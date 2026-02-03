@@ -17,7 +17,8 @@ public class AverageBasketRepository
         DateTime dateFrom,
         DateTime dateTo,
         BreakdownType breakdown = BreakdownType.Monthly,
-        GroupByType groupBy = GroupByType.None)
+        GroupByType groupBy = GroupByType.None,
+        bool includeLastYear = false)
     {
         var results = new List<AverageBasketRow>();
         
@@ -29,14 +30,53 @@ public class AverageBasketRepository
             _ => "CONVERT(VARCHAR(7), t1.DateTrans, 120)"
         };
 
-        // Build grouping components based on GroupByType
         var (groupSelect, groupJoin, groupField, groupOrderBy) = GetGroupingComponents(groupBy);
         
         string sql;
+        string lyJoinCondition = "ly.Period = CAST(CAST(SUBSTRING(cy.Period, 1, 4) AS INT) - 1 AS VARCHAR(4)) + SUBSTRING(cy.Period, 5, 20)";
+        string lyGroupMatch = groupBy != GroupByType.None ? " AND ly.GroupCode = cy.GroupCode" : "";
         
         if (groupBy == GroupByType.None)
         {
-            // Simple query without grouping dimension
+            var lyFrom = includeLastYear ? $@"
+                , LYSales AS (
+                    SELECT 
+                        {periodField} AS Period,
+                        COUNT(DISTINCT t1.pk_InvoiceID) AS InvoiceCount,
+                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetSales,
+                        SUM(ISNULL(t2.VatAmount, 0)) AS VatSales
+                    FROM tbl_InvoiceHeader t1
+                    INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice
+                    WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo)
+                    GROUP BY {periodField}
+                ),
+                LYReturns AS (
+                    SELECT 
+                        {periodField} AS Period,
+                        COUNT(DISTINCT t1.pk_CreditID) AS CreditCount,
+                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetReturns,
+                        SUM(ISNULL(t2.VatAmount, 0)) AS VatReturns
+                    FROM tbl_CreditHeader t1
+                    INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
+                    WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo)
+                    GROUP BY {periodField}
+                ),
+                LY AS (
+                    SELECT 
+                        COALESCE(lys.Period, lyr.Period) AS Period,
+                        ISNULL(lys.InvoiceCount, 0) AS InvoiceCount,
+                        ISNULL(lyr.CreditCount, 0) AS CreditCount,
+                        ISNULL(lys.NetSales, 0) AS NetSales,
+                        ISNULL(lyr.NetReturns, 0) AS NetReturns,
+                        ISNULL(lys.VatSales, 0) AS VatSales,
+                        ISNULL(lyr.VatReturns, 0) AS VatReturns
+                    FROM LYSales lys
+                    FULL OUTER JOIN LYReturns lyr ON lys.Period = lyr.Period
+                )" : "";
+            
+            var lyJoin = includeLastYear ? $@"
+                LEFT JOIN LY ly ON {lyJoinCondition}" : "";
+            
             sql = $@"
                 ;WITH Sales AS (
                     SELECT 
@@ -61,26 +101,92 @@ public class AverageBasketRepository
                     INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
                     WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo
                     GROUP BY {periodField}
-                )
+                ),
+                CY AS (
+                    SELECT 
+                        COALESCE(s.Period, r.Period) AS Period,
+                        NULL AS GroupCode,
+                        NULL AS GroupName,
+                        ISNULL(s.InvoiceCount, 0) AS InvoiceCount,
+                        ISNULL(r.CreditCount, 0) AS CreditCount,
+                        ISNULL(s.QtySold, 0) AS QtySold,
+                        ISNULL(r.QtyReturned, 0) AS QtyReturned,
+                        ISNULL(s.NetSales, 0) AS NetSales,
+                        ISNULL(r.NetReturns, 0) AS NetReturns,
+                        ISNULL(s.VatSales, 0) AS VatSales,
+                        ISNULL(r.VatReturns, 0) AS VatReturns
+                    FROM Sales s
+                    FULL OUTER JOIN Returns r ON s.Period = r.Period
+                ){lyFrom}
                 SELECT 
-                    COALESCE(s.Period, r.Period) AS Period,
-                    NULL AS GroupCode,
-                    NULL AS GroupName,
-                    ISNULL(s.InvoiceCount, 0) AS InvoiceCount,
-                    ISNULL(r.CreditCount, 0) AS CreditCount,
-                    ISNULL(s.QtySold, 0) AS QtySold,
-                    ISNULL(r.QtyReturned, 0) AS QtyReturned,
-                    ISNULL(s.NetSales, 0) AS NetSales,
-                    ISNULL(r.NetReturns, 0) AS NetReturns,
-                    ISNULL(s.VatSales, 0) AS VatSales,
-                    ISNULL(r.VatReturns, 0) AS VatReturns
-                FROM Sales s
-                FULL OUTER JOIN Returns r ON s.Period = r.Period
-                ORDER BY COALESCE(s.Period, r.Period)";
+                    cy.Period,
+                    cy.GroupCode,
+                    cy.GroupName,
+                    cy.InvoiceCount,
+                    cy.CreditCount,
+                    cy.QtySold,
+                    cy.QtyReturned,
+                    cy.NetSales,
+                    cy.NetReturns,
+                    cy.VatSales,
+                    cy.VatReturns{(includeLastYear ? @",
+                    ISNULL(ly.InvoiceCount, 0) AS LYInvoiceCount,
+                    ISNULL(ly.CreditCount, 0) AS LYCreditCount,
+                    ISNULL(ly.NetSales, 0) AS LYNetSales,
+                    ISNULL(ly.NetReturns, 0) AS LYNetReturns,
+                    ISNULL(ly.VatSales, 0) AS LYVatSales,
+                    ISNULL(ly.VatReturns, 0) AS LYVatReturns" : "")}
+                FROM CY cy
+                {lyJoin}
+                ORDER BY cy.Period";
         }
         else
         {
-            // Query with grouping dimension (Store, Category, etc.)
+            var lyFrom = includeLastYear ? $@"
+                , LYSales AS (
+                    SELECT 
+                        {periodField} AS Period,
+                        {groupSelect}
+                        COUNT(DISTINCT t1.pk_InvoiceID) AS InvoiceCount,
+                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetSales,
+                        SUM(ISNULL(t2.VatAmount, 0)) AS VatSales
+                    FROM tbl_InvoiceHeader t1
+                    INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice
+                    {groupJoin}
+                    WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo)
+                    GROUP BY {periodField}, {groupField}
+                ),
+                LYReturns AS (
+                    SELECT 
+                        {periodField} AS Period,
+                        {groupSelect}
+                        COUNT(DISTINCT t1.pk_CreditID) AS CreditCount,
+                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetReturns,
+                        SUM(ISNULL(t2.VatAmount, 0)) AS VatReturns
+                    FROM tbl_CreditHeader t1
+                    INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
+                    {groupJoin.Replace("t2.fk_Invoice", "t2.fk_Credit")}
+                    WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo)
+                    GROUP BY {periodField}, {groupField}
+                ),
+                LY AS (
+                    SELECT 
+                        COALESCE(lys.Period, lyr.Period) AS Period,
+                        COALESCE(lys.GroupCode, lyr.GroupCode) AS GroupCode,
+                        COALESCE(lys.GroupName, lyr.GroupName) AS GroupName,
+                        ISNULL(lys.InvoiceCount, 0) AS InvoiceCount,
+                        ISNULL(lyr.CreditCount, 0) AS CreditCount,
+                        ISNULL(lys.NetSales, 0) AS NetSales,
+                        ISNULL(lyr.NetReturns, 0) AS NetReturns,
+                        ISNULL(lys.VatSales, 0) AS VatSales,
+                        ISNULL(lyr.VatReturns, 0) AS VatReturns
+                    FROM LYSales lys
+                    FULL OUTER JOIN LYReturns lyr ON lys.Period = lyr.Period AND lys.GroupCode = lyr.GroupCode
+                )" : "";
+            
+            var lyJoin = includeLastYear ? $@"
+                LEFT JOIN LY ly ON ly.Period = CAST(CAST(SUBSTRING(cy.Period, 1, 4) AS INT) - 1 AS VARCHAR(4)) + SUBSTRING(cy.Period, 5, 20){lyGroupMatch}" : "";
+            
             sql = $@"
                 ;WITH Sales AS (
                     SELECT 
@@ -109,22 +215,44 @@ public class AverageBasketRepository
                     {groupJoin.Replace("t2.fk_Invoice", "t2.fk_Credit")}
                     WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo
                     GROUP BY {periodField}, {groupField}
-                )
+                ),
+                CY AS (
+                    SELECT 
+                        COALESCE(s.Period, r.Period) AS Period,
+                        COALESCE(s.GroupCode, r.GroupCode) AS GroupCode,
+                        COALESCE(s.GroupName, r.GroupName) AS GroupName,
+                        ISNULL(s.InvoiceCount, 0) AS InvoiceCount,
+                        ISNULL(r.CreditCount, 0) AS CreditCount,
+                        ISNULL(s.QtySold, 0) AS QtySold,
+                        ISNULL(r.QtyReturned, 0) AS QtyReturned,
+                        ISNULL(s.NetSales, 0) AS NetSales,
+                        ISNULL(r.NetReturns, 0) AS NetReturns,
+                        ISNULL(s.VatSales, 0) AS VatSales,
+                        ISNULL(r.VatReturns, 0) AS VatReturns
+                    FROM Sales s
+                    FULL OUTER JOIN Returns r ON s.Period = r.Period AND s.GroupCode = r.GroupCode
+                ){lyFrom}
                 SELECT 
-                    COALESCE(s.Period, r.Period) AS Period,
-                    COALESCE(s.GroupCode, r.GroupCode) AS GroupCode,
-                    COALESCE(s.GroupName, r.GroupName) AS GroupName,
-                    ISNULL(s.InvoiceCount, 0) AS InvoiceCount,
-                    ISNULL(r.CreditCount, 0) AS CreditCount,
-                    ISNULL(s.QtySold, 0) AS QtySold,
-                    ISNULL(r.QtyReturned, 0) AS QtyReturned,
-                    ISNULL(s.NetSales, 0) AS NetSales,
-                    ISNULL(r.NetReturns, 0) AS NetReturns,
-                    ISNULL(s.VatSales, 0) AS VatSales,
-                    ISNULL(r.VatReturns, 0) AS VatReturns
-                FROM Sales s
-                FULL OUTER JOIN Returns r ON s.Period = r.Period AND s.GroupCode = r.GroupCode
-                ORDER BY {groupOrderBy}, COALESCE(s.Period, r.Period)";
+                    cy.Period,
+                    cy.GroupCode,
+                    cy.GroupName,
+                    cy.InvoiceCount,
+                    cy.CreditCount,
+                    cy.QtySold,
+                    cy.QtyReturned,
+                    cy.NetSales,
+                    cy.NetReturns,
+                    cy.VatSales,
+                    cy.VatReturns{(includeLastYear ? @",
+                    ISNULL(ly.InvoiceCount, 0) AS LYInvoiceCount,
+                    ISNULL(ly.CreditCount, 0) AS LYCreditCount,
+                    ISNULL(ly.NetSales, 0) AS LYNetSales,
+                    ISNULL(ly.NetReturns, 0) AS LYNetReturns,
+                    ISNULL(ly.VatSales, 0) AS LYVatSales,
+                    ISNULL(ly.VatReturns, 0) AS LYVatReturns" : "")}
+                FROM CY cy
+                {lyJoin}
+                ORDER BY {groupOrderBy}, cy.Period";
         }
 
         using var conn = new SqlConnection(_connectionString);
@@ -134,6 +262,8 @@ public class AverageBasketRepository
         
         await conn.OpenAsync();
         using var reader = await cmd.ExecuteReaderAsync();
+        
+        var hasLy = includeLastYear;
         
         while (await reader.ReadAsync())
         {
@@ -154,6 +284,18 @@ public class AverageBasketRepository
             
             row.CYGrossSales = row.CYNetSales + row.CYVatSales;
             row.CYGrossReturns = row.CYNetReturns + row.CYVatReturns;
+            
+            if (hasLy)
+            {
+                row.LYInvoiceCount = reader.GetInt32(11);
+                row.LYCreditCount = reader.GetInt32(12);
+                row.LYNetSales = reader.IsDBNull(13) ? 0 : reader.GetDecimal(13);
+                row.LYNetReturns = reader.IsDBNull(14) ? 0 : reader.GetDecimal(14);
+                row.LYVatSales = reader.IsDBNull(15) ? 0 : reader.GetDecimal(15);
+                row.LYVatReturns = reader.IsDBNull(16) ? 0 : reader.GetDecimal(16);
+                row.LYTotalNet = row.LYNetSales - row.LYNetReturns;
+                row.LYTotalGross = row.LYTotalNet + (row.LYVatSales - row.LYVatReturns);
+            }
             
             results.Add(row);
         }

@@ -10,6 +10,7 @@ public class AverageBasketViewModel
     public BreakdownType Breakdown { get; set; } = BreakdownType.Monthly;
     public GroupByType GroupBy { get; set; } = GroupByType.None;
     public bool IncludeVat { get; set; } = false;
+    public bool CompareLastYear { get; set; } = false;
     
     // Date preset for quick selection
     public string? DatePreset { get; set; }
@@ -31,4 +32,12 @@ public class AverageBasketViewModel
     public decimal OverallAverageBasket => TotalTransactions > 0 
         ? (IncludeVat ? TotalGrossSales : TotalNetSales) / TotalTransactions 
         : 0;
+    
+    // Last Year totals (when CompareLastYear is true)
+    public int TotalLYTransactions => Results.Sum(r => r.LYTotalTransactions);
+    public decimal TotalLYNetSales => Results.Sum(r => r.LYTotalNet);
+    public decimal TotalLYGrossSales => Results.Sum(r => r.LYTotalGross);
+    public decimal OverallYoYChangePercent => TotalLYNetSales != 0 
+        ? Math.Round((TotalNetSales - TotalLYNetSales) / TotalLYNetSales * 100, 2) 
+        : (TotalNetSales > 0 ? 100 : 0);
 }

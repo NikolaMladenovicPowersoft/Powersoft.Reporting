@@ -32,8 +32,17 @@ public class AverageBasketRow
     // Last Year (for comparison)
     public int LYInvoiceCount { get; set; }
     public int LYCreditCount { get; set; }
+    public decimal LYNetSales { get; set; }
+    public decimal LYNetReturns { get; set; }
+    public decimal LYVatSales { get; set; }
+    public decimal LYVatReturns { get; set; }
     public decimal LYTotalNet { get; set; }
     public decimal LYTotalGross { get; set; }
+    
+    // Computed Last Year
+    public int LYTotalTransactions => LYInvoiceCount - LYCreditCount;
+    public decimal LYAverageNet => LYTotalTransactions > 0 ? LYTotalNet / LYTotalTransactions : 0;
+    public decimal LYAverageGross => LYTotalTransactions > 0 ? LYTotalGross / LYTotalTransactions : 0;
     
     // Year over Year
     public decimal YoYChangePercent => LYTotalNet != 0 

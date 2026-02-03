@@ -73,7 +73,8 @@ public class ReportsController : Controller
                 model.DateFrom,
                 model.DateTo,
                 model.Breakdown,
-                model.GroupBy
+                model.GroupBy,
+                model.CompareLastYear
             );
         }
         catch (Exception ex)

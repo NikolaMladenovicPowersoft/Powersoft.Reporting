@@ -8,13 +8,20 @@ public class AverageBasketViewModel
     public DateTime DateFrom { get; set; } = new DateTime(DateTime.Today.Year, 1, 1);
     public DateTime DateTo { get; set; } = DateTime.Today;
     public BreakdownType Breakdown { get; set; } = BreakdownType.Monthly;
+    public GroupByType GroupBy { get; set; } = GroupByType.None;
     public bool IncludeVat { get; set; } = false;
+    
+    // Date preset for quick selection
+    public string? DatePreset { get; set; }
     
     public List<AverageBasketRow> Results { get; set; } = new();
     
     public string? ConnectedDatabase { get; set; }
     public bool IsConnected { get; set; }
     public string? ErrorMessage { get; set; }
+    
+    // Check if results are grouped
+    public bool HasGrouping => GroupBy != GroupByType.None;
     
     // Totals
     public int TotalTransactions => Results.Sum(r => r.CYTotalTransactions);

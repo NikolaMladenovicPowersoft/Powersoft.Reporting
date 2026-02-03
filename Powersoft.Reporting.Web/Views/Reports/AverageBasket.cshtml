@@ -24,19 +24,59 @@
         <i class="bi bi-funnel me-2"></i>Report Parameters
     </div>
     <div class="card-body">
-        <form asp-action="AverageBasket" method="post">
+        <form asp-action="AverageBasket" method="post" id="reportForm">
+            <!-- Date Presets -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                    <div class="btn-group flex-wrap" role="group">
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                        
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetYesterday" value="yesterday" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetYesterday">Yesterday</label>
+                        
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLast7" value="last7" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLast7">Last 7 Days</label>
+                        
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                        
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                        
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                        
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                        
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                    </div>
+                </div>
+            </div>
+            
+            <hr class="my-3">
+            
+            <!-- Main Parameters -->
             <div class="row g-3 align-items-end">
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label fw-semibold">Date From</label>
                     <input type="date" asp-for="DateFrom" class="form-control" />
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label fw-semibold">Date To</label>
                     <input type="date" asp-for="DateTo" class="form-control" />
                 </div>
                 <div class="col-md-2">
                     <label class="form-label fw-semibold">Breakdown</label>
                     <select asp-for="Breakdown" class="form-select" asp-items="Html.GetEnumSelectList<Powersoft.Reporting.Core.Enums.BreakdownType>()">
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">Group By</label>
+                    <select asp-for="GroupBy" class="form-select" asp-items="Html.GetEnumSelectList<Powersoft.Reporting.Core.Enums.GroupByType>()">
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -94,7 +134,7 @@
     
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-table me-2"></i>Results (@Model.Results.Count rows)</span>
+            <span><i class="bi bi-table me-2"></i>Results (@Model.Results.Count rows)@(Model.HasGrouping ? $" - Grouped by {Model.GroupBy}" : "")</span>
             <button class="btn btn-outline-success btn-sm" onclick="exportToCSV()">
                 <i class="bi bi-download me-1"></i>Export CSV
             </button>
@@ -104,6 +144,10 @@
                 <table class="table table-hover mb-0" id="resultsTable">
                     <thead>
                         <tr>
+                            @if (Model.HasGrouping)
+                            {
+                                <th>@Model.GroupBy</th>
+                            }
                             <th>Period</th>
                             <th class="text-end">Invoices</th>
                             <th class="text-end">Returns</th>
@@ -122,6 +166,10 @@
                             var avgBasket = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
                             var totalSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
                             <tr>
+                                @if (Model.HasGrouping)
+                                {
+                                    <td class="fw-semibold text-info">@(row.Level1Value ?? row.Level1 ?? "N/A")</td>
+                                }
                                 <td class="fw-semibold">@row.Period</td>
                                 <td class="text-end">@row.CYInvoiceCount.ToString("N0")</td>
                                 <td class="text-end text-danger">@row.CYCreditCount.ToString("N0")</td>
@@ -137,6 +185,10 @@
                     </tbody>
                     <tfoot class="table-light">
                         <tr class="fw-bold">
+                            @if (Model.HasGrouping)
+                            {
+                                <td></td>
+                            }
                             <td>TOTAL</td>
                             <td class="text-end">@Model.Results.Sum(r => r.CYInvoiceCount).ToString("N0")</td>
                             <td class="text-end text-danger">@Model.Results.Sum(r => r.CYCreditCount).ToString("N0")</td>
@@ -177,24 +229,32 @@ else
 
 @section Scripts {
 <script>
+// Clear date preset when manually changing dates
+document.getElementById('DateFrom').addEventListener('change', clearPreset);
+document.getElementById('DateTo').addEventListener('change', clearPreset);
+
+function clearPreset() {
+    document.querySelectorAll('input[name="DatePreset"]').forEach(r => r.checked = false);
+}
+
 function exportToCSV() {
     const table = document.getElementById('resultsTable');
     let csv = [];
     
     // Headers
     const headers = [];
-    table.querySelectorAll('thead th').forEach(th => headers.push(th.textContent.trim()));
+    table.querySelectorAll('thead th').forEach(th => headers.push('"' + th.textContent.trim() + '"'));
     csv.push(headers.join(','));
     
     // Data rows
     table.querySelectorAll('tbody tr').forEach(row => {
         const rowData = [];
-        row.querySelectorAll('td').forEach(td => rowData.push(td.textContent.trim()));
+        row.querySelectorAll('td').forEach(td => rowData.push('"' + td.textContent.trim() + '"'));
         csv.push(rowData.join(','));
     });
     
     // Download
-    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

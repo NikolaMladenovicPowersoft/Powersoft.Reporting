@@ -1,0 +1,202 @@
+@model Powersoft.Reporting.Web.ViewModels.DatabaseSelectionViewModel
+@{
+    ViewData["Title"] = "Database Selection";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-database me-2"></i>Database Connection</span>
+                @if (Model.IsConnected)
+                {
+                    <form asp-action="Disconnect" method="post" class="d-inline">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="bi bi-x-circle me-1"></i>Disconnect
+                        </button>
+                    </form>
+                }
+            </div>
+            <div class="card-body p-4">
+                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                {
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        @Model.ErrorMessage
+                    </div>
+                }
+                
+                @if (Model.IsConnected)
+                {
+                    <div class="text-center py-4">
+                        <div class="mb-3">
+                            <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+                        </div>
+                        <h4 class="mb-2">Connected Successfully</h4>
+                        <p class="text-muted mb-4">
+                            You are connected to <strong>@Model.ConnectedDatabaseName</strong>
+                        </p>
+                        <a href="@Url.Action("Index", "Reports")" class="btn btn-primary btn-lg">
+                            <i class="bi bi-arrow-right me-2"></i>Go to Reports
+                        </a>
+                    </div>
+                }
+                else
+                {
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-building me-1"></i>Company
+                            </label>
+                            <select id="companySelect" class="form-select form-select-lg">
+                                <option value="">Select a company...</option>
+                                @foreach (var company in Model.Companies)
+                                {
+                                    <option value="@company.CompanyCode">@company.CompanyName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-database me-1"></i>Database
+                            </label>
+                            <select id="databaseSelect" class="form-select form-select-lg" disabled>
+                                <option value="">Select a company first...</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button id="connectBtn" class="btn btn-primary btn-lg w-100" disabled>
+                            <i class="bi bi-plug me-2"></i>Connect to Database
+                        </button>
+                    </div>
+                    
+                    <div id="connectionStatus" class="mt-3" style="display: none;">
+                        <div class="d-flex align-items-center justify-content-center">
+                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                            <span>Connecting...</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+        
+        @if (!Model.IsConnected && Model.Companies.Any())
+        {
+            <div class="card mt-4">
+                <div class="card-header">
+                    <i class="bi bi-info-circle me-2"></i>Quick Stats
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-4">
+                            <div class="stat-card">
+                                <div class="stat-value text-primary">@Model.Companies.Count</div>
+                                <div class="stat-label">Active Companies</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="stat-card">
+                                <div class="stat-value text-success">
+                                    <i class="bi bi-check-circle"></i>
+                                </div>
+                                <div class="stat-label">PS Central Connected</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="stat-card">
+                                <div class="stat-value text-info">v1.0</div>
+                                <div class="stat-label">Reporting Engine</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('companySelect').addEventListener('change', async function() {
+        const companyCode = this.value;
+        const dbSelect = document.getElementById('databaseSelect');
+        const connectBtn = document.getElementById('connectBtn');
+        
+        if (!companyCode) {
+            dbSelect.innerHTML = '<option value="">Select a company first...</option>';
+            dbSelect.disabled = true;
+            connectBtn.disabled = true;
+            return;
+        }
+        
+        dbSelect.innerHTML = '<option value="">Loading databases...</option>';
+        dbSelect.disabled = true;
+        
+        try {
+            const response = await fetch(`/Home/GetDatabases?companyCode=${encodeURIComponent(companyCode)}`);
+            const databases = await response.json();
+            
+            if (databases.error) {
+                dbSelect.innerHTML = '<option value="">Error loading databases</option>';
+                return;
+            }
+            
+            dbSelect.innerHTML = '<option value="">Select a database...</option>';
+            databases.forEach(db => {
+                const option = document.createElement('option');
+                option.value = db.value;
+                option.textContent = db.text;
+                dbSelect.appendChild(option);
+            });
+            
+            dbSelect.disabled = false;
+        } catch (error) {
+            console.error('Error loading databases:', error);
+            dbSelect.innerHTML = '<option value="">Error loading databases</option>';
+        }
+    });
+    
+    document.getElementById('databaseSelect').addEventListener('change', function() {
+        const connectBtn = document.getElementById('connectBtn');
+        connectBtn.disabled = !this.value;
+    });
+    
+    document.getElementById('connectBtn').addEventListener('click', async function() {
+        const dbCode = document.getElementById('databaseSelect').value;
+        if (!dbCode) return;
+        
+        const btn = this;
+        const status = document.getElementById('connectionStatus');
+        
+        btn.disabled = true;
+        status.style.display = 'block';
+        
+        try {
+            const response = await fetch('/Home/Connect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `databaseCode=${encodeURIComponent(dbCode)}`
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Connection failed: ' + result.message);
+                btn.disabled = false;
+                status.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Connection error:', error);
+            alert('Connection failed. Please try again.');
+            btn.disabled = false;
+            status.style.display = 'none';
+        }
+    });
+</script>
+}

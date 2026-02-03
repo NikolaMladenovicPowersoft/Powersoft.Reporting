@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Powersoft Reporting</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --ps-primary: #2563eb;
+            --ps-primary-dark: #1d4ed8;
+            --ps-success: #059669;
+            --ps-warning: #d97706;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: #f8fafc;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, var(--ps-primary) 0%, var(--ps-primary-dark) 100%);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .navbar-brand {
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .card-header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            font-weight: 600;
+            border-radius: 12px 12px 0 0 !important;
+        }
+        
+        .btn-primary {
+            background: var(--ps-primary);
+            border-color: var(--ps-primary);
+        }
+        
+        .btn-primary:hover {
+            background: var(--ps-primary-dark);
+            border-color: var(--ps-primary-dark);
+        }
+        
+        .table {
+            font-size: 0.9rem;
+        }
+        
+        .table th {
+            background: #f1f5f9;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            color: #64748b;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        
+        .stat-card .stat-label {
+            color: #64748b;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .status-connected {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .status-disconnected {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .form-select, .form-control {
+            border-radius: 8px;
+            border-color: #e2e8f0;
+        }
+        
+        .form-select:focus, .form-control:focus {
+            border-color: var(--ps-primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+        
+        .sidebar-nav {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .sidebar-nav .nav-link {
+            color: #475569;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin: 0.25rem 0.5rem;
+        }
+        
+        .sidebar-nav .nav-link:hover {
+            background: #f1f5f9;
+            color: var(--ps-primary);
+        }
+        
+        .sidebar-nav .nav-link.active {
+            background: var(--ps-primary);
+            color: white;
+        }
+        
+        .sidebar-nav .nav-link i {
+            width: 24px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-bar-chart-fill me-2"></i>
+                Powersoft Reporting
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" asp-controller="Home" asp-action="Index">
+                            <i class="bi bi-database me-1"></i> Database
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" asp-controller="Reports" asp-action="Index">
+                            <i class="bi bi-file-earmark-bar-graph me-1"></i> Reports
+                        </a>
+                    </li>
+                </ul>
+                @{
+                    var connectedDb = Context.Session.GetString("ConnectedDatabase");
+                }
+                @if (!string.IsNullOrEmpty(connectedDb))
+                {
+                    <span class="status-badge status-connected">
+                        <i class="bi bi-check-circle-fill"></i>
+                        @connectedDb
+                    </span>
+                }
+                else
+                {
+                    <span class="status-badge status-disconnected">
+                        <i class="bi bi-exclamation-circle"></i>
+                        Not Connected
+                    </span>
+                }
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        @if (TempData["Warning"] != null)
+        {
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                @TempData["Warning"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+        
+        @if (TempData["Success"] != null)
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle me-2"></i>
+                @TempData["Success"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+        
+        @RenderBody()
+    </div>
+
+    <footer class="text-center text-muted py-4 mt-5">
+        <small>&copy; @DateTime.Now.Year Powersoft Reporting Engine</small>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

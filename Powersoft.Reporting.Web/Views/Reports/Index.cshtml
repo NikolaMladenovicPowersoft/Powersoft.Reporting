@@ -1,0 +1,112 @@
+@{
+    ViewData["Title"] = "Reports";
+    var connectedDb = Context.Session.GetString("ConnectedDatabase");
+}
+
+<div class="row">
+    <div class="col-lg-3 mb-4">
+        <div class="sidebar-nav p-3">
+            <h6 class="text-muted text-uppercase small fw-bold px-3 mb-3">
+                <i class="bi bi-folder me-2"></i>Stock Control
+            </h6>
+            <nav class="nav flex-column">
+                <h6 class="text-muted small px-3 mt-2 mb-2">Power Reports</h6>
+                <a class="nav-link active" asp-action="AverageBasket">
+                    <i class="bi bi-basket me-2"></i>Average Basket
+                </a>
+                <a class="nav-link disabled" href="#">
+                    <i class="bi bi-graph-up me-2"></i>Sales Analysis
+                    <span class="badge bg-secondary ms-auto">Soon</span>
+                </a>
+                <a class="nav-link disabled" href="#">
+                    <i class="bi bi-box-seam me-2"></i>Stock Movement
+                    <span class="badge bg-secondary ms-auto">Soon</span>
+                </a>
+            </nav>
+            
+            <hr class="my-3">
+            
+            <h6 class="text-muted text-uppercase small fw-bold px-3 mb-3">
+                <i class="bi bi-folder me-2"></i>Accounting
+            </h6>
+            <nav class="nav flex-column">
+                <a class="nav-link disabled" href="#">
+                    <i class="bi bi-receipt me-2"></i>P&L Report
+                    <span class="badge bg-secondary ms-auto">Soon</span>
+                </a>
+            </nav>
+        </div>
+    </div>
+    
+    <div class="col-lg-9">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-speedometer2 me-2"></i>Reports Dashboard
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card h-100 border-primary">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-primary bg-opacity-10 rounded-circle p-3 me-3">
+                                        <i class="bi bi-basket text-primary" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Average Basket</h5>
+                                        <p class="text-muted small mb-0">Sales performance analysis</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted">
+                                    Analyze average transaction value, quantity per sale, and compare 
+                                    year-over-year performance with customizable date ranges and groupings.
+                                </p>
+                                <a asp-action="AverageBasket" class="btn btn-primary">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-secondary bg-opacity-10 rounded-circle p-3 me-3">
+                                        <i class="bi bi-graph-up text-secondary" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Sales Analysis</h5>
+                                        <span class="badge bg-warning">Coming Soon</span>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted">
+                                    Detailed sales breakdown by product, category, customer, 
+                                    and time period with profit margin analysis.
+                                </p>
+                                <button class="btn btn-outline-secondary" disabled>
+                                    <i class="bi bi-clock me-1"></i>Coming Soon
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr class="my-4">
+                
+                <div class="row">
+                    <div class="col-12">
+                        <div class="alert alert-info d-flex align-items-center">
+                            <i class="bi bi-info-circle me-3" style="font-size: 1.5rem;"></i>
+                            <div>
+                                <strong>Connected to:</strong> @connectedDb
+                                <br>
+                                <small class="text-muted">Select a report from the sidebar or cards above to begin.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

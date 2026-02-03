@@ -23,7 +23,15 @@ public class HomeController : Controller
         try
         {
             var centralConnString = _configuration.GetConnectionString("PSCentral");
-            var repo = new CentralRepository(centralConnString!);
+            _logger.LogInformation("Connection string: {ConnStr}", centralConnString ?? "NULL");
+            
+            if (string.IsNullOrEmpty(centralConnString))
+            {
+                viewModel.ErrorMessage = "Connection string 'PSCentral' not found in configuration";
+                return View(viewModel);
+            }
+            
+            var repo = new CentralRepository(centralConnString);
             
             viewModel.Companies = await repo.GetActiveCompaniesAsync();
             
@@ -38,7 +46,7 @@ public class HomeController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading companies");
-            viewModel.ErrorMessage = "Unable to connect to PS Central database. Please check configuration.";
+            viewModel.ErrorMessage = $"Database error: {ex.Message}";
         }
         
         return View(viewModel);
@@ -78,6 +86,8 @@ public class HomeController : Controller
             
             // Build tenant connection string
             var tenantConnString = ConnectionStringBuilder.Build(database);
+            _logger.LogInformation("Attempting connection to: {Server}\\{Instance}, DB: {DbName}, User: {User}", 
+                database.DBServerID, database.DBProviderInstanceName, database.DBName, database.DBUserName);
             
             // Test connection
             using var conn = new Microsoft.Data.SqlClient.SqlConnection(tenantConnString);

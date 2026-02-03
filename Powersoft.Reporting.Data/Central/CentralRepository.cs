@@ -18,7 +18,7 @@ public class CentralRepository
         
         const string sql = @"
             SELECT pk_CompanyCode, CompanyName, CompanyActive, 
-                   Address1, Address2, Phone, Email
+                   Address1, Address2, Tel1, Email
             FROM tbl_Company 
             WHERE CompanyActive = 1 
             ORDER BY CompanyName";
@@ -38,7 +38,7 @@ public class CentralRepository
                 CompanyActive = reader.GetBoolean(2),
                 Address1 = reader.IsDBNull(3) ? null : reader.GetString(3),
                 Address2 = reader.IsDBNull(4) ? null : reader.GetString(4),
-                Phone = reader.IsDBNull(5) ? null : reader.GetString(5),
+                Tel1 = reader.IsDBNull(5) ? null : reader.GetString(5),
                 Email = reader.IsDBNull(6) ? null : reader.GetString(6)
             });
         }

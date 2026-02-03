@@ -33,7 +33,6 @@ public static class ConnectionStringBuilder
         if (!string.IsNullOrWhiteSpace(db.DBPassword))
         {
             sb.Append(";Password=");
-            // Decrypt the password
             sb.Append(Cryptography.Decrypt(db.DBPassword));
         }
         
@@ -41,6 +40,7 @@ public static class ConnectionStringBuilder
         sb.Append(";Pooling=true");
         sb.Append(";MultipleActiveResultSets=True");
         sb.Append(";TrustServerCertificate=True");
+        sb.Append(";Encrypt=False");
         
         return sb.ToString();
     }

@@ -19,11 +19,9 @@ public static class Cryptography
 
     private static string Clear()
     {
-        // ASCII 120-100: xwvutsrqponmlkjihgfed
-        var sb = new StringBuilder();
-        for (int i = 120; i >= 100; i--)
-            sb.Append((char)i);
-        return sb.ToString();
+        // VB.NET bug: For i = 120 To 100 without Step -1 doesn't execute!
+        // So Clear() returns empty string in the original code
+        return "";
     }
 
     public static string Decrypt(string cipherText)
@@ -34,11 +32,12 @@ public static class Cryptography
         try
         {
             byte[] cipherBytes = Convert.FromBase64String(cipherText);
-            using var pdb = new Rfc2898DeriveBytes(
-                Clear(),
-                Encoding.ASCII.GetBytes(Initialize()),
-                1000,
-                HashAlgorithmName.SHA1);
+            var s = new ASCIIEncoding();
+            
+            // Must match legacy VB.NET behavior - no iterations/hash specified
+            #pragma warning disable SYSLIB0041
+            using var pdb = new Rfc2898DeriveBytes(Clear(), s.GetBytes(Initialize()));
+            #pragma warning restore SYSLIB0041
 
             using var aes = Aes.Create();
             aes.Key = pdb.GetBytes(32);
@@ -64,11 +63,11 @@ public static class Cryptography
             return string.Empty;
 
         byte[] clearBytes = Encoding.Unicode.GetBytes(clearText);
-        using var pdb = new Rfc2898DeriveBytes(
-            Clear(),
-            Encoding.ASCII.GetBytes(Initialize()),
-            1000,
-            HashAlgorithmName.SHA1);
+        var s = new ASCIIEncoding();
+        
+        #pragma warning disable SYSLIB0041
+        using var pdb = new Rfc2898DeriveBytes(Clear(), s.GetBytes(Initialize()));
+        #pragma warning restore SYSLIB0041
 
         using var aes = Aes.Create();
         aes.Key = pdb.GetBytes(32);

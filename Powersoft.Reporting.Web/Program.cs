@@ -1,9 +1,22 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Powersoft.Reporting.Core.Interfaces;
+using Powersoft.Reporting.Data.Auth;
+using Powersoft.Reporting.Data.Central;
+using Powersoft.Reporting.Data.Factories;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddControllersWithViews();
 
-// Add session support for storing tenant connection
+var centralConnString = builder.Configuration.GetConnectionString("PSCentral");
+if (!string.IsNullOrEmpty(centralConnString))
+{
+    builder.Services.AddSingleton<ICentralRepository>(sp => new CentralRepository(centralConnString));
+    builder.Services.AddSingleton<IAuthenticationService>(sp => new AuthenticationService(centralConnString));
+}
+
+builder.Services.AddSingleton<ITenantRepositoryFactory, TenantRepositoryFactory>();
+
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
@@ -12,9 +25,23 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/Account/Login";
+        options.LogoutPath = "/Account/Logout";
+        options.AccessDeniedPath = "/Account/AccessDenied";
+        options.Cookie.Name = "PowersoftReporting.Auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+    });
+
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -27,7 +54,7 @@ app.UseStaticFiles();
 app.UseRouting();
 
 app.UseSession();
-
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(

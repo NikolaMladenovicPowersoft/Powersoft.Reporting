@@ -1,18 +1,21 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Powersoft.Reporting.Data.Central;
+using Powersoft.Reporting.Core.Constants;
+using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Data.Helpers;
 using Powersoft.Reporting.Web.ViewModels;
 
 namespace Powersoft.Reporting.Web.Controllers;
 
+[Authorize]
 public class HomeController : Controller
 {
-    private readonly IConfiguration _configuration;
+    private readonly ICentralRepository _centralRepository;
     private readonly ILogger<HomeController> _logger;
 
-    public HomeController(IConfiguration configuration, ILogger<HomeController> logger)
+    public HomeController(ICentralRepository centralRepository, ILogger<HomeController> logger)
     {
-        _configuration = configuration;
+        _centralRepository = centralRepository;
         _logger = logger;
     }
 
@@ -22,21 +25,9 @@ public class HomeController : Controller
         
         try
         {
-            var centralConnString = _configuration.GetConnectionString("PSCentral");
-            _logger.LogInformation("Connection string: {ConnStr}", centralConnString ?? "NULL");
+            viewModel.Companies = await _centralRepository.GetActiveCompaniesAsync();
             
-            if (string.IsNullOrEmpty(centralConnString))
-            {
-                viewModel.ErrorMessage = "Connection string 'PSCentral' not found in configuration";
-                return View(viewModel);
-            }
-            
-            var repo = new CentralRepository(centralConnString);
-            
-            viewModel.Companies = await repo.GetActiveCompaniesAsync();
-            
-            // Check if already connected
-            var connectedDb = HttpContext.Session.GetString("ConnectedDatabase");
+            var connectedDb = HttpContext.Session.GetString(SessionKeys.ConnectedDatabase);
             if (!string.IsNullOrEmpty(connectedDb))
             {
                 viewModel.ConnectedDatabaseName = connectedDb;
@@ -46,7 +37,7 @@ public class HomeController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading companies");
-            viewModel.ErrorMessage = $"Database error: {ex.Message}";
+            viewModel.ErrorMessage = "Unable to connect to PS Central database. Please check configuration.";
         }
         
         return View(viewModel);
@@ -57,10 +48,7 @@ public class HomeController : Controller
     {
         try
         {
-            var centralConnString = _configuration.GetConnectionString("PSCentral");
-            var repo = new CentralRepository(centralConnString!);
-            
-            var databases = await repo.GetActiveDatabasesForCompanyAsync(companyCode);
+            var databases = await _centralRepository.GetActiveDatabasesForCompanyAsync(companyCode);
             return Json(databases.Select(d => new { value = d.DBCode, text = d.DBFriendlyName }));
         }
         catch (Exception ex)
@@ -75,44 +63,38 @@ public class HomeController : Controller
     {
         try
         {
-            var centralConnString = _configuration.GetConnectionString("PSCentral");
-            var repo = new CentralRepository(centralConnString!);
-            
-            var database = await repo.GetDatabaseByCodeAsync(databaseCode);
+            var database = await _centralRepository.GetDatabaseByCodeAsync(databaseCode);
             if (database == null)
             {
                 return Json(new { success = false, message = "Database not found" });
             }
             
-            // Build tenant connection string
             var tenantConnString = ConnectionStringBuilder.Build(database);
             _logger.LogInformation("Attempting connection to: {Server}\\{Instance}, DB: {DbName}, User: {User}", 
                 database.DBServerID, database.DBProviderInstanceName, database.DBName, database.DBUserName);
             
-            // Test connection
             using var conn = new Microsoft.Data.SqlClient.SqlConnection(tenantConnString);
             await conn.OpenAsync();
             
-            // Store in session
-            HttpContext.Session.SetString("TenantConnectionString", tenantConnString);
-            HttpContext.Session.SetString("ConnectedDatabase", database.DBFriendlyName);
-            HttpContext.Session.SetString("ConnectedDatabaseCode", database.DBCode);
+            HttpContext.Session.SetString(SessionKeys.TenantConnectionString, tenantConnString);
+            HttpContext.Session.SetString(SessionKeys.ConnectedDatabase, database.DBFriendlyName);
+            HttpContext.Session.SetString(SessionKeys.ConnectedDatabaseCode, database.DBCode);
             
             return Json(new { success = true, databaseName = database.DBFriendlyName });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error connecting to database {DatabaseCode}", databaseCode);
-            return Json(new { success = false, message = $"Connection failed: {ex.Message}" });
+            return Json(new { success = false, message = "Connection failed. Please try again or contact support." });
         }
     }
 
     [HttpPost]
     public IActionResult Disconnect()
     {
-        HttpContext.Session.Remove("TenantConnectionString");
-        HttpContext.Session.Remove("ConnectedDatabase");
-        HttpContext.Session.Remove("ConnectedDatabaseCode");
+        HttpContext.Session.Remove(SessionKeys.TenantConnectionString);
+        HttpContext.Session.Remove(SessionKeys.ConnectedDatabase);
+        HttpContext.Session.Remove(SessionKeys.ConnectedDatabaseCode);
         
         return RedirectToAction("Index");
     }

@@ -1,22 +1,37 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Powersoft.Reporting.Core.Constants;
 using Powersoft.Reporting.Core.Enums;
-using Powersoft.Reporting.Data.Tenant;
+using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Web.ViewModels;
 
 namespace Powersoft.Reporting.Web.Controllers;
 
+[Authorize]
 public class ReportsController : Controller
 {
+    private readonly ITenantRepositoryFactory _repositoryFactory;
     private readonly ILogger<ReportsController> _logger;
 
-    public ReportsController(ILogger<ReportsController> logger)
+    public ReportsController(ITenantRepositoryFactory repositoryFactory, ILogger<ReportsController> logger)
     {
+        _repositoryFactory = repositoryFactory;
         _logger = logger;
+    }
+    
+    private string? GetTenantConnectionString()
+    {
+        return HttpContext.Session.GetString(SessionKeys.TenantConnectionString);
+    }
+    
+    private string? GetConnectedDatabaseName()
+    {
+        return HttpContext.Session.GetString(SessionKeys.ConnectedDatabase);
     }
 
     public IActionResult Index()
     {
-        var connectedDb = HttpContext.Session.GetString("ConnectedDatabase");
+        var connectedDb = GetConnectedDatabaseName();
         if (string.IsNullOrEmpty(connectedDb))
         {
             TempData["Warning"] = "Please select and connect to a database first.";
@@ -26,10 +41,10 @@ public class ReportsController : Controller
         return View();
     }
 
-    public IActionResult AverageBasket()
+    public async Task<IActionResult> AverageBasket()
     {
-        var connectedDb = HttpContext.Session.GetString("ConnectedDatabase");
-        var tenantConnString = HttpContext.Session.GetString("TenantConnectionString");
+        var connectedDb = GetConnectedDatabaseName();
+        var tenantConnString = GetTenantConnectionString();
         
         if (string.IsNullOrEmpty(tenantConnString))
         {
@@ -45,14 +60,16 @@ public class ReportsController : Controller
             DateTo = DateTime.Today
         };
         
+        await LoadAvailableStoresAsync(viewModel, tenantConnString);
+        
         return View(viewModel);
     }
 
     [HttpPost]
     public async Task<IActionResult> AverageBasket(AverageBasketViewModel model)
     {
-        var connectedDb = HttpContext.Session.GetString("ConnectedDatabase");
-        var tenantConnString = HttpContext.Session.GetString("TenantConnectionString");
+        var connectedDb = GetConnectedDatabaseName();
+        var tenantConnString = GetTenantConnectionString();
         
         if (string.IsNullOrEmpty(tenantConnString))
         {
@@ -63,27 +80,77 @@ public class ReportsController : Controller
         model.ConnectedDatabase = connectedDb;
         model.IsConnected = true;
         
-        // Handle date presets
+        await LoadAvailableStoresAsync(model, tenantConnString);
         ApplyDatePreset(model);
+        
+        var filter = model.ToReportFilter();
+        if (!filter.IsValid(out var validationErrors))
+        {
+            model.ErrorMessage = string.Join(" ", validationErrors);
+            return View(model);
+        }
         
         try
         {
-            var repo = new AverageBasketRepository(tenantConnString);
-            model.Results = await repo.GetAverageBasketDataAsync(
-                model.DateFrom,
-                model.DateTo,
-                model.Breakdown,
-                model.GroupBy,
-                model.CompareLastYear
-            );
+            var repo = _repositoryFactory.CreateAverageBasketRepository(tenantConnString);
+            var result = await repo.GetAverageBasketDataAsync(filter);
+            
+            model.Results = result.Items;
+            model.TotalCount = result.TotalCount;
+            model.PageNumber = result.PageNumber;
+            model.PageSize = result.PageSize;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating Average Basket report");
-            model.ErrorMessage = $"Error generating report: {ex.Message}";
+            _logger.LogError(ex, "Error generating Average Basket report for period {DateFrom} to {DateTo}", 
+                filter.DateFrom, filter.DateTo);
+            model.ErrorMessage = "An error occurred while generating the report. Please try again.";
         }
         
         return View(model);
+    }
+    
+    [HttpGet]
+    public async Task<IActionResult> GetStores()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        
+        if (string.IsNullOrEmpty(tenantConnString))
+        {
+            return Json(new { error = "Not connected to database" });
+        }
+        
+        try
+        {
+            var repo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+            var stores = await repo.GetActiveStoresAsync();
+            
+            return Json(stores.Select(s => new 
+            { 
+                code = s.StoreCode, 
+                name = s.StoreName,
+                display = s.DisplayName 
+            }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading stores");
+            return Json(new { error = "Failed to load stores" });
+        }
+    }
+    
+    private async Task LoadAvailableStoresAsync(AverageBasketViewModel model, string tenantConnString)
+    {
+        try
+        {
+            var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+            model.AvailableStores = await storeRepo.GetActiveStoresAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load stores");
+            model.AvailableStores = new();
+        }
     }
     
     private void ApplyDatePreset(AverageBasketViewModel model)

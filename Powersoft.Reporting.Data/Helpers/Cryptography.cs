@@ -3,14 +3,11 @@ using System.Text;
 
 namespace Powersoft.Reporting.Data.Helpers;
 
-/// <summary>
-/// Port of Powersoft.CloudCommon.Security.Cryptography for password decryption.
-/// </summary>
+// Must match Powersoft.CloudCommon.Cryptography - used for tbl_DB password decryption
 public static class Cryptography
 {
     private static string Initialize()
     {
-        // ASCII 100-120: defghijklmnopqrstuvwx
         var sb = new StringBuilder();
         for (int i = 100; i <= 120; i++)
             sb.Append((char)i);
@@ -19,8 +16,7 @@ public static class Cryptography
 
     private static string Clear()
     {
-        // VB.NET bug: For i = 120 To 100 without Step -1 doesn't execute!
-        // So Clear() returns empty string in the original code
+        // original VB loop For i=120 To 100 (no Step -1) never runs, returns ""
         return "";
     }
 
@@ -34,7 +30,6 @@ public static class Cryptography
             byte[] cipherBytes = Convert.FromBase64String(cipherText);
             var s = new ASCIIEncoding();
             
-            // Must match legacy VB.NET behavior - no iterations/hash specified
             #pragma warning disable SYSLIB0041
             using var pdb = new Rfc2898DeriveBytes(Clear(), s.GetBytes(Initialize()));
             #pragma warning restore SYSLIB0041
@@ -52,7 +47,6 @@ public static class Cryptography
         }
         catch
         {
-            // If decryption fails, return original (might be plaintext)
             return cipherText;
         }
     }

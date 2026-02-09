@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Powersoft.Reporting.Core", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Powersoft.Reporting.Data", "Powersoft.Reporting.Data\Powersoft.Reporting.Data.csproj", "{3448877F-E1B0-461A-AA2B-761E34D33465}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Powersoft.Reporting.Tests", "Powersoft.Reporting.Tests\Powersoft.Reporting.Tests.csproj", "{513538B4-AC46-41B6-AAE0-65FD86CE044A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{3448877F-E1B0-461A-AA2B-761E34D33465}.Release|x64.Build.0 = Release|Any CPU
 		{3448877F-E1B0-461A-AA2B-761E34D33465}.Release|x86.ActiveCfg = Release|Any CPU
 		{3448877F-E1B0-461A-AA2B-761E34D33465}.Release|x86.Build.0 = Release|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Debug|x64.Build.0 = Debug|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Debug|x86.Build.0 = Debug|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Release|x64.ActiveCfg = Release|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Release|x64.Build.0 = Release|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Release|x86.ActiveCfg = Release|Any CPU
+		{513538B4-AC46-41B6-AAE0-65FD86CE044A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

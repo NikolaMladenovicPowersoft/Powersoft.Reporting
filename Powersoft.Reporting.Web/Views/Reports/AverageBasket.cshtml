@@ -8,14 +8,14 @@
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
-                <li class="breadcrumb-item"><a href="#">Stock Control</a></li>
+                <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
                 <li class="breadcrumb-item active">Average Basket</li>
             </ol>
         </nav>
         <h2 class="mb-0">
             <i class="bi bi-basket me-2 text-primary"></i>Average Basket Report
         </h2>
-        <p class="text-muted">Analyze sales performance and average transaction values</p>
+        <p class="text-muted mb-0">Analyze sales performance and average transaction values</p>
     </div>
 </div>
 
@@ -25,11 +25,13 @@
     </div>
     <div class="card-body">
         <form asp-action="AverageBasket" method="post" id="reportForm">
-            <!-- Date Presets -->
+            <input type="hidden" asp-for="SelectedStoreCodesString" id="selectedStoreCodesHidden" />
+            <input type="hidden" asp-for="PageNumber" id="pageNumberHidden" />
+            
             <div class="row mb-3">
                 <div class="col-12">
                     <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
-                    <div class="btn-group flex-wrap" role="group">
+                    <div class="date-presets btn-group flex-wrap" role="group">
                         <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
                         <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
                         
@@ -59,43 +61,91 @@
             
             <hr class="my-3">
             
-            <!-- Main Parameters -->
-            <div class="row g-3 align-items-end">
-                <div class="col-md-2">
+            <div class="row g-3 mb-3 align-items-end">
+                <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Date From</label>
-                    <input type="date" asp-for="DateFrom" class="form-control" />
+                    <input type="date" asp-for="DateFrom" class="form-control" onchange="clearPreset()" />
                 </div>
-                <div class="col-md-2">
+                <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Date To</label>
-                    <input type="date" asp-for="DateTo" class="form-control" />
+                    <input type="date" asp-for="DateTo" class="form-control" onchange="clearPreset()" />
                 </div>
-                <div class="col-md-2">
+                <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Breakdown</label>
-                    <select asp-for="Breakdown" class="form-select" asp-items="Html.GetEnumSelectList<Powersoft.Reporting.Core.Enums.BreakdownType>()">
-                    </select>
+                    <select asp-for="Breakdown" class="form-select" asp-items="Html.GetEnumSelectList<Powersoft.Reporting.Core.Enums.BreakdownType>()"></select>
                 </div>
-                <div class="col-md-2">
+                <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Group By</label>
-                    <select asp-for="GroupBy" class="form-select" asp-items="Html.GetEnumSelectList<Powersoft.Reporting.Core.Enums.GroupByType>()">
+                    <select asp-for="GroupBy" class="form-select" asp-items="Html.GetEnumSelectList<Powersoft.Reporting.Core.Enums.GroupByType>()"></select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold">Stores</label>
+                    <div class="store-select-container">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-shop"></i></span>
+                            <div class="form-control store-multiselect" id="storeSelector" role="button" aria-haspopup="listbox" aria-expanded="false" onclick="toggleStoreDropdown(event)">
+                                <span id="storeSelectionText">All Stores</span>
+                            </div>
+                            <button type="button" class="btn btn-outline-secondary" onclick="clearStoreSelection()" title="Clear store selection">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <div class="store-dropdown" id="storeDropdown" role="listbox">
+                            <div class="store-search p-2">
+                                <input type="text" class="form-control form-control-sm" placeholder="Search stores..." 
+                                       id="storeSearchInput" onkeyup="filterStores()" aria-label="Search stores">
+                            </div>
+                            <div class="store-list" id="storeList">
+                                @foreach (var store in Model.AvailableStores)
+                                {
+                                    var isChecked = Model.SelectedStoreCodes.Contains(store.StoreCode);
+                                    <label class="store-item" data-code="@store.StoreCode" data-name="@store.StoreName.ToLower()">
+                                        <input type="checkbox" value="@store.StoreCode" @(isChecked ? "checked" : "") onchange="updateStoreSelection()">
+                                        <span>@store.DisplayName</span>
+                                    </label>
+                                }
+                            </div>
+                            <div class="store-actions p-2 border-top">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllStores()">Select All</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearStoreSelection()">Clear All</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row g-3 mb-4 align-items-end">
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="IncludeVat" class="form-check-input" id="includeVatCheck" />
+                        <label asp-for="IncludeVat" class="form-check-label" for="includeVatCheck">Include VAT</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="CompareLastYear" class="form-check-input" id="compareLyCheck" />
+                        <label asp-for="CompareLastYear" class="form-check-label" for="compareLyCheck">Compare with Last Year</label>
+                    </div>
+                </div>
+                <div class="col-auto ms-md-auto">
+                    <label class="form-label fw-semibold small text-muted mb-1">Rows per page</label>
+                    <select asp-for="PageSize" class="form-select form-select-sm w-auto">
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
                     </select>
                 </div>
-                <div class="col-md-2">
-                    <div class="form-check mt-4">
-                        <input type="checkbox" asp-for="IncludeVat" class="form-check-input" />
-                        <label asp-for="IncludeVat" class="form-check-label">Include VAT</label>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <div class="form-check mt-4">
-                        <input type="checkbox" asp-for="CompareLastYear" class="form-check-input" />
-                        <label asp-for="CompareLastYear" class="form-check-label">Compare with Last Year</label>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-play-fill me-1"></i>Generate
-                    </button>
-                </div>
+            </div>
+            
+            <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
+                <button type="submit" class="btn btn-primary btn-lg btn-generate" id="generateBtn">
+                    <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
+                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                </button>
+                <a asp-action="AverageBasket" class="btn btn-outline-secondary btn-reset" title="Reset all filters to defaults">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Filters
+                </a>
             </div>
         </form>
     </div>
@@ -103,47 +153,69 @@
 
 @if (!string.IsNullOrEmpty(Model.ErrorMessage))
 {
-    <div class="alert alert-danger">
-        <i class="bi bi-exclamation-triangle me-2"></i>
-        @Model.ErrorMessage
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <div class="d-flex align-items-start">
+            <i class="bi bi-exclamation-triangle-fill me-2 mt-1"></i>
+            <div>
+                <strong>Unable to generate report</strong>
+                <p class="mb-0 mt-1">@Model.ErrorMessage</p>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["Warning"] != null)
+{
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        @TempData["Warning"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        @TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
 }
 
 @if (Model.Results.Any())
 {
     <div class="row mb-4 g-3">
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
             <div class="stat-card text-center">
                 <div class="stat-value">@Model.TotalTransactions.ToString("N0")</div>
-                <div class="stat-label">Total Transactions</div>
+                <div class="stat-label" title="Net transactions on current page">Net Trans. (page)</div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
             <div class="stat-card text-center">
                 <div class="stat-value">@Model.TotalQty.ToString("N0")</div>
-                <div class="stat-label">Items Sold</div>
+                <div class="stat-label" title="Items sold on current page">Items Sold (page)</div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
             <div class="stat-card text-center">
                 <div class="stat-value">@((Model.IncludeVat ? Model.TotalGrossSales : Model.TotalNetSales).ToString("N2"))</div>
-                <div class="stat-label">Total Sales</div>
+                <div class="stat-label" title="Sales total on current page">Sales (page)</div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
             <div class="stat-card text-center">
                 <div class="stat-value text-primary">@Model.OverallAverageBasket.ToString("N2")</div>
-                <div class="stat-label">Average Basket</div>
+                <div class="stat-label">Avg. Basket</div>
             </div>
         </div>
         @if (Model.CompareLastYear)
         {
-            <div class="col-md-3">
+            var yoyClass = Model.OverallYoYChangePercent >= 0 ? "text-success" : "text-danger";
+            var yoyIcon = Model.OverallYoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+            <div class="col-6 col-md-3">
                 <div class="stat-card text-center">
-                    @{
-                        var yoyClass = Model.OverallYoYChangePercent >= 0 ? "text-success" : "text-danger";
-                        var yoyIcon = Model.OverallYoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
-                    }
                     <div class="stat-value @yoyClass"><i class="bi @yoyIcon me-1"></i>@Model.OverallYoYChangePercent.ToString("N1")%</div>
                     <div class="stat-label">YoY Change</div>
                 </div>
@@ -153,7 +225,18 @@
     
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-table me-2"></i>Results (@Model.Results.Count rows)@(Model.HasGrouping ? $" - Grouped by {Model.GroupBy}" : "")</span>
+            <span>
+                <i class="bi bi-table me-2"></i>
+                Results: @Model.TotalCount total rows
+                @if (Model.HasStoreFilter)
+                {
+                    <span class="badge bg-info ms-2">@Model.SelectedStoreCodes.Count stores filtered</span>
+                }
+                @if (Model.HasGrouping)
+                {
+                    <span class="badge bg-secondary ms-2">Grouped by @Model.GroupBy</span>
+                }
+            </span>
             <button class="btn btn-outline-success btn-sm" onclick="exportToCSV()">
                 <i class="bi bi-download me-1"></i>Export CSV
             </button>
@@ -209,11 +292,11 @@
                                 {
                                     var lySales = Model.IncludeVat ? row.LYTotalGross : row.LYTotalNet;
                                     var lyAvg = Model.IncludeVat ? row.LYAverageGross : row.LYAverageNet;
-                                    var yoyClass = row.YoYChangePercent >= 0 ? "text-success" : "text-danger";
-                                    var yoyIcon = row.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                    var yoyRowClass = row.YoYChangePercent >= 0 ? "text-success" : "text-danger";
+                                    var yoyRowIcon = row.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
                                     <td class="text-end text-muted">@lySales.ToString("N2")</td>
                                     <td class="text-end text-muted">@lyAvg.ToString("N2")</td>
-                                    <td class="text-end @yoyClass"><i class="bi @yoyIcon"></i> @row.YoYChangePercent.ToString("N1")%</td>
+                                    <td class="text-end @yoyRowClass"><i class="bi @yoyRowIcon"></i> @row.YoYChangePercent.ToString("N1")%</td>
                                 }
                             </tr>
                         }
@@ -224,7 +307,7 @@
                             {
                                 <td></td>
                             }
-                            <td>TOTAL</td>
+                            <td>PAGE TOTAL</td>
                             <td class="text-end">@Model.Results.Sum(r => r.CYInvoiceCount).ToString("N0")</td>
                             <td class="text-end text-danger">@Model.Results.Sum(r => r.CYCreditCount).ToString("N0")</td>
                             <td class="text-end">@Model.TotalTransactions.ToString("N0")</td>
@@ -247,15 +330,64 @@
                 </table>
             </div>
         </div>
+        
+        <!-- Pagination -->
+        @if (Model.TotalPages > 1)
+        {
+            <div class="card-footer">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="text-muted">
+                        Showing @((Model.PageNumber - 1) * Model.PageSize + 1) to @(Math.Min(Model.PageNumber * Model.PageSize, Model.TotalCount)) of @Model.TotalCount rows
+                    </div>
+                    <nav>
+                        <ul class="pagination mb-0">
+                            <li class="page-item @(Model.HasPreviousPage ? "" : "disabled")">
+                                <a class="page-link" href="#" onclick="goToPage(1); return false;">
+                                    <i class="bi bi-chevron-double-left"></i>
+                                </a>
+                            </li>
+                            <li class="page-item @(Model.HasPreviousPage ? "" : "disabled")">
+                                <a class="page-link" href="#" onclick="goToPage(@(Model.PageNumber - 1)); return false;">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            
+                            @{
+                                var startPage = Math.Max(1, Model.PageNumber - 2);
+                                var endPage = Math.Min(Model.TotalPages, Model.PageNumber + 2);
+                            }
+                            
+                            @for (int p = startPage; p <= endPage; p++)
+                            {
+                                <li class="page-item @(p == Model.PageNumber ? "active" : "")">
+                                    <a class="page-link" href="#" onclick="goToPage(@p); return false;">@p</a>
+                                </li>
+                            }
+                            
+                            <li class="page-item @(Model.HasNextPage ? "" : "disabled")">
+                                <a class="page-link" href="#" onclick="goToPage(@(Model.PageNumber + 1)); return false;">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                            <li class="page-item @(Model.HasNextPage ? "" : "disabled")">
+                                <a class="page-link" href="#" onclick="goToPage(@Model.TotalPages); return false;">
+                                    <i class="bi bi-chevron-double-right"></i>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        }
     </div>
 }
 else if (ViewContext.HttpContext.Request.Method == "POST")
 {
     <div class="card">
         <div class="card-body text-center py-5">
-            <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
+            <i class="bi bi-inbox empty-state-icon text-muted"></i>
             <h4 class="mt-3">No Data Found</h4>
-            <p class="text-muted">No transactions found for the selected date range.</p>
+            <p class="text-muted">No transactions found for the selected criteria.</p>
         </div>
     </div>
 }
@@ -263,23 +395,102 @@ else
 {
     <div class="card">
         <div class="card-body text-center py-5">
-            <i class="bi bi-bar-chart text-primary" style="font-size: 4rem;"></i>
+            <i class="bi bi-bar-chart empty-state-icon text-primary"></i>
             <h4 class="mt-3">Generate Your Report</h4>
-            <p class="text-muted">Select your parameters above and click "Generate" to view the Average Basket analysis.</p>
+            <p class="text-muted">Select your parameters above and click "Generate Report" to view the Average Basket analysis.</p>
         </div>
     </div>
 }
 
 @section Scripts {
 <script>
-// Clear date preset when manually changing dates
-document.getElementById('DateFrom').addEventListener('change', clearPreset);
-document.getElementById('DateTo').addEventListener('change', clearPreset);
+// Store selection functionality
+let storeDropdownOpen = false;
 
+function toggleStoreDropdown(event) {
+    event.stopPropagation();
+    const dropdown = document.getElementById('storeDropdown');
+    const selector = document.getElementById('storeSelector');
+    storeDropdownOpen = !storeDropdownOpen;
+    dropdown.classList.toggle('show', storeDropdownOpen);
+    selector.setAttribute('aria-expanded', storeDropdownOpen);
+}
+
+document.addEventListener('click', function(event) {
+    const container = document.querySelector('.store-select-container');
+    if (!container.contains(event.target)) {
+        const dropdown = document.getElementById('storeDropdown');
+        const selector = document.getElementById('storeSelector');
+        dropdown.classList.remove('show');
+        selector.setAttribute('aria-expanded', 'false');
+        storeDropdownOpen = false;
+    }
+});
+
+function updateStoreSelection() {
+    const checkboxes = document.querySelectorAll('#storeList input[type="checkbox"]:checked');
+    const selectedCodes = Array.from(checkboxes).map(cb => cb.value);
+    
+    document.getElementById('selectedStoreCodesHidden').value = selectedCodes.join(',');
+    
+    const text = selectedCodes.length === 0 
+        ? 'All Stores' 
+        : selectedCodes.length === 1 
+            ? `1 store selected`
+            : `${selectedCodes.length} stores selected`;
+    
+    document.getElementById('storeSelectionText').textContent = text;
+}
+
+function selectAllStores() {
+    document.querySelectorAll('#storeList input[type="checkbox"]').forEach(cb => cb.checked = true);
+    updateStoreSelection();
+}
+
+function clearStoreSelection() {
+    document.querySelectorAll('#storeList input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateStoreSelection();
+}
+
+function filterStores() {
+    const searchText = document.getElementById('storeSearchInput').value.toLowerCase();
+    document.querySelectorAll('.store-item').forEach(item => {
+        const name = item.dataset.name;
+        const code = item.dataset.code.toLowerCase();
+        const visible = name.includes(searchText) || code.includes(searchText);
+        item.style.display = visible ? 'flex' : 'none';
+    });
+}
+
+// Date preset handling
 function clearPreset() {
     document.querySelectorAll('input[name="DatePreset"]').forEach(r => r.checked = false);
 }
 
+// Pagination
+function goToPage(page) {
+    document.getElementById('pageNumberHidden').value = page;
+    document.getElementById('reportForm').submit();
+}
+
+function resetPage() {
+    document.getElementById('pageNumberHidden').value = 1;
+}
+
+function showLoading() {
+    const btn = document.getElementById('generateBtn');
+    const spinner = btn.querySelector('.spinner-border');
+    const text = btn.querySelector('.btn-text');
+    
+    btn.classList.add('btn-loading');
+    spinner.classList.remove('d-none');
+    text.style.visibility = 'hidden';
+    
+    // Disable after a tiny delay to allow form submission
+    setTimeout(() => { btn.disabled = true; }, 10);
+}
+
+// CSV Export
 function exportToCSV() {
     const table = document.getElementById('resultsTable');
     let csv = [];
@@ -304,5 +515,22 @@ function exportToCSV() {
     a.download = `AverageBasket_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
 }
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', function() {
+    updateStoreSelection();
+    
+    // Form submit handler - show loading state
+    const form = document.getElementById('reportForm');
+    form.addEventListener('submit', function() {
+        showLoading();
+    });
+    
+    // Generate button resets page to 1
+    const generateBtn = document.getElementById('generateBtn');
+    generateBtn.addEventListener('click', function() {
+        resetPage();
+    });
+});
 </script>
 }

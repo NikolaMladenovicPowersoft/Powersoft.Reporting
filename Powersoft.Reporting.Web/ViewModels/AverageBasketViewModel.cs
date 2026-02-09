@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Powersoft.Reporting.Core.Enums;
 using Powersoft.Reporting.Core.Models;
 
@@ -5,15 +6,47 @@ namespace Powersoft.Reporting.Web.ViewModels;
 
 public class AverageBasketViewModel
 {
+    [Required(ErrorMessage = "Date From is required")]
+    [DataType(DataType.Date)]
+    [Display(Name = "Date From")]
     public DateTime DateFrom { get; set; } = new DateTime(DateTime.Today.Year, 1, 1);
+    
+    [Required(ErrorMessage = "Date To is required")]
+    [DataType(DataType.Date)]
+    [Display(Name = "Date To")]
     public DateTime DateTo { get; set; } = DateTime.Today;
+    
+    [Display(Name = "Breakdown")]
     public BreakdownType Breakdown { get; set; } = BreakdownType.Monthly;
+    
+    [Display(Name = "Group By")]
     public GroupByType GroupBy { get; set; } = GroupByType.None;
+    
+    [Display(Name = "Include VAT")]
     public bool IncludeVat { get; set; } = false;
+    
+    [Display(Name = "Compare with Last Year")]
     public bool CompareLastYear { get; set; } = false;
     
-    // Date preset for quick selection
     public string? DatePreset { get; set; }
+    
+    public List<string> SelectedStoreCodes { get; set; } = new();
+    public string SelectedStoreCodesString 
+    { 
+        get => string.Join(",", SelectedStoreCodes);
+        set => SelectedStoreCodes = string.IsNullOrEmpty(value) 
+            ? new List<string>() 
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+    }
+    
+    public List<Store> AvailableStores { get; set; } = new();
+    
+    public int PageNumber { get; set; } = 1;
+    public int PageSize { get; set; } = 50;
+    public int TotalCount { get; set; }
+    public int TotalPages => PageSize > 0 ? (int)Math.Ceiling(TotalCount / (double)PageSize) : 0;
+    public bool HasPreviousPage => PageNumber > 1;
+    public bool HasNextPage => PageNumber < TotalPages;
     
     public List<AverageBasketRow> Results { get; set; } = new();
     
@@ -21,10 +54,9 @@ public class AverageBasketViewModel
     public bool IsConnected { get; set; }
     public string? ErrorMessage { get; set; }
     
-    // Check if results are grouped
     public bool HasGrouping => GroupBy != GroupByType.None;
+    public bool HasStoreFilter => SelectedStoreCodes.Any();
     
-    // Totals
     public int TotalTransactions => Results.Sum(r => r.CYTotalTransactions);
     public decimal TotalQty => Results.Sum(r => r.CYTotalQty);
     public decimal TotalNetSales => Results.Sum(r => r.CYTotalNet);
@@ -33,11 +65,27 @@ public class AverageBasketViewModel
         ? (IncludeVat ? TotalGrossSales : TotalNetSales) / TotalTransactions 
         : 0;
     
-    // Last Year totals (when CompareLastYear is true)
     public int TotalLYTransactions => Results.Sum(r => r.LYTotalTransactions);
     public decimal TotalLYNetSales => Results.Sum(r => r.LYTotalNet);
     public decimal TotalLYGrossSales => Results.Sum(r => r.LYTotalGross);
     public decimal OverallYoYChangePercent => TotalLYNetSales != 0 
         ? Math.Round((TotalNetSales - TotalLYNetSales) / TotalLYNetSales * 100, 2) 
         : (TotalNetSales > 0 ? 100 : 0);
+    
+    public ReportFilter ToReportFilter()
+    {
+        return new ReportFilter
+        {
+            DateFrom = DateFrom,
+            DateTo = DateTo,
+            Breakdown = Breakdown,
+            GroupBy = GroupBy,
+            IncludeVat = IncludeVat,
+            CompareLastYear = CompareLastYear,
+            StoreCodes = SelectedStoreCodes,
+            PageNumber = PageNumber,
+            PageSize = PageSize,
+            DatePreset = DatePreset
+        };
+    }
 }

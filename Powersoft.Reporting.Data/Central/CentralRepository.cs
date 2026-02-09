@@ -1,9 +1,10 @@
 using Microsoft.Data.SqlClient;
+using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
 
 namespace Powersoft.Reporting.Data.Central;
 
-public class CentralRepository
+public class CentralRepository : ICentralRepository
 {
     private readonly string _connectionString;
 

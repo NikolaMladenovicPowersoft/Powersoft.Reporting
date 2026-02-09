@@ -1,22 +1,410 @@
+/* ============================================
+   Powersoft Reporting - Design System
+   Jedinstvena paleta, tokeni, komponente
+   ============================================ */
+
+/* --- Design Tokens --- */
+:root {
+    --ps-primary: #2563eb;
+    --ps-primary-dark: #1d4ed8;
+    --ps-primary-light: #3b82f6;
+    --ps-success: #059669;
+    --ps-success-light: #dcfce7;
+    --ps-warning: #d97706;
+    --ps-warning-light: #fef3c7;
+    --ps-danger: #dc2626;
+    --ps-muted: #64748b;
+    --ps-muted-light: #f1f5f9;
+    --ps-text: #1e293b;
+    --ps-border: #e2e8f0;
+    --ps-bg: #f8fafc;
+    --ps-radius: 12px;
+    --ps-radius-sm: 8px;
+    --ps-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --ps-shadow-lg: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* --- Base --- */
 html {
-  font-size: 14px;
+    font-size: 14px;
+    position: relative;
+    min-height: 100%;
 }
 
 @media (min-width: 768px) {
-  html {
-    font-size: 16px;
-  }
-}
-
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
-}
-
-html {
-  position: relative;
-  min-height: 100%;
+    html {
+        font-size: 16px;
+    }
 }
 
 body {
-  margin-bottom: 60px;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: var(--ps-bg);
+    color: var(--ps-text);
+    margin-bottom: 60px;
+}
+
+/* --- Navbar --- */
+.navbar {
+    background: linear-gradient(135deg, var(--ps-primary) 0%, var(--ps-primary-dark) 100%);
+    box-shadow: var(--ps-shadow);
+}
+
+.navbar-brand {
+    font-weight: 600;
+    letter-spacing: -0.5px;
+}
+
+/* --- Cards --- */
+.card {
+    border: none;
+    border-radius: var(--ps-radius);
+    box-shadow: var(--ps-shadow);
+}
+
+.card-header {
+    background: white;
+    border-bottom: 1px solid var(--ps-border);
+    font-weight: 600;
+    border-radius: var(--ps-radius) var(--ps-radius) 0 0 !important;
+}
+
+/* --- Buttons --- */
+.btn-primary {
+    background: var(--ps-primary);
+    border-color: var(--ps-primary);
+}
+
+.btn-primary:hover {
+    background: var(--ps-primary-dark);
+    border-color: var(--ps-primary-dark);
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus,
+.form-control:focus, .form-check-input:focus {
+    box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.25);
+}
+
+/* --- Form Controls --- */
+.form-select, .form-control {
+    border-radius: var(--ps-radius-sm);
+    border-color: var(--ps-border);
+}
+
+.form-select:focus, .form-control:focus {
+    border-color: var(--ps-primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* --- Tables --- */
+.table {
+    font-size: 0.9rem;
+}
+
+.table th {
+    background: var(--ps-muted-light);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    color: var(--ps-muted);
+}
+
+/* --- Stat Cards --- */
+.stat-card {
+    background: white;
+    border-radius: var(--ps-radius);
+    padding: 1.5rem;
+    box-shadow: var(--ps-shadow);
+}
+
+.stat-card .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--ps-text);
+}
+
+.stat-card .stat-label {
+    color: var(--ps-muted);
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* --- Status Badges --- */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.status-connected {
+    background: var(--ps-success-light);
+    color: #166534;
+}
+
+.status-disconnected {
+    background: var(--ps-warning-light);
+    color: #92400e;
+}
+
+/* --- Sidebar Nav --- */
+.sidebar-nav {
+    background: white;
+    border-radius: var(--ps-radius);
+    box-shadow: var(--ps-shadow);
+}
+
+.sidebar-nav .nav-link {
+    color: var(--ps-muted);
+    padding: 0.75rem 1rem;
+    border-radius: var(--ps-radius-sm);
+    margin: 0.25rem 0.5rem;
+}
+
+.sidebar-nav .nav-link:hover {
+    background: var(--ps-muted-light);
+    color: var(--ps-primary);
+}
+
+.sidebar-nav .nav-link.active {
+    background: var(--ps-primary);
+    color: white;
+}
+
+.sidebar-nav .nav-link i {
+    width: 24px;
+}
+
+/* --- Empty / Icon States --- */
+.empty-state-icon {
+    font-size: 4rem;
+}
+
+.empty-state-icon.text-muted {
+    color: var(--ps-muted) !important;
+}
+
+.empty-state-icon.text-primary {
+    color: var(--ps-primary) !important;
+}
+
+/* --- Report Form Specific --- */
+.report-form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: flex-end;
+}
+
+.btn-generate {
+    min-width: 140px;
+}
+
+.btn-reset {
+    flex-shrink: 0;
+}
+
+/* --- Store Multi-Select --- */
+.store-select-container {
+    position: relative;
+}
+
+.store-multiselect {
+    cursor: pointer;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+}
+
+.store-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 1050;
+    background: white;
+    border: 1px solid var(--ps-border);
+    border-radius: 0 0 var(--ps-radius-sm) var(--ps-radius-sm);
+    box-shadow: var(--ps-shadow-lg);
+    max-height: 300px;
+    overflow: hidden;
+}
+
+.store-dropdown.show {
+    display: block;
+}
+
+.store-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.store-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    gap: 0.5rem;
+}
+
+.store-item:hover {
+    background-color: var(--ps-muted-light);
+}
+
+.store-item input {
+    margin: 0;
+}
+
+/* --- Date Presets - Responsive --- */
+.date-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+@media (max-width: 576px) {
+    .date-presets {
+        gap: 0.5rem;
+    }
+    
+    .date-presets label.btn {
+        flex: 1 1 calc(50% - 0.25rem);
+        min-width: 0;
+        text-align: center;
+    }
+}
+
+/* --- Report form mobile --- */
+@media (max-width: 767px) {
+    .report-form-actions .btn-generate {
+        width: 100%;
+    }
+    
+    .stat-card .stat-value {
+        font-size: 1.5rem;
+    }
+}
+
+/* --- Form utilities --- */
+.w-auto {
+    width: auto !important;
+}
+
+/* --- Pagination --- */
+.pagination .page-link {
+    color: var(--ps-primary);
+}
+
+.pagination .page-item.active .page-link {
+    background-color: var(--ps-primary);
+    border-color: var(--ps-primary);
+}
+
+/* --- Loading States --- */
+.btn-loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+.btn-loading .btn-text {
+    visibility: hidden;
+}
+
+.btn-loading .spinner-border {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15em;
+}
+
+/* --- Overlay loading for entire form --- */
+.form-loading {
+    position: relative;
+}
+
+.form-loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.7);
+    z-index: 10;
+    border-radius: var(--ps-radius);
+}
+
+.form-loading .loading-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 11;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.loading-overlay .spinner-border {
+    width: 2rem;
+    height: 2rem;
+    color: var(--ps-primary);
+}
+
+.loading-overlay span {
+    font-weight: 500;
+    color: var(--ps-muted);
+}
+
+/* --- Alerts --- */
+.alert {
+    border-radius: var(--ps-radius);
+    border: none;
+}
+
+.alert-danger {
+    background-color: #fef2f2;
+    color: #991b1b;
+}
+
+.alert-danger .bi {
+    color: var(--ps-danger);
+}
+
+.alert-warning {
+    background-color: #fffbeb;
+    color: #92400e;
+}
+
+.alert-warning .bi {
+    color: var(--ps-warning);
+}
+
+.alert-success {
+    background-color: #f0fdf4;
+    color: #166534;
+}
+
+.alert-success .bi {
+    color: var(--ps-success);
+}
+
+.alert-info {
+    background-color: #eff6ff;
+    color: #1e40af;
+}
+
+.alert-info .bi {
+    color: var(--ps-primary);
 }

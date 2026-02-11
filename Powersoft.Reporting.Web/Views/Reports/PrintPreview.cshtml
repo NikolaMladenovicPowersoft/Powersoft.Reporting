@@ -1,0 +1,605 @@
+@model Powersoft.Reporting.Web.ViewModels.AverageBasketViewModel
+@{
+    Layout = null;
+    var db = Model.ConnectedDatabase ?? "Unknown";
+    var now = DateTime.Now;
+    var hasGrouping = Model.GroupBy != Powersoft.Reporting.Core.Enums.GroupByType.None;
+    var hasGroup2 = Model.SecondaryGroupBy != Powersoft.Reporting.Core.Enums.GroupByType.None;
+    var gt = Model.GrandTotals;
+    var hasLY = Model.CompareLastYear;
+
+    // Group rows by Level1 for grouped display
+    var grouped = hasGrouping
+        ? Model.Results.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A").ToList()
+        : null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Average Basket - Print Preview</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #525659;
+            color: #1e293b;
+        }
+
+        /* === Toolbar === */
+        .toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: #2c3e50;
+            color: white;
+            padding: 6px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-size: 13px;
+        }
+
+        .toolbar .title {
+            font-weight: 600;
+            margin-right: auto;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toolbar .separator {
+            width: 1px;
+            height: 24px;
+            background: rgba(255,255,255,0.2);
+        }
+
+        .toolbar button, .toolbar .dropdown-btn {
+            background: none;
+            border: 1px solid rgba(255,255,255,0.25);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .toolbar button:hover, .toolbar .dropdown-btn:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.4);
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .zoom-controls button {
+            padding: 5px 8px;
+        }
+
+        .zoom-level {
+            min-width: 42px;
+            text-align: center;
+            font-size: 12px;
+            color: rgba(255,255,255,0.8);
+        }
+
+        /* Export dropdown */
+        .export-wrap {
+            position: relative;
+        }
+
+        .export-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 4px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            min-width: 160px;
+            z-index: 200;
+            overflow: hidden;
+        }
+
+        .export-menu.show { display: block; }
+
+        .export-menu a {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            color: #1e293b;
+            text-decoration: none;
+            font-size: 13px;
+            transition: background 0.1s;
+        }
+
+        .export-menu a:hover {
+            background: #f1f5f9;
+        }
+
+        .export-menu a i {
+            width: 18px;
+            text-align: center;
+            color: #64748b;
+        }
+
+        /* === Paper container === */
+        .paper-container {
+            margin: 56px auto 40px;
+            padding: 20px;
+        }
+
+        .paper {
+            background: white;
+            margin: 0 auto;
+            padding: 48px 56px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+            transform-origin: top center;
+            transition: transform 0.2s ease;
+            max-width: 1200px;
+        }
+
+        /* === Report Content === */
+        .report-header {
+            text-align: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #1e293b;
+        }
+
+        .report-header .company-name {
+            font-size: 20px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #1e293b;
+        }
+
+        .report-header .report-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #475569;
+            margin-top: 2px;
+        }
+
+        .report-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 16px;
+        }
+
+        .report-meta .meta-right {
+            text-align: right;
+        }
+
+        /* === Report Table === */
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .report-table thead th {
+            background: #e2e8f0;
+            padding: 5px 8px;
+            text-align: right;
+            font-weight: 700;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #334155;
+            border-bottom: 2px solid #94a3b8;
+            white-space: nowrap;
+        }
+
+        .report-table thead th:first-child {
+            text-align: left;
+        }
+
+        /* Sub-header row (Current Year / Last Year) */
+        .report-table .col-group-header th {
+            background: #f1f5f9;
+            font-size: 9px;
+            padding: 3px 8px;
+            border-bottom: 1px solid #cbd5e1;
+            color: #64748b;
+        }
+
+        /* Group header row */
+        .report-table .group-header td {
+            background: #f8fafc;
+            padding: 6px 8px 3px;
+            font-weight: 700;
+            font-size: 11px;
+            color: #1e293b;
+            border-top: 1px solid #94a3b8;
+            text-align: left;
+        }
+
+        .report-table tbody td {
+            padding: 3px 8px;
+            text-align: right;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+        }
+
+        .report-table tbody td:first-child {
+            text-align: left;
+            padding-left: 16px;
+            color: #64748b;
+        }
+
+        .report-table tbody tr:hover td {
+            background: #fafbfd;
+        }
+
+        /* Group subtotal */
+        .report-table .group-subtotal td {
+            font-weight: 600;
+            border-top: 1px solid #cbd5e1;
+            border-bottom: 1px solid #94a3b8;
+            padding: 4px 8px;
+            background: #f8fafc;
+            font-style: italic;
+            color: #475569;
+        }
+
+        /* Grand total */
+        .report-table .grand-total td {
+            font-weight: 700;
+            border-top: 3px double #1e293b;
+            padding: 6px 8px;
+            background: #f1f5f9;
+            font-size: 11.5px;
+            color: #0f172a;
+        }
+
+        .text-danger { color: #dc2626; }
+        .text-end { text-align: right; }
+
+        /* === Footer === */
+        .report-footer {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 10px;
+            color: #94a3b8;
+        }
+
+        /* === Print styles === */
+        @@media print {
+            body { background: white; }
+            .toolbar { display: none !important; }
+            .paper-container { margin: 0; padding: 0; }
+            .paper {
+                box-shadow: none;
+                padding: 20px;
+                transform: none !important;
+            }
+            .report-table { page-break-inside: auto; }
+            .report-table tr { page-break-inside: avoid; }
+            .report-table .group-header { page-break-after: avoid; }
+            .report-footer { page-break-before: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <span class="title">
+            <i class="bi bi-bar-chart-fill me-1"></i>
+            Average Basket — @db
+        </span>
+
+        <div class="zoom-controls">
+            <button onclick="zoomOut()" title="Zoom out"><i class="bi bi-zoom-out"></i></button>
+            <span class="zoom-level" id="zoomLabel">100%</span>
+            <button onclick="zoomIn()" title="Zoom in"><i class="bi bi-zoom-in"></i></button>
+            <button onclick="zoomReset()" title="Fit to width" style="font-size:11px;">Fit</button>
+        </div>
+
+        <div class="separator"></div>
+
+        <button onclick="window.print()">
+            <i class="bi bi-printer"></i> Print
+        </button>
+
+        <div class="export-wrap">
+            <button class="dropdown-btn" onclick="toggleExportMenu(event)">
+                <i class="bi bi-download"></i> Export <i class="bi bi-chevron-down" style="font-size:10px;"></i>
+            </button>
+            <div class="export-menu" id="exportMenu">
+                <a href="@Url.Action("ExportPdf", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), breakdown = Model.Breakdown, groupBy = Model.GroupBy, secondaryGroupBy = Model.SecondaryGroupBy, includeVat = Model.IncludeVat, compareLastYear = Model.CompareLastYear, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
+                    <i class="bi bi-filetype-pdf"></i> PDF
+                </a>
+                <a href="@Url.Action("ExportExcel", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), breakdown = Model.Breakdown, groupBy = Model.GroupBy, secondaryGroupBy = Model.SecondaryGroupBy, includeVat = Model.IncludeVat, compareLastYear = Model.CompareLastYear, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
+                    <i class="bi bi-filetype-xlsx"></i> Excel (.xlsx)
+                </a>
+                <a href="#" onclick="exportCSVFromTable(); return false;">
+                    <i class="bi bi-filetype-csv"></i> CSV
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Paper -->
+    <div class="paper-container">
+        <div class="paper" id="paper">
+
+            <!-- Header -->
+            <div class="report-header">
+                <div class="company-name">@db</div>
+                <div class="report-title">Average Basket Report</div>
+            </div>
+
+            <!-- Meta -->
+            <div class="report-meta">
+                <div>
+                    <strong>Printed:</strong> @now.ToString("dd/MM/yyyy HH:mm:ss")
+                </div>
+                <div class="meta-right">
+                    <strong>Period:</strong> @Model.DateFrom.ToString("dd/MM/yyyy") — @Model.DateTo.ToString("dd/MM/yyyy")<br />
+                    <strong>Breakdown:</strong> @Model.Breakdown
+                    @if (Model.IncludeVat) { <span> &nbsp;| Includes VAT</span> }
+                    @if (hasGrouping) { <span> &nbsp;| Group: @Model.GroupBy</span> }
+                    @if (hasGroup2) { <span> &gt; @Model.SecondaryGroupBy</span> }
+                </div>
+            </div>
+
+            <!-- Table -->
+            <table class="report-table" id="reportTable">
+                <thead>
+                    <tr>
+                        <th style="min-width:90px;">Period</th>
+                        <th colspan="3" style="text-align:center; border-right:1px solid #94a3b8;">Current Year — Sales</th>
+                        <th colspan="3" style="text-align:center; border-right:1px solid #94a3b8;">Returns</th>
+                        <th colspan="2" style="text-align:center; border-right:1px solid #94a3b8;">Net Sales</th>
+                        <th colspan="2" style="text-align:center;">Average</th>
+                        @if (hasLY)
+                        {
+                            <th colspan="3" style="text-align:center; border-left:2px solid #94a3b8;">Last Year</th>
+                        }
+                    </tr>
+                    <tr class="col-group-header">
+                        <th></th>
+                        <th>Tickets</th>
+                        <th>Value</th>
+                        <th style="border-right:1px solid #cbd5e1;">Qty</th>
+                        <th>Tickets</th>
+                        <th>Value</th>
+                        <th style="border-right:1px solid #cbd5e1;">Qty</th>
+                        <th>Value</th>
+                        <th style="border-right:1px solid #cbd5e1;">Tickets</th>
+                        <th>Value</th>
+                        <th>Qty</th>
+                        @if (hasLY)
+                        {
+                            <th style="border-left:2px solid #cbd5e1;">Value</th>
+                            <th>% +/-</th>
+                            <th>Avg</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                @if (hasGrouping && grouped != null)
+                {
+                    @foreach (var group in grouped)
+                    {
+                        var groupRows = group.ToList();
+                        var colSpan = hasLY ? 14 : 11;
+                        
+                        // Group header
+                        <tr class="group-header">
+                            <td colspan="@colSpan">@group.Key</td>
+                        </tr>
+                        
+                        @foreach (var row in groupRows)
+                        {
+                            var sales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
+                            var returns = Model.IncludeVat ? (row.CYGrossReturns) : row.CYNetReturns;
+                            var netSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
+                            var avg = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
+                            <tr>
+                                <td>@row.Period</td>
+                                <td>@row.CYInvoiceCount.ToString("N0")</td>
+                                <td>@row.CYNetSales.ToString("N2")</td>
+                                <td>@row.CYQtySold.ToString("N0")</td>
+                                <td class="text-danger">@row.CYCreditCount.ToString("N0")</td>
+                                <td class="text-danger">@row.CYNetReturns.ToString("N2")</td>
+                                <td class="text-danger">@row.CYQtyReturned.ToString("N0")</td>
+                                <td>@netSales.ToString("N2")</td>
+                                <td>@row.CYTotalTransactions.ToString("N0")</td>
+                                <td>@avg.ToString("N2")</td>
+                                <td>@row.CYAverageQty.ToString("N2")</td>
+                                @if (hasLY)
+                                {
+                                    var lySales = Model.IncludeVat ? row.LYTotalGross : row.LYTotalNet;
+                                    var lyAvg = Model.IncludeVat ? row.LYAverageGross : row.LYAverageNet;
+                                    <td>@lySales.ToString("N2")</td>
+                                    <td>@row.YoYChangePercent.ToString("N2")</td>
+                                    <td>@lyAvg.ToString("N2")</td>
+                                }
+                            </tr>
+                        }
+                        
+                        var gInv = groupRows.Sum(r => r.CYInvoiceCount);
+                        var gCred = groupRows.Sum(r => r.CYCreditCount);
+                        var gNet = groupRows.Sum(r => r.CYTotalNet);
+                        var gGross = groupRows.Sum(r => r.CYTotalGross);
+                        var gNetSales = Model.IncludeVat ? gGross : gNet;
+                        var gTrans = gInv - gCred;
+                        var gAvg = gTrans > 0 ? gNetSales / gTrans : 0;
+                        var gQty = groupRows.Sum(r => r.CYTotalQty);
+                        var gAvgQty = gTrans > 0 ? gQty / gTrans : 0;
+                        <tr class="group-subtotal">
+                            <td>Subtotal</td>
+                            <td>@gInv.ToString("N0")</td>
+                            <td>@groupRows.Sum(r => r.CYNetSales).ToString("N2")</td>
+                            <td>@groupRows.Sum(r => r.CYQtySold).ToString("N0")</td>
+                            <td>@gCred.ToString("N0")</td>
+                            <td>@groupRows.Sum(r => r.CYNetReturns).ToString("N2")</td>
+                            <td>@groupRows.Sum(r => r.CYQtyReturned).ToString("N0")</td>
+                            <td>@gNetSales.ToString("N2")</td>
+                            <td>@gTrans.ToString("N0")</td>
+                            <td>@gAvg.ToString("N2")</td>
+                            <td>@gAvgQty.ToString("N2")</td>
+                            @if (hasLY)
+                            {
+                                var gLyNet = groupRows.Sum(r => r.LYTotalNet);
+                                var gLyGross = groupRows.Sum(r => r.LYTotalGross);
+                                var gLySales = Model.IncludeVat ? gLyGross : gLyNet;
+                                var gLyTrans = groupRows.Sum(r => r.LYTotalTransactions);
+                                var gLyAvg = gLyTrans > 0 ? gLySales / gLyTrans : 0;
+                                var gYoy = gLyNet != 0 ? Math.Round((gNet - gLyNet) / Math.Abs(gLyNet) * 100, 2) : 0;
+                                <td>@gLySales.ToString("N2")</td>
+                                <td>@gYoy.ToString("N2")</td>
+                                <td>@gLyAvg.ToString("N2")</td>
+                            }
+                        </tr>
+                    }
+                }
+                else
+                {
+                    @foreach (var row in Model.Results)
+                    {
+                        var netSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
+                        var avg = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
+                        <tr>
+                            <td>@row.Period</td>
+                            <td>@row.CYInvoiceCount.ToString("N0")</td>
+                            <td>@row.CYNetSales.ToString("N2")</td>
+                            <td>@row.CYQtySold.ToString("N0")</td>
+                            <td class="text-danger">@row.CYCreditCount.ToString("N0")</td>
+                            <td class="text-danger">@row.CYNetReturns.ToString("N2")</td>
+                            <td class="text-danger">@row.CYQtyReturned.ToString("N0")</td>
+                            <td>@netSales.ToString("N2")</td>
+                            <td>@row.CYTotalTransactions.ToString("N0")</td>
+                            <td>@avg.ToString("N2")</td>
+                            <td>@row.CYAverageQty.ToString("N2")</td>
+                            @if (hasLY)
+                            {
+                                var lySales = Model.IncludeVat ? row.LYTotalGross : row.LYTotalNet;
+                                var lyAvg = Model.IncludeVat ? row.LYAverageGross : row.LYAverageNet;
+                                <td>@lySales.ToString("N2")</td>
+                                <td>@row.YoYChangePercent.ToString("N2")</td>
+                                <td>@lyAvg.ToString("N2")</td>
+                            }
+                        </tr>
+                    }
+                }
+
+                @if (gt != null)
+                {
+                    var gtSales = Model.IncludeVat ? gt.GrossSales : gt.NetSales;
+                    var gtAvg = Model.IncludeVat ? gt.AverageBasketGross : gt.AverageBasketNet;
+                    <tr class="grand-total">
+                        <td>Grand Total</td>
+                        <td>@gt.TotalInvoices.ToString("N0")</td>
+                        <td>@gt.TotalNetSales.ToString("N2")</td>
+                        <td>@gt.TotalQtySold.ToString("N0")</td>
+                        <td>@gt.TotalCredits.ToString("N0")</td>
+                        <td>@gt.TotalNetReturns.ToString("N2")</td>
+                        <td>@gt.TotalQtyReturned.ToString("N0")</td>
+                        <td>@gtSales.ToString("N2")</td>
+                        <td>@gt.NetTransactions.ToString("N0")</td>
+                        <td>@gtAvg.ToString("N2")</td>
+                        <td>@gt.AverageQty.ToString("N2")</td>
+                        @if (hasLY)
+                        {
+                            var gtLySales = Model.IncludeVat ? gt.LYTotalGross : gt.LYTotalNet;
+                            var gtLyAvg = Model.IncludeVat ? gt.LYAverageBasketGross : gt.LYAverageBasketNet;
+                            <td>@gtLySales.ToString("N2")</td>
+                            <td>@gt.YoYChangePercent.ToString("N2")</td>
+                            <td>@gtLyAvg.ToString("N2")</td>
+                        }
+                    </tr>
+                }
+                </tbody>
+            </table>
+
+            <!-- Footer -->
+            <div class="report-footer">
+                End of Report<br />
+                &copy; @now.Year Power Soft Ltd.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var currentZoom = 100;
+        var paper = document.getElementById('paper');
+
+        function setZoom(val) {
+            currentZoom = Math.max(50, Math.min(250, val));
+            paper.style.transform = 'scale(' + (currentZoom / 100) + ')';
+            paper.style.transformOrigin = 'top center';
+            document.getElementById('zoomLabel').textContent = currentZoom + '%';
+        }
+
+        function zoomIn() { setZoom(currentZoom + 10); }
+        function zoomOut() { setZoom(currentZoom - 10); }
+        function zoomReset() {
+            setZoom(100);
+        }
+
+        // Apply initial zoom
+        setZoom(100);
+
+        function toggleExportMenu(e) {
+            e.stopPropagation();
+            document.getElementById('exportMenu').classList.toggle('show');
+        }
+
+        document.addEventListener('click', function() {
+            document.getElementById('exportMenu').classList.remove('show');
+        });
+
+        function exportCSVFromTable() {
+            var table = document.getElementById('reportTable');
+            var csv = [];
+            table.querySelectorAll('tr').forEach(function(row) {
+                var cells = [];
+                row.querySelectorAll('th, td').forEach(function(cell) {
+                    cells.push('"' + cell.textContent.trim().replace(/"/g, '""') + '"');
+                });
+                if (cells.length > 0) csv.push(cells.join(','));
+            });
+            var blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'AverageBasket_' + new Date().toISOString().split('T')[0] + '.csv';
+            a.click();
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'p') {
+                e.preventDefault();
+                window.print();
+            }
+            if (e.ctrlKey && e.key === '+') { e.preventDefault(); zoomIn(); }
+            if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
+            if (e.key === 'Escape') window.close();
+        });
+    </script>
+</body>
+</html>

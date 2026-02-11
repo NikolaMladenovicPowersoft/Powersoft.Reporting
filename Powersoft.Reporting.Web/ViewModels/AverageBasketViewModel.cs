@@ -22,6 +22,9 @@ public class AverageBasketViewModel
     [Display(Name = "Group By")]
     public GroupByType GroupBy { get; set; } = GroupByType.None;
     
+    [Display(Name = "Then By")]
+    public GroupByType SecondaryGroupBy { get; set; } = GroupByType.None;
+    
     [Display(Name = "Include VAT")]
     public bool IncludeVat { get; set; } = false;
     
@@ -29,6 +32,12 @@ public class AverageBasketViewModel
     public bool CompareLastYear { get; set; } = false;
     
     public string? DatePreset { get; set; }
+    
+    public string SortColumn { get; set; } = "Period";
+    public string SortDirection { get; set; } = "ASC";
+    
+    public Dictionary<string, string> FilterValues { get; set; } = new();
+    public Dictionary<string, string> FilterOperators { get; set; } = new();
     
     public List<string> SelectedStoreCodes { get; set; } = new();
     public string SelectedStoreCodesString 
@@ -49,12 +58,14 @@ public class AverageBasketViewModel
     public bool HasNextPage => PageNumber < TotalPages;
     
     public List<AverageBasketRow> Results { get; set; } = new();
+    public ReportGrandTotals? GrandTotals { get; set; }
     
     public string? ConnectedDatabase { get; set; }
     public bool IsConnected { get; set; }
     public string? ErrorMessage { get; set; }
     
     public bool HasGrouping => GroupBy != GroupByType.None;
+    public bool HasSecondaryGrouping => SecondaryGroupBy != GroupByType.None;
     public bool HasStoreFilter => SelectedStoreCodes.Any();
     
     public int TotalTransactions => Results.Sum(r => r.CYTotalTransactions);
@@ -80,12 +91,17 @@ public class AverageBasketViewModel
             DateTo = DateTo,
             Breakdown = Breakdown,
             GroupBy = GroupBy,
+            SecondaryGroupBy = SecondaryGroupBy,
             IncludeVat = IncludeVat,
             CompareLastYear = CompareLastYear,
             StoreCodes = SelectedStoreCodes,
             PageNumber = PageNumber,
             PageSize = PageSize,
-            DatePreset = DatePreset
+            DatePreset = DatePreset,
+            SortColumn = SortColumn,
+            SortDirection = SortDirection,
+            FilterValues = FilterValues ?? new(),
+            FilterOperators = FilterOperators ?? new()
         };
     }
 }

@@ -4,4 +4,5 @@ public interface ITenantRepositoryFactory
 {
     IStoreRepository CreateStoreRepository(string connectionString);
     IAverageBasketRepository CreateAverageBasketRepository(string connectionString);
+    IScheduleRepository CreateScheduleRepository(string connectionString);
 }

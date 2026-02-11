@@ -1,6 +1,8 @@
 @model Powersoft.Reporting.Web.ViewModels.AverageBasketViewModel
 @{
     ViewData["Title"] = "Average Basket Report";
+    var filterCols = new[] { "Period", "GroupName", "Group2Name", "Invoices", "Returns", "NetTransactions", "QtySold", "QtyReturned", "NetQty", "Sales", "AvgBasket", "AvgQty" };
+    bool hasAnyFilter = Model.FilterValues != null && Model.FilterValues.Any(kv => !string.IsNullOrEmpty(kv.Value));
 }
 
 <div class="row mb-4">
@@ -27,6 +29,13 @@
         <form asp-action="AverageBasket" method="post" id="reportForm">
             <input type="hidden" asp-for="SelectedStoreCodesString" id="selectedStoreCodesHidden" />
             <input type="hidden" asp-for="PageNumber" id="pageNumberHidden" />
+            <input type="hidden" asp-for="SortColumn" id="sortColumnHidden" />
+            <input type="hidden" asp-for="SortDirection" id="sortDirectionHidden" />
+            @foreach (var col in filterCols)
+            {
+                <input type="hidden" name="FilterValues[@col]" id="fv_@col" value="@(Model.FilterValues.GetValueOrDefault(col, ""))" />
+                <input type="hidden" name="FilterOperators[@col]" id="fo_@col" value="@(Model.FilterOperators.GetValueOrDefault(col, ""))" />
+            }
             
             <div class="row mb-3">
                 <div class="col-12">
@@ -77,6 +86,10 @@
                 <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Group By</label>
                     <select asp-for="GroupBy" class="form-select" asp-items="Html.GetEnumSelectList<Powersoft.Reporting.Core.Enums.GroupByType>()"></select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Then By</label>
+                    <select asp-for="SecondaryGroupBy" class="form-select" asp-items="Html.GetEnumSelectList<Powersoft.Reporting.Core.Enums.GroupByType>()"></select>
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label fw-semibold">Stores</label>
@@ -143,7 +156,10 @@
                     <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
                     <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                 </button>
-                <a asp-action="AverageBasket" class="btn btn-outline-secondary btn-reset" title="Reset all filters to defaults">
+                <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                    <i class="bi bi-clock-history me-2"></i>Schedule
+                </button>
+                <a asp-action="AverageBasket" class="btn btn-outline-secondary btn-reset ms-auto" title="Reset all filters to defaults">
                     <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Filters
                 </a>
             </div>
@@ -185,46 +201,57 @@
 
 @if (Model.Results.Any())
 {
+    var gt0 = Model.GrandTotals;
+    var showGtCards = gt0 != null;
+    var cardTransactions = showGtCards ? gt0!.NetTransactions : Model.TotalTransactions;
+    var cardQty = showGtCards ? gt0!.NetQty : Model.TotalQty;
+    var cardSales = showGtCards 
+        ? (Model.IncludeVat ? gt0!.GrossSales : gt0!.NetSales) 
+        : (Model.IncludeVat ? Model.TotalGrossSales : Model.TotalNetSales);
+    var cardAvg = showGtCards 
+        ? (Model.IncludeVat ? gt0!.AverageBasketGross : gt0!.AverageBasketNet) 
+        : Model.OverallAverageBasket;
+
     <div class="row mb-4 g-3">
         <div class="col-6 col-md-3">
             <div class="stat-card text-center">
-                <div class="stat-value">@Model.TotalTransactions.ToString("N0")</div>
-                <div class="stat-label" title="Net transactions on current page">Net Trans. (page)</div>
+                <div class="stat-value">@cardTransactions.ToString("N0")</div>
+                <div class="stat-label">Net Transactions</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card text-center">
-                <div class="stat-value">@Model.TotalQty.ToString("N0")</div>
-                <div class="stat-label" title="Items sold on current page">Items Sold (page)</div>
+                <div class="stat-value">@cardQty.ToString("N0")</div>
+                <div class="stat-label">Items Sold</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card text-center">
-                <div class="stat-value">@((Model.IncludeVat ? Model.TotalGrossSales : Model.TotalNetSales).ToString("N2"))</div>
-                <div class="stat-label" title="Sales total on current page">Sales (page)</div>
+                <div class="stat-value">@cardSales.ToString("N2")</div>
+                <div class="stat-label">Total Sales</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card text-center">
-                <div class="stat-value text-primary">@Model.OverallAverageBasket.ToString("N2")</div>
+                <div class="stat-value text-primary">@cardAvg.ToString("N2")</div>
                 <div class="stat-label">Avg. Basket</div>
             </div>
         </div>
-        @if (Model.CompareLastYear)
+        @if (Model.CompareLastYear && gt0 != null)
         {
-            var yoyClass = Model.OverallYoYChangePercent >= 0 ? "text-success" : "text-danger";
-            var yoyIcon = Model.OverallYoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+            var yoyClass = gt0.YoYChangePercent >= 0 ? "text-success" : "text-danger";
+            var yoyIcon = gt0.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
             <div class="col-6 col-md-3">
                 <div class="stat-card text-center">
-                    <div class="stat-value @yoyClass"><i class="bi @yoyIcon me-1"></i>@Model.OverallYoYChangePercent.ToString("N1")%</div>
+                    <div class="stat-value @yoyClass"><i class="bi @yoyIcon me-1"></i>@gt0.YoYChangePercent.ToString("N1")%</div>
                     <div class="stat-label">YoY Change</div>
                 </div>
             </div>
         }
     </div>
     
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card" id="results">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span>
                 <i class="bi bi-table me-2"></i>
                 Results: @Model.TotalCount total rows
@@ -236,30 +263,92 @@
                 {
                     <span class="badge bg-secondary ms-2">Grouped by @Model.GroupBy</span>
                 }
+                @if (Model.HasSecondaryGrouping)
+                {
+                    <span class="badge bg-secondary ms-1">then @Model.SecondaryGroupBy</span>
+                }
             </span>
-            <button class="btn btn-outline-success btn-sm" onclick="exportToCSV()">
-                <i class="bi bi-download me-1"></i>Export CSV
-            </button>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                @if (hasAnyFilter)
+                {
+                    <button class="btn btn-sm btn-outline-warning" onclick="clearAllFilters()" title="Clear all column filters">
+                        <i class="bi bi-funnel me-1"></i>Clear Filters
+                    </button>
+                }
+                <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()" id="previewToggleBtn" title="Toggle document preview">
+                    <i class="bi bi-eye me-1"></i>Preview
+                </button>
+                <div class="btn-group btn-group-sm">
+                <button class="btn btn-outline-success" onclick="exportToCSV()">
+                    <i class="bi bi-filetype-csv me-1"></i>CSV
+                </button>
+                <a class="btn btn-outline-success" asp-action="ExportExcel" asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")" asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")" asp-route-breakdown="@Model.Breakdown" asp-route-groupBy="@Model.GroupBy" asp-route-secondaryGroupBy="@Model.SecondaryGroupBy" asp-route-includeVat="@Model.IncludeVat" asp-route-compareLastYear="@Model.CompareLastYear" asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                    <i class="bi bi-filetype-xlsx me-1"></i>Excel
+                </a>
+                <a class="btn btn-outline-danger" asp-action="ExportPdf" asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")" asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")" asp-route-breakdown="@Model.Breakdown" asp-route-groupBy="@Model.GroupBy" asp-route-secondaryGroupBy="@Model.SecondaryGroupBy" asp-route-includeVat="@Model.IncludeVat" asp-route-compareLastYear="@Model.CompareLastYear" asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                    <i class="bi bi-filetype-pdf me-1"></i>PDF
+                </a>
+                </div>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0" id="resultsTable">
+                    @{
+                        var sc = Model.SortColumn ?? "Period";
+                        var sd = Model.SortDirection ?? "ASC";
+                        string SortClass(string col) => sc.Equals(col, StringComparison.OrdinalIgnoreCase)
+                            ? (sd == "ASC" ? "sortable sort-asc" : "sortable sort-desc")
+                            : "sortable";
+                        string SortIcon(string col) => sc.Equals(col, StringComparison.OrdinalIgnoreCase)
+                            ? (sd == "ASC" ? "bi-caret-up-fill" : "bi-caret-down-fill")
+                            : "bi-caret-up-fill";
+                    }
+                    @{
+                        string FilterVal(string col) => (Model.FilterValues ?? new Dictionary<string, string>()).GetValueOrDefault(col, "") ?? "";
+                    }
                     <thead>
                         <tr>
                             @if (Model.HasGrouping)
                             {
-                                <th>@Model.GroupBy</th>
+                                <th class="@SortClass("GroupName")" onclick="sortBy('GroupName')">
+                                    @Model.GroupBy<i class="bi @SortIcon("GroupName") sort-icon"></i>
+                                </th>
                             }
-                            <th>Period</th>
-                            <th class="text-end">Invoices</th>
-                            <th class="text-end">Returns</th>
-                            <th class="text-end">Net Trans.</th>
-                            <th class="text-end">Qty Sold</th>
-                            <th class="text-end">Qty Ret.</th>
-                            <th class="text-end">Net Qty</th>
-                            <th class="text-end">@(Model.IncludeVat ? "Gross" : "Net") Sales</th>
-                            <th class="text-end">Avg Basket</th>
-                            <th class="text-end">Avg Qty</th>
+                            @if (Model.HasSecondaryGrouping)
+                            {
+                                <th>@Model.SecondaryGroupBy</th>
+                            }
+                            <th class="@SortClass("Period")" onclick="sortBy('Period')">
+                                Period<i class="bi @SortIcon("Period") sort-icon"></i>
+                            </th>
+                            <th class="text-end @SortClass("Invoices")" onclick="sortBy('Invoices')">
+                                Invoices<i class="bi @SortIcon("Invoices") sort-icon"></i>
+                            </th>
+                            <th class="text-end @SortClass("Returns")" onclick="sortBy('Returns')">
+                                Returns<i class="bi @SortIcon("Returns") sort-icon"></i>
+                            </th>
+                            <th class="text-end @SortClass("NetTransactions")" onclick="sortBy('NetTransactions')">
+                                Net Trans.<i class="bi @SortIcon("NetTransactions") sort-icon"></i>
+                            </th>
+                            <th class="text-end @SortClass("QtySold")" onclick="sortBy('QtySold')">
+                                Qty Sold<i class="bi @SortIcon("QtySold") sort-icon"></i>
+                            </th>
+                            <th class="text-end @SortClass("QtyReturned")" onclick="sortBy('QtyReturned')">
+                                Qty Ret.<i class="bi @SortIcon("QtyReturned") sort-icon"></i>
+                            </th>
+                            <th class="text-end @SortClass("NetQty")" onclick="sortBy('NetQty')">
+                                Net Qty<i class="bi @SortIcon("NetQty") sort-icon"></i>
+                            </th>
+                            <th class="text-end @SortClass("Sales")" onclick="sortBy('Sales')">
+                                @(Model.IncludeVat ? "Gross" : "Net") Sales<i class="bi @SortIcon("Sales") sort-icon"></i>
+                            </th>
+                            <th class="text-end @SortClass("AvgBasket")" onclick="sortBy('AvgBasket')">
+                                Avg Basket<i class="bi @SortIcon("AvgBasket") sort-icon"></i>
+                            </th>
+                            <th class="text-end @SortClass("AvgQty")" onclick="sortBy('AvgQty')">
+                                Avg Qty<i class="bi @SortIcon("AvgQty") sort-icon"></i>
+                            </th>
                             @if (Model.CompareLastYear)
                             {
                                 <th class="text-end">LY Sales</th>
@@ -267,65 +356,252 @@
                                 <th class="text-end">YoY %</th>
                             }
                         </tr>
+                        <tr class="filter-row">
+                            @if (Model.HasGrouping)
+                            {
+                                <td>
+                                    <div class="filter-cell">
+                                        @Html.Raw("<select class=\"filter-op text-filter-op\" data-col=\"GroupName\" onchange=\"applyColumnFilters()\" title=\"Filter mode\"><option value=\"contains\">Contains</option><option value=\"eq\">Equals</option><option value=\"starts\">Starts with</option><option value=\"neq\">Not equal</option></select>")
+                                        <input type="text" class="filter-input col-filter" data-col="GroupName"
+                                               value="@FilterVal("GroupName")" placeholder="Search..." />
+                                    </div>
+                                </td>
+                            }
+                            @if (Model.HasSecondaryGrouping)
+                            {
+                                <td>
+                                    <div class="filter-cell">
+                                        @Html.Raw("<select class=\"filter-op text-filter-op\" data-col=\"Group2Name\" onchange=\"applyColumnFilters()\" title=\"Filter mode\"><option value=\"contains\">Contains</option><option value=\"eq\">Equals</option><option value=\"starts\">Starts with</option><option value=\"neq\">Not equal</option></select>")
+                                        <input type="text" class="filter-input col-filter" data-col="Group2Name"
+                                               value="@FilterVal("Group2Name")" placeholder="Search..." />
+                                    </div>
+                                </td>
+                            }
+                            <td>
+                                <div class="filter-cell">
+                                    @Html.Raw("<select class=\"filter-op text-filter-op\" data-col=\"Period\" onchange=\"applyColumnFilters()\" title=\"Filter mode\"><option value=\"contains\">Contains</option><option value=\"eq\">Equals</option><option value=\"starts\">Starts with</option><option value=\"neq\">Not equal</option></select>")
+                                    <input type="text" class="filter-input col-filter" data-col="Period"
+                                           value="@FilterVal("Period")" placeholder="Search..." />
+                                </div>
+                            </td>
+                            @{
+                                var numColNames = new[] { "Invoices", "Returns", "NetTransactions", "QtySold", "QtyReturned", "NetQty", "Sales", "AvgBasket", "AvgQty" };
+                            }
+                            @foreach (var colName in numColNames)
+                            {
+                                <td>
+                                    <div class="filter-cell">
+                                        @Html.Raw($"<select class=\"filter-op num-filter-op\" data-col=\"{colName}\" onchange=\"applyColumnFilters()\" title=\"Filter mode\"><option value=\"gte\">≥ Min</option><option value=\"eq\">= Equal</option><option value=\"neq\">≠ Not</option><option value=\"gt\">&gt; Greater</option><option value=\"lt\">&lt; Less</option><option value=\"lte\">≤ Max</option></select>")
+                                        <input type="text" class="filter-input col-filter" data-col="@colName"
+                                               value="@FilterVal(colName)" placeholder="0" inputmode="decimal" />
+                                    </div>
+                                </td>
+                            }
+                            @if (Model.CompareLastYear)
+                            {
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                            }
+                        </tr>
                     </thead>
                     <tbody>
-                        @foreach (var row in Model.Results)
+                        @{
+                            var baseColumnCount = 10 + (Model.CompareLastYear ? 3 : 0);
+                            var totalColumns = baseColumnCount + (Model.HasGrouping ? 1 : 0) + (Model.HasSecondaryGrouping ? 1 : 0);
+                        }
+                        @if (Model.HasGrouping)
                         {
-                            var avgBasket = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
-                            var totalSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
-                            <tr>
-                                @if (Model.HasGrouping)
+                            var groupedResults = Model.Results
+                                .GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A")
+                                .ToList();
+                            foreach (var group in groupedResults)
+                            {
+                                var groupRows = group.ToList();
+                                <tr class="group-header-row">
+                                    <td colspan="@totalColumns">
+                                        <i class="bi bi-diagram-3 me-2"></i>@group.Key
+                                    </td>
+                                </tr>
+                                foreach (var row in groupRows)
                                 {
-                                    <td class="fw-semibold text-info">@(row.Level1Value ?? row.Level1 ?? "N/A")</td>
+                                    var avgBasket = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
+                                    var totalSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
+                                    <tr>
+                                        @if (Model.HasGrouping)
+                                        {
+                                            <td class="text-info fw-semibold">@((row.Level1Value ?? row.Level1 ?? "N/A"))</td>
+                                        }
+                                        @if (Model.HasSecondaryGrouping)
+                                        {
+                                            <td class="text-info">@(row.Level2Value ?? row.Level2 ?? "N/A")</td>
+                                        }
+                                        <td class="fw-semibold">@row.Period</td>
+                                        <td class="text-end">@row.CYInvoiceCount.ToString("N0")</td>
+                                        <td class="text-end text-danger">@row.CYCreditCount.ToString("N0")</td>
+                                        <td class="text-end fw-semibold">@row.CYTotalTransactions.ToString("N0")</td>
+                                        <td class="text-end">@row.CYQtySold.ToString("N0")</td>
+                                        <td class="text-end text-danger">@row.CYQtyReturned.ToString("N0")</td>
+                                        <td class="text-end fw-semibold">@row.CYTotalQty.ToString("N0")</td>
+                                        <td class="text-end">@totalSales.ToString("N2")</td>
+                                        <td class="text-end fw-semibold text-primary">@avgBasket.ToString("N2")</td>
+                                        <td class="text-end">@row.CYAverageQty.ToString("N2")</td>
+                                        @if (Model.CompareLastYear)
+                                        {
+                                            var lySales = Model.IncludeVat ? row.LYTotalGross : row.LYTotalNet;
+                                            var lyAvg = Model.IncludeVat ? row.LYAverageGross : row.LYAverageNet;
+                                            var yoyRowClass = row.YoYChangePercent >= 0 ? "text-success" : "text-danger";
+                                            var yoyRowIcon = row.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                            <td class="text-end text-muted">@lySales.ToString("N2")</td>
+                                            <td class="text-end text-muted">@lyAvg.ToString("N2")</td>
+                                            <td class="text-end @yoyRowClass"><i class="bi @yoyRowIcon"></i> @row.YoYChangePercent.ToString("N1")%</td>
+                                        }
+                                    </tr>
                                 }
-                                <td class="fw-semibold">@row.Period</td>
-                                <td class="text-end">@row.CYInvoiceCount.ToString("N0")</td>
-                                <td class="text-end text-danger">@row.CYCreditCount.ToString("N0")</td>
-                                <td class="text-end fw-semibold">@row.CYTotalTransactions.ToString("N0")</td>
-                                <td class="text-end">@row.CYQtySold.ToString("N0")</td>
-                                <td class="text-end text-danger">@row.CYQtyReturned.ToString("N0")</td>
-                                <td class="text-end fw-semibold">@row.CYTotalQty.ToString("N0")</td>
-                                <td class="text-end">@totalSales.ToString("N2")</td>
-                                <td class="text-end fw-semibold text-primary">@avgBasket.ToString("N2")</td>
-                                <td class="text-end">@row.CYAverageQty.ToString("N2")</td>
+
+                                var gInvoices = groupRows.Sum(r => r.CYInvoiceCount);
+                                var gCredits = groupRows.Sum(r => r.CYCreditCount);
+                                var gNetTransactions = groupRows.Sum(r => r.CYTotalTransactions);
+                                var gQtySold = groupRows.Sum(r => r.CYQtySold);
+                                var gQtyReturned = groupRows.Sum(r => r.CYQtyReturned);
+                                var gNetQty = groupRows.Sum(r => r.CYTotalQty);
+                                var gSales = groupRows.Sum(r => Model.IncludeVat ? r.CYTotalGross : r.CYTotalNet);
+                                var gAvgBasket = gNetTransactions > 0 ? gSales / gNetTransactions : 0;
+                                var gAvgQty = gNetTransactions > 0 ? gNetQty / gNetTransactions : 0;
+                                decimal gLySales = 0, gLyAvg = 0, gYoY = 0;
+                                if (Model.CompareLastYear)
+                                {
+                                    var gLyTransactions = groupRows.Sum(r => r.LYTotalTransactions);
+                                    gLySales = groupRows.Sum(r => Model.IncludeVat ? r.LYTotalGross : r.LYTotalNet);
+                                    gLyAvg = gLyTransactions > 0 ? gLySales / gLyTransactions : 0;
+                                    gYoY = gLySales != 0 ? Math.Round((gSales - gLySales) / Math.Abs(gLySales) * 100, 2) : (gSales > 0 ? 100 : 0);
+                                }
+
+                                <tr class="group-subtotal-row">
+                                    @if (Model.HasGrouping)
+                                    {
+                                        <td></td>
+                                    }
+                                    @if (Model.HasSecondaryGrouping)
+                                    {
+                                        <td></td>
+                                    }
+                                    <td class="fw-semibold text-uppercase text-muted">Subtotal</td>
+                                    <td class="text-end fw-semibold">@gInvoices.ToString("N0")</td>
+                                    <td class="text-end text-danger fw-semibold">@gCredits.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@gNetTransactions.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@gQtySold.ToString("N0")</td>
+                                    <td class="text-end text-danger fw-semibold">@gQtyReturned.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@gNetQty.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@gSales.ToString("N2")</td>
+                                    <td class="text-end fw-semibold text-primary">@gAvgBasket.ToString("N2")</td>
+                                    <td class="text-end fw-semibold">@gAvgQty.ToString("N2")</td>
+                                    @if (Model.CompareLastYear)
+                                    {
+                                        var yoyClass = gYoY >= 0 ? "text-success" : "text-danger";
+                                        var yoyIcon = gYoY >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                        <td class="text-end text-muted fw-semibold">@gLySales.ToString("N2")</td>
+                                        <td class="text-end text-muted fw-semibold">@gLyAvg.ToString("N2")</td>
+                                        <td class="text-end fw-semibold @yoyClass"><i class="bi @yoyIcon"></i> @gYoY.ToString("N1")%</td>
+                                    }
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            foreach (var row in Model.Results)
+                            {
+                                var avgBasket = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
+                                var totalSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
+                                <tr>
+                                    @if (Model.HasGrouping)
+                                    {
+                                        <td class="fw-semibold text-info">@(row.Level1Value ?? row.Level1 ?? "N/A")</td>
+                                    }
+                                    @if (Model.HasSecondaryGrouping)
+                                    {
+                                        <td class="text-info">@(row.Level2Value ?? row.Level2 ?? "N/A")</td>
+                                    }
+                                    <td class="fw-semibold">@row.Period</td>
+                                    <td class="text-end">@row.CYInvoiceCount.ToString("N0")</td>
+                                    <td class="text-end text-danger">@row.CYCreditCount.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@row.CYTotalTransactions.ToString("N0")</td>
+                                    <td class="text-end">@row.CYQtySold.ToString("N0")</td>
+                                    <td class="text-end text-danger">@row.CYQtyReturned.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@row.CYTotalQty.ToString("N0")</td>
+                                    <td class="text-end">@totalSales.ToString("N2")</td>
+                                    <td class="text-end fw-semibold text-primary">@avgBasket.ToString("N2")</td>
+                                    <td class="text-end">@row.CYAverageQty.ToString("N2")</td>
+                                    @if (Model.CompareLastYear)
+                                    {
+                                        var lySales = Model.IncludeVat ? row.LYTotalGross : row.LYTotalNet;
+                                        var lyAvg = Model.IncludeVat ? row.LYAverageGross : row.LYAverageNet;
+                                        var yoyRowClass = row.YoYChangePercent >= 0 ? "text-success" : "text-danger";
+                                        var yoyRowIcon = row.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                        <td class="text-end text-muted">@lySales.ToString("N2")</td>
+                                        <td class="text-end text-muted">@lyAvg.ToString("N2")</td>
+                                        <td class="text-end @yoyRowClass"><i class="bi @yoyRowIcon"></i> @row.YoYChangePercent.ToString("N1")%</td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    <tfoot>
+                        @if (Model.TotalPages > 1)
+                        {
+                            <tr class="table-light fw-bold">
+                                @if (Model.HasGrouping) { <td></td> }
+                                @if (Model.HasSecondaryGrouping) { <td></td> }
+                                <td>PAGE TOTAL</td>
+                                <td class="text-end">@Model.Results.Sum(r => r.CYInvoiceCount).ToString("N0")</td>
+                                <td class="text-end text-danger">@Model.Results.Sum(r => r.CYCreditCount).ToString("N0")</td>
+                                <td class="text-end">@Model.TotalTransactions.ToString("N0")</td>
+                                <td class="text-end">@Model.Results.Sum(r => r.CYQtySold).ToString("N0")</td>
+                                <td class="text-end text-danger">@Model.Results.Sum(r => r.CYQtyReturned).ToString("N0")</td>
+                                <td class="text-end">@Model.TotalQty.ToString("N0")</td>
+                                <td class="text-end">@((Model.IncludeVat ? Model.TotalGrossSales : Model.TotalNetSales).ToString("N2"))</td>
+                                <td class="text-end text-primary">@Model.OverallAverageBasket.ToString("N2")</td>
+                                <td class="text-end">-</td>
                                 @if (Model.CompareLastYear)
                                 {
-                                    var lySales = Model.IncludeVat ? row.LYTotalGross : row.LYTotalNet;
-                                    var lyAvg = Model.IncludeVat ? row.LYAverageGross : row.LYAverageNet;
-                                    var yoyRowClass = row.YoYChangePercent >= 0 ? "text-success" : "text-danger";
-                                    var yoyRowIcon = row.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
-                                    <td class="text-end text-muted">@lySales.ToString("N2")</td>
-                                    <td class="text-end text-muted">@lyAvg.ToString("N2")</td>
-                                    <td class="text-end @yoyRowClass"><i class="bi @yoyRowIcon"></i> @row.YoYChangePercent.ToString("N1")%</td>
+                                    var footYoyClass = Model.OverallYoYChangePercent >= 0 ? "text-success" : "text-danger";
+                                    var footYoyIcon = Model.OverallYoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                    <td class="text-end text-muted">@((Model.IncludeVat ? Model.TotalLYGrossSales : Model.TotalLYNetSales).ToString("N2"))</td>
+                                    <td class="text-end">-</td>
+                                    <td class="text-end @footYoyClass"><i class="bi @footYoyIcon"></i> @Model.OverallYoYChangePercent.ToString("N1")%</td>
                                 }
                             </tr>
                         }
-                    </tbody>
-                    <tfoot class="table-light">
-                        <tr class="fw-bold">
-                            @if (Model.HasGrouping)
-                            {
-                                <td></td>
-                            }
-                            <td>PAGE TOTAL</td>
-                            <td class="text-end">@Model.Results.Sum(r => r.CYInvoiceCount).ToString("N0")</td>
-                            <td class="text-end text-danger">@Model.Results.Sum(r => r.CYCreditCount).ToString("N0")</td>
-                            <td class="text-end">@Model.TotalTransactions.ToString("N0")</td>
-                            <td class="text-end">@Model.Results.Sum(r => r.CYQtySold).ToString("N0")</td>
-                            <td class="text-end text-danger">@Model.Results.Sum(r => r.CYQtyReturned).ToString("N0")</td>
-                            <td class="text-end">@Model.TotalQty.ToString("N0")</td>
-                            <td class="text-end">@((Model.IncludeVat ? Model.TotalGrossSales : Model.TotalNetSales).ToString("N2"))</td>
-                            <td class="text-end text-primary">@Model.OverallAverageBasket.ToString("N2")</td>
-                            <td class="text-end">-</td>
-                            @if (Model.CompareLastYear)
-                            {
-                                var footYoyClass = Model.OverallYoYChangePercent >= 0 ? "text-success" : "text-danger";
-                                var footYoyIcon = Model.OverallYoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
-                                <td class="text-end text-muted">@((Model.IncludeVat ? Model.TotalLYGrossSales : Model.TotalLYNetSales).ToString("N2"))</td>
-                                <td class="text-end">-</td>
-                                <td class="text-end @footYoyClass"><i class="bi @footYoyIcon"></i> @Model.OverallYoYChangePercent.ToString("N1")%</td>
-                            }
-                        </tr>
+                        @if (Model.GrandTotals != null)
+                        {
+                            var gt = Model.GrandTotals;
+                            var gtSales = Model.IncludeVat ? gt.GrossSales : gt.NetSales;
+                            var gtAvg = Model.IncludeVat ? gt.AverageBasketGross : gt.AverageBasketNet;
+                            <tr class="grand-total-row">
+                                @if (Model.HasGrouping) { <td></td> }
+                                @if (Model.HasSecondaryGrouping) { <td></td> }
+                                <td><i class="bi bi-calculator me-1"></i>GRAND TOTAL</td>
+                                <td class="text-end">@gt.TotalInvoices.ToString("N0")</td>
+                                <td class="text-end text-danger">@gt.TotalCredits.ToString("N0")</td>
+                                <td class="text-end">@gt.NetTransactions.ToString("N0")</td>
+                                <td class="text-end">@gt.TotalQtySold.ToString("N0")</td>
+                                <td class="text-end text-danger">@gt.TotalQtyReturned.ToString("N0")</td>
+                                <td class="text-end">@gt.NetQty.ToString("N0")</td>
+                                <td class="text-end">@gtSales.ToString("N2")</td>
+                                <td class="text-end text-primary">@gtAvg.ToString("N2")</td>
+                                <td class="text-end">@gt.AverageQty.ToString("N2")</td>
+                                @if (Model.CompareLastYear)
+                                {
+                                    var gtLySales = Model.IncludeVat ? gt.LYTotalGross : gt.LYTotalNet;
+                                    var gtLyAvg = Model.IncludeVat ? gt.LYAverageBasketGross : gt.LYAverageBasketNet;
+                                    var gtYoyClass = gt.YoYChangePercent >= 0 ? "text-success" : "text-danger";
+                                    var gtYoyIcon = gt.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                    <td class="text-end">@gtLySales.ToString("N2")</td>
+                                    <td class="text-end">@gtLyAvg.ToString("N2")</td>
+                                    <td class="text-end @gtYoyClass"><i class="bi @gtYoyIcon"></i> @gt.YoYChangePercent.ToString("N1")%</td>
+                                }
+                            </tr>
+                        }
                     </tfoot>
                 </table>
             </div>
@@ -380,6 +656,21 @@
             </div>
         }
     </div>
+
+    <!-- Inline Preview Panel (hidden by default) -->
+    <div id="previewPanel" style="display:none;" class="mt-3">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+                <span><i class="bi bi-file-earmark-text me-2"></i>Document Preview</span>
+                <button class="btn btn-sm btn-outline-light" onclick="togglePreview()" title="Close preview">
+                    <i class="bi bi-x-lg me-1"></i>Back to Grid
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <iframe id="previewFrame" style="width:100%; border:none; min-height:700px; background:#525659;"></iframe>
+            </div>
+        </div>
+    </div>
 }
 else if (ViewContext.HttpContext.Request.Method == "POST")
 {
@@ -401,6 +692,104 @@ else
         </div>
     </div>
 }
+
+<!-- Schedule Modal -->
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="scheduleModalLabel">
+                    <i class="bi bi-clock-history me-2"></i>Schedule Report
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-light border mb-3 py-2">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        The report will run automatically and recipients will receive an email with a link to download the exported file.
+                    </small>
+                </div>
+
+                <h6 class="text-muted mb-2"><i class="bi bi-funnel me-1"></i>Parameters (current selection)</h6>
+                <div class="bg-light rounded p-2 mb-4 small">
+                    <span class="me-3"><strong>Period:</strong> @Model.DateFrom.ToString("dd/MM/yyyy") – @Model.DateTo.ToString("dd/MM/yyyy")</span>
+                    <span class="me-3"><strong>Breakdown:</strong> @Model.Breakdown</span>
+                    @if (Model.HasStoreFilter)
+                    {
+                        <span><strong>Stores:</strong> @Model.SelectedStoreCodes.Count selected</span>
+                    }
+                </div>
+
+                <h6 class="text-muted mb-2"><i class="bi bi-gear me-1"></i>Schedule settings</h6>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Schedule Name</label>
+                        <input type="text" class="form-control" id="schedName" placeholder="e.g. Weekly Sales Summary" required>
+                        <small class="text-muted">A label to identify this schedule in the list</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Export Format</label>
+                        <select class="form-select" id="schedFormat">
+                            <option value="Excel">Excel (.xlsx)</option>
+                            <option value="PDF">PDF</option>
+                            <option value="CSV">CSV</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Recurrence</label>
+                        <select class="form-select" id="schedRecurrence" onchange="onRecurrenceChange()">
+                            <option value="Once">Run Once</option>
+                            <option value="Daily" selected>Daily</option>
+                            <option value="Weekly">Weekly</option>
+                            <option value="Monthly">Monthly</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="schedDayContainer" style="display:none;">
+                        <label class="form-label fw-semibold" id="schedDayLabel">Day</label>
+                        <select class="form-select" id="schedDay">
+                            <option value="1">Monday</option>
+                            <option value="2">Tuesday</option>
+                            <option value="3">Wednesday</option>
+                            <option value="4">Thursday</option>
+                            <option value="5">Friday</option>
+                            <option value="6">Saturday</option>
+                            <option value="0">Sunday</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Time</label>
+                        <input type="time" class="form-control" id="schedTime" value="08:00">
+                    </div>
+
+                    <div class="col-12 mt-2">
+                        <h6 class="text-muted mb-2"><i class="bi bi-envelope me-1"></i>Recipients</h6>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email addresses</label>
+                        <input type="text" class="form-control" id="schedRecipients" placeholder="user@company.com, manager@company.com">
+                        <small class="text-muted">Separate multiple addresses with commas</small>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email Subject <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="schedSubject" placeholder="Average Basket Report - {date}">
+                    </div>
+                </div>
+                <div id="scheduleAlert" class="mt-3" style="display:none;"></div>
+
+                <hr class="my-3">
+                <h6 class="text-muted"><i class="bi bi-list-check me-1"></i>Existing Schedules</h6>
+                <div id="existingSchedules" class="small text-muted">Loading...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveSchedule()">
+                    <i class="bi bi-check-lg me-1"></i>Save Schedule
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
 <script>
@@ -467,10 +856,154 @@ function clearPreset() {
     document.querySelectorAll('input[name="DatePreset"]').forEach(r => r.checked = false);
 }
 
+function applyPresetDates(preset) {
+    const today = new Date();
+    let from, to;
+    let breakdown = null;
+
+    switch (preset) {
+        case 'today':
+            from = to = today;
+            breakdown = 'Daily';
+            break;
+        case 'yesterday':
+            from = to = addDays(today, -1);
+            breakdown = 'Daily';
+            break;
+        case 'last7':
+            from = addDays(today, -6);
+            to = today;
+            breakdown = 'Daily';
+            break;
+        case 'last30':
+            from = addDays(today, -29);
+            to = today;
+            breakdown = 'Daily';
+            break;
+        case 'thisMonth':
+            from = new Date(today.getFullYear(), today.getMonth(), 1);
+            to = today;
+            breakdown = 'Daily';
+            break;
+        case 'lastMonth':
+            var lm = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            from = lm;
+            to = new Date(lm.getFullYear(), lm.getMonth() + 1, 0);
+            breakdown = 'Daily';
+            break;
+        case 'ytd':
+            from = new Date(today.getFullYear(), 0, 1);
+            to = today;
+            breakdown = 'Monthly';
+            break;
+        case 'lastYear':
+            from = new Date(today.getFullYear() - 1, 0, 1);
+            to = new Date(today.getFullYear() - 1, 11, 31);
+            breakdown = 'Monthly';
+            break;
+        default:
+            return;
+    }
+
+    document.getElementById('DateFrom').value = formatDate(from);
+    document.getElementById('DateTo').value = formatDate(to);
+
+    if (breakdown) {
+        var sel = document.getElementById('Breakdown');
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].text === breakdown) { sel.selectedIndex = i; break; }
+        }
+    }
+}
+
+function addDays(date, days) {
+    var d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d;
+}
+
+function formatDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Submit form with anchor to keep scroll at results
+function submitToResults() {
+    var form = document.getElementById('reportForm');
+    var action = form.getAttribute('action') || '';
+    if (action.indexOf('#') > -1) action = action.substring(0, action.indexOf('#'));
+    form.setAttribute('action', action + '#results');
+    form.submit();
+}
+
+// Column filtering with live debounce
+var _filterTimer = null;
+var FILTER_DEBOUNCE_MS = 600;
+
+function syncFilterHiddenFields() {
+    document.querySelectorAll('.col-filter').forEach(function(input) {
+        var col = input.dataset.col;
+        var hidden = document.getElementById('fv_' + col);
+        if (hidden) hidden.value = input.value.trim();
+        // Visual feedback: highlight active filters
+        input.classList.toggle('filter-active', input.value.trim() !== '');
+    });
+    document.querySelectorAll('.filter-op').forEach(function(select) {
+        var col = select.dataset.col;
+        var hidden = document.getElementById('fo_' + col);
+        if (hidden) hidden.value = select.value;
+    });
+}
+
+function applyColumnFilters() {
+    if (_filterTimer) clearTimeout(_filterTimer);
+    syncFilterHiddenFields();
+    document.getElementById('pageNumberHidden').value = 1;
+    submitToResults();
+}
+
+function scheduleFilterApply() {
+    if (_filterTimer) clearTimeout(_filterTimer);
+    _filterTimer = setTimeout(function() {
+        applyColumnFilters();
+    }, FILTER_DEBOUNCE_MS);
+}
+
+function clearAllFilters() {
+    if (_filterTimer) clearTimeout(_filterTimer);
+    document.querySelectorAll('.col-filter').forEach(function(input) {
+        input.value = '';
+        input.classList.remove('filter-active');
+    });
+    document.querySelectorAll('.filter-op').forEach(function(select) { select.selectedIndex = 0; });
+    @foreach (var col in filterCols)
+    {
+        @:document.getElementById('fv_@col').value = '';
+        @:document.getElementById('fo_@col').value = '';
+    }
+    document.getElementById('pageNumberHidden').value = 1;
+    submitToResults();
+}
+
+// Column sorting
+function sortBy(column) {
+    var currentCol = document.getElementById('sortColumnHidden').value;
+    var currentDir = document.getElementById('sortDirectionHidden').value;
+    
+    if (currentCol === column) {
+        document.getElementById('sortDirectionHidden').value = (currentDir === 'ASC') ? 'DESC' : 'ASC';
+    } else {
+        document.getElementById('sortColumnHidden').value = column;
+        document.getElementById('sortDirectionHidden').value = 'ASC';
+    }
+    
+    document.getElementById('pageNumberHidden').value = 1;
+    submitToResults();
+}
+
 // Pagination
 function goToPage(page) {
     document.getElementById('pageNumberHidden').value = page;
-    document.getElementById('reportForm').submit();
+    submitToResults();
 }
 
 function resetPage() {
@@ -488,6 +1021,53 @@ function showLoading() {
     
     // Disable after a tiny delay to allow form submission
     setTimeout(() => { btn.disabled = true; }, 10);
+}
+
+// Print Preview toggle
+var previewOpen = false;
+function togglePreview() {
+    var panel = document.getElementById('previewPanel');
+    var gridCard = document.getElementById('results');
+    var btn = document.getElementById('previewToggleBtn');
+    previewOpen = !previewOpen;
+
+    if (previewOpen) {
+        gridCard.style.display = 'none';
+        panel.style.display = 'block';
+        btn.innerHTML = '<i class="bi bi-table me-1"></i>Grid';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-outline-warning');
+
+        var frame = document.getElementById('previewFrame');
+        if (!frame.src || frame.src === 'about:blank') {
+            var url = '@Url.Action("PrintPreview")' +
+                '?dateFrom=@Model.DateFrom.ToString("yyyy-MM-dd")' +
+                '&dateTo=@Model.DateTo.ToString("yyyy-MM-dd")' +
+                '&breakdown=@Model.Breakdown' +
+                '&groupBy=@Model.GroupBy' +
+                '&secondaryGroupBy=@Model.SecondaryGroupBy' +
+                '&includeVat=@Model.IncludeVat' +
+                '&compareLastYear=@Model.CompareLastYear' +
+                '&storeCodes=@(Model.SelectedStoreCodesString ?? "")' +
+                '&sortColumn=@Model.SortColumn' +
+                '&sortDirection=@Model.SortDirection';
+            frame.src = url;
+        }
+
+        // Auto-resize iframe to content
+        frame.onload = function() {
+            try {
+                var h = frame.contentDocument.body.scrollHeight + 80;
+                frame.style.height = Math.max(h, 700) + 'px';
+            } catch (e) { frame.style.height = '900px'; }
+        };
+    } else {
+        panel.style.display = 'none';
+        gridCard.style.display = '';
+        btn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+        btn.classList.remove('btn-outline-warning');
+        btn.classList.add('btn-outline-primary');
+    }
 }
 
 // CSV Export
@@ -516,18 +1096,139 @@ function exportToCSV() {
     a.click();
 }
 
-// Initialize on load
+    // Schedule modal
+function onRecurrenceChange() {
+    var type = document.getElementById('schedRecurrence').value;
+    var container = document.getElementById('schedDayContainer');
+    var daySelect = document.getElementById('schedDay');
+    var label = document.getElementById('schedDayLabel');
+
+    if (type === 'Weekly') {
+        container.style.display = '';
+        label.textContent = 'Day of Week';
+        daySelect.innerHTML = '<option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>';
+    } else if (type === 'Monthly') {
+        container.style.display = '';
+        label.textContent = 'Day of Month';
+        var opts = '';
+        for (var i = 1; i <= 28; i++) opts += '<option value="' + i + '">' + i + '</option>';
+        daySelect.innerHTML = opts;
+    } else {
+        container.style.display = 'none';
+    }
+}
+
+function saveSchedule() {
+    var name = document.getElementById('schedName').value.trim();
+    var recipients = document.getElementById('schedRecipients').value.trim();
+    var alertDiv = document.getElementById('scheduleAlert');
+
+    if (!name || !recipients) {
+        alertDiv.innerHTML = '<div class="alert alert-warning mb-0">Please fill in schedule name and recipients.</div>';
+        alertDiv.style.display = '';
+        return;
+    }
+
+    var recurrence = document.getElementById('schedRecurrence').value;
+    var day = (recurrence === 'Weekly' || recurrence === 'Monthly')
+        ? document.getElementById('schedDay').value : null;
+
+    var formData = new FormData();
+    formData.append('scheduleName', name);
+    formData.append('recurrenceType', recurrence);
+    if (day) formData.append('recurrenceDay', day);
+    formData.append('scheduleTime', document.getElementById('schedTime').value);
+    formData.append('exportFormat', document.getElementById('schedFormat').value);
+    formData.append('recipients', recipients);
+    formData.append('emailSubject', document.getElementById('schedSubject').value);
+
+    fetch('@Url.Action("SaveSchedule", "Reports")', { method: 'POST', body: formData })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                alertDiv.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>' + data.message + '</div>';
+                alertDiv.style.display = '';
+                document.getElementById('schedName').value = '';
+                loadExistingSchedules();
+            } else {
+                alertDiv.innerHTML = '<div class="alert alert-danger mb-0">' + data.message + '</div>';
+                alertDiv.style.display = '';
+            }
+        })
+        .catch(function() {
+            alertDiv.innerHTML = '<div class="alert alert-danger mb-0">Network error. Please try again.</div>';
+            alertDiv.style.display = '';
+        });
+}
+
+function loadExistingSchedules() {
+    fetch('@Url.Action("GetSchedules", "Reports")')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var container = document.getElementById('existingSchedules');
+            if (!data || data.length === 0) {
+                container.innerHTML = '<em>No schedules configured yet.</em>';
+                return;
+            }
+            var html = '<table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th></tr></thead><tbody>';
+            data.forEach(function(s) {
+                html += '<tr><td>' + s.scheduleName + '</td><td>' + s.recurrenceType + '</td><td>' + s.exportFormat + '</td><td>' + s.scheduleTime + '</td><td>' + (s.nextRun || '-') + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        })
+        .catch(function() {
+            document.getElementById('existingSchedules').innerHTML = '<em>Could not load schedules.</em>';
+        });
+}
+
+// Load schedules when modal opens
+document.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById('scheduleModal');
+    if (modal) {
+        modal.addEventListener('show.bs.modal', loadExistingSchedules);
+    }
+});
+
+    // Initialize on load
 document.addEventListener('DOMContentLoaded', function() {
     updateStoreSelection();
     
-    // Form submit handler - show loading state
+    // Restore filter operator selections and wire live filtering
+    document.querySelectorAll('.filter-op').forEach(function(select) {
+        var col = select.dataset.col;
+        var hidden = document.getElementById('fo_' + col);
+        if (hidden && hidden.value) {
+            select.value = hidden.value;
+        }
+    });
+    
+    // Live filter: debounced input on every keystroke
+    document.querySelectorAll('.col-filter').forEach(function(input) {
+        input.addEventListener('input', scheduleFilterApply);
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyColumnFilters(); // immediate on Enter
+            }
+        });
+        // Mark active filters on load
+        if (input.value.trim() !== '') input.classList.add('filter-active');
+    });
+    
+    // Wire preset radios to update date fields
+    document.querySelectorAll('input[name="DatePreset"]').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+            applyPresetDates(this.value);
+        });
+    });
+    
     const form = document.getElementById('reportForm');
     form.addEventListener('submit', function() {
         showLoading();
     });
     
-    // Generate button resets page to 1
-    const generateBtn = document.getElementById('generateBtn');
+    var generateBtn = document.getElementById('generateBtn');
     generateBtn.addEventListener('click', function() {
         resetPage();
     });

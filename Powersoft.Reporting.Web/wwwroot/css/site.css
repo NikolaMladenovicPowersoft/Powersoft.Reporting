@@ -408,3 +408,126 @@ body {
 .alert-info .bi {
     color: var(--ps-primary);
 }
+
+/* --- Sortable Table Headers --- */
+.table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 1.5rem;
+    transition: background-color 0.15s ease;
+}
+
+.table th.sortable:hover {
+    background-color: #e2e8f0;
+}
+
+.table th.sortable .sort-icon {
+    position: absolute;
+    right: 0.4rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.7rem;
+    opacity: 0.3;
+}
+
+.table th.sortable.sort-asc .sort-icon,
+.table th.sortable.sort-desc .sort-icon {
+    opacity: 1;
+    color: var(--ps-primary);
+}
+
+/* --- Grand Total Row --- */
+.table .grand-total-row {
+    background-color: #dbeafe !important;
+    border-top: 2px solid var(--ps-primary);
+}
+
+.table .grand-total-row td {
+    font-weight: 700;
+    color: var(--ps-text);
+}
+
+/* --- Group Subtotal Row --- */
+.table .group-header-row td {
+    background-color: #e2e8f0 !important;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: #1e293b;
+    border-top: 2px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
+}
+
+.table .group-subtotal-row {
+    background-color: #f8fafc !important;
+    border-top: 1px solid var(--ps-border);
+    border-bottom: 2px solid #cbd5e1;
+}
+
+.table .group-subtotal-row td {
+    font-weight: 600;
+    font-style: italic;
+    color: #1f2937;
+}
+
+/* --- Filter Row --- */
+.filter-row td {
+    background: #f8fafc;
+    padding: 0.3rem 0.2rem !important;
+    border-bottom: 2px solid var(--ps-primary);
+    vertical-align: middle;
+}
+
+.filter-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 70px;
+}
+
+.filter-row .filter-op {
+    width: 100%;
+    border: 1px solid var(--ps-border);
+    border-radius: 4px 4px 0 0;
+    padding: 1px 4px;
+    font-size: 0.68rem;
+    color: var(--ps-muted);
+    background: #f1f5f9;
+    cursor: pointer;
+    appearance: auto;
+    outline: none;
+    line-height: 1.4;
+}
+
+.filter-row .filter-op:focus {
+    border-color: var(--ps-primary);
+    color: var(--ps-text);
+}
+
+.filter-row .filter-input {
+    width: 100%;
+    border: 1px solid var(--ps-border);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    padding: 3px 6px;
+    font-size: 0.8rem;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.filter-row .filter-input:focus {
+    border-color: var(--ps-primary);
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.15);
+}
+
+.filter-row .filter-input::placeholder {
+    color: #cbd5e1;
+    font-style: italic;
+}
+
+.filter-row .filter-input.filter-active {
+    background: #eff6ff;
+    border-color: var(--ps-primary-light);
+    font-weight: 500;
+}

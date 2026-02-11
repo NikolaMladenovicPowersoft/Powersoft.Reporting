@@ -15,6 +15,7 @@ public class ReportFilter : IValidatableObject
     
     public BreakdownType Breakdown { get; set; } = BreakdownType.Monthly;
     public GroupByType GroupBy { get; set; } = GroupByType.None;
+    public GroupByType SecondaryGroupBy { get; set; } = GroupByType.None;
     public bool IncludeVat { get; set; } = false;
     public bool CompareLastYear { get; set; } = false;
     
@@ -28,7 +29,31 @@ public class ReportFilter : IValidatableObject
     
     public string? DatePreset { get; set; }
     
+    private string _sortColumn = "Period";
+    public string SortColumn
+    {
+        get => _sortColumn;
+        set => _sortColumn = ValidSortColumns.Contains(value, StringComparer.OrdinalIgnoreCase) ? value : "Period";
+    }
+    
+    private string _sortDirection = "ASC";
+    public string SortDirection
+    {
+        get => _sortDirection;
+        set => _sortDirection = string.Equals(value, "DESC", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
+    }
+    
+    private static readonly HashSet<string> ValidSortColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Period", "GroupName", "Invoices", "Returns", "NetTransactions",
+        "QtySold", "QtyReturned", "NetQty", "Sales", "AvgBasket", "AvgQty"
+    };
+    
+    public Dictionary<string, string> FilterValues { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> FilterOperators { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    
     public bool HasStoreFilter => StoreCodes.Any();
+    public bool HasColumnFilters => FilterValues.Any(kv => !string.IsNullOrEmpty(kv.Value));
     
     public int Skip => (PageNumber - 1) * PageSize;
     
@@ -64,6 +89,7 @@ public class ReportFilter : IValidatableObject
                 "Date From appears to be invalid (before year 2000)",
                 new[] { nameof(DateFrom) });
         }
+        
     }
     
     public bool IsValid(out List<string> errors)

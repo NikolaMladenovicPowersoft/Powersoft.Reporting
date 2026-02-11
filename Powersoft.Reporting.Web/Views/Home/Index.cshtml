@@ -7,14 +7,14 @@
     <div class="col-lg-8">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-database me-2"></i>Database Connection</span>
+                <span>
+                    <i class="bi bi-database me-2"></i>@(Model.IsConnected ? "Change Database" : "Select Database")
+                </span>
                 @if (Model.IsConnected)
                 {
-                    <form asp-action="Disconnect" method="post" class="d-inline">
-                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                            <i class="bi bi-x-circle me-1"></i>Disconnect
-                        </button>
-                    </form>
+                    <span class="status-badge status-connected">
+                        <i class="bi bi-check-circle-fill"></i> Currently logged in to database: @Model.ConnectedDatabaseName
+                    </span>
                 }
             </div>
             <div class="card-body p-4">
@@ -26,94 +26,49 @@
                     </div>
                 }
                 
-                @if (Model.IsConnected)
-                {
-                    <div class="text-center py-4">
-                        <div class="mb-3">
-                            <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
-                        </div>
-                        <h4 class="mb-2">Connected Successfully</h4>
-                        <p class="text-muted mb-4">
-                            You are connected to <strong>@Model.ConnectedDatabaseName</strong>
-                        </p>
-                        <a href="@Url.Action("Index", "Reports")" class="btn btn-primary btn-lg">
-                            <i class="bi bi-arrow-right me-2"></i>Go to Reports
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-building me-1"></i>Company
+                        </label>
+                        <select id="companySelect" class="form-select form-select-lg">
+                            <option value="">Select a company...</option>
+                            @foreach (var company in Model.Companies)
+                            {
+                                <option value="@company.CompanyCode">@company.CompanyName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-database me-1"></i>Database
+                        </label>
+                        <select id="databaseSelect" class="form-select form-select-lg" disabled>
+                            <option value="">Select a company first...</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mt-4 d-flex gap-2">
+                    <button id="connectBtn" class="btn btn-primary btn-lg flex-grow-1" disabled>
+                        <i class="bi bi-arrow-right me-2"></i>Continue
+                    </button>
+                    @if (Model.IsConnected)
+                    {
+                        <a href="@Url.Action("Index", "Reports")" class="btn btn-outline-primary btn-lg">
+                            <i class="bi bi-bar-chart me-1"></i>Reports
                         </a>
+                    }
+                </div>
+                
+                <div id="connectionStatus" class="mt-3" style="display: none;">
+                    <div class="d-flex align-items-center justify-content-center">
+                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                        <span>Connecting...</span>
                     </div>
-                }
-                else
-                {
-                    <div class="row g-4">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">
-                                <i class="bi bi-building me-1"></i>Company
-                            </label>
-                            <select id="companySelect" class="form-select form-select-lg">
-                                <option value="">Select a company...</option>
-                                @foreach (var company in Model.Companies)
-                                {
-                                    <option value="@company.CompanyCode">@company.CompanyName</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">
-                                <i class="bi bi-database me-1"></i>Database
-                            </label>
-                            <select id="databaseSelect" class="form-select form-select-lg" disabled>
-                                <option value="">Select a company first...</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="mt-4">
-                        <button id="connectBtn" class="btn btn-primary btn-lg w-100" disabled>
-                            <i class="bi bi-plug me-2"></i>Connect to Database
-                        </button>
-                    </div>
-                    
-                    <div id="connectionStatus" class="mt-3" style="display: none;">
-                        <div class="d-flex align-items-center justify-content-center">
-                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-                            <span>Connecting...</span>
-                        </div>
-                    </div>
-                }
+                </div>
             </div>
         </div>
-        
-        @if (!Model.IsConnected && Model.Companies.Any())
-        {
-            <div class="card mt-4">
-                <div class="card-header">
-                    <i class="bi bi-info-circle me-2"></i>Quick Stats
-                </div>
-                <div class="card-body">
-                    <div class="row text-center">
-                        <div class="col-md-4">
-                            <div class="stat-card">
-                                <div class="stat-value text-primary">@Model.Companies.Count</div>
-                                <div class="stat-label">Active Companies</div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="stat-card">
-                                <div class="stat-value text-success">
-                                    <i class="bi bi-check-circle"></i>
-                                </div>
-                                <div class="stat-label">PS Central Connected</div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="stat-card">
-                                <div class="stat-value text-info">v1.0</div>
-                                <div class="stat-label">Reporting Engine</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        }
     </div>
 </div>
 
@@ -131,7 +86,7 @@
             return;
         }
         
-        dbSelect.innerHTML = '<option value="">Loading databases...</option>';
+        dbSelect.innerHTML = '<option value="">Loading...</option>';
         dbSelect.disabled = true;
         
         try {
@@ -153,14 +108,12 @@
             
             dbSelect.disabled = false;
         } catch (error) {
-            console.error('Error loading databases:', error);
             dbSelect.innerHTML = '<option value="">Error loading databases</option>';
         }
     });
     
     document.getElementById('databaseSelect').addEventListener('change', function() {
-        const connectBtn = document.getElementById('connectBtn');
-        connectBtn.disabled = !this.value;
+        document.getElementById('connectBtn').disabled = !this.value;
     });
     
     document.getElementById('connectBtn').addEventListener('click', async function() {
@@ -176,23 +129,20 @@
         try {
             const response = await fetch('/Home/Connect', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: `databaseCode=${encodeURIComponent(dbCode)}`
             });
             
             const result = await response.json();
             
             if (result.success) {
-                window.location.reload();
+                window.location.href = '@Url.Action("Index", "Reports")';
             } else {
-                alert('Connection failed: ' + result.message);
+                alert(result.message);
                 btn.disabled = false;
                 status.style.display = 'none';
             }
         } catch (error) {
-            console.error('Connection error:', error);
             alert('Connection failed. Please try again.');
             btn.disabled = false;
             status.style.display = 'none';

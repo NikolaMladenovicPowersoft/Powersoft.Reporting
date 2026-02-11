@@ -37,17 +37,17 @@
                 }
                 @if (!string.IsNullOrEmpty(connectedDb))
                 {
-                    <span class="status-badge status-connected me-3">
-                        <i class="bi bi-check-circle-fill"></i>
+                    <a href="/Home" class="status-badge status-connected me-3 text-decoration-none" title="Click to change database">
+                        <i class="bi bi-database-fill"></i>
                         @connectedDb
-                    </span>
+                    </a>
                 }
                 else
                 {
-                    <span class="status-badge status-disconnected me-3">
+                    <a href="/Home" class="status-badge status-disconnected me-3 text-decoration-none">
                         <i class="bi bi-exclamation-circle"></i>
                         Not Connected
-                    </span>
+                    </a>
                 }
                 
                 @if (User.Identity?.IsAuthenticated == true)

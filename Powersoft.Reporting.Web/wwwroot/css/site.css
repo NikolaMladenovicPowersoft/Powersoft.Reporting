@@ -261,6 +261,14 @@ body {
     margin: 0;
 }
 
+/* --- Item Selector --- */
+.item-selector {
+    cursor: pointer;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+}
+
 /* --- Date Presets - Responsive --- */
 .date-presets {
     display: flex;

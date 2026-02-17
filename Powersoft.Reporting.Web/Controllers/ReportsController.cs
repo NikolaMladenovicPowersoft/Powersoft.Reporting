@@ -114,6 +114,26 @@ public class ReportsController : Controller
     }
     
     [HttpGet]
+    public async Task<IActionResult> SearchItems(string? search, bool includeInactive = false)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { error = "Not connected to database" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateItemRepository(tenantConnString);
+            var items = await repo.SearchItemsAsync(search ?? "", includeInactive);
+            return Json(items.Select(i => new { id = i.ItemId, code = i.ItemCode, name = i.ItemNamePrimary }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching items");
+            return Json(new { error = "Failed to search items" });
+        }
+    }
+
+    [HttpGet]
     public async Task<IActionResult> GetStores()
     {
         var tenantConnString = GetTenantConnectionString();
@@ -243,10 +263,10 @@ public class ReportsController : Controller
     [HttpGet]
     public async Task<IActionResult> PrintPreview(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
-        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes,
+        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
         string sortColumn = "Period", string sortDirection = "ASC")
     {
-        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, sortColumn, sortDirection);
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
         if (result == null) return RedirectToAction("AverageBasket");
 
         var model = new AverageBasketViewModel
@@ -272,10 +292,10 @@ public class ReportsController : Controller
     [HttpGet]
     public async Task<IActionResult> ExportExcel(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
-        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes,
+        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
         string sortColumn = "Period", string sortDirection = "ASC")
     {
-        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, sortColumn, sortDirection);
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
         if (result == null) return RedirectToAction("AverageBasket");
 
         var service = new ExcelExportService();
@@ -287,10 +307,10 @@ public class ReportsController : Controller
     [HttpGet]
     public async Task<IActionResult> ExportPdf(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
-        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes,
+        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
         string sortColumn = "Period", string sortDirection = "ASC")
     {
-        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, sortColumn, sortDirection);
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
         if (result == null) return RedirectToAction("AverageBasket");
 
         var service = new PdfExportService();
@@ -301,7 +321,7 @@ public class ReportsController : Controller
 
     private async Task<(List<AverageBasketRow> rows, ReportGrandTotals? totals, ReportFilter filter)?> RunExportQuery(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
-        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes,
+        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
         string sortColumn, string sortDirection)
     {
         var tenantConnString = GetTenantConnectionString();
@@ -316,7 +336,9 @@ public class ReportsController : Controller
             SecondaryGroupBy = secondaryGroupBy,
             IncludeVat = includeVat,
             CompareLastYear = compareLastYear,
-            StoreCodes = string.IsNullOrEmpty(storeCodes) ? new() : storeCodes.Split(',').ToList(),
+            StoreCodes = string.IsNullOrEmpty(storeCodes) ? new() : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+            ItemIds = string.IsNullOrEmpty(itemIds) ? new() : itemIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Where(s => int.TryParse(s.Trim(), out _)).Select(s => int.Parse(s.Trim())).ToList(),
             SortColumn = sortColumn,
             SortDirection = sortDirection,
             PageSize = int.MaxValue

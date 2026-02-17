@@ -48,6 +48,17 @@ public class AverageBasketViewModel
             : value.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
     }
     
+    public List<int> SelectedItemIds { get; set; } = new();
+    public string SelectedItemIdsString 
+    { 
+        get => string.Join(",", SelectedItemIds);
+        set => SelectedItemIds = string.IsNullOrEmpty(value) 
+            ? new List<int>() 
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Where(s => int.TryParse(s.Trim(), out _))
+                .Select(s => int.Parse(s.Trim())).ToList();
+    }
+    
     public List<Store> AvailableStores { get; set; } = new();
     
     public int PageNumber { get; set; } = 1;
@@ -67,6 +78,7 @@ public class AverageBasketViewModel
     public bool HasGrouping => GroupBy != GroupByType.None;
     public bool HasSecondaryGrouping => SecondaryGroupBy != GroupByType.None;
     public bool HasStoreFilter => SelectedStoreCodes.Any();
+    public bool HasItemFilter => SelectedItemIds.Any();
     
     public int TotalTransactions => Results.Sum(r => r.CYTotalTransactions);
     public decimal TotalQty => Results.Sum(r => r.CYTotalQty);
@@ -95,6 +107,7 @@ public class AverageBasketViewModel
             IncludeVat = IncludeVat,
             CompareLastYear = CompareLastYear,
             StoreCodes = SelectedStoreCodes,
+            ItemIds = SelectedItemIds,
             PageNumber = PageNumber,
             PageSize = PageSize,
             DatePreset = DatePreset,

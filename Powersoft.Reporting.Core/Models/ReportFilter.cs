@@ -21,6 +21,11 @@ public class ReportFilter : IValidatableObject
     
     public List<string> StoreCodes { get; set; } = new();
     
+    /// <summary>
+    /// When non-empty, restricts report to only these item IDs (fk_ItemID in InvoiceDetails/CreditDetails).
+    /// </summary>
+    public List<int> ItemIds { get; set; } = new();
+    
     [Range(1, int.MaxValue, ErrorMessage = "Page number must be at least 1")]
     public int PageNumber { get; set; } = 1;
     
@@ -53,6 +58,7 @@ public class ReportFilter : IValidatableObject
     public Dictionary<string, string> FilterOperators { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     
     public bool HasStoreFilter => StoreCodes.Any();
+    public bool HasItemFilter => ItemIds.Any();
     public bool HasColumnFilters => FilterValues.Any(kv => !string.IsNullOrEmpty(kv.Value));
     
     public int Skip => (PageNumber - 1) * PageSize;

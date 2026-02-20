@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Powersoft.Reporting.Core.Constants;
 using Powersoft.Reporting.Core.Enums;
+using Powersoft.Reporting.Core.Helpers;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
 using Powersoft.Reporting.Web.Services;
@@ -242,9 +243,8 @@ public class ReportsController : Controller
     public async Task<IActionResult> SaveSchedule(
         string scheduleName, string recurrenceType, int? recurrenceDay,
         string scheduleTime, string exportFormat, string recipients,
-        string? emailSubject, string? parametersJson)
+        string? emailSubject, string? parametersJson, string? recurrenceJson)
     {
-        // Action check: actionID 6026 = Schedule Average Basket
         if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleAvgBasket))
             return Json(new { success = false, message = "You don't have permission to create schedules." });
 
@@ -257,7 +257,40 @@ public class ReportsController : Controller
 
         try
         {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var count = await repo.CountActiveSchedulesForReportAsync("AverageBasket");
+            if (count >= ModuleConstants.ScheduleLimitDefault)
+                return Json(new { success = false, message = $"Schedule limit reached. Maximum {ModuleConstants.ScheduleLimitDefault} active schedules per report." });
+
             var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                    {
+                        var onceAt = RecurrenceNextRunCalculator.GetOnceScheduleDateTime(recurrenceJson);
+                        if (onceAt.HasValue && onceAt.Value < DateTime.Now)
+                            return Json(new { success = false, message = "For 'Run once', start date and time must be in the future." });
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                    }
+                }
+                else
+                {
+                    nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+            {
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            }
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
             var schedule = new ReportSchedule
             {
                 ReportType = "AverageBasket",
@@ -270,12 +303,11 @@ public class ReportsController : Controller
                 Recipients = recipients,
                 EmailSubject = emailSubject,
                 ParametersJson = parametersJson,
-                NextRunDate = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime)
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun
             };
 
-            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
             var id = await repo.CreateScheduleAsync(schedule);
-
             return Json(new { success = true, scheduleId = id, message = "Schedule saved successfully" });
         }
         catch (Exception ex)

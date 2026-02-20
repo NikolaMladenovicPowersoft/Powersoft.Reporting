@@ -20,6 +20,7 @@ BEGIN
         
         -- Report Parameters (stored as JSON for flexibility)
         ParametersJson       NVARCHAR(MAX) NULL,
+        RecurrenceJson       NVARCHAR(MAX) NULL,            -- Outlook-style recurrence (Priority 4)
         
         -- Delivery
         ExportFormat         NVARCHAR(10)  NOT NULL DEFAULT 'Excel',  -- 'CSV','Excel','PDF'

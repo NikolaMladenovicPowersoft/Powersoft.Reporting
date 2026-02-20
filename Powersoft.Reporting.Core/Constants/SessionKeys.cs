@@ -47,4 +47,7 @@ public static class ModuleConstants
     // INI layout constants (tbl_IniModule / tbl_IniHeader codes)
     public const string IniHeaderAvgBasket = "AVGBASKET";
     public const string IniDescriptionAvgBasket = "Average Basket Report Layout";
+
+    /// <summary>Default max active schedules per report type per DB. Overridable per-DB later (Priority 5).</summary>
+    public const int ScheduleLimitDefault = 5;
 }

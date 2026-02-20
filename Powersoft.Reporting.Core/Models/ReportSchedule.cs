@@ -16,7 +16,9 @@ public class ReportSchedule
     public DateTime? LastRunDate { get; set; }
     
     public string? ParametersJson { get; set; }
-    
+    /// <summary>Outlook-style recurrence (JSON). When set, overrides RecurrenceType/RecurrenceDay.</summary>
+    public string? RecurrenceJson { get; set; }
+
     public string ExportFormat { get; set; } = "Excel";
     public string Recipients { get; set; } = string.Empty;
     public string? EmailSubject { get; set; }

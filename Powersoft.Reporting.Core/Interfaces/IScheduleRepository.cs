@@ -9,4 +9,5 @@ public interface IScheduleRepository
     Task<ReportSchedule?> GetScheduleByIdAsync(int scheduleId);
     Task<bool> UpdateScheduleAsync(ReportSchedule schedule);
     Task<bool> DeleteScheduleAsync(int scheduleId);
+    Task<int> CountActiveSchedulesForReportAsync(string reportType);
 }

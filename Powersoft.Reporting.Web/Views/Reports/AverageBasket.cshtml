@@ -807,8 +807,7 @@ else
                 </div>
 
                 <h6 class="text-muted mb-2"><i class="bi bi-funnel me-1"></i>Parameters (current selection)</h6>
-                <div class="bg-light rounded p-2 mb-4 small">
-                    <span class="me-3"><strong>Period:</strong> @Model.DateFrom.ToString("dd/MM/yyyy") – @Model.DateTo.ToString("dd/MM/yyyy")</span>
+                <div class="bg-light rounded p-2 mb-3 small">
                     <span class="me-3"><strong>Breakdown:</strong> @Model.Breakdown</span>
                     @if (Model.HasStoreFilter)
                     {
@@ -818,6 +817,31 @@ else
                     {
                         <span><strong>Items:</strong> @Model.SelectedItemIds.Count selected</span>
                     }
+                </div>
+
+                <h6 class="text-muted mb-2"><i class="bi bi-calendar-range me-1"></i>Report date range</h6>
+                <p class="small text-muted mb-2">Computed when the schedule runs (e.g. last 7 days from run date).</p>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Period type</label>
+                        <select class="form-select" id="schedDateRangeType" onchange="onSchedDateRangeTypeChange()">
+                            <option value="LastNDays" data-value="7">Last 7 days</option>
+                            <option value="LastNDays" data-value="30">Last 30 days</option>
+                            <option value="ThisMonth">This month (to today)</option>
+                            <option value="LastMonth">Last month</option>
+                            <option value="YearToDate">Year to date</option>
+                            <option value="LastYear">Last year</option>
+                            <option value="Custom">Custom (fixed dates)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3" id="schedCustomDateFromWrap" style="display:none;">
+                        <label class="form-label fw-semibold">From</label>
+                        <input type="date" class="form-control" id="schedDateFrom" value="@Model.DateFrom.ToString("yyyy-MM-dd")">
+                    </div>
+                    <div class="col-md-3" id="schedCustomDateToWrap" style="display:none;">
+                        <label class="form-label fw-semibold">To</label>
+                        <input type="date" class="form-control" id="schedDateTo" value="@Model.DateTo.ToString("yyyy-MM-dd")">
+                    </div>
                 </div>
 
                 <h6 class="text-muted mb-2"><i class="bi bi-gear me-1"></i>Schedule settings</h6>
@@ -856,9 +880,31 @@ else
                             <option value="0">Sunday</option>
                         </select>
                     </div>
+                    <div class="col-md-4" id="schedWeeklyDaysContainer" style="display:none;">
+                        <label class="form-label fw-semibold">Days of week</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="1"> Mon</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="2"> Tue</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="3"> Wed</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="4"> Thu</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="5"> Fri</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="6"> Sat</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="0"> Sun</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4" id="schedMonthDayContainer" style="display:none;">
+                        <label class="form-label fw-semibold">Day of month</label>
+                        <select class="form-select" id="schedMonthDay">
+                            @for (var i = 1; i <= 28; i++) { <option value="@i">@i</option> }
+                        </select>
+                    </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold">Time</label>
                         <input type="time" class="form-control" id="schedTime" value="08:00">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Start date (recurrence)</label>
+                        <input type="date" class="form-control" id="schedStartDate" value="@DateTime.Today.ToString("yyyy-MM-dd")" min="@DateTime.Today.ToString("yyyy-MM-dd")" style="max-width:12rem;" title="For 'Run once' this is the execution date. Must be today or in the future.">
                     </div>
 
                     <div class="col-12 mt-2">
@@ -1336,24 +1382,34 @@ function exportToCSV() {
 }
 
     // Schedule modal
+function onSchedDateRangeTypeChange() {
+    var sel = document.getElementById('schedDateRangeType');
+    var opt = sel.options[sel.selectedIndex];
+    var isCustom = (opt.value === 'Custom');
+    document.getElementById('schedCustomDateFromWrap').style.display = isCustom ? '' : 'none';
+    document.getElementById('schedCustomDateToWrap').style.display = isCustom ? '' : 'none';
+}
+
 function onRecurrenceChange() {
     var type = document.getElementById('schedRecurrence').value;
-    var container = document.getElementById('schedDayContainer');
+    var dayContainer = document.getElementById('schedDayContainer');
+    var weeklyContainer = document.getElementById('schedWeeklyDaysContainer');
+    var monthContainer = document.getElementById('schedMonthDayContainer');
     var daySelect = document.getElementById('schedDay');
     var label = document.getElementById('schedDayLabel');
 
+    dayContainer.style.display = 'none';
+    weeklyContainer.style.display = 'none';
+    monthContainer.style.display = 'none';
+
     if (type === 'Weekly') {
-        container.style.display = '';
-        label.textContent = 'Day of Week';
-        daySelect.innerHTML = '<option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>';
+        weeklyContainer.style.display = '';
     } else if (type === 'Monthly') {
-        container.style.display = '';
-        label.textContent = 'Day of Month';
-        var opts = '';
-        for (var i = 1; i <= 28; i++) opts += '<option value="' + i + '">' + i + '</option>';
-        daySelect.innerHTML = opts;
+        monthContainer.style.display = '';
+    } else if (type === 'Once') {
+        // no extra options
     } else {
-        container.style.display = 'none';
+        // Daily
     }
 }
 
@@ -1369,19 +1425,39 @@ function saveSchedule() {
     }
 
     var recurrence = document.getElementById('schedRecurrence').value;
-    var day = (recurrence === 'Weekly' || recurrence === 'Monthly')
-        ? document.getElementById('schedDay').value : null;
+    if (recurrence === 'Once') {
+        var startDate = document.getElementById('schedStartDate').value;
+        var today = new Date().toISOString().slice(0, 10);
+        if (!startDate || startDate < today) {
+            alertDiv.innerHTML = '<div class="alert alert-warning mb-0">For &quot;Run once&quot;, start date must be today or in the future.</div>';
+            alertDiv.style.display = '';
+            return;
+        }
+    }
+
+    var day = (recurrence === 'Monthly') ? parseInt(document.getElementById('schedMonthDay').value, 10) : null;
 
     var formData = new FormData();
     formData.append('scheduleName', name);
     formData.append('recurrenceType', recurrence);
-    if (day) formData.append('recurrenceDay', day);
+    if (day !== null && !isNaN(day)) formData.append('recurrenceDay', day);
     formData.append('scheduleTime', document.getElementById('schedTime').value);
     formData.append('exportFormat', document.getElementById('schedFormat').value);
     formData.append('recipients', recipients);
     formData.append('emailSubject', document.getElementById('schedSubject').value);
 
+    var dateRangeSel = document.getElementById('schedDateRangeType');
+    var dateRangeOpt = dateRangeSel.options[dateRangeSel.selectedIndex];
+    var reportDateRange = { type: dateRangeOpt.value };
+    if (reportDateRange.type === 'LastNDays') {
+        reportDateRange.value = parseInt(dateRangeOpt.getAttribute('data-value') || '7', 10);
+    } else if (reportDateRange.type === 'Custom') {
+        reportDateRange.dateFrom = document.getElementById('schedDateFrom').value;
+        reportDateRange.dateTo = document.getElementById('schedDateTo').value;
+    }
+
     var params = {
+        reportDateRange: reportDateRange,
         dateFrom: document.getElementById('DateFrom').value,
         dateTo: document.getElementById('DateTo').value,
         breakdown: document.getElementById('Breakdown').value,
@@ -1395,6 +1471,21 @@ function saveSchedule() {
         sortDirection: document.getElementById('sortDirectionHidden').value || 'ASC'
     };
     formData.append('parametersJson', JSON.stringify(params));
+
+    var startDate = document.getElementById('schedStartDate').value || new Date().toISOString().slice(0, 10);
+    var recurrenceJson = {
+        type: recurrence,
+        time: document.getElementById('schedTime').value,
+        range: { startDate: startDate, noEndDate: true }
+    };
+    if (recurrence === 'Weekly') {
+        var days = [];
+        document.querySelectorAll('.sched-dow:checked').forEach(function(cb) { days.push(parseInt(cb.value, 10)); });
+        recurrenceJson.pattern = { interval: 1, daysOfWeek: days.length ? days : [1] };
+    } else if (recurrence === 'Monthly') {
+        recurrenceJson.pattern = { dayOfMonth: day !== null ? day : 1 };
+    }
+    formData.append('recurrenceJson', JSON.stringify(recurrenceJson));
 
     fetch('@Url.Action("SaveSchedule", "Reports")', { method: 'POST', body: formData })
         .then(function(r) { return r.json(); })
@@ -1436,11 +1527,14 @@ function loadExistingSchedules() {
         });
 }
 
-// Load schedules when modal opens
+// Load schedules and init date range visibility when modal opens
 document.addEventListener('DOMContentLoaded', function() {
     var modal = document.getElementById('scheduleModal');
     if (modal) {
-        modal.addEventListener('show.bs.modal', loadExistingSchedules);
+        modal.addEventListener('show.bs.modal', function() {
+            loadExistingSchedules();
+            onSchedDateRangeTypeChange();
+        });
     }
 });
 

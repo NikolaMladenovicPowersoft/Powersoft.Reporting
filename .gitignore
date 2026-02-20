@@ -57,3 +57,7 @@ artifacts/
 appsettings.Development.json
 appsettings.Local.json
 *.local.json
+
+# Personal / local notes (do not commit)
+_DOCS/HUBSTAFF_TIMESHEET.md
+_DOCS/MEETING_ASSISTANT_PROMPT.md

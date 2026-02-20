@@ -36,4 +36,12 @@ public class TenantRepositoryFactory : ITenantRepositoryFactory
             
         return new ScheduleRepository(connectionString);
     }
+
+    public IIniRepository CreateIniRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+            
+        return new IniRepository(connectionString);
+    }
 }

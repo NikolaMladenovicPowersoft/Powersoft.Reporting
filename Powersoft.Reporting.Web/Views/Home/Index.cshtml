@@ -18,6 +18,26 @@
                 }
             </div>
             <div class="card-body p-4">
+                @if (TempData["Warning"] != null)
+                {
+                    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        @TempData["Warning"]
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(Model.DisplayName))
+                {
+                    <div class="mb-3 text-muted small">
+                        <i class="bi bi-person me-1"></i>@Model.DisplayName
+                        <span class="ms-2 badge bg-secondary">@Model.RoleName</span>
+                        @if (Model.IsSystemAdmin)
+                        {
+                            <span class="ms-1 badge bg-warning text-dark">Admin</span>
+                        }
+                    </div>
+                }
+
                 @if (!string.IsNullOrEmpty(Model.ErrorMessage))
                 {
                     <div class="alert alert-danger">
@@ -32,10 +52,21 @@
                             <i class="bi bi-building me-1"></i>Company
                         </label>
                         <select id="companySelect" class="form-select form-select-lg">
-                            <option value="">Select a company...</option>
-                            @foreach (var company in Model.Companies)
+                            @if (Model.Companies.Count == 0)
                             {
-                                <option value="@company.CompanyCode">@company.CompanyName</option>
+                                <option value="">No companies available</option>
+                            }
+                            else if (Model.Companies.Count == 1)
+                            {
+                                <option value="@Model.Companies[0].CompanyCode" selected>@Model.Companies[0].CompanyName</option>
+                            }
+                            else
+                            {
+                                <option value="">Select a company...</option>
+                                @foreach (var company in Model.Companies)
+                                {
+                                    <option value="@company.CompanyCode">@company.CompanyName</option>
+                                }
                             }
                         </select>
                     </div>
@@ -74,50 +105,64 @@
 
 @section Scripts {
 <script>
-    document.getElementById('companySelect').addEventListener('change', async function() {
-        const companyCode = this.value;
-        const dbSelect = document.getElementById('databaseSelect');
-        const connectBtn = document.getElementById('connectBtn');
-        
+    // Pre-loaded accessible databases (already filtered server-side by ranking + module + user-DB link)
+    const accessibleDatabases = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.AccessibleDatabases.Select(d => new { value = d.DBCode, text = d.DBFriendlyName, company = d.CompanyCode })));
+
+    const companySelect = document.getElementById('companySelect');
+    const dbSelect = document.getElementById('databaseSelect');
+    const connectBtn = document.getElementById('connectBtn');
+
+    function loadDatabasesForCompany(companyCode) {
         if (!companyCode) {
             dbSelect.innerHTML = '<option value="">Select a company first...</option>';
             dbSelect.disabled = true;
             connectBtn.disabled = true;
             return;
         }
-        
-        dbSelect.innerHTML = '<option value="">Loading...</option>';
-        dbSelect.disabled = true;
-        
-        try {
-            const response = await fetch(`/Home/GetDatabases?companyCode=${encodeURIComponent(companyCode)}`);
-            const databases = await response.json();
-            
-            if (databases.error) {
-                dbSelect.innerHTML = '<option value="">Error loading databases</option>';
-                return;
-            }
-            
-            dbSelect.innerHTML = '<option value="">Select a database...</option>';
-            databases.forEach(db => {
-                const option = document.createElement('option');
-                option.value = db.value;
-                option.textContent = db.text;
-                dbSelect.appendChild(option);
-            });
-            
-            dbSelect.disabled = false;
-        } catch (error) {
-            dbSelect.innerHTML = '<option value="">Error loading databases</option>';
+
+        const filtered = accessibleDatabases.filter(d => d.company === companyCode);
+
+        if (filtered.length === 0) {
+            dbSelect.innerHTML = '<option value="">No databases available</option>';
+            dbSelect.disabled = true;
+            connectBtn.disabled = true;
+            return;
         }
+
+        if (filtered.length === 1) {
+            // Single DB: auto-select it
+            dbSelect.innerHTML = '';
+            const opt = document.createElement('option');
+            opt.value = filtered[0].value;
+            opt.textContent = filtered[0].text;
+            opt.selected = true;
+            dbSelect.appendChild(opt);
+            dbSelect.disabled = false;
+            connectBtn.disabled = false;
+        } else {
+            dbSelect.innerHTML = '<option value="">Select a database...</option>';
+            filtered.forEach(db => {
+                const opt = document.createElement('option');
+                opt.value = db.value;
+                opt.textContent = db.text;
+                dbSelect.appendChild(opt);
+            });
+            dbSelect.disabled = false;
+            connectBtn.disabled = true;
+        }
+    }
+
+    companySelect.addEventListener('change', function() {
+        loadDatabasesForCompany(this.value);
     });
-    
-    document.getElementById('databaseSelect').addEventListener('change', function() {
-        document.getElementById('connectBtn').disabled = !this.value;
+
+    dbSelect.addEventListener('change', function() {
+        connectBtn.disabled = !this.value;
     });
-    
-    document.getElementById('connectBtn').addEventListener('click', async function() {
-        const dbCode = document.getElementById('databaseSelect').value;
+
+    connectBtn.addEventListener('click', async function() {
+        const dbCode = dbSelect.value;
         if (!dbCode) return;
         
         const btn = this;
@@ -148,5 +193,10 @@
             status.style.display = 'none';
         }
     });
+
+    // If single company is pre-selected (auto-selected when only 1 company), load its databases
+    if (companySelect.value) {
+        loadDatabasesForCompany(companySelect.value);
+    }
 </script>
 }

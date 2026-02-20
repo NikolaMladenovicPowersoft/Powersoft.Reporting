@@ -6,4 +6,5 @@ public interface IAuthenticationService
 {
     Task<LoginResult> AuthenticateAsync(LoginRequest request);
     Task<AppUser?> GetUserByUsernameAsync(string username);
+    Task<bool> UserExistsAsync(string username);
 }

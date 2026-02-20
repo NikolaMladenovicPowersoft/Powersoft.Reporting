@@ -13,11 +13,16 @@ namespace Powersoft.Reporting.Web.Controllers;
 public class ReportsController : Controller
 {
     private readonly ITenantRepositoryFactory _repositoryFactory;
+    private readonly ICentralRepository _centralRepository;
     private readonly ILogger<ReportsController> _logger;
 
-    public ReportsController(ITenantRepositoryFactory repositoryFactory, ILogger<ReportsController> logger)
+    public ReportsController(
+        ITenantRepositoryFactory repositoryFactory,
+        ICentralRepository centralRepository,
+        ILogger<ReportsController> logger)
     {
         _repositoryFactory = repositoryFactory;
+        _centralRepository = centralRepository;
         _logger = logger;
     }
     
@@ -29,6 +34,52 @@ public class ReportsController : Controller
     private string? GetConnectedDatabaseName()
     {
         return HttpContext.Session.GetString(SessionKeys.ConnectedDatabase);
+    }
+
+    private int GetRanking()
+    {
+        var fromSession = HttpContext.Session.GetInt32(SessionKeys.Ranking);
+        if (fromSession.HasValue) return fromSession.Value;
+
+        var claim = User.FindFirst(AppClaimTypes.Ranking)?.Value;
+        if (int.TryParse(claim, out var ranking))
+        {
+            HttpContext.Session.SetInt32(SessionKeys.Ranking, ranking);
+            return ranking;
+        }
+        return 99;
+    }
+
+    private int GetRoleID()
+    {
+        var fromSession = HttpContext.Session.GetInt32(SessionKeys.RoleID);
+        if (fromSession.HasValue) return fromSession.Value;
+
+        var claim = User.FindFirst(AppClaimTypes.RoleID)?.Value;
+        if (int.TryParse(claim, out var roleId))
+        {
+            HttpContext.Session.SetInt32(SessionKeys.RoleID, roleId);
+            return roleId;
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Checks whether the current user is authorized for a specific action.
+    /// Ranking &lt;= 20: all actions allowed.
+    /// Ranking > 20: check tbl_RelRoleAction.
+    /// </summary>
+    private async Task<bool> IsActionAuthorizedAsync(int actionId)
+    {
+        var ranking = GetRanking();
+
+        // System admin, client admin, client standard: all actions allowed
+        if (ranking <= ModuleConstants.RankingAllActionsAllowed)
+            return true;
+
+        // Custom roles: check per-action permission
+        var roleId = GetRoleID();
+        return await _centralRepository.IsActionAuthorizedAsync(roleId, actionId);
     }
 
     public IActionResult Index()
@@ -43,7 +94,7 @@ public class ReportsController : Controller
         return View();
     }
 
-    public async Task<IActionResult> AverageBasket()
+    public async Task<IActionResult> AverageBasket(bool clearedFilters = false, bool layoutReset = false)
     {
         var connectedDb = GetConnectedDatabaseName();
         var tenantConnString = GetTenantConnectionString();
@@ -53,16 +104,37 @@ public class ReportsController : Controller
             TempData["Warning"] = "Please select and connect to a database first.";
             return RedirectToAction("Index", "Home");
         }
+
+        // Action check: actionID 6025 = View Average Basket
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewAvgBasket))
+        {
+            _logger.LogWarning("User {User} denied access to Average Basket (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewAvgBasket);
+            return RedirectToAction("AccessDenied", "Account");
+        }
         
         var viewModel = new AverageBasketViewModel
         {
             ConnectedDatabase = connectedDb,
             IsConnected = true,
             DateFrom = new DateTime(DateTime.Today.Year, 1, 1),
-            DateTo = DateTime.Today
+            DateTo = DateTime.Today,
+            CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleAvgBasket)
         };
         
+        await ApplySavedLayoutAsync(viewModel, tenantConnString);
         await LoadAvailableStoresAsync(viewModel, tenantConnString);
+
+        if (clearedFilters)
+        {
+            TempData["Success"] = viewModel.HasSavedLayout
+                ? "Filters cleared. Displaying your saved layout."
+                : "Filters cleared.";
+        }
+        else if (layoutReset)
+        {
+            TempData["Success"] = "Layout discarded. Reset to defaults.";
+        }
         
         return View(viewModel);
     }
@@ -78,9 +150,13 @@ public class ReportsController : Controller
             TempData["Warning"] = "Please select and connect to a database first.";
             return RedirectToAction("Index", "Home");
         }
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewAvgBasket))
+            return RedirectToAction("AccessDenied", "Account");
         
         model.ConnectedDatabase = connectedDb;
         model.IsConnected = true;
+        model.CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleAvgBasket);
         
         await LoadAvailableStoresAsync(model, tenantConnString);
         ApplyDatePreset(model);
@@ -168,6 +244,10 @@ public class ReportsController : Controller
         string scheduleTime, string exportFormat, string recipients,
         string? emailSubject, string? parametersJson)
     {
+        // Action check: actionID 6026 = Schedule Average Basket
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleAvgBasket))
+            return Json(new { success = false, message = "You don't have permission to create schedules." });
+
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
             return Json(new { success = false, message = "Not connected to database" });
@@ -204,6 +284,104 @@ public class ReportsController : Controller
             return Json(new { success = false, message = "Failed to save schedule. The schedule tables may not exist yet." });
         }
     }
+
+    // ==================== Layout Save/Restore ====================
+
+    private string GetUserCode()
+    {
+        var fromSession = HttpContext.Session.GetString(SessionKeys.UserCode);
+        if (!string.IsNullOrEmpty(fromSession)) return fromSession;
+
+        var claim = User.FindFirst(AppClaimTypes.UserCode)?.Value;
+        if (!string.IsNullOrEmpty(claim))
+        {
+            HttpContext.Session.SetString(SessionKeys.UserCode, claim);
+            return claim;
+        }
+        return User.Identity?.Name ?? "UNKNOWN";
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var parms = await repo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderAvgBasket,
+                userCode);
+
+            return Json(new { success = true, hasSaved = parms.Count > 0, parameters = parms });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to load layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveLayout([FromBody] Dictionary<string, string> parameters)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (parameters == null || parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            await repo.SaveLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderAvgBasket,
+                ModuleConstants.IniDescriptionAvgBasket,
+                userCode,
+                parameters);
+
+            return Json(new { success = true, message = "Layout saved" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ResetLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var deleted = await repo.DeleteLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderAvgBasket,
+                userCode);
+
+            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to reset layout" });
+        }
+    }
+
+    // ==================== Schedules ====================
 
     [HttpGet]
     public async Task<IActionResult> GetSchedules()
@@ -354,6 +532,42 @@ public class ReportsController : Controller
         {
             _logger.LogError(ex, "Error exporting report");
             return null;
+        }
+    }
+
+    private async Task ApplySavedLayoutAsync(AverageBasketViewModel model, string tenantConnString)
+    {
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var parms = await repo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderAvgBasket,
+                userCode);
+
+            if (parms.Count == 0) return;
+
+            model.HasSavedLayout = true;
+
+            if (parms.TryGetValue("IncludeVat", out var iv))
+                model.IncludeVat = iv == "1";
+            if (parms.TryGetValue("CompareLastYear", out var cly))
+                model.CompareLastYear = cly == "1";
+            if (parms.TryGetValue("Breakdown", out var bd) && Enum.TryParse<BreakdownType>(bd, out var bdt))
+                model.Breakdown = bdt;
+            if (parms.TryGetValue("GroupBy", out var gb) && Enum.TryParse<GroupByType>(gb, out var gbt))
+                model.GroupBy = gbt;
+            if (parms.TryGetValue("SecondaryGroupBy", out var sgb) && Enum.TryParse<GroupByType>(sgb, out var sgbt))
+                model.SecondaryGroupBy = sgbt;
+            if (parms.TryGetValue("PageSize", out var ps) && int.TryParse(ps, out var pageSize) && pageSize > 0)
+                model.PageSize = pageSize;
+            if (parms.TryGetValue("HiddenColumns", out var hc) && !string.IsNullOrEmpty(hc))
+                model.HiddenColumns = hc;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load saved layout — using defaults");
         }
     }
 

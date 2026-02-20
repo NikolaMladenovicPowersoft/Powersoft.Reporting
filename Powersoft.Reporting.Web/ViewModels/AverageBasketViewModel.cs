@@ -74,6 +74,24 @@ public class AverageBasketViewModel
     public string? ConnectedDatabase { get; set; }
     public bool IsConnected { get; set; }
     public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Whether the current user has permission to create schedules (actionID 6026).
+    /// Controls visibility of the Schedule button.
+    /// </summary>
+    public bool CanSchedule { get; set; } = true;
+
+    /// <summary>
+    /// Whether a saved layout was loaded from tbl_IniHeader/tbl_IniDetail.
+    /// Used to show a visual indicator and the Reset Layout option.
+    /// </summary>
+    public bool HasSavedLayout { get; set; }
+
+    /// <summary>
+    /// Comma-separated list of column keys that should be hidden.
+    /// Loaded from saved layout, applied via JS on page load.
+    /// </summary>
+    public string? HiddenColumns { get; set; }
     
     public bool HasGrouping => GroupBy != GroupByType.None;
     public bool HasSecondaryGrouping => SecondaryGroupBy != GroupByType.None;

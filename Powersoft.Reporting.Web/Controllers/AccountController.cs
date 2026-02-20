@@ -53,11 +53,16 @@ public class AccountController : Controller
 
             if (result.Success && result.User != null)
             {
+                var user = result.User;
+
                 var claims = new List<Claim>
                 {
-                    new Claim(ClaimTypes.Name, result.User.Username),
-                    new Claim(ClaimTypes.GivenName, result.User.DisplayName),
-                    new Claim(ClaimTypes.Role, result.User.Role)
+                    new Claim(ClaimTypes.Name, user.Username),
+                    new Claim(ClaimTypes.GivenName, user.DisplayName),
+                    new Claim(AppClaimTypes.UserCode, user.Username),
+                    new Claim(AppClaimTypes.RoleID, user.RoleID.ToString()),
+                    new Claim(AppClaimTypes.Ranking, user.Ranking.ToString()),
+                    new Claim(AppClaimTypes.RoleName, user.RoleName)
                 };
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -74,7 +79,14 @@ public class AccountController : Controller
                     new ClaimsPrincipal(claimsIdentity),
                     authProperties);
 
-                _logger.LogInformation("User {Username} logged in successfully", model.Username);
+                // Store in session for quick access without parsing claims
+                HttpContext.Session.SetString(SessionKeys.UserCode, user.Username);
+                HttpContext.Session.SetInt32(SessionKeys.RoleID, user.RoleID);
+                HttpContext.Session.SetInt32(SessionKeys.Ranking, user.Ranking);
+
+                _logger.LogInformation(
+                    "User {Username} logged in (Role: {RoleName}, Ranking: {Ranking})", 
+                    user.Username, user.RoleName, user.Ranking);
 
                 if (!string.IsNullOrEmpty(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl))
                 {

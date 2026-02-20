@@ -42,9 +42,13 @@ public class AuthenticationService : IAuthenticationService
     private async Task<AppUser?> ValidateUserAsync(string username, string password)
     {
         const string sql = @"
-            SELECT pk_UserCode, UserDesc, UserPassword, UserActive
-            FROM tbl_User
-            WHERE pk_UserCode = @Username AND ISNULL(UserActive, 0) = 1";
+            SELECT u.pk_UserCode, u.UserDesc, u.UserPassword, u.UserActive,
+                   u.fk_RoleID, r.RoleName, r.Ranking, u.fk_CompanyCode
+            FROM tbl_User u
+            INNER JOIN tbl_Role r ON u.fk_RoleID = r.pk_RoleID
+            WHERE u.pk_UserCode = @Username
+              AND u.UserActive = 1
+              AND r.RoleActive = 1";
 
         using var conn = new SqlConnection(_centralConnectionString);
         using var cmd = new SqlCommand(sql, conn);
@@ -58,7 +62,6 @@ public class AuthenticationService : IAuthenticationService
             var storedPasswordHash = reader.IsDBNull(2) ? "" : reader.GetString(2);
             var userDesc = reader.IsDBNull(1) ? username : reader.GetString(1);
 
-            // tbl_User stores SHA1 - try UTF-8 then Unicode (legacy FormsAuth / SQL differ)
             var inputHashUtf8 = GenerateSha1HashUtf8(password);
             var inputHashUnicode = GenerateSha1HashUnicode(password);
             var trimmedStored = (storedPasswordHash ?? "").Trim();
@@ -70,8 +73,11 @@ public class AuthenticationService : IAuthenticationService
                 {
                     Username = username,
                     DisplayName = userDesc,
-                    Role = "User",
-                    IsActive = true
+                    IsActive = true,
+                    RoleID = reader.GetInt32(4),
+                    RoleName = reader.IsDBNull(5) ? "" : reader.GetString(5),
+                    Ranking = reader.IsDBNull(6) ? 99 : reader.GetInt32(6),
+                    CompanyCode = reader.IsDBNull(7) ? null : reader.GetString(7)
                 };
             }
         }
@@ -96,9 +102,11 @@ public class AuthenticationService : IAuthenticationService
     public async Task<AppUser?> GetUserByUsernameAsync(string username)
     {
         const string sql = @"
-            SELECT pk_UserCode, UserDesc, UserActive
-            FROM tbl_User
-            WHERE pk_UserCode = @Username";
+            SELECT u.pk_UserCode, u.UserDesc, u.UserActive,
+                   u.fk_RoleID, r.RoleName, r.Ranking, u.fk_CompanyCode
+            FROM tbl_User u
+            LEFT JOIN tbl_Role r ON u.fk_RoleID = r.pk_RoleID
+            WHERE u.pk_UserCode = @Username";
 
         using var conn = new SqlConnection(_centralConnectionString);
         using var cmd = new SqlCommand(sql, conn);
@@ -113,8 +121,11 @@ public class AuthenticationService : IAuthenticationService
             {
                 Username = reader.GetString(0),
                 DisplayName = reader.IsDBNull(1) ? username : reader.GetString(1),
-                Role = "User",
-                IsActive = !reader.IsDBNull(2) && reader.GetBoolean(2)
+                IsActive = !reader.IsDBNull(2) && reader.GetBoolean(2),
+                RoleID = reader.IsDBNull(3) ? 0 : reader.GetInt32(3),
+                RoleName = reader.IsDBNull(4) ? "" : reader.GetString(4),
+                Ranking = reader.IsDBNull(5) ? 99 : reader.GetInt32(5),
+                CompanyCode = reader.IsDBNull(6) ? null : reader.GetString(6)
             };
         }
 

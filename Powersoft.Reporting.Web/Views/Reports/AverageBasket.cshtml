@@ -32,6 +32,7 @@
             <input type="hidden" asp-for="PageNumber" id="pageNumberHidden" />
             <input type="hidden" asp-for="SortColumn" id="sortColumnHidden" />
             <input type="hidden" asp-for="SortDirection" id="sortDirectionHidden" />
+            <input type="hidden" asp-for="HiddenColumns" id="hiddenColumnsInput" />
             @foreach (var col in filterCols)
             {
                 <input type="hidden" name="FilterValues[@col]" id="fv_@col" value="@(Model.FilterValues.GetValueOrDefault(col, ""))" />
@@ -172,10 +173,30 @@
                 <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
                     <i class="bi bi-clock-history me-2"></i>Schedule
                 </button>
-                <a asp-action="AverageBasket" class="btn btn-outline-secondary btn-reset ms-auto" title="Reset all filters to defaults">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Filters
+                <div class="btn-group ms-auto">
+                    <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Save current parameters as your default layout">
+                        <i class="bi bi-save me-1"></i>Save Layout
+                    </button>
+                    @if (Model.HasSavedLayout)
+                    {
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetSavedLayout()" title="Discard your saved layout and restore factory defaults">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Layout
+                        </button>
+                    }
+                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#columnSettingsModal" title="Choose which columns to show/hide">
+                        <i class="bi bi-layout-three-columns me-1"></i>Columns
+                    </button>
+                </div>
+                <a asp-action="AverageBasket" asp-route-clearedFilters="true" class="btn btn-outline-secondary btn-reset" title="Clear all column filters. Your saved layout is preserved.">
+                    <i class="bi bi-funnel me-1"></i>Clear Filters
                 </a>
             </div>
+            @if (Model.HasSavedLayout)
+            {
+                <div class="mt-2">
+                    <small class="text-info"><i class="bi bi-check-circle me-1"></i>Saved layout loaded</small>
+                </div>
+            }
         </form>
     </div>
 </div>
@@ -288,8 +309,8 @@
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 @if (hasAnyFilter)
                 {
-                    <button class="btn btn-sm btn-outline-warning" onclick="clearAllFilters()" title="Clear all column filters">
-                        <i class="bi bi-funnel me-1"></i>Clear Filters
+                    <button class="btn btn-sm btn-outline-warning" onclick="clearAllFilters()" title="Clear column filter inputs and refresh">
+                        <i class="bi bi-funnel me-1"></i>Clear column filters
                     </button>
                 }
                 <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()" id="previewToggleBtn" title="Toggle document preview">
@@ -336,34 +357,34 @@
                             {
                                 <th>@Model.SecondaryGroupBy</th>
                             }
-                            <th class="@SortClass("Period")" onclick="sortBy('Period')">
+                            <th data-col="Period" class="@SortClass("Period")" onclick="sortBy('Period')">
                                 Period<i class="bi @SortIcon("Period") sort-icon"></i>
                             </th>
-                            <th class="text-end @SortClass("Invoices")" onclick="sortBy('Invoices')">
+                            <th data-col="Invoices" class="text-end @SortClass("Invoices")" onclick="sortBy('Invoices')">
                                 Invoices<i class="bi @SortIcon("Invoices") sort-icon"></i>
                             </th>
-                            <th class="text-end @SortClass("Returns")" onclick="sortBy('Returns')">
+                            <th data-col="Returns" class="text-end @SortClass("Returns")" onclick="sortBy('Returns')">
                                 Returns<i class="bi @SortIcon("Returns") sort-icon"></i>
                             </th>
-                            <th class="text-end @SortClass("NetTransactions")" onclick="sortBy('NetTransactions')">
+                            <th data-col="NetTransactions" class="text-end @SortClass("NetTransactions")" onclick="sortBy('NetTransactions')">
                                 Net Trans.<i class="bi @SortIcon("NetTransactions") sort-icon"></i>
                             </th>
-                            <th class="text-end @SortClass("QtySold")" onclick="sortBy('QtySold')">
+                            <th data-col="QtySold" class="text-end @SortClass("QtySold")" onclick="sortBy('QtySold')">
                                 Qty Sold<i class="bi @SortIcon("QtySold") sort-icon"></i>
                             </th>
-                            <th class="text-end @SortClass("QtyReturned")" onclick="sortBy('QtyReturned')">
+                            <th data-col="QtyReturned" class="text-end @SortClass("QtyReturned")" onclick="sortBy('QtyReturned')">
                                 Qty Ret.<i class="bi @SortIcon("QtyReturned") sort-icon"></i>
                             </th>
-                            <th class="text-end @SortClass("NetQty")" onclick="sortBy('NetQty')">
+                            <th data-col="NetQty" class="text-end @SortClass("NetQty")" onclick="sortBy('NetQty')">
                                 Net Qty<i class="bi @SortIcon("NetQty") sort-icon"></i>
                             </th>
-                            <th class="text-end @SortClass("Sales")" onclick="sortBy('Sales')">
+                            <th data-col="Sales" class="text-end @SortClass("Sales")" onclick="sortBy('Sales')">
                                 @(Model.IncludeVat ? "Gross" : "Net") Sales<i class="bi @SortIcon("Sales") sort-icon"></i>
                             </th>
-                            <th class="text-end @SortClass("AvgBasket")" onclick="sortBy('AvgBasket')">
+                            <th data-col="AvgBasket" class="text-end @SortClass("AvgBasket")" onclick="sortBy('AvgBasket')">
                                 Avg Basket<i class="bi @SortIcon("AvgBasket") sort-icon"></i>
                             </th>
-                            <th class="text-end @SortClass("AvgQty")" onclick="sortBy('AvgQty')">
+                            <th data-col="AvgQty" class="text-end @SortClass("AvgQty")" onclick="sortBy('AvgQty')">
                                 Avg Qty<i class="bi @SortIcon("AvgQty") sort-icon"></i>
                             </th>
                             @if (Model.CompareLastYear)
@@ -699,12 +720,12 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             <div class="mt-4 d-flex justify-content-center gap-2 flex-wrap">
                 @if (hasAnyFilter)
                 {
-                    <button class="btn btn-outline-warning" onclick="clearAllFilters()" title="Clear all column filters">
-                        <i class="bi bi-funnel me-1"></i>Clear Filters
+                    <button class="btn btn-outline-warning" onclick="clearAllFilters()" title="Clear column filter inputs and refresh">
+                        <i class="bi bi-funnel me-1"></i>Clear column filters
                     </button>
                 }
-                <a asp-action="AverageBasket" class="btn btn-outline-secondary" title="Reset all filters to defaults">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Filters
+                <a asp-action="AverageBasket" asp-route-clearedFilters="true" class="btn btn-outline-secondary" title="Clear filters and reload. Your saved layout is preserved.">
+                    <i class="bi bi-funnel me-1"></i>Clear Filters
                 </a>
             </div>
         </div>
@@ -864,6 +885,38 @@ else
                 <button type="button" class="btn btn-primary" onclick="saveSchedule()">
                     <i class="bi bi-check-lg me-1"></i>Save Schedule
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Column Settings Modal -->
+<div class="modal fade" id="columnSettingsModal" tabindex="-1" aria-labelledby="columnSettingsLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="columnSettingsLabel">
+                    <i class="bi bi-layout-three-columns me-2"></i>Column Visibility
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">Toggle which data columns are visible in the results table. Changes apply immediately.</p>
+                <div class="row g-2">
+                    <div class="col-6"><div class="form-check"><input class="form-check-input col-toggle" type="checkbox" value="Invoices" id="colToggleInvoices" checked onchange="applyColumnVisibility()"><label class="form-check-label" for="colToggleInvoices">Invoices</label></div></div>
+                    <div class="col-6"><div class="form-check"><input class="form-check-input col-toggle" type="checkbox" value="Returns" id="colToggleReturns" checked onchange="applyColumnVisibility()"><label class="form-check-label" for="colToggleReturns">Returns</label></div></div>
+                    <div class="col-6"><div class="form-check"><input class="form-check-input col-toggle" type="checkbox" value="NetTransactions" id="colToggleNetTransactions" checked onchange="applyColumnVisibility()"><label class="form-check-label" for="colToggleNetTransactions">Net Transactions</label></div></div>
+                    <div class="col-6"><div class="form-check"><input class="form-check-input col-toggle" type="checkbox" value="QtySold" id="colToggleQtySold" checked onchange="applyColumnVisibility()"><label class="form-check-label" for="colToggleQtySold">Qty Sold</label></div></div>
+                    <div class="col-6"><div class="form-check"><input class="form-check-input col-toggle" type="checkbox" value="QtyReturned" id="colToggleQtyReturned" checked onchange="applyColumnVisibility()"><label class="form-check-label" for="colToggleQtyReturned">Qty Returned</label></div></div>
+                    <div class="col-6"><div class="form-check"><input class="form-check-input col-toggle" type="checkbox" value="NetQty" id="colToggleNetQty" checked onchange="applyColumnVisibility()"><label class="form-check-label" for="colToggleNetQty">Net Qty</label></div></div>
+                    <div class="col-6"><div class="form-check"><input class="form-check-input col-toggle" type="checkbox" value="Sales" id="colToggleSales" checked onchange="applyColumnVisibility()"><label class="form-check-label" for="colToggleSales">Sales</label></div></div>
+                    <div class="col-6"><div class="form-check"><input class="form-check-input col-toggle" type="checkbox" value="AvgBasket" id="colToggleAvgBasket" checked onchange="applyColumnVisibility()"><label class="form-check-label" for="colToggleAvgBasket">Avg Basket</label></div></div>
+                    <div class="col-6"><div class="form-check"><input class="form-check-input col-toggle" type="checkbox" value="AvgQty" id="colToggleAvgQty" checked onchange="applyColumnVisibility()"><label class="form-check-label" for="colToggleAvgQty">Avg Qty</label></div></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="resetColumnVisibility()">Show All</button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
             </div>
         </div>
     </div>
@@ -1397,10 +1450,143 @@ function scheduleItemSearch() {
     _itemSearchDebounceTimer = setTimeout(function() { searchItems(); }, ITEM_SEARCH_DEBOUNCE_MS);
 }
 
+// ==================== Layout Save/Load/Reset ====================
+
+function collectCurrentLayout() {
+    var parms = {};
+    var vat = document.getElementById('includeVatCheck');
+    if (vat) parms['IncludeVat'] = vat.checked ? '1' : '0';
+    var cly = document.getElementById('compareLyCheck');
+    if (cly) parms['CompareLastYear'] = cly.checked ? '1' : '0';
+    var bd = document.getElementById('Breakdown');
+    if (bd) parms['Breakdown'] = bd.options[bd.selectedIndex].text;
+    var gb = document.getElementById('GroupBy');
+    if (gb) parms['GroupBy'] = gb.options[gb.selectedIndex].text;
+    var sgb = document.getElementById('SecondaryGroupBy');
+    if (sgb) parms['SecondaryGroupBy'] = sgb.options[sgb.selectedIndex].text;
+    var ps = document.getElementById('PageSize');
+    if (ps) parms['PageSize'] = ps.value;
+
+    // Column visibility
+    var hidden = [];
+    document.querySelectorAll('.col-toggle').forEach(function(cb) {
+        if (!cb.checked) hidden.push(cb.value);
+    });
+    parms['HiddenColumns'] = hidden.join(',');
+
+    return parms;
+}
+
+function saveCurrentLayout() {
+    var parms = collectCurrentLayout();
+    fetch('@Url.Action("SaveLayout", "Reports")', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parms)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            showLayoutToast('Layout saved successfully', 'success');
+        } else {
+            showLayoutToast(data.message || 'Failed to save layout', 'danger');
+        }
+    })
+    .catch(function() {
+        showLayoutToast('Network error saving layout', 'danger');
+    });
+}
+
+function resetSavedLayout() {
+    if (!confirm('Reset your saved layout to factory defaults?')) return;
+    fetch('@Url.Action("ResetLayout", "Reports")', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            showLayoutToast('Layout reset — reloading...', 'success');
+            setTimeout(function() { window.location.href = '@Url.Action("AverageBasket", new { layoutReset = true })'; }, 800);
+        } else {
+            showLayoutToast(data.message || 'Failed to reset layout', 'danger');
+        }
+    })
+    .catch(function() {
+        showLayoutToast('Network error', 'danger');
+    });
+}
+
+function showLayoutToast(message, type) {
+    var existing = document.getElementById('layoutToast');
+    if (existing) existing.remove();
+    var div = document.createElement('div');
+    div.id = 'layoutToast';
+    div.className = 'alert alert-' + type + ' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';
+    div.style.zIndex = '9999';
+    div.innerHTML = '<i class="bi bi-' + (type === 'success' ? 'check-circle' : 'exclamation-triangle') + ' me-1"></i>' + message +
+        '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+    document.body.appendChild(div);
+    setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
+}
+
+// ==================== Column Visibility ====================
+
+function applyColumnVisibility() {
+    var hidden = [];
+    document.querySelectorAll('.col-toggle').forEach(function(cb) {
+        if (!cb.checked) hidden.push(cb.value);
+    });
+    var hiddenInput = document.getElementById('hiddenColumnsInput');
+    if (hiddenInput) hiddenInput.value = hidden.join(',');
+
+    var styleEl = document.getElementById('colVisibilityStyle');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'colVisibilityStyle';
+        document.head.appendChild(styleEl);
+    }
+
+    var table = document.getElementById('resultsTable');
+    if (!table) return;
+
+    var rules = [];
+    document.querySelectorAll('.col-toggle').forEach(function(cb) {
+        var colKey = cb.value;
+        if (!cb.checked) {
+            var headers = table.querySelectorAll('thead tr:first-child th');
+            for (var i = 0; i < headers.length; i++) {
+                if (headers[i].getAttribute('data-col') === colKey) {
+                    var colIdx = i + 1;
+                    rules.push('#resultsTable th:nth-child(' + colIdx + '), #resultsTable td:nth-child(' + colIdx + ') { display: none; }');
+                    break;
+                }
+            }
+        }
+    });
+
+    styleEl.textContent = rules.join('\n');
+}
+
+function resetColumnVisibility() {
+    document.querySelectorAll('.col-toggle').forEach(function(cb) { cb.checked = true; });
+    applyColumnVisibility();
+}
+
+function initColumnVisibilityFromServer() {
+    var hiddenCols = '@(Model.HiddenColumns ?? "")';
+    if (!hiddenCols) return;
+    var hidden = hiddenCols.split(',').filter(function(s) { return s.trim(); });
+    if (hidden.length === 0) return;
+    hidden.forEach(function(col) {
+        var cb = document.querySelector('.col-toggle[value="' + col.trim() + '"]');
+        if (cb) cb.checked = false;
+    });
+    applyColumnVisibility();
+}
+
     // Initialize on load
 document.addEventListener('DOMContentLoaded', function() {
     updateStoreSelection();
     updateItemSelectionText();
+    initColumnVisibilityFromServer();
     
     var itemSearchInput = document.getElementById('itemSearchInput');
     if (itemSearchInput) {

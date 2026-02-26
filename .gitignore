@@ -57,3 +57,9 @@ artifacts/
 appsettings.Development.json
 appsettings.Local.json
 *.local.json
+
+# AI / IDE rules
+.cursor/
+
+# Personal docs
+_DOCS/

@@ -66,6 +66,29 @@ public class ReportsController : Controller
     }
 
     /// <summary>
+    /// Reads MaxSchedulesPerReport from DB settings (tbl_Ini*), falling back to the compiled default.
+    /// </summary>
+    private async Task<int> GetMaxSchedulesPerReportAsync(string tenantConnString)
+    {
+        try
+        {
+            var iniRepo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var ini = await iniRepo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderDbSettings,
+                "ALL");
+
+            var settings = DatabaseSettings.FromDictionary(ini);
+            return settings.MaxSchedulesPerReport;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read DB settings, using default schedule limit");
+            return ModuleConstants.ScheduleLimitDefault;
+        }
+    }
+
+    /// <summary>
     /// Checks whether the current user is authorized for a specific action.
     /// Ranking &lt;= 20: all actions allowed.
     /// Ranking > 20: check tbl_RelRoleAction.
@@ -258,9 +281,10 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
             var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.AverageBasket);
-            if (count >= ModuleConstants.ScheduleLimitDefault)
-                return Json(new { success = false, message = $"Schedule limit reached. Maximum {ModuleConstants.ScheduleLimitDefault} active schedules per report." });
+            if (count >= maxSchedules)
+                return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
 
             var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
             DateTime? nextRun = null;

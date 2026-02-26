@@ -100,6 +100,24 @@ public class ScheduleExecutionService
         Database db, string connString, DateTime now,
         ScheduleRunSummary summary, CancellationToken ct)
     {
+        try
+        {
+            var iniRepo = _repositoryFactory.CreateIniRepository(connString);
+            var ini = await iniRepo.GetLayoutAsync(
+                ModuleConstants.ModuleCode, ModuleConstants.IniHeaderDbSettings, "ALL");
+            var dbSettings = DatabaseSettings.FromDictionary(ini);
+
+            if (!dbSettings.SchedulerEnabled)
+            {
+                _logger.LogInformation("Scheduler disabled for DB {DB} — skipping", db.DBFriendlyName);
+                return;
+            }
+        }
+        catch
+        {
+            // Settings table may not exist yet — continue with defaults (scheduler enabled)
+        }
+
         var scheduleRepo = _repositoryFactory.CreateScheduleRepository(connString);
 
         List<ReportSchedule> dueSchedules;

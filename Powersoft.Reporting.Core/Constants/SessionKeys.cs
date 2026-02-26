@@ -48,6 +48,18 @@ public static class ModuleConstants
     public const string IniHeaderAvgBasket = "AVGBASKET";
     public const string IniDescriptionAvgBasket = "Average Basket Report Layout";
 
-    /// <summary>Default max active schedules per report type per DB. Overridable per-DB later (Priority 5).</summary>
+    // INI settings constants (DB-level settings, userCode = "ALL")
+    public const string IniHeaderDbSettings = "DBSETTINGS";
+    public const string IniDescriptionDbSettings = "Report Engine Database Settings";
+
+    // Settings parameter codes (ParmCode in tbl_IniDetail)
+    public const string SettingMaxSchedules = "MaxSchedulesPerReport";
+    public const string SettingDefaultExportFormat = "DefaultExportFormat";
+    public const string SettingSchedulerEnabled = "SchedulerEnabled";
+    public const string SettingRetentionDays = "RetentionDays";
+
+    /// <summary>Default max active schedules per report type per DB. Overridable via DB settings.</summary>
     public const int ScheduleLimitDefault = 5;
+    public const string DefaultExportFormatValue = "Excel";
+    public const int DefaultRetentionDays = 7;
 }

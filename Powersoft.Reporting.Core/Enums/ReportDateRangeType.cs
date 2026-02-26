@@ -6,6 +6,9 @@ namespace Powersoft.Reporting.Core.Enums;
 public enum ReportDateRangeType
 {
     LastNDays,
+    Yesterday,
+    ThisWeek,
+    LastWeek,
     ThisMonth,
     LastMonth,
     YearToDate,

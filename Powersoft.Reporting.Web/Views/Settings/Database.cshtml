@@ -1,0 +1,130 @@
+@model Powersoft.Reporting.Web.ViewModels.DatabaseSettingsViewModel
+
+@{
+    ViewData["Title"] = "Database Settings";
+    var isReadOnly = !Model.CanEdit;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+
+        <div class="d-flex align-items-center mb-4">
+            <h2 class="mb-0">
+                <i class="bi bi-gear me-2"></i>Database Settings
+            </h2>
+            @if (!string.IsNullOrEmpty(Model.ConnectedDatabase))
+            {
+                <span class="badge bg-primary ms-3 fs-6">@Model.ConnectedDatabase</span>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle me-2"></i>@Model.SuccessMessage
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+
+        @if (TempData["Error"] is string errorMsg)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle me-2"></i>@errorMsg
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+
+        <form asp-action="Database" method="post">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Scheduler Settings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="MaxSchedulesPerReport" class="form-label"></label>
+                            @if (isReadOnly)
+                            {
+                                <input asp-for="MaxSchedulesPerReport" class="form-control" type="number" disabled />
+                            }
+                            else
+                            {
+                                <input asp-for="MaxSchedulesPerReport" class="form-control" type="number" min="1" max="100" />
+                            }
+                            <span asp-validation-for="MaxSchedulesPerReport" class="text-danger small"></span>
+                            <div class="form-text">Maximum active schedules allowed per report type.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="DefaultExportFormat" class="form-label"></label>
+                            @if (isReadOnly)
+                            {
+                                <select asp-for="DefaultExportFormat" class="form-select" disabled>
+                                    <option value="Excel">Excel (.xlsx)</option>
+                                    <option value="PDF">PDF</option>
+                                </select>
+                            }
+                            else
+                            {
+                                <select asp-for="DefaultExportFormat" class="form-select">
+                                    <option value="Excel">Excel (.xlsx)</option>
+                                    <option value="PDF">PDF</option>
+                                </select>
+                            }
+                            <div class="form-text">Default format for new scheduled reports.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-3">
+                                @if (isReadOnly)
+                                {
+                                    <input asp-for="SchedulerEnabled" class="form-check-input" type="checkbox" disabled />
+                                }
+                                else
+                                {
+                                    <input asp-for="SchedulerEnabled" class="form-check-input" type="checkbox" />
+                                }
+                                <label asp-for="SchedulerEnabled" class="form-check-label"></label>
+                            </div>
+                            <div class="form-text">When disabled, no scheduled reports will be executed for this database.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-archive me-2"></i>Storage & Retention</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="RetentionDays" class="form-label"></label>
+                            @if (isReadOnly)
+                            {
+                                <input asp-for="RetentionDays" class="form-control" type="number" disabled />
+                            }
+                            else
+                            {
+                                <input asp-for="RetentionDays" class="form-control" type="number" min="1" max="365" />
+                            }
+                            <span asp-validation-for="RetentionDays" class="text-danger small"></span>
+                            <div class="form-text">How many days generated report files are kept before cleanup.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (Model.CanEdit)
+            {
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Save Settings
+                    </button>
+                    <a asp-controller="Reports" asp-action="Index" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-1"></i>Back to Reports
+                    </a>
+                </div>
+            }
+        </form>
+
+    </div>
+</div>

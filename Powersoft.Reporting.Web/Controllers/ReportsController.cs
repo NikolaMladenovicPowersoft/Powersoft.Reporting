@@ -258,7 +258,7 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-            var count = await repo.CountActiveSchedulesForReportAsync("AverageBasket");
+            var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.AverageBasket);
             if (count >= ModuleConstants.ScheduleLimitDefault)
                 return Json(new { success = false, message = $"Schedule limit reached. Maximum {ModuleConstants.ScheduleLimitDefault} active schedules per report." });
 
@@ -293,7 +293,7 @@ public class ReportsController : Controller
 
             var schedule = new ReportSchedule
             {
-                ReportType = "AverageBasket",
+                ReportType = ReportTypeConstants.AverageBasket,
                 ScheduleName = scheduleName,
                 CreatedBy = User.Identity?.Name ?? "Unknown",
                 RecurrenceType = recurrenceType ?? "Daily",
@@ -425,7 +425,7 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-            var schedules = await repo.GetSchedulesForReportAsync("AverageBasket");
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.AverageBasket);
             return Json(schedules.Select(s => new
             {
                 s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,

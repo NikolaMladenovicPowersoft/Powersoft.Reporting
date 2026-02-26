@@ -147,6 +147,79 @@ public class ScheduleRepository : IScheduleRepository
         return Convert.ToInt32(result);
     }
 
+    public async Task<List<ReportSchedule>> GetDueSchedulesAsync(DateTime asOfUtc)
+    {
+        const string sql = @"
+            SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
+                   RecurrenceType, RecurrenceDay, ScheduleTime, NextRunDate, LastRunDate,
+                   ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject
+            FROM tbl_ReportSchedule
+            WHERE IsActive = 1
+              AND NextRunDate IS NOT NULL
+              AND NextRunDate <= @AsOf
+            ORDER BY NextRunDate";
+
+        var schedules = new List<ReportSchedule>();
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@AsOf", asOfUtc);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            schedules.Add(MapSchedule(reader));
+        }
+
+        return schedules;
+    }
+
+    public async Task UpdateAfterExecutionAsync(int scheduleId, DateTime lastRunDate, DateTime? nextRunDate, bool deactivate)
+    {
+        const string sql = @"
+            UPDATE tbl_ReportSchedule
+            SET LastRunDate = @LastRunDate,
+                NextRunDate = @NextRunDate,
+                IsActive = CASE WHEN @Deactivate = 1 THEN 0 ELSE IsActive END,
+                ModifiedDate = GETDATE()
+            WHERE pk_ScheduleID = @Id";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Id", scheduleId);
+        cmd.Parameters.AddWithValue("@LastRunDate", lastRunDate);
+        cmd.Parameters.AddWithValue("@NextRunDate", (object?)nextRunDate ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Deactivate", deactivate ? 1 : 0);
+
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<int> InsertScheduleLogAsync(ScheduleLog log)
+    {
+        const string sql = @"
+            INSERT INTO tbl_ReportScheduleLog
+                (fk_ScheduleID, RunDate, Status, RowsGenerated, FileSizeBytes, ErrorMessage, DurationMs)
+            VALUES
+                (@ScheduleId, @RunDate, @Status, @RowsGenerated, @FileSizeBytes, @ErrorMessage, @DurationMs);
+            SELECT SCOPE_IDENTITY();";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ScheduleId", log.ScheduleId);
+        cmd.Parameters.AddWithValue("@RunDate", log.RunDate);
+        cmd.Parameters.AddWithValue("@Status", log.Status);
+        cmd.Parameters.AddWithValue("@RowsGenerated", (object?)log.RowsGenerated ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@FileSizeBytes", (object?)log.FileSizeBytes ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ErrorMessage", (object?)log.ErrorMessage ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@DurationMs", (object?)log.DurationMs ?? DBNull.Value);
+
+        var result = await cmd.ExecuteScalarAsync();
+        return Convert.ToInt32(result);
+    }
+
     private static ReportSchedule MapSchedule(SqlDataReader reader)
     {
         return new ReportSchedule

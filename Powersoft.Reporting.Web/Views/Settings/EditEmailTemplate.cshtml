@@ -1,0 +1,209 @@
+@model Powersoft.Reporting.Core.Models.EmailTemplate
+@{
+    ViewData["Title"] = Model.TemplateId > 0 ? "Edit Email Template" : "New Email Template";
+    var isEdit = Model.TemplateId > 0;
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0">
+                <i class="bi bi-envelope-paper me-2"></i>@ViewData["Title"]
+            </h4>
+            <small class="text-muted">Configure the email template with merge fields. Use «FieldName» syntax to insert dynamic values.</small>
+        </div>
+        <a asp-action="EmailTemplates" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Back to Templates
+        </a>
+    </div>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle me-1"></i>@TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <form asp-action="SaveEmailTemplate" method="post">
+        <input type="hidden" asp-for="TemplateId" />
+        <input type="hidden" asp-for="CreatedBy" />
+        <input type="hidden" asp-for="CreatedDate" />
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header"><i class="bi bi-gear me-1"></i>Template Settings</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Template Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" asp-for="TemplateName" placeholder="e.g. Standard Report Template" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Report Type</label>
+                            <select class="form-select" asp-for="ReportType">
+                                <option value="">All Reports</option>
+                                <option value="AverageBasket">Average Basket</option>
+                            </select>
+                            <small class="text-muted">Leave empty to apply to all report types</small>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" asp-for="IsDefault">
+                            <label class="form-check-label" asp-for="IsDefault">Set as default template</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header"><i class="bi bi-envelope me-1"></i>Email Subject</div>
+                    <div class="card-body">
+                        <div class="input-group">
+                            <input type="text" class="form-control" asp-for="EmailSubject" placeholder="Report: «ReportName» — «Period»">
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Insert merge field into subject">
+                                    <i class="bi bi-braces"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="#" onclick="insertFieldInto('EmailSubject', '«ReportName»'); return false;">Report Name</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertFieldInto('EmailSubject', '«DatabaseName»'); return false;">Database Name</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertFieldInto('EmailSubject', '«Period»'); return false;">Period</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertFieldInto('EmailSubject', '«ExportFormat»'); return false;">Export Format</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertFieldInto('EmailSubject', '«GeneratedDate»'); return false;">Generated Date</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertFieldInto('EmailSubject', '«UserName»'); return false;">User Name</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertFieldInto('EmailSubject', '«CompanyName»'); return false;">Company Name</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <small class="text-muted">Merge fields in the subject are replaced with actual values when the email is sent</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-body-text me-1"></i>Email Message</span>
+                        <div class="d-flex gap-1">
+                            <!-- Formatting toolbar -->
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('bold')" title="Bold"><i class="bi bi-type-bold"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('italic')" title="Italic"><i class="bi bi-type-italic"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('underline')" title="Underline"><i class="bi bi-type-underline"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('strikethrough')" title="Strikethrough"><i class="bi bi-type-strikethrough"></i></button>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('justifyLeft')" title="Align left"><i class="bi bi-text-left"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('justifyCenter')" title="Center"><i class="bi bi-text-center"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('justifyRight')" title="Align right"><i class="bi bi-text-right"></i></button>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('insertUnorderedList')" title="Bullet list"><i class="bi bi-list-ul"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('insertOrderedList')" title="Numbered list"><i class="bi bi-list-ol"></i></button>
+                            </div>
+                            <select class="form-select form-select-sm" style="width:auto;" onchange="formatBlock(this.value); this.selectedIndex=0;">
+                                <option value="">Format</option>
+                                <option value="p">Normal</option>
+                                <option value="h2">Heading 2</option>
+                                <option value="h3">Heading 3</option>
+                                <option value="h4">Heading 4</option>
+                            </select>
+                            <!-- Insert Merged Field dropdown -->
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                    <i class="bi bi-braces me-1"></i>Insert Merged Field
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><h6 class="dropdown-header">Report Fields</h6></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertMergeField('«ReportName»'); return false;">«ReportName» — Report Title</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertMergeField('«DatabaseName»'); return false;">«DatabaseName» — Database Name</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertMergeField('«Period»'); return false;">«Period» — Date Range</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertMergeField('«RowCount»'); return false;">«RowCount» — Number of Rows</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertMergeField('«ExportFormat»'); return false;">«ExportFormat» — File Format</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertMergeField('«GeneratedDate»'); return false;">«GeneratedDate» — Generation Date</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><h6 class="dropdown-header">User / Company</h6></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertMergeField('«UserName»'); return false;">«UserName» — Sender Name</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="insertMergeField('«CompanyName»'); return false;">«CompanyName» — Company Name</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="emailBodyEditor" contenteditable="true"
+                             style="min-height:350px; padding:16px; outline:none; font-family:Arial,sans-serif; font-size:14px;"
+                             oninput="syncEditorToHidden()">@Html.Raw(Model.EmailBodyHtml)</div>
+                        <input type="hidden" asp-for="EmailBodyHtml" id="EmailBodyHtml" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <a asp-action="EmailTemplates" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-lg me-1"></i>Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>@(isEdit ? "Update Template" : "Create Template")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+<script>
+function syncEditorToHidden() {
+    document.getElementById('EmailBodyHtml').value = document.getElementById('emailBodyEditor').innerHTML;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    syncEditorToHidden();
+});
+
+function formatCmd(cmd) {
+    document.getElementById('emailBodyEditor').focus();
+    document.execCommand(cmd, false, null);
+    syncEditorToHidden();
+}
+
+function formatBlock(tag) {
+    if (!tag) return;
+    document.getElementById('emailBodyEditor').focus();
+    document.execCommand('formatBlock', false, '<' + tag + '>');
+    syncEditorToHidden();
+}
+
+function insertMergeField(field) {
+    var editor = document.getElementById('emailBodyEditor');
+    editor.focus();
+    var sel = window.getSelection();
+    if (sel.rangeCount) {
+        var range = sel.getRangeAt(0);
+        var span = document.createElement('span');
+        span.style.color = '#2563eb';
+        span.style.fontWeight = 'bold';
+        span.textContent = field;
+        range.deleteContents();
+        range.insertNode(span);
+        range.setStartAfter(span);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    } else {
+        editor.innerHTML += '<span style="color:#2563eb;font-weight:bold;">' + field + '</span>';
+    }
+    syncEditorToHidden();
+}
+
+function insertFieldInto(inputId, field) {
+    var input = document.getElementById(inputId);
+    var pos = input.selectionStart || input.value.length;
+    input.value = input.value.substring(0, pos) + field + input.value.substring(pos);
+    input.focus();
+    input.setSelectionRange(pos + field.length, pos + field.length);
+}
+</script>
+}

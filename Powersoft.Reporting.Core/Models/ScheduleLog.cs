@@ -12,6 +12,20 @@ public class ScheduleLog
     public int? DurationMs { get; set; }
 }
 
+public class ScheduleLogEntry
+{
+    public int LogId { get; set; }
+    public int ScheduleId { get; set; }
+    public string ScheduleName { get; set; } = "";
+    public string ReportType { get; set; } = "";
+    public DateTime RunDate { get; set; }
+    public string Status { get; set; } = "";
+    public int? RowsGenerated { get; set; }
+    public long? FileSizeBytes { get; set; }
+    public string? ErrorMessage { get; set; }
+    public int? DurationMs { get; set; }
+}
+
 public static class ScheduleLogStatus
 {
     public const string Success = "Success";

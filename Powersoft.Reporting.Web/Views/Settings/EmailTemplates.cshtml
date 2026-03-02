@@ -1,0 +1,126 @@
+@model List<Powersoft.Reporting.Core.Models.EmailTemplate>
+@{
+    ViewData["Title"] = "Email Templates";
+}
+
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0"><i class="bi bi-envelope-paper me-2"></i>Email Templates</h4>
+            <small class="text-muted">Manage email templates for report delivery. Templates support merge fields like «ReportName», «Period», etc.</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="EditEmailTemplate" class="btn btn-primary">
+                <i class="bi bi-plus-lg me-1"></i>New Template
+            </a>
+            <a asp-action="Database" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Back to Settings
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="bi bi-check-circle me-1"></i>@TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (Model.Count == 0)
+    {
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-envelope" style="font-size:3rem;color:#6b7280;"></i>
+                <h5 class="mt-3">No Templates Yet</h5>
+                <p class="text-muted">Create your first email template to customize report delivery emails.</p>
+                <a asp-action="EditEmailTemplate" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Create Template
+                </a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Template Name</th>
+                            <th>Subject</th>
+                            <th>Report Type</th>
+                            <th class="text-center">Default</th>
+                            <th>Created</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in Model)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@t.TemplateName</strong>
+                                </td>
+                                <td class="text-muted">@(t.EmailSubject.Length > 50 ? t.EmailSubject[..50] + "..." : t.EmailSubject)</td>
+                                <td>@(t.ReportType ?? "All Reports")</td>
+                                <td class="text-center">
+                                    @if (t.IsDefault)
+                                    {
+                                        <span class="badge bg-success">Default</span>
+                                    }
+                                </td>
+                                <td class="text-muted small">@t.CreatedDate.ToString("yyyy-MM-dd")</td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <a asp-action="EditEmailTemplate" asp-route-id="@t.TemplateId" class="btn btn-outline-primary" title="Edit">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <button class="btn btn-outline-danger" onclick="deleteTemplate(@t.TemplateId, '@t.TemplateName.Replace("'", "\\'")')" title="Delete">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <div class="card mt-3">
+        <div class="card-header"><i class="bi bi-info-circle me-1"></i>Available Merge Fields</div>
+        <div class="card-body">
+            <div class="row g-2">
+                <div class="col-md-4"><code>«ReportName»</code> — Report title (e.g. Average Basket)</div>
+                <div class="col-md-4"><code>«DatabaseName»</code> — Connected database name</div>
+                <div class="col-md-4"><code>«Period»</code> — Date range (e.g. 2026-01-01 to 2026-02-28)</div>
+                <div class="col-md-4"><code>«RowCount»</code> — Number of rows in the report</div>
+                <div class="col-md-4"><code>«ExportFormat»</code> — File format (Excel, PDF, CSV)</div>
+                <div class="col-md-4"><code>«GeneratedDate»</code> — Date and time of generation</div>
+                <div class="col-md-4"><code>«UserName»</code> — Logged-in user who triggered the report</div>
+                <div class="col-md-4"><code>«CompanyName»</code> — Company name from psCentral</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+function deleteTemplate(id, name) {
+    if (!confirm('Delete template "' + name + '"? This cannot be undone.')) return;
+    fetch('@Url.Action("DeleteEmailTemplate", "Settings")', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'id=' + id
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) location.reload();
+        else alert(data.message || 'Failed to delete');
+    })
+    .catch(function() { alert('Network error'); });
+}
+</script>
+}

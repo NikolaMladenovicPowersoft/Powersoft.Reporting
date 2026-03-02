@@ -220,6 +220,192 @@ public class ScheduleRepository : IScheduleRepository
         return Convert.ToInt32(result);
     }
 
+    public async Task<List<ScheduleLogEntry>> GetScheduleLogsAsync(int? scheduleId = null, int top = 100)
+    {
+        var sql = @"
+            SELECT TOP (@Top)
+                   l.pk_LogID, l.fk_ScheduleID, s.ScheduleName, s.ReportType,
+                   l.RunDate, l.Status, l.RowsGenerated, l.FileSizeBytes, l.ErrorMessage, l.DurationMs
+            FROM tbl_ReportScheduleLog l
+            INNER JOIN tbl_ReportSchedule s ON s.pk_ScheduleID = l.fk_ScheduleID"
+            + (scheduleId.HasValue ? " WHERE l.fk_ScheduleID = @ScheduleId" : "")
+            + " ORDER BY l.RunDate DESC";
+
+        var entries = new List<ScheduleLogEntry>();
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Top", top);
+        if (scheduleId.HasValue)
+            cmd.Parameters.AddWithValue("@ScheduleId", scheduleId.Value);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            entries.Add(new ScheduleLogEntry
+            {
+                LogId = reader.GetInt32(0),
+                ScheduleId = reader.GetInt32(1),
+                ScheduleName = reader.GetString(2),
+                ReportType = reader.GetString(3),
+                RunDate = reader.GetDateTime(4),
+                Status = reader.GetString(5),
+                RowsGenerated = reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                FileSizeBytes = reader.IsDBNull(7) ? null : reader.GetInt64(7),
+                ErrorMessage = reader.IsDBNull(8) ? null : reader.GetString(8),
+                DurationMs = reader.IsDBNull(9) ? null : reader.GetInt32(9)
+            });
+        }
+
+        return entries;
+    }
+
+    // ==================== Email Templates ====================
+
+    public async Task<List<EmailTemplate>> GetEmailTemplatesAsync(string? reportType = null)
+    {
+        var sql = @"SELECT pk_TemplateID, TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, IsActive, CreatedBy, CreatedDate
+                    FROM tbl_ReportEmailTemplate
+                    WHERE IsActive = 1"
+            + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL)" : "")
+            + " ORDER BY IsDefault DESC, TemplateName";
+
+        var templates = new List<EmailTemplate>();
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        if (reportType != null)
+            cmd.Parameters.AddWithValue("@ReportType", reportType);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            templates.Add(MapEmailTemplate(reader));
+
+        return templates;
+    }
+
+    public async Task<EmailTemplate?> GetEmailTemplateByIdAsync(int templateId)
+    {
+        const string sql = @"SELECT pk_TemplateID, TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, IsActive, CreatedBy, CreatedDate
+                             FROM tbl_ReportEmailTemplate WHERE pk_TemplateID = @Id";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Id", templateId);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? MapEmailTemplate(reader) : null;
+    }
+
+    public async Task<EmailTemplate?> GetDefaultEmailTemplateAsync(string? reportType = null)
+    {
+        var sql = @"SELECT TOP 1 pk_TemplateID, TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, IsActive, CreatedBy, CreatedDate
+                    FROM tbl_ReportEmailTemplate
+                    WHERE IsActive = 1 AND IsDefault = 1"
+            + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL)" : "")
+            + " ORDER BY ReportType DESC";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        if (reportType != null)
+            cmd.Parameters.AddWithValue("@ReportType", reportType);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? MapEmailTemplate(reader) : null;
+    }
+
+    public async Task<int> CreateEmailTemplateAsync(EmailTemplate template)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        if (template.IsDefault)
+            await ClearDefaultFlagAsync(conn, null);
+
+        const string sql = @"INSERT INTO tbl_ReportEmailTemplate
+            (TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, CreatedBy)
+            VALUES (@Name, @ReportType, @Subject, @Body, @IsDefault, @CreatedBy);
+            SELECT SCOPE_IDENTITY();";
+
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Name", template.TemplateName);
+        cmd.Parameters.AddWithValue("@ReportType", (object?)template.ReportType ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Subject", template.EmailSubject);
+        cmd.Parameters.AddWithValue("@Body", template.EmailBodyHtml);
+        cmd.Parameters.AddWithValue("@IsDefault", template.IsDefault);
+        cmd.Parameters.AddWithValue("@CreatedBy", template.CreatedBy);
+
+        var result = await cmd.ExecuteScalarAsync();
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<bool> UpdateEmailTemplateAsync(EmailTemplate template)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        if (template.IsDefault)
+            await ClearDefaultFlagAsync(conn, template.TemplateId);
+
+        const string sql = @"UPDATE tbl_ReportEmailTemplate
+            SET TemplateName = @Name, ReportType = @ReportType, EmailSubject = @Subject,
+                EmailBodyHtml = @Body, IsDefault = @IsDefault, ModifiedDate = GETDATE(), ModifiedBy = @ModifiedBy
+            WHERE pk_TemplateID = @Id";
+
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Id", template.TemplateId);
+        cmd.Parameters.AddWithValue("@Name", template.TemplateName);
+        cmd.Parameters.AddWithValue("@ReportType", (object?)template.ReportType ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Subject", template.EmailSubject);
+        cmd.Parameters.AddWithValue("@Body", template.EmailBodyHtml);
+        cmd.Parameters.AddWithValue("@IsDefault", template.IsDefault);
+        cmd.Parameters.AddWithValue("@ModifiedBy", template.CreatedBy);
+
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    private static async Task ClearDefaultFlagAsync(SqlConnection conn, int? excludeId)
+    {
+        var sql = "UPDATE tbl_ReportEmailTemplate SET IsDefault = 0 WHERE IsDefault = 1 AND IsActive = 1";
+        if (excludeId.HasValue)
+            sql += " AND pk_TemplateID <> @ExcludeId";
+
+        using var cmd = new SqlCommand(sql, conn);
+        if (excludeId.HasValue)
+            cmd.Parameters.AddWithValue("@ExcludeId", excludeId.Value);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<bool> DeleteEmailTemplateAsync(int templateId)
+    {
+        const string sql = @"UPDATE tbl_ReportEmailTemplate SET IsActive = 0, ModifiedDate = GETDATE() WHERE pk_TemplateID = @Id";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Id", templateId);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    private static EmailTemplate MapEmailTemplate(SqlDataReader reader)
+    {
+        return new EmailTemplate
+        {
+            TemplateId = reader.GetInt32(0),
+            TemplateName = reader.GetString(1),
+            ReportType = reader.IsDBNull(2) ? null : reader.GetString(2),
+            EmailSubject = reader.GetString(3),
+            EmailBodyHtml = reader.GetString(4),
+            IsDefault = reader.GetBoolean(5),
+            IsActive = reader.GetBoolean(6),
+            CreatedBy = reader.GetString(7),
+            CreatedDate = reader.GetDateTime(8)
+        };
+    }
+
     private static ReportSchedule MapSchedule(SqlDataReader reader)
     {
         return new ReportSchedule

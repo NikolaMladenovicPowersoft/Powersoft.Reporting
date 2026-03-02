@@ -1,0 +1,174 @@
+@{
+    ViewData["Title"] = "Schedule Execution Logs";
+    var dbName = ViewBag.ConnectedDatabase as string ?? "Unknown";
+}
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-0"><i class="bi bi-clock-history me-2"></i>Schedule Execution Logs</h4>
+            <small class="text-muted">Database: <strong>@dbName</strong></small>
+        </div>
+        <div class="d-flex gap-2">
+            <select class="form-select form-select-sm" id="statusFilter" style="width: 150px;" onchange="loadLogs()">
+                <option value="">All Statuses</option>
+                <option value="Success">Success</option>
+                <option value="Failed">Failed</option>
+            </select>
+            <button class="btn btn-sm btn-outline-primary" onclick="loadLogs()">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+            </button>
+            <a class="btn btn-sm btn-outline-secondary" asp-action="AverageBasket">
+                <i class="bi bi-arrow-left me-1"></i>Back to Report
+            </a>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <div class="card border-0 bg-light">
+                <div class="card-body text-center py-2">
+                    <div class="fs-4 fw-bold text-primary" id="statTotal">—</div>
+                    <small class="text-muted">Total Runs</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 bg-light">
+                <div class="card-body text-center py-2">
+                    <div class="fs-4 fw-bold text-success" id="statSuccess">—</div>
+                    <small class="text-muted">Succeeded</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 bg-light">
+                <div class="card-body text-center py-2">
+                    <div class="fs-4 fw-bold text-danger" id="statFailed">—</div>
+                    <small class="text-muted">Failed</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 bg-light">
+                <div class="card-body text-center py-2">
+                    <div class="fs-4 fw-bold text-info" id="statAvgDuration">—</div>
+                    <small class="text-muted">Avg Duration</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0" id="logsTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Schedule</th>
+                            <th>Report</th>
+                            <th>Run Date</th>
+                            <th>Status</th>
+                            <th class="text-end">Rows</th>
+                            <th class="text-end">Size</th>
+                            <th class="text-end">Duration</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsBody">
+                        <tr><td colspan="9" class="text-center py-4 text-muted">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.addEventListener('DOMContentLoaded', loadLogs);
+
+    function loadLogs() {
+        fetch('@Url.Action("GetScheduleLogs")')
+            .then(r => r.json())
+            .then(data => renderLogs(data))
+            .catch(() => {
+                document.getElementById('logsBody').innerHTML =
+                    '<tr><td colspan="9" class="text-center py-4 text-danger">Failed to load logs</td></tr>';
+            });
+    }
+
+    function renderLogs(data) {
+        var filter = document.getElementById('statusFilter').value;
+        var filtered = filter ? data.filter(l => l.status === filter) : data;
+
+        // Stats
+        var total = data.length;
+        var success = data.filter(l => l.status === 'Success').length;
+        var failed = data.filter(l => l.status === 'Failed').length;
+        var durations = data.filter(l => l.durationMs).map(l => l.durationMs);
+        var avgMs = durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+
+        document.getElementById('statTotal').textContent = total;
+        document.getElementById('statSuccess').textContent = success;
+        document.getElementById('statFailed').textContent = failed;
+        document.getElementById('statAvgDuration').textContent = avgMs > 0 ? formatDuration(avgMs) : '—';
+
+        if (filtered.length === 0) {
+            document.getElementById('logsBody').innerHTML =
+                '<tr><td colspan="9" class="text-center py-4 text-muted">No logs found</td></tr>';
+            return;
+        }
+
+        var html = '';
+        filtered.forEach(function(l) {
+            var statusBadge = l.status === 'Success'
+                ? '<span class="badge bg-success">Success</span>'
+                : l.status === 'Failed'
+                    ? '<span class="badge bg-danger">Failed</span>'
+                    : '<span class="badge bg-secondary">' + l.status + '</span>';
+
+            var sizeStr = l.fileSizeBytes ? formatBytes(l.fileSizeBytes) : '—';
+            var durationStr = l.durationMs ? formatDuration(l.durationMs) : '—';
+            var errorStr = l.errorMessage
+                ? '<span class="text-danger" title="' + escapeHtml(l.errorMessage) + '" style="cursor:pointer;" onclick="alert(this.title)">'
+                  + truncate(l.errorMessage, 40) + '</span>'
+                : '—';
+
+            html += '<tr>'
+                + '<td class="text-muted">' + l.logId + '</td>'
+                + '<td><strong>' + escapeHtml(l.scheduleName) + '</strong><br/><small class="text-muted">ID: ' + l.scheduleId + '</small></td>'
+                + '<td>' + escapeHtml(l.reportType) + '</td>'
+                + '<td>' + l.runDate + '</td>'
+                + '<td>' + statusBadge + '</td>'
+                + '<td class="text-end">' + (l.rowsGenerated !== null ? l.rowsGenerated.toLocaleString() : '—') + '</td>'
+                + '<td class="text-end">' + sizeStr + '</td>'
+                + '<td class="text-end">' + durationStr + '</td>'
+                + '<td>' + errorStr + '</td>'
+                + '</tr>';
+        });
+
+        document.getElementById('logsBody').innerHTML = html;
+    }
+
+    function formatBytes(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function formatDuration(ms) {
+        if (ms < 1000) return ms + 'ms';
+        return (ms / 1000).toFixed(1) + 's';
+    }
+
+    function truncate(str, len) { return str.length > len ? str.substring(0, len) + '...' : str; }
+
+    function escapeHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+</script>
+}

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Powersoft.Reporting.Core.Constants;
@@ -15,15 +16,21 @@ public class ReportsController : Controller
 {
     private readonly ITenantRepositoryFactory _repositoryFactory;
     private readonly ICentralRepository _centralRepository;
+    private readonly IEmailSender _emailSender;
     private readonly ILogger<ReportsController> _logger;
+
+    private static readonly Regex EmailRegex = new(
+        @"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public ReportsController(
         ITenantRepositoryFactory repositoryFactory,
         ICentralRepository centralRepository,
+        IEmailSender emailSender,
         ILogger<ReportsController> logger)
     {
         _repositoryFactory = repositoryFactory;
         _centralRepository = centralRepository;
+        _emailSender = emailSender;
         _logger = logger;
     }
     
@@ -341,6 +348,62 @@ public class ReportsController : Controller
         }
     }
 
+    // ==================== Email Templates ====================
+
+    [HttpGet]
+    public async Task<IActionResult> GetEmailTemplates()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new List<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var templates = await repo.GetEmailTemplatesAsync(ReportTypeConstants.AverageBasket);
+            return Json(templates.Select(t => new
+            {
+                t.TemplateId, t.TemplateName, t.EmailSubject, t.EmailBodyHtml, t.IsDefault
+            }));
+        }
+        catch
+        {
+            return Json(new List<object>());
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveEmailTemplate(string templateName, string emailSubject, string emailBodyHtml, bool isDefault = false)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (string.IsNullOrWhiteSpace(templateName))
+            return Json(new { success = false, message = "Template name is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var template = new ReportSchedule(); // Using EmailTemplate model
+            var id = await repo.CreateEmailTemplateAsync(new Core.Models.EmailTemplate
+            {
+                TemplateName = templateName,
+                ReportType = ReportTypeConstants.AverageBasket,
+                EmailSubject = emailSubject ?? "",
+                EmailBodyHtml = emailBodyHtml ?? "",
+                IsDefault = isDefault,
+                CreatedBy = User.Identity?.Name ?? "Unknown"
+            });
+            return Json(new { success = true, templateId = id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving email template");
+            return Json(new { success = false, message = "Failed to save template. The table may not exist yet." });
+        }
+    }
+
     // ==================== Layout Save/Restore ====================
 
     private string GetUserCode()
@@ -495,6 +558,45 @@ public class ReportsController : Controller
     }
 
     [HttpGet]
+    public IActionResult ScheduleLogs()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+        {
+            TempData["Warning"] = "Please select and connect to a database first.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        ViewBag.ConnectedDatabase = HttpContext.Session.GetString(SessionKeys.ConnectedDatabase);
+        return View();
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetScheduleLogs(int? scheduleId = null)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new List<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var logs = await repo.GetScheduleLogsAsync(scheduleId, top: 200);
+            return Json(logs.Select(l => new
+            {
+                l.LogId, l.ScheduleId, l.ScheduleName, l.ReportType,
+                runDate = l.RunDate.ToString("yyyy-MM-dd HH:mm:ss"),
+                l.Status, l.RowsGenerated, l.FileSizeBytes,
+                l.ErrorMessage, l.DurationMs
+            }));
+        }
+        catch
+        {
+            return Json(new List<object>());
+        }
+    }
+
+    [HttpGet]
     public async Task<IActionResult> PrintPreview(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
@@ -551,6 +653,163 @@ public class ReportsController : Controller
         var bytes = service.GenerateAverageBasketPdf(result.Value.rows, result.Value.totals, result.Value.filter);
         var filename = $"AverageBasket_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
         return File(bytes, "application/pdf", filename);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportCsv(
+        DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
+        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
+        string sortColumn = "Period", string sortDirection = "ASC")
+    {
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("AverageBasket");
+
+        var service = new CsvExportService();
+        var bytes = service.GenerateAverageBasketCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+        var filename = $"AverageBasket_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+        return File(bytes, "text/csv", filename);
+    }
+
+    // ==================== Send to Email ====================
+
+    [HttpPost]
+    public async Task<IActionResult> SendReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
+        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear,
+        string? storeCodes, string? itemIds,
+        string sortColumn = "Period", string sortDirection = "ASC")
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Please enter at least one email address." });
+
+        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        if (invalidEmails.Length > 0)
+            return Json(new { success = false, message = $"Invalid email format: {string.Join(", ", invalidEmails)}" });
+
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy,
+            includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                var pdfService = new PdfExportService();
+                fileBytes = pdfService.GenerateAverageBasketPdf(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileName = $"AverageBasket_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                var csvService = new CsvExportService();
+                fileBytes = csvService.GenerateAverageBasketCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileName = $"AverageBasket_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                var excelService = new ExcelExportService();
+                fileBytes = excelService.GenerateAverageBasketExcel(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileName = $"AverageBasket_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+
+        // Load template body if selected
+        string? templateBody = null;
+        string? templateSubject = null;
+        if (templateId.HasValue && templateId > 0)
+        {
+            try
+            {
+                var tenantConnString = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConnString))
+                {
+                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
+                    if (tmpl != null)
+                    {
+                        templateBody = tmpl.EmailBodyHtml;
+                        templateSubject = tmpl.EmailSubject;
+                    }
+                }
+            }
+            catch { /* fall back to default */ }
+        }
+
+        string ReplaceMergeFields(string text) => text
+            .Replace("\u00ABReportName\u00BB", "Average Basket")
+            .Replace("\u00ABDatabaseName\u00BB", dbName)
+            .Replace("\u00ABPeriod\u00BB", period)
+            .Replace("\u00ABRowCount\u00BB", result.Value.rows.Count.ToString())
+            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
+            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
+            .Replace("\u00ABUserName\u00BB", userName)
+            .Replace("\u00ABCompanyName\u00BB", dbName)
+            .Replace("\u00AB", "").Replace("\u00BB", "");
+
+        var subject = string.IsNullOrWhiteSpace(emailSubject)
+            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Average Basket Report — {period}")
+            : emailSubject;
+
+        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
+            ? ReplaceMergeFields(templateBody)
+            : $@"
+<div style='font-family: Arial, sans-serif; max-width: 600px;'>
+    <h2 style='color: #2563eb;'>Average Basket Report</h2>
+    <table style='border-collapse: collapse; width: 100%; margin: 16px 0;'>
+        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Database</td>
+            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
+        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Period</td>
+            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{period}</td></tr>
+        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Rows</td>
+            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{result.Value.rows.Count}</td></tr>
+        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Format</td>
+            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{exportFormat}</td></tr>
+    </table>
+    <p style='color: #6b7280; font-size: 13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
+</div>";
+
+        var textBody = $"Average Basket Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}";
+
+        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
+        var sentCount = 0;
+        var errors = new List<string>();
+
+        foreach (var email in emails)
+        {
+            try
+            {
+                await _emailSender.SendAsync(email, subject, htmlBody, textBody, attachments);
+                sentCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send report email to {Email}", email);
+                errors.Add(email);
+            }
+        }
+
+        if (errors.Count > 0 && sentCount == 0)
+            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", errors)}" });
+
+        var msg = sentCount == 1
+            ? $"Report sent to {emails[0]}"
+            : $"Report sent to {sentCount} recipient(s)";
+        if (errors.Count > 0)
+            msg += $" (failed: {string.Join(", ", errors)})";
+
+        return Json(new { success = true, message = msg });
     }
 
     private async Task<(List<AverageBasketRow> rows, ReportGrandTotals? totals, ReportFilter filter)?> RunExportQuery(

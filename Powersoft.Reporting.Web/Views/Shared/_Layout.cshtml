@@ -35,12 +35,25 @@
                         var rankingStr = Context.Session.GetInt32("Ranking");
                         var showSettings = rankingStr.HasValue && rankingStr.Value <= 15;
                     }
+                    <li class="nav-item">
+                        <a class="nav-link" asp-controller="Reports" asp-action="ScheduleLogs">
+                            <i class="bi bi-clock-history me-1"></i> Logs
+                        </a>
+                    </li>
                     @if (showSettings)
                     {
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Settings" asp-action="Database">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                                 <i class="bi bi-gear me-1"></i> Settings
                             </a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" asp-controller="Settings" asp-action="Database"><i class="bi bi-database me-2"></i>Database Settings</a></li>
+                                @if (rankingStr.HasValue && rankingStr.Value < 15)
+                                {
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" asp-controller="Settings" asp-action="System"><i class="bi bi-sliders me-2"></i>System Settings</a></li>
+                                }
+                            </ul>
                         </li>
                     }
                 </ul>

@@ -6,6 +6,7 @@ using Powersoft.Reporting.Data.Factories;
 using Powersoft.Reporting.Data.Helpers;
 using Powersoft.Reporting.Web.Options;
 using Powersoft.Reporting.Web.Services;
+using Powersoft.Reporting.Web.Services.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,7 +26,12 @@ if (!string.IsNullOrEmpty(centralConnString))
 }
 
 builder.Services.AddSingleton<ITenantRepositoryFactory, TenantRepositoryFactory>();
-builder.Services.AddTransient<ScheduleExecutionService>();
+builder.Services.AddScoped<ScheduleExecutionService>();
+builder.Services.AddHostedService<ScheduleBackgroundService>();
+
+// DigitalOcean Spaces (S3-compatible cold storage)
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
+builder.Services.AddSingleton<IReportStorageService, S3ReportStorageService>();
 
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>

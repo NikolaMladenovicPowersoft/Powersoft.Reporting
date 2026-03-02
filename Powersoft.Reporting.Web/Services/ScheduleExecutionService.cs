@@ -6,6 +6,7 @@ using Powersoft.Reporting.Core.Helpers;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
 using Powersoft.Reporting.Data.Helpers;
+using Powersoft.Reporting.Web.Services.Storage;
 
 namespace Powersoft.Reporting.Web.Services;
 
@@ -19,6 +20,7 @@ public class ScheduleExecutionService
     private readonly ICentralRepository _centralRepository;
     private readonly ITenantRepositoryFactory _repositoryFactory;
     private readonly IEmailSender _emailSender;
+    private readonly IReportStorageService _storageService;
     private readonly ILogger<ScheduleExecutionService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -30,11 +32,13 @@ public class ScheduleExecutionService
         ICentralRepository centralRepository,
         ITenantRepositoryFactory repositoryFactory,
         IEmailSender emailSender,
+        IReportStorageService storageService,
         ILogger<ScheduleExecutionService> logger)
     {
         _centralRepository = centralRepository;
         _repositoryFactory = repositoryFactory;
         _emailSender = emailSender;
+        _storageService = storageService;
         _logger = logger;
     }
 
@@ -44,6 +48,21 @@ public class ScheduleExecutionService
         var now = DateTime.Now;
 
         _logger.LogInformation("Schedule runner started at {Time}", now);
+
+        try
+        {
+            var sysSettings = await _centralRepository.GetSystemSettingsAsync("RE_");
+            var systemCfg = SystemSettings.FromDictionary(sysSettings);
+            if (!systemCfg.SchedulerMasterEnabled)
+            {
+                _logger.LogInformation("Scheduler master switch is OFF — aborting run");
+                return summary;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not read system settings — continuing with defaults");
+        }
 
         List<Database> databases;
         try
@@ -167,7 +186,21 @@ public class ScheduleExecutionService
             log.RowsGenerated = rows.Count;
             log.FileSizeBytes = fileBytes.Length;
 
-            await SendReportEmailAsync(schedule, db, fileBytes, fileName, contentType, rows.Count, filter, ct);
+            // Upload to cold storage (S3 / DigitalOcean Spaces) if configured
+            string? storageKey = null;
+            if (_storageService.IsConfigured)
+            {
+                try
+                {
+                    storageKey = await _storageService.UploadAsync(fileName, fileBytes, contentType, ct);
+                }
+                catch (Exception stEx)
+                {
+                    _logger.LogWarning(stEx, "Failed to upload report to S3 for schedule {Id}", schedule.ScheduleId);
+                }
+            }
+
+            await SendReportEmailAsync(schedule, db, fileBytes, fileName, contentType, rows.Count, filter, storageKey, ct);
 
             var isOnce = string.Equals(schedule.RecurrenceType, "Once", StringComparison.OrdinalIgnoreCase);
             DateTime? nextRun = isOnce
@@ -257,6 +290,13 @@ public class ScheduleExecutionService
                 contentType = "application/pdf";
                 break;
 
+            case "csv":
+                var csvService = new CsvExportService();
+                fileBytes = csvService.GenerateAverageBasketCsv(result.Items, result.GrandTotals, filter);
+                fileName = $"AverageBasket_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+
             default:
                 var excelService = new ExcelExportService();
                 fileBytes = excelService.GenerateAverageBasketExcel(result.Items, result.GrandTotals, filter);
@@ -271,7 +311,7 @@ public class ScheduleExecutionService
     private async Task SendReportEmailAsync(
         ReportSchedule schedule, Database db,
         byte[] fileBytes, string fileName, string contentType,
-        int rowCount, ReportFilter filter, CancellationToken ct)
+        int rowCount, ReportFilter filter, string? storageKey, CancellationToken ct)
     {
         var recipients = schedule.Recipients
             .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -286,8 +326,15 @@ public class ScheduleExecutionService
             ? schedule.EmailSubject
             : $"Scheduled Report: {schedule.ScheduleName} — {db.DBFriendlyName}";
 
-        var htmlBody = BuildEmailHtml(schedule, db, rowCount, filter, fileName);
-        var textBody = BuildEmailText(schedule, db, rowCount, filter);
+        string? downloadUrl = null;
+        if (!string.IsNullOrEmpty(storageKey) && _storageService.IsConfigured)
+        {
+            try { downloadUrl = _storageService.GetDownloadUrl(storageKey, TimeSpan.FromDays(7)); }
+            catch { /* pre-signed URL generation is best-effort */ }
+        }
+
+        var htmlBody = BuildEmailHtml(schedule, db, rowCount, filter, fileName, downloadUrl);
+        var textBody = BuildEmailText(schedule, db, rowCount, filter, downloadUrl);
 
         var attachments = new[]
         {
@@ -445,7 +492,7 @@ public class ScheduleExecutionService
 
     private static string BuildEmailHtml(
         ReportSchedule schedule, Database db,
-        int rowCount, ReportFilter filter, string fileName)
+        int rowCount, ReportFilter filter, string fileName, string? downloadUrl = null)
     {
         return $@"
 <div style='font-family: Arial, sans-serif; max-width: 600px;'>
@@ -465,7 +512,13 @@ public class ScheduleExecutionService
     <p style='color: #6b7280; font-size: 13px;'>
         File: {fileName}<br/>
         Generated: {DateTime.Now:yyyy-MM-dd HH:mm}
-    </p>
+    </p>{(string.IsNullOrEmpty(downloadUrl) ? "" : $@"
+    <p style='margin-top: 12px;'>
+        <a href='{downloadUrl}' style='display:inline-block;padding:8px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:4px;font-size:13px;'>
+            Download Report
+        </a>
+        <br/><span style='color:#9ca3af;font-size:11px;'>Link valid for 7 days</span>
+    </p>")}
     <p style='color: #9ca3af; font-size: 11px; margin-top: 24px;'>
         This is an automated report from Powersoft Reporting Engine.<br/>
         To modify or stop this schedule, log in to the Reporting dashboard.
@@ -475,17 +528,21 @@ public class ScheduleExecutionService
 
     private static string BuildEmailText(
         ReportSchedule schedule, Database db,
-        int rowCount, ReportFilter filter)
+        int rowCount, ReportFilter filter, string? downloadUrl = null)
     {
-        return $@"Scheduled Report: {schedule.ScheduleName}
+        var text = $@"Scheduled Report: {schedule.ScheduleName}
 Database: {db.DBFriendlyName}
 Report Type: {schedule.ReportType}
 Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}
 Rows: {rowCount}
 Format: {schedule.ExportFormat}
-Generated: {DateTime.Now:yyyy-MM-dd HH:mm}
+Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
 
-This is an automated report from Powersoft Reporting Engine.";
+        if (!string.IsNullOrEmpty(downloadUrl))
+            text += $"\n\nDownload: {downloadUrl}\n(Link valid for 7 days)";
+
+        text += "\n\nThis is an automated report from Powersoft Reporting Engine.";
+        return text;
     }
 }
 

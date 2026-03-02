@@ -28,4 +28,14 @@ public interface ICentralRepository
     /// Checks if a role has a specific action assigned (for Ranking > 20 only).
     /// </summary>
     Task<bool> IsActionAuthorizedAsync(int roleId, int actionId);
+
+    /// <summary>
+    /// Reads system settings from tbl_SystemSettings where ParameterCode starts with the given prefix.
+    /// </summary>
+    Task<Dictionary<string, string>> GetSystemSettingsAsync(string parameterPrefix);
+
+    /// <summary>
+    /// Upserts a system setting in tbl_SystemSettings.
+    /// </summary>
+    Task UpsertSystemSettingAsync(string parameterCode, string description, string dataType, string value);
 }

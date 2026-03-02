@@ -333,7 +333,7 @@
                 <a href="@Url.Action("ExportExcel", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), breakdown = Model.Breakdown, groupBy = Model.GroupBy, secondaryGroupBy = Model.SecondaryGroupBy, includeVat = Model.IncludeVat, compareLastYear = Model.CompareLastYear, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
                     <i class="bi bi-filetype-xlsx"></i> Excel (.xlsx)
                 </a>
-                <a href="#" onclick="exportCSVFromTable(); return false;">
+                <a href="@Url.Action("ExportCsv", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), breakdown = Model.Breakdown, groupBy = Model.GroupBy, secondaryGroupBy = Model.SecondaryGroupBy, includeVat = Model.IncludeVat, compareLastYear = Model.CompareLastYear, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
                     <i class="bi bi-filetype-csv"></i> CSV
                 </a>
             </div>

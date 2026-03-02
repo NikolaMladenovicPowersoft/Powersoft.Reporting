@@ -256,6 +256,53 @@ public class CentralRepository : ICentralRepository
         };
     }
 
+    public async Task<Dictionary<string, string>> GetSystemSettingsAsync(string parameterPrefix)
+    {
+        const string sql = @"
+            SELECT pk_ParameterCode, ParameterValue
+            FROM tbl_SystemSettings
+            WHERE pk_ParameterCode LIKE @Prefix + '%'";
+
+        var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Prefix", parameterPrefix);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            settings[reader.GetString(0)] = reader.IsDBNull(1) ? "" : reader.GetString(1);
+        }
+
+        return settings;
+    }
+
+    public async Task UpsertSystemSettingAsync(string parameterCode, string description, string dataType, string value)
+    {
+        const string sql = @"
+            IF EXISTS (SELECT 1 FROM tbl_SystemSettings WHERE pk_ParameterCode = @Code)
+                UPDATE tbl_SystemSettings
+                SET ParameterValue = @Value,
+                    ParameterDescription = @Desc,
+                    ParameterDataType = @DataType
+                WHERE pk_ParameterCode = @Code
+            ELSE
+                INSERT INTO tbl_SystemSettings (pk_ParameterCode, ParameterDescription, ParameterDataType, ParameterValue)
+                VALUES (@Code, @Desc, @DataType, @Value)";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Code", parameterCode);
+        cmd.Parameters.AddWithValue("@Desc", description);
+        cmd.Parameters.AddWithValue("@DataType", dataType);
+        cmd.Parameters.AddWithValue("@Value", value);
+
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     private static Database MapDatabase(SqlDataReader reader)
     {
         return new Database

@@ -26,4 +26,17 @@ public interface IScheduleRepository
     /// Inserts an execution log entry into tbl_ReportScheduleLog.
     /// </summary>
     Task<int> InsertScheduleLogAsync(ScheduleLog log);
+
+    /// <summary>
+    /// Returns recent schedule execution logs, optionally filtered by schedule ID.
+    /// </summary>
+    Task<List<ScheduleLogEntry>> GetScheduleLogsAsync(int? scheduleId = null, int top = 100);
+
+    // Email templates
+    Task<List<EmailTemplate>> GetEmailTemplatesAsync(string? reportType = null);
+    Task<EmailTemplate?> GetEmailTemplateByIdAsync(int templateId);
+    Task<EmailTemplate?> GetDefaultEmailTemplateAsync(string? reportType = null);
+    Task<int> CreateEmailTemplateAsync(EmailTemplate template);
+    Task<bool> UpdateEmailTemplateAsync(EmailTemplate template);
+    Task<bool> DeleteEmailTemplateAsync(int templateId);
 }

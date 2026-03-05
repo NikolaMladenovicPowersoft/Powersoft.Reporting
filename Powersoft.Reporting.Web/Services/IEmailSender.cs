@@ -8,6 +8,10 @@ public interface IEmailSender
 
     Task SendAsync(string toEmail, string subject, string htmlBody, string textBody,
         IEnumerable<EmailAttachment>? attachments, CancellationToken ct = default);
+
+    Task SendAsync(string toEmail, string? ccEmails, string? bccEmails,
+        string subject, string htmlBody, string textBody,
+        IEnumerable<EmailAttachment>? attachments, CancellationToken ct = default);
 }
 
 public class EmailAttachment

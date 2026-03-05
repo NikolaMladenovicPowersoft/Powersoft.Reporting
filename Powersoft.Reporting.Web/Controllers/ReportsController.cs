@@ -34,6 +34,17 @@ public class ReportsController : Controller
         _logger = logger;
     }
     
+    private static (string[] valid, string[] invalid) ParseAndValidateEmailList(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return (Array.Empty<string>(), Array.Empty<string>());
+
+        var all = input.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var valid = all.Where(e => EmailRegex.IsMatch(e)).ToArray();
+        var invalid = all.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        return (valid, invalid);
+    }
+
     private string? GetTenantConnectionString()
     {
         return HttpContext.Session.GetString(SessionKeys.TenantConnectionString);
@@ -689,6 +700,13 @@ public class ReportsController : Controller
         if (invalidEmails.Length > 0)
             return Json(new { success = false, message = $"Invalid email format: {string.Join(", ", invalidEmails)}" });
 
+        var ccList = ParseAndValidateEmailList(cc);
+        var bccList = ParseAndValidateEmailList(bcc);
+        if (ccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid CC email: {string.Join(", ", ccList.invalid)}" });
+        if (bccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid BCC email: {string.Join(", ", bccList.invalid)}" });
+
         var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy,
             includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
         if (result == null)
@@ -786,11 +804,14 @@ public class ReportsController : Controller
         var sentCount = 0;
         var errors = new List<string>();
 
+        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
+        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+
         foreach (var email in emails)
         {
             try
             {
-                await _emailSender.SendAsync(email, subject, htmlBody, textBody, attachments);
+                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
                 sentCount++;
             }
             catch (Exception ex)

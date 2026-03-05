@@ -322,10 +322,6 @@ public class ScheduleExecutionService
             return;
         }
 
-        var subject = !string.IsNullOrWhiteSpace(schedule.EmailSubject)
-            ? schedule.EmailSubject
-            : $"Scheduled Report: {schedule.ScheduleName} — {db.DBFriendlyName}";
-
         string? downloadUrl = null;
         if (!string.IsNullOrEmpty(storageKey) && _storageService.IsConfigured)
         {
@@ -333,8 +329,54 @@ public class ScheduleExecutionService
             catch { /* pre-signed URL generation is best-effort */ }
         }
 
-        var htmlBody = BuildEmailHtml(schedule, db, rowCount, filter, fileName, downloadUrl);
-        var textBody = BuildEmailText(schedule, db, rowCount, filter, downloadUrl);
+        var period = $"{filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        var mergeValues = new Dictionary<string, string>
+        {
+            ["\u00ABReportName\u00BB"] = schedule.ScheduleName ?? schedule.ReportType ?? "Report",
+            ["\u00ABDatabaseName\u00BB"] = db.DBFriendlyName ?? "Unknown",
+            ["\u00ABPeriod\u00BB"] = period,
+            ["\u00ABRowCount\u00BB"] = rowCount.ToString(),
+            ["\u00ABExportFormat\u00BB"] = schedule.ExportFormat ?? "Excel",
+            ["\u00ABGeneratedDate\u00BB"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+            ["\u00ABUserName\u00BB"] = schedule.CreatedBy ?? "Scheduler",
+            ["\u00ABCompanyName\u00BB"] = db.DBFriendlyName ?? ""
+        };
+
+        // Try loading a template from the database
+        EmailTemplate? template = null;
+        try
+        {
+            var connString = ConnectionStringBuilder.Build(db);
+            var scheduleRepo = _repositoryFactory.CreateScheduleRepository(connString);
+            template = await scheduleRepo.GetDefaultEmailTemplateAsync(schedule.ReportType);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load email template for schedule {Id} — using default", schedule.ScheduleId);
+        }
+
+        string subject;
+        string htmlBody;
+        string textBody;
+
+        if (template != null && !string.IsNullOrWhiteSpace(template.EmailBodyHtml))
+        {
+            subject = !string.IsNullOrWhiteSpace(schedule.EmailSubject)
+                ? schedule.EmailSubject
+                : ReplaceMergeFields(template.EmailSubject, mergeValues);
+            htmlBody = ReplaceMergeFields(template.EmailBodyHtml, mergeValues);
+            if (!string.IsNullOrEmpty(downloadUrl))
+                htmlBody += BuildDownloadLinkHtml(downloadUrl);
+            textBody = StripHtmlToPlainText(htmlBody);
+        }
+        else
+        {
+            subject = !string.IsNullOrWhiteSpace(schedule.EmailSubject)
+                ? schedule.EmailSubject
+                : $"Scheduled Report: {schedule.ScheduleName} — {db.DBFriendlyName}";
+            htmlBody = BuildEmailHtml(schedule, db, rowCount, filter, fileName, downloadUrl);
+            textBody = BuildEmailText(schedule, db, rowCount, filter, downloadUrl);
+        }
 
         var attachments = new[]
         {
@@ -359,6 +401,35 @@ public class ScheduleExecutionService
                     recipient, schedule.ScheduleId);
             }
         }
+    }
+
+    private static string ReplaceMergeFields(string text, Dictionary<string, string> values)
+    {
+        foreach (var (placeholder, value) in values)
+            text = text.Replace(placeholder, value);
+        text = text.Replace("\u00AB", "").Replace("\u00BB", "");
+        return text;
+    }
+
+    private static string StripHtmlToPlainText(string html)
+    {
+        var text = System.Text.RegularExpressions.Regex.Replace(html, "<br\\s*/?>", "\n");
+        text = System.Text.RegularExpressions.Regex.Replace(text, "</p>", "\n");
+        text = System.Text.RegularExpressions.Regex.Replace(text, "</tr>", "\n");
+        text = System.Text.RegularExpressions.Regex.Replace(text, "<[^>]+>", "");
+        text = System.Net.WebUtility.HtmlDecode(text);
+        return text.Trim();
+    }
+
+    private static string BuildDownloadLinkHtml(string downloadUrl)
+    {
+        return $@"
+    <p style='margin-top: 12px;'>
+        <a href='{downloadUrl}' style='display:inline-block;padding:8px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:4px;font-size:13px;'>
+            Download Report
+        </a>
+        <br/><span style='color:#9ca3af;font-size:11px;'>Link valid for 7 days</span>
+    </p>";
     }
 
     private static ScheduleParameters DeserializeParameters(string? json)

@@ -17,14 +17,31 @@ public sealed class BrevoSmtpEmailSender : IEmailSender
     }
 
     public Task SendAsync(string toEmail, string subject, string htmlBody, string textBody, CancellationToken ct = default)
-        => SendAsync(toEmail, subject, htmlBody, textBody, attachments: null, ct);
+        => SendAsync(toEmail, null, null, subject, htmlBody, textBody, attachments: null, ct);
 
-    public async Task SendAsync(string toEmail, string subject, string htmlBody, string textBody,
+    public Task SendAsync(string toEmail, string subject, string htmlBody, string textBody,
+        IEnumerable<EmailAttachment>? attachments, CancellationToken ct = default)
+        => SendAsync(toEmail, null, null, subject, htmlBody, textBody, attachments, ct);
+
+    public async Task SendAsync(string toEmail, string? ccEmails, string? bccEmails,
+        string subject, string htmlBody, string textBody,
         IEnumerable<EmailAttachment>? attachments, CancellationToken ct = default)
     {
         using var msg = new MailMessage();
         msg.From = new MailAddress(_opt.FromEmail, _opt.FromName);
         msg.To.Add(toEmail);
+
+        if (!string.IsNullOrWhiteSpace(ccEmails))
+        {
+            foreach (var addr in ccEmails.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                msg.CC.Add(addr);
+        }
+        if (!string.IsNullOrWhiteSpace(bccEmails))
+        {
+            foreach (var addr in bccEmails.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                msg.Bcc.Add(addr);
+        }
+
         msg.Subject = subject;
         msg.Body = htmlBody;
         msg.IsBodyHtml = true;
@@ -48,7 +65,8 @@ public sealed class BrevoSmtpEmailSender : IEmailSender
             Credentials = new NetworkCredential(_opt.SmtpUser, _opt.SmtpPassword)
         };
 
-        _logger.LogInformation("Sending email to {To}, subject: {Subject}", toEmail, subject);
+        _logger.LogInformation("Sending email to {To} (CC: {CC}, BCC: {BCC}), subject: {Subject}",
+            toEmail, ccEmails ?? "none", bccEmails ?? "none", subject);
         await client.SendMailAsync(msg, ct);
         _logger.LogInformation("Email sent successfully to {To}", toEmail);
     }

@@ -8,11 +8,23 @@ namespace Powersoft.Reporting.Core.Models;
 /// </summary>
 public class ScheduleParameters
 {
+    // Average Basket specific
     public BreakdownType Breakdown { get; set; } = BreakdownType.Monthly;
     public GroupByType GroupBy { get; set; } = GroupByType.None;
     public GroupByType SecondaryGroupBy { get; set; } = GroupByType.None;
-    public bool IncludeVat { get; set; }
     public bool CompareLastYear { get; set; }
+
+    // Purchases vs Sales specific
+    public PsReportMode ReportMode { get; set; } = PsReportMode.Detailed;
+    public PsGroupBy PrimaryGroup { get; set; } = PsGroupBy.None;
+    public PsGroupBy SecondaryGroup { get; set; } = PsGroupBy.None;
+    public PsGroupBy ThirdGroup { get; set; } = PsGroupBy.None;
+    public bool ShowProfit { get; set; } = true;
+    public bool ShowStock { get; set; }
+    public string? ReportType { get; set; }
+
+    // Shared
+    public bool IncludeVat { get; set; }
     public List<string>? StoreCodes { get; set; }
     public List<int>? ItemIds { get; set; }
 

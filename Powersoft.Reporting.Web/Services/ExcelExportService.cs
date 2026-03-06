@@ -1,4 +1,5 @@
 using ClosedXML.Excel;
+using Powersoft.Reporting.Core.Enums;
 using Powersoft.Reporting.Core.Models;
 
 namespace Powersoft.Reporting.Web.Services;
@@ -126,6 +127,95 @@ public class ExcelExportService
         // Auto-fit columns
         ws.Columns().AdjustToContents();
         
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    public byte[] GeneratePurchasesSalesExcel(
+        List<PurchasesSalesRow> rows,
+        PurchasesSalesTotals? totals,
+        PurchasesSalesFilter filter)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Purchases vs Sales");
+
+        ws.Cell(1, 1).Value = "Purchases vs Sales Report";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+        ws.Cell(2, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(3, 1).Value = $"Mode: {filter.ReportMode} | Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+
+        int headerRow = 5;
+        int col = 1;
+
+        bool hasL1 = filter.PrimaryGroup != PsGroupBy.None;
+        bool hasL2 = filter.SecondaryGroup != PsGroupBy.None;
+        bool hasL3 = filter.ThirdGroup != PsGroupBy.None;
+        bool hasItem = !filter.IsSummary || (!hasL1 && !hasL2 && !hasL3);
+
+        if (hasL1) ws.Cell(headerRow, col++).Value = filter.PrimaryGroup.ToString();
+        if (hasL2) ws.Cell(headerRow, col++).Value = filter.SecondaryGroup.ToString();
+        if (hasL3) ws.Cell(headerRow, col++).Value = filter.ThirdGroup.ToString();
+        if (hasItem) { ws.Cell(headerRow, col++).Value = "Item Code"; ws.Cell(headerRow, col++).Value = "Item Name"; }
+        ws.Cell(headerRow, col++).Value = "Qty Purchased";
+        ws.Cell(headerRow, col++).Value = filter.IncludeVat ? "Gross Purchased" : "Net Purchased";
+        ws.Cell(headerRow, col++).Value = "Qty Sold";
+        ws.Cell(headerRow, col++).Value = filter.IncludeVat ? "Gross Sold" : "Net Sold";
+        ws.Cell(headerRow, col++).Value = "Profit";
+        ws.Cell(headerRow, col++).Value = "Qty %";
+        ws.Cell(headerRow, col++).Value = "Val %";
+        if (filter.ShowStock) ws.Cell(headerRow, col++).Value = "Stock Qty";
+
+        var headerRange = ws.Range(headerRow, 1, headerRow, col - 1);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+        foreach (var row in rows)
+        {
+            col = 1;
+            if (hasL1) ws.Cell(dataRow, col++).Value = row.Level1Value ?? row.Level1 ?? "N/A";
+            if (hasL2) ws.Cell(dataRow, col++).Value = row.Level2Value ?? row.Level2 ?? "N/A";
+            if (hasL3) ws.Cell(dataRow, col++).Value = row.Level3Value ?? row.Level3 ?? "N/A";
+            if (hasItem) { ws.Cell(dataRow, col++).Value = row.ItemCode ?? ""; ws.Cell(dataRow, col++).Value = row.ItemName ?? ""; }
+            ws.Cell(dataRow, col++).Value = row.QuantityPurchased;
+            ws.Cell(dataRow, col++).Value = filter.IncludeVat ? row.GrossPurchasedValue : row.NetPurchasedValue;
+            ws.Cell(dataRow, col++).Value = row.QuantitySold;
+            ws.Cell(dataRow, col++).Value = filter.IncludeVat ? row.GrossSoldValue : row.NetSoldValue;
+            ws.Cell(dataRow, col++).Value = row.Profit;
+            ws.Cell(dataRow, col++).Value = row.QtyPercent;
+            ws.Cell(dataRow, col++).Value = row.ValPercent;
+            if (filter.ShowStock) ws.Cell(dataRow, col++).Value = row.TotalStockQty;
+            dataRow++;
+        }
+
+        if (totals != null)
+        {
+            col = 1;
+            int skipCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+            for (int i = 0; i < skipCols; i++) ws.Cell(dataRow, col++).Value = "";
+            if (hasItem) { ws.Cell(dataRow, col++).Value = "TOTAL"; ws.Cell(dataRow, col++).Value = ""; }
+            else ws.Cell(dataRow, col++).Value = "TOTAL";
+            ws.Cell(dataRow, col++).Value = totals.TotalQtyPurchased;
+            ws.Cell(dataRow, col++).Value = filter.IncludeVat ? totals.TotalGrossPurchased : totals.TotalNetPurchased;
+            ws.Cell(dataRow, col++).Value = totals.TotalQtySold;
+            ws.Cell(dataRow, col++).Value = filter.IncludeVat ? totals.TotalGrossSold : totals.TotalNetSold;
+            ws.Cell(dataRow, col++).Value = totals.TotalProfit;
+            ws.Cell(dataRow, col++).Value = totals.QtyPercent;
+            ws.Cell(dataRow, col++).Value = totals.ValPercent;
+            if (filter.ShowStock) ws.Cell(dataRow, col++).Value = totals.TotalStockQty;
+
+            var totalRange = ws.Range(dataRow, 1, dataRow, col - 1);
+            totalRange.Style.Font.Bold = true;
+            totalRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
+            totalRange.Style.Border.TopBorder = XLBorderStyleValues.Medium;
+        }
+
+        ws.Columns().AdjustToContents();
+
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();

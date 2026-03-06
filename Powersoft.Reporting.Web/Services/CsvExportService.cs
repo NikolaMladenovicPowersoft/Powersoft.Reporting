@@ -90,6 +90,69 @@ public class CsvExportService
         return new UTF8Encoding(true).GetBytes(sb.ToString());
     }
 
+    public byte[] GeneratePurchasesSalesCsv(
+        List<PurchasesSalesRow> rows,
+        PurchasesSalesTotals? totals,
+        PurchasesSalesFilter filter)
+    {
+        bool hasL1 = filter.PrimaryGroup != Core.Enums.PsGroupBy.None;
+        bool hasL2 = filter.SecondaryGroup != Core.Enums.PsGroupBy.None;
+        bool hasL3 = filter.ThirdGroup != Core.Enums.PsGroupBy.None;
+        bool hasItem = !filter.IsSummary || (!hasL1 && !hasL2 && !hasL3);
+
+        var sb = new StringBuilder();
+        var headers = new List<string>();
+        if (hasL1) headers.Add(filter.PrimaryGroup.ToString());
+        if (hasL2) headers.Add(filter.SecondaryGroup.ToString());
+        if (hasL3) headers.Add(filter.ThirdGroup.ToString());
+        if (hasItem) { headers.Add("Item Code"); headers.Add("Item Name"); }
+        headers.AddRange(new[]
+        {
+            "Qty Purchased", filter.IncludeVat ? "Gross Purchased" : "Net Purchased",
+            "Qty Sold", filter.IncludeVat ? "Gross Sold" : "Net Sold",
+            "Profit", "Qty %", "Val %"
+        });
+        if (filter.ShowStock) headers.Add("Stock Qty");
+        sb.AppendLine(string.Join(",", headers.Select(Escape)));
+
+        foreach (var row in rows)
+        {
+            var cells = new List<string>();
+            if (hasL1) cells.Add(row.Level1Value ?? row.Level1 ?? "N/A");
+            if (hasL2) cells.Add(row.Level2Value ?? row.Level2 ?? "N/A");
+            if (hasL3) cells.Add(row.Level3Value ?? row.Level3 ?? "N/A");
+            if (hasItem) { cells.Add(row.ItemCode ?? ""); cells.Add(row.ItemName ?? ""); }
+            cells.Add(row.QuantityPurchased.ToString(CultureInfo.InvariantCulture));
+            cells.Add((filter.IncludeVat ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.QuantitySold.ToString(CultureInfo.InvariantCulture));
+            cells.Add((filter.IncludeVat ? row.GrossSoldValue : row.NetSoldValue).ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.Profit.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.QtyPercent.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.ValPercent.ToString("F2", CultureInfo.InvariantCulture));
+            if (filter.ShowStock) cells.Add(row.TotalStockQty.ToString(CultureInfo.InvariantCulture));
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        if (totals != null)
+        {
+            var cells = new List<string>();
+            int skip = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+            for (int i = 0; i < skip; i++) cells.Add("");
+            if (hasItem) { cells.Add("TOTAL"); cells.Add(""); } else cells.Add("TOTAL");
+            cells.Add(totals.TotalQtyPurchased.ToString(CultureInfo.InvariantCulture));
+            cells.Add((filter.IncludeVat ? totals.TotalGrossPurchased : totals.TotalNetPurchased).ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(totals.TotalQtySold.ToString(CultureInfo.InvariantCulture));
+            cells.Add((filter.IncludeVat ? totals.TotalGrossSold : totals.TotalNetSold).ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(totals.TotalProfit.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(totals.QtyPercent.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(totals.ValPercent.ToString("F2", CultureInfo.InvariantCulture));
+            if (filter.ShowStock) cells.Add(totals.TotalStockQty.ToString(CultureInfo.InvariantCulture));
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        return new UTF8Encoding(true).GetBytes(sb.ToString());
+    }
+
     private static string Escape(string value)
     {
         if (string.IsNullOrEmpty(value)) return "";

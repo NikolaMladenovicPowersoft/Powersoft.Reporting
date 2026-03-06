@@ -166,4 +166,83 @@ public class PdfExportService
         };
         table.AddCell(cell);
     }
+
+    public byte[] GeneratePurchasesSalesPdf(
+        List<PurchasesSalesRow> rows,
+        PurchasesSalesTotals? totals,
+        PurchasesSalesFilter filter)
+    {
+        bool hasL1 = filter.PrimaryGroup != Core.Enums.PsGroupBy.None;
+        bool hasL2 = filter.SecondaryGroup != Core.Enums.PsGroupBy.None;
+        bool hasL3 = filter.ThirdGroup != Core.Enums.PsGroupBy.None;
+        bool hasItem = !filter.IsSummary || (!hasL1 && !hasL2 && !hasL3);
+
+        int colCount = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
+                     + (hasItem ? 2 : 0) + 7 + (filter.ShowStock ? 1 : 0);
+
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Purchases vs Sales Report", TitleFont));
+        document.Add(new Paragraph(
+            $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd} | Mode: {filter.ReportMode}",
+            SubtitleFont));
+        document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var table = new PdfPTable(colCount) { WidthPercentage = 100, SpacingBefore = 5f };
+
+        if (hasL1) AddHeaderCell(table, filter.PrimaryGroup.ToString());
+        if (hasL2) AddHeaderCell(table, filter.SecondaryGroup.ToString());
+        if (hasL3) AddHeaderCell(table, filter.ThirdGroup.ToString());
+        if (hasItem) { AddHeaderCell(table, "Code"); AddHeaderCell(table, "Name"); }
+        AddHeaderCell(table, "Qty Purch");
+        AddHeaderCell(table, filter.IncludeVat ? "Gross Purch" : "Net Purch");
+        AddHeaderCell(table, "Qty Sold");
+        AddHeaderCell(table, filter.IncludeVat ? "Gross Sold" : "Net Sold");
+        AddHeaderCell(table, "Profit");
+        AddHeaderCell(table, "Qty %");
+        AddHeaderCell(table, "Val %");
+        if (filter.ShowStock) AddHeaderCell(table, "Stock");
+
+        bool alternate = false;
+        foreach (var row in rows)
+        {
+            var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+            if (hasL1) AddDataCell(table, row.Level1Value ?? "N/A", bg);
+            if (hasL2) AddDataCell(table, row.Level2Value ?? "N/A", bg);
+            if (hasL3) AddDataCell(table, row.Level3Value ?? "N/A", bg);
+            if (hasItem) { AddDataCell(table, row.ItemCode ?? "", bg); AddDataCell(table, row.ItemName ?? "", bg); }
+            AddDataCell(table, row.QuantityPurchased.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, (filter.IncludeVat ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.QuantitySold.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, (filter.IncludeVat ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.Profit.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, $"{row.QtyPercent:N1}%", bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, $"{row.ValPercent:N1}%", bg, Element.ALIGN_RIGHT);
+            if (filter.ShowStock) AddDataCell(table, row.TotalStockQty.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            alternate = !alternate;
+        }
+
+        if (totals != null)
+        {
+            int skip = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+            for (int i = 0; i < skip; i++) AddTotalCell(table, "");
+            if (hasItem) { AddTotalCell(table, "TOTAL"); AddTotalCell(table, ""); }
+            AddTotalCell(table, totals.TotalQtyPurchased.ToString("N0"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, (filter.IncludeVat ? totals.TotalGrossPurchased : totals.TotalNetPurchased).ToString("N2"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, totals.TotalQtySold.ToString("N0"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, (filter.IncludeVat ? totals.TotalGrossSold : totals.TotalNetSold).ToString("N2"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, totals.TotalProfit.ToString("N2"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, $"{totals.QtyPercent:N1}%", Element.ALIGN_RIGHT);
+            AddTotalCell(table, $"{totals.ValPercent:N1}%", Element.ALIGN_RIGHT);
+            if (filter.ShowStock) AddTotalCell(table, totals.TotalStockQty.ToString("N0"), Element.ALIGN_RIGHT);
+        }
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
 }

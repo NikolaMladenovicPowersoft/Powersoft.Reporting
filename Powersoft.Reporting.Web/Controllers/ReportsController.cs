@@ -362,7 +362,7 @@ public class ReportsController : Controller
     // ==================== Email Templates ====================
 
     [HttpGet]
-    public async Task<IActionResult> GetEmailTemplates()
+    public async Task<IActionResult> GetEmailTemplates(string? reportType = null)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
@@ -371,10 +371,10 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-            var templates = await repo.GetEmailTemplatesAsync(ReportTypeConstants.AverageBasket);
+            var templates = await repo.GetEmailTemplatesAsync(reportType);
             return Json(templates.Select(t => new
             {
-                t.TemplateId, t.TemplateName, t.EmailSubject, t.EmailBodyHtml, t.IsDefault
+                t.TemplateId, t.TemplateName, t.EmailSubject, t.EmailBodyHtml, t.IsDefault, t.ReportType
             }));
         }
         catch
@@ -971,5 +971,559 @@ public class ReportsController : Controller
                 model.Breakdown = BreakdownType.Monthly;
                 break;
         }
+    }
+
+    // ==================== Purchases vs Sales ====================
+
+    public async Task<IActionResult> PurchasesSales()
+    {
+        var connectedDb = GetConnectedDatabaseName();
+        var tenantConnString = GetTenantConnectionString();
+
+        if (string.IsNullOrEmpty(tenantConnString))
+        {
+            TempData["Warning"] = "Please select and connect to a database first.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        var viewModel = new PurchasesSalesViewModel
+        {
+            ConnectedDatabase = connectedDb,
+            IsConnected = true,
+            DateFrom = new DateTime(DateTime.Today.Year, 1, 1),
+            DateTo = DateTime.Today
+        };
+
+        await ApplyPsSavedLayoutAsync(viewModel, tenantConnString);
+        await LoadPsStoresAsync(viewModel, tenantConnString);
+        return View(viewModel);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> PurchasesSales(PurchasesSalesViewModel model)
+    {
+        var connectedDb = GetConnectedDatabaseName();
+        var tenantConnString = GetTenantConnectionString();
+
+        if (string.IsNullOrEmpty(tenantConnString))
+        {
+            TempData["Warning"] = "Please select and connect to a database first.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        model.ConnectedDatabase = connectedDb;
+        model.IsConnected = true;
+        await LoadPsStoresAsync(model, tenantConnString);
+
+        var filter = model.ToPurchasesSalesFilter();
+        if (!filter.IsValid(out var errors))
+        {
+            model.ErrorMessage = string.Join(" ", errors);
+            return View(model);
+        }
+
+        try
+        {
+            var repo = _repositoryFactory.CreatePurchasesSalesRepository(tenantConnString);
+            var result = await repo.GetPurchasesSalesDataAsync(filter);
+
+            model.Results = result.Items;
+            model.TotalCount = result.TotalCount;
+            model.PageNumber = result.PageNumber;
+            model.PageSize = result.PageSize;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating Purchases vs Sales report");
+            model.ErrorMessage = "An error occurred while generating the report. Please try again.";
+        }
+
+        return View(model);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportPsExcel(
+        DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
+        PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemIds,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("PurchasesSales");
+
+        var service = new ExcelExportService();
+        var bytes = service.GeneratePurchasesSalesExcel(result.Value.rows, result.Value.totals, result.Value.filter);
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportPsPdf(
+        DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
+        PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemIds,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("PurchasesSales");
+
+        var service = new PdfExportService();
+        var bytes = service.GeneratePurchasesSalesPdf(result.Value.rows, result.Value.totals, result.Value.filter);
+        return File(bytes, "application/pdf", $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportPsCsv(
+        DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
+        PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemIds,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("PurchasesSales");
+
+        var service = new CsvExportService();
+        var bytes = service.GeneratePurchasesSalesCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+        return File(bytes, "text/csv", $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendPsReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
+        PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemIds,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Please enter at least one email address." });
+
+        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        if (invalidEmails.Length > 0)
+            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
+
+        var ccList = ParseAndValidateEmailList(cc);
+        var bccList = ParseAndValidateEmailList(bcc);
+        if (ccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
+        if (bccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
+
+        var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GeneratePurchasesSalesPdf(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileName = $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GeneratePurchasesSalesCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileName = $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GeneratePurchasesSalesExcel(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileName = $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+
+        string? templateBody = null;
+        string? templateSubject = null;
+        if (templateId.HasValue && templateId > 0)
+        {
+            try
+            {
+                var tenantConnString = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConnString))
+                {
+                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
+                    if (tmpl != null)
+                    {
+                        templateBody = tmpl.EmailBodyHtml;
+                        templateSubject = tmpl.EmailSubject;
+                    }
+                }
+            }
+            catch { /* fall back to default */ }
+        }
+
+        string ReplaceMergeFields(string text) => text
+            .Replace("\u00ABReportName\u00BB", "Purchases vs Sales")
+            .Replace("\u00ABDatabaseName\u00BB", dbName)
+            .Replace("\u00ABPeriod\u00BB", period)
+            .Replace("\u00ABRowCount\u00BB", result.Value.rows.Count.ToString())
+            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
+            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
+            .Replace("\u00ABUserName\u00BB", userName)
+            .Replace("\u00ABCompanyName\u00BB", dbName)
+            .Replace("\u00AB", "").Replace("\u00BB", "");
+
+        var subject = string.IsNullOrWhiteSpace(emailSubject)
+            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Purchases vs Sales Report — {period}")
+            : emailSubject;
+
+        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
+            ? ReplaceMergeFields(templateBody)
+            : $@"
+<div style='font-family:Arial,sans-serif;max-width:600px;'>
+    <h2 style='color:#2563eb;'>Purchases vs Sales Report</h2>
+    <table style='border-collapse:collapse;width:100%;margin:16px 0;'>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Database</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Period</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{period}</td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Rows</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{result.Value.rows.Count}</td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{exportFormat}</td></tr>
+    </table>
+    <p style='color:#6b7280;font-size:13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
+</div>";
+        var textBody = $"Purchases vs Sales Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}";
+
+        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
+        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
+        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+
+        var sentCount = 0;
+        var sendErrors = new List<string>();
+        foreach (var email in emails)
+        {
+            try
+            {
+                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
+                sentCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send PS report email to {Email}", email);
+                sendErrors.Add(email);
+            }
+        }
+
+        if (sendErrors.Count > 0 && sentCount == 0)
+            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", sendErrors)}" });
+
+        var msg = sentCount == 1 ? $"Report sent to {emails[0]}" : $"Report sent to {sentCount} recipient(s)";
+        if (sendErrors.Count > 0) msg += $" (failed: {string.Join(", ", sendErrors)})";
+        return Json(new { success = true, message = msg });
+    }
+
+    private async Task<(List<PurchasesSalesRow> rows, PurchasesSalesTotals? totals, PurchasesSalesFilter filter)?> RunPsExportQuery(
+        DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
+        PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemIds,
+        string sortColumn, string sortDirection)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var filter = new PurchasesSalesFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            ReportMode = reportMode,
+            PrimaryGroup = primaryGroup,
+            SecondaryGroup = secondaryGroup,
+            ThirdGroup = thirdGroup,
+            IncludeVat = includeVat,
+            ShowProfit = showProfit,
+            ShowStock = showStock,
+            StoreCodes = string.IsNullOrEmpty(storeCodes) ? new() : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+            ItemIds = string.IsNullOrEmpty(itemIds) ? new() : itemIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Where(s => int.TryParse(s.Trim(), out _)).Select(s => int.Parse(s.Trim())).ToList(),
+            SortColumn = sortColumn,
+            SortDirection = sortDirection,
+            PageSize = int.MaxValue
+        };
+
+        try
+        {
+            var repo = _repositoryFactory.CreatePurchasesSalesRepository(tenantConnString);
+            var result = await repo.GetPurchasesSalesDataAsync(filter);
+            return (result.Items, null, filter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting PS report");
+            return null;
+        }
+    }
+
+    private async Task LoadPsStoresAsync(PurchasesSalesViewModel model, string tenantConnString)
+    {
+        try
+        {
+            var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+            model.AvailableStores = await storeRepo.GetActiveStoresAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load stores for PS report");
+            model.AvailableStores = new();
+        }
+    }
+
+    private async Task ApplyPsSavedLayoutAsync(PurchasesSalesViewModel model, string tenantConnString)
+    {
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var parms = await repo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderPurchasesSales,
+                userCode);
+
+            if (parms.Count == 0) return;
+
+            model.HasSavedLayout = true;
+
+            if (parms.TryGetValue("IncludeVat", out var iv))
+                model.IncludeVat = iv == "1";
+            if (parms.TryGetValue("ShowProfit", out var sp))
+                model.ShowProfit = sp == "1";
+            if (parms.TryGetValue("ShowStock", out var ss))
+                model.ShowStock = ss == "1";
+            if (parms.TryGetValue("ReportMode", out var rm) && Enum.TryParse<PsReportMode>(rm, out var rmt))
+                model.ReportMode = rmt;
+            if (parms.TryGetValue("PrimaryGroup", out var pg) && Enum.TryParse<PsGroupBy>(pg, out var pgt))
+                model.PrimaryGroup = pgt;
+            if (parms.TryGetValue("SecondaryGroup", out var sg) && Enum.TryParse<PsGroupBy>(sg, out var sgt))
+                model.SecondaryGroup = sgt;
+            if (parms.TryGetValue("ThirdGroup", out var tg) && Enum.TryParse<PsGroupBy>(tg, out var tgt))
+                model.ThirdGroup = tgt;
+            if (parms.TryGetValue("PageSize", out var ps) && int.TryParse(ps, out var pageSize) && pageSize > 0)
+                model.PageSize = pageSize;
+            if (parms.TryGetValue("HiddenColumns", out var hc) && !string.IsNullOrEmpty(hc))
+                model.HiddenColumns = hc;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load PS saved layout — using defaults");
+        }
+    }
+
+    // ==================== PS Layout ====================
+
+    [HttpPost]
+    public async Task<IActionResult> SavePsLayout([FromBody] Dictionary<string, string> parameters)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (parameters == null || parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            await repo.SaveLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderPurchasesSales,
+                ModuleConstants.IniDescriptionPurchasesSales,
+                userCode,
+                parameters);
+
+            return Json(new { success = true, message = "Layout saved" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving PS layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ResetPsLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var deleted = await repo.DeleteLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderPurchasesSales,
+                userCode);
+
+            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting PS layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to reset layout" });
+        }
+    }
+
+    // ==================== PS Schedules ====================
+
+    [HttpGet]
+    public async Task<IActionResult> GetPsSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new List<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.PurchasesSales);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                s.Recipients, s.ReportType,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                lastRun = s.LastRunDate?.ToString("yyyy-MM-dd HH:mm")
+            }));
+        }
+        catch
+        {
+            return Json(new List<object>());
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SavePsSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
+            var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.PurchasesSales);
+            if (count >= maxSchedules)
+                return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                    {
+                        var onceAt = RecurrenceNextRunCalculator.GetOnceScheduleDateTime(recurrenceJson);
+                        if (onceAt.HasValue && onceAt.Value < DateTime.Now)
+                            return Json(new { success = false, message = "For 'Run once', start date and time must be in the future." });
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                    }
+                }
+                else
+                {
+                    nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+            {
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            }
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.PurchasesSales,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "Unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = parametersJson,
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun
+            };
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving PS report schedule");
+            return Json(new { success = false, message = "Failed to save schedule." });
+        }
+    }
+
+    // ==================== PS Print Preview ====================
+
+    [HttpGet]
+    public async Task<IActionResult> PrintPsPreview(
+        DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
+        PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemIds,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("PurchasesSales");
+
+        var model = new PurchasesSalesViewModel
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            ReportMode = reportMode,
+            PrimaryGroup = primaryGroup,
+            SecondaryGroup = secondaryGroup,
+            ThirdGroup = thirdGroup,
+            IncludeVat = includeVat,
+            ShowProfit = showProfit,
+            ShowStock = showStock,
+            ConnectedDatabase = GetConnectedDatabaseName(),
+            Results = result.Value.rows,
+            TotalCount = result.Value.rows.Count,
+            SortColumn = sortColumn,
+            SortDirection = sortDirection
+        };
+
+        return View(model);
     }
 }

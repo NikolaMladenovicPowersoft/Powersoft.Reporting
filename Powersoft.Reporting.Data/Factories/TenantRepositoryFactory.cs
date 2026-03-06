@@ -29,6 +29,14 @@ public class TenantRepositoryFactory : ITenantRepositoryFactory
         return new AverageBasketRepository(connectionString);
     }
 
+    public IPurchasesSalesRepository CreatePurchasesSalesRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+
+        return new PurchasesSalesRepository(connectionString);
+    }
+
     public IScheduleRepository CreateScheduleRepository(string connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))

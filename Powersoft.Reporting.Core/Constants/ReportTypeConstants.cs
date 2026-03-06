@@ -8,6 +8,7 @@ namespace Powersoft.Reporting.Core.Constants;
 public static class ReportTypeConstants
 {
     public const string AverageBasket = "AverageBasket";
+    public const string PurchasesSales = "PurchasesSales";
 
     /// <summary>
     /// The set of report types that can be scheduled.
@@ -15,7 +16,8 @@ public static class ReportTypeConstants
     /// </summary>
     public static readonly HashSet<string> Schedulable = new(StringComparer.OrdinalIgnoreCase)
     {
-        AverageBasket
+        AverageBasket,
+        PurchasesSales
     };
 
     public static bool IsSchedulable(string reportType) =>

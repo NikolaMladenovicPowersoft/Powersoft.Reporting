@@ -47,6 +47,8 @@ public static class ModuleConstants
     // INI layout constants (tbl_IniModule / tbl_IniHeader codes)
     public const string IniHeaderAvgBasket = "AVGBASKET";
     public const string IniDescriptionAvgBasket = "Average Basket Report Layout";
+    public const string IniHeaderPurchasesSales = "PURCHSALES";
+    public const string IniDescriptionPurchasesSales = "Purchases vs Sales Report Layout";
 
     // INI settings constants (DB-level settings, userCode = "ALL")
     public const string IniHeaderDbSettings = "DBSETTINGS";

@@ -63,7 +63,20 @@
                                     <strong>@t.TemplateName</strong>
                                 </td>
                                 <td class="text-muted">@(t.EmailSubject.Length > 50 ? t.EmailSubject[..50] + "..." : t.EmailSubject)</td>
-                                <td>@(t.ReportType ?? "All Reports")</td>
+                                <td>
+                                    @switch (t.ReportType)
+                                    {
+                                        case "AverageBasket":
+                                            <span class="badge bg-primary">Average Basket</span>
+                                            break;
+                                        case "PurchasesSales":
+                                            <span class="badge bg-info text-dark">Purchases vs Sales</span>
+                                            break;
+                                        default:
+                                            <span class="badge bg-secondary">All Reports</span>
+                                            break;
+                                    }
+                                </td>
                                 <td class="text-center">
                                     @if (t.IsDefault)
                                     {

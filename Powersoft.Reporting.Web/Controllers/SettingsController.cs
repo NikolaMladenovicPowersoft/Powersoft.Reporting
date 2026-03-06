@@ -263,6 +263,8 @@ public class SettingsController : Controller
         }
 
         model.CreatedBy = User.Identity?.Name ?? "Unknown";
+        if (string.IsNullOrWhiteSpace(model.ReportType))
+            model.ReportType = null;
 
         var repo = _repositoryFactory.CreateScheduleRepository(connString);
 

@@ -180,10 +180,10 @@ public class ScheduleExecutionService
                 "Executing schedule {Id} '{Name}' (type: {Type}) for DB {DB}",
                 schedule.ScheduleId, schedule.ScheduleName, schedule.ReportType, db.DBFriendlyName);
 
-            var (rows, totals, filter, fileBytes, fileName, contentType) =
+            var (rowCount, fileBytes, fileName, contentType, period) =
                 await GenerateReportAsync(schedule, connString);
 
-            log.RowsGenerated = rows.Count;
+            log.RowsGenerated = rowCount;
             log.FileSizeBytes = fileBytes.Length;
 
             // Upload to cold storage (S3 / DigitalOcean Spaces) if configured
@@ -200,7 +200,7 @@ public class ScheduleExecutionService
                 }
             }
 
-            await SendReportEmailAsync(schedule, db, fileBytes, fileName, contentType, rows.Count, filter, storageKey, ct);
+            await SendReportEmailAsync(schedule, db, fileBytes, fileName, contentType, rowCount, period, storageKey, ct);
 
             var isOnce = string.Equals(schedule.RecurrenceType, "Once", StringComparison.OrdinalIgnoreCase);
             DateTime? nextRun = isOnce
@@ -246,13 +246,19 @@ public class ScheduleExecutionService
         }
     }
 
-    private async Task<(
-        List<AverageBasketRow> rows,
-        ReportGrandTotals? totals,
-        ReportFilter filter,
-        byte[] fileBytes,
-        string fileName,
-        string contentType)> GenerateReportAsync(ReportSchedule schedule, string connString)
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateReportAsync(ReportSchedule schedule, string connString)
+    {
+        var reportType = schedule.ReportType ?? ReportTypeConstants.AverageBasket;
+
+        if (string.Equals(reportType, ReportTypeConstants.PurchasesSales, StringComparison.OrdinalIgnoreCase))
+            return await GeneratePurchasesSalesReportAsync(schedule, connString);
+
+        return await GenerateAverageBasketReportAsync(schedule, connString);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateAverageBasketReportAsync(ReportSchedule schedule, string connString)
     {
         var parameters = DeserializeParameters(schedule.ParametersJson);
         var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
@@ -284,34 +290,85 @@ public class ScheduleExecutionService
         switch (format)
         {
             case "pdf":
-                var pdfService = new PdfExportService();
-                fileBytes = pdfService.GenerateAverageBasketPdf(result.Items, result.GrandTotals, filter);
+                fileBytes = new PdfExportService().GenerateAverageBasketPdf(result.Items, result.GrandTotals, filter);
                 fileName = $"AverageBasket_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
                 contentType = "application/pdf";
                 break;
-
             case "csv":
-                var csvService = new CsvExportService();
-                fileBytes = csvService.GenerateAverageBasketCsv(result.Items, result.GrandTotals, filter);
+                fileBytes = new CsvExportService().GenerateAverageBasketCsv(result.Items, result.GrandTotals, filter);
                 fileName = $"AverageBasket_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
                 contentType = "text/csv";
                 break;
-
             default:
-                var excelService = new ExcelExportService();
-                fileBytes = excelService.GenerateAverageBasketExcel(result.Items, result.GrandTotals, filter);
+                fileBytes = new ExcelExportService().GenerateAverageBasketExcel(result.Items, result.GrandTotals, filter);
                 fileName = $"AverageBasket_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 break;
         }
 
-        return (result.Items, result.GrandTotals, filter, fileBytes, fileName, contentType);
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        return (result.Items.Count, fileBytes, fileName, contentType, period);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GeneratePurchasesSalesReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        var filter = new PurchasesSalesFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            ReportMode = parameters.ReportMode,
+            PrimaryGroup = parameters.PrimaryGroup,
+            SecondaryGroup = parameters.SecondaryGroup,
+            ThirdGroup = parameters.ThirdGroup,
+            IncludeVat = parameters.IncludeVat,
+            ShowProfit = parameters.ShowProfit,
+            ShowStock = parameters.ShowStock,
+            StoreCodes = parameters.StoreCodes ?? new(),
+            ItemIds = parameters.ItemIds ?? new(),
+            SortColumn = parameters.SortColumn ?? "ItemCode",
+            SortDirection = parameters.SortDirection ?? "ASC",
+            PageSize = int.MaxValue
+        };
+
+        var repo = _repositoryFactory.CreatePurchasesSalesRepository(connString);
+        var result = await repo.GetPurchasesSalesDataAsync(filter);
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GeneratePurchasesSalesPdf(result.Items, null, filter);
+                fileName = $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GeneratePurchasesSalesCsv(result.Items, null, filter);
+                fileName = $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GeneratePurchasesSalesExcel(result.Items, null, filter);
+                fileName = $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        return (result.Items.Count, fileBytes, fileName, contentType, period);
     }
 
     private async Task SendReportEmailAsync(
         ReportSchedule schedule, Database db,
         byte[] fileBytes, string fileName, string contentType,
-        int rowCount, ReportFilter filter, string? storageKey, CancellationToken ct)
+        int rowCount, string period, string? storageKey, CancellationToken ct)
     {
         var recipients = schedule.Recipients
             .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -329,10 +386,14 @@ public class ScheduleExecutionService
             catch { /* pre-signed URL generation is best-effort */ }
         }
 
-        var period = $"{filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        var reportDisplayName = schedule.ReportType switch
+        {
+            ReportTypeConstants.PurchasesSales => "Purchases vs Sales",
+            _ => "Average Basket"
+        };
         var mergeValues = new Dictionary<string, string>
         {
-            ["\u00ABReportName\u00BB"] = schedule.ScheduleName ?? schedule.ReportType ?? "Report",
+            ["\u00ABReportName\u00BB"] = schedule.ScheduleName ?? reportDisplayName,
             ["\u00ABDatabaseName\u00BB"] = db.DBFriendlyName ?? "Unknown",
             ["\u00ABPeriod\u00BB"] = period,
             ["\u00ABRowCount\u00BB"] = rowCount.ToString(),
@@ -374,8 +435,8 @@ public class ScheduleExecutionService
             subject = !string.IsNullOrWhiteSpace(schedule.EmailSubject)
                 ? schedule.EmailSubject
                 : $"Scheduled Report: {schedule.ScheduleName} — {db.DBFriendlyName}";
-            htmlBody = BuildEmailHtml(schedule, db, rowCount, filter, fileName, downloadUrl);
-            textBody = BuildEmailText(schedule, db, rowCount, filter, downloadUrl);
+            htmlBody = BuildEmailHtml(schedule, db, rowCount, period, fileName, downloadUrl);
+            textBody = BuildEmailText(schedule, db, rowCount, period, downloadUrl);
         }
 
         var attachments = new[]
@@ -476,6 +537,20 @@ public class ScheduleExecutionService
             if (root.TryGetProperty("itemIds", out var iid) || root.TryGetProperty("ItemIds", out iid))
                 p.ItemIds = ParseIntList(iid);
 
+            // PS-specific fields
+            if (root.TryGetProperty("reportMode", out var rm) || root.TryGetProperty("ReportMode", out rm))
+                p.ReportMode = ParseEnum<PsReportMode>(rm);
+            if (root.TryGetProperty("primaryGroup", out var pg) || root.TryGetProperty("PrimaryGroup", out pg))
+                p.PrimaryGroup = ParseEnum<PsGroupBy>(pg);
+            if (root.TryGetProperty("secondaryGroup", out var sg2p) || root.TryGetProperty("SecondaryGroup", out sg2p))
+                p.SecondaryGroup = ParseEnum<PsGroupBy>(sg2p);
+            if (root.TryGetProperty("thirdGroup", out var tg) || root.TryGetProperty("ThirdGroup", out tg))
+                p.ThirdGroup = ParseEnum<PsGroupBy>(tg);
+            if (root.TryGetProperty("showProfit", out var sp))
+                p.ShowProfit = sp.ValueKind == JsonValueKind.True;
+            if (root.TryGetProperty("showStock", out var ss))
+                p.ShowStock = ss.ValueKind == JsonValueKind.True;
+
             // reportDateRange (frontend format) or DateRange (code format)
             if (root.TryGetProperty("reportDateRange", out var rdr) || root.TryGetProperty("DateRange", out rdr))
             {
@@ -563,7 +638,7 @@ public class ScheduleExecutionService
 
     private static string BuildEmailHtml(
         ReportSchedule schedule, Database db,
-        int rowCount, ReportFilter filter, string fileName, string? downloadUrl = null)
+        int rowCount, string period, string fileName, string? downloadUrl = null)
     {
         return $@"
 <div style='font-family: Arial, sans-serif; max-width: 600px;'>
@@ -574,7 +649,7 @@ public class ScheduleExecutionService
         <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Report Type</td>
             <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{schedule.ReportType}</td></tr>
         <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Period</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}</td></tr>
+            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{period}</td></tr>
         <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Rows</td>
             <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{rowCount}</td></tr>
         <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Format</td>
@@ -599,12 +674,12 @@ public class ScheduleExecutionService
 
     private static string BuildEmailText(
         ReportSchedule schedule, Database db,
-        int rowCount, ReportFilter filter, string? downloadUrl = null)
+        int rowCount, string period, string? downloadUrl = null)
     {
         var text = $@"Scheduled Report: {schedule.ScheduleName}
 Database: {db.DBFriendlyName}
 Report Type: {schedule.ReportType}
-Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}
+Period: {period}
 Rows: {rowCount}
 Format: {schedule.ExportFormat}
 Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";

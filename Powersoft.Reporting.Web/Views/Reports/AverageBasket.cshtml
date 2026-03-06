@@ -1673,7 +1673,7 @@ function openSendEmailModal() {
 }
 
 function loadEmailTemplates() {
-    fetch('@Url.Action("GetEmailTemplates", "Reports")')
+    fetch('@Url.Action("GetEmailTemplates", "Reports")?reportType=AverageBasket')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             _emailTemplatesCache = data || [];

@@ -268,7 +268,7 @@ public class ScheduleRepository : IScheduleRepository
         var sql = @"SELECT pk_TemplateID, TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, IsActive, CreatedBy, CreatedDate
                     FROM tbl_ReportEmailTemplate
                     WHERE IsActive = 1"
-            + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL)" : "")
+            + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL OR ReportType = '')" : "")
             + " ORDER BY IsDefault DESC, TemplateName";
 
         var templates = new List<EmailTemplate>();
@@ -304,7 +304,7 @@ public class ScheduleRepository : IScheduleRepository
         var sql = @"SELECT TOP 1 pk_TemplateID, TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, IsActive, CreatedBy, CreatedDate
                     FROM tbl_ReportEmailTemplate
                     WHERE IsActive = 1 AND IsDefault = 1"
-            + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL)" : "")
+            + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL OR ReportType = '')" : "")
             + " ORDER BY ReportType DESC";
 
         using var conn = new SqlConnection(_connectionString);
@@ -323,7 +323,7 @@ public class ScheduleRepository : IScheduleRepository
         await conn.OpenAsync();
 
         if (template.IsDefault)
-            await ClearDefaultFlagAsync(conn, null);
+            await ClearDefaultFlagAsync(conn, null, template.ReportType);
 
         const string sql = @"INSERT INTO tbl_ReportEmailTemplate
             (TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, CreatedBy)
@@ -348,7 +348,7 @@ public class ScheduleRepository : IScheduleRepository
         await conn.OpenAsync();
 
         if (template.IsDefault)
-            await ClearDefaultFlagAsync(conn, template.TemplateId);
+            await ClearDefaultFlagAsync(conn, template.TemplateId, template.ReportType);
 
         const string sql = @"UPDATE tbl_ReportEmailTemplate
             SET TemplateName = @Name, ReportType = @ReportType, EmailSubject = @Subject,
@@ -367,13 +367,21 @@ public class ScheduleRepository : IScheduleRepository
         return await cmd.ExecuteNonQueryAsync() > 0;
     }
 
-    private static async Task ClearDefaultFlagAsync(SqlConnection conn, int? excludeId)
+    private static async Task ClearDefaultFlagAsync(SqlConnection conn, int? excludeId, string? reportType)
     {
         var sql = "UPDATE tbl_ReportEmailTemplate SET IsDefault = 0 WHERE IsDefault = 1 AND IsActive = 1";
+
+        if (reportType != null)
+            sql += " AND ReportType = @ReportType";
+        else
+            sql += " AND (ReportType IS NULL OR ReportType = '')";
+
         if (excludeId.HasValue)
             sql += " AND pk_TemplateID <> @ExcludeId";
 
         using var cmd = new SqlCommand(sql, conn);
+        if (reportType != null)
+            cmd.Parameters.AddWithValue("@ReportType", reportType);
         if (excludeId.HasValue)
             cmd.Parameters.AddWithValue("@ExcludeId", excludeId.Value);
         await cmd.ExecuteNonQueryAsync();

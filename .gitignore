@@ -61,5 +61,10 @@ appsettings.Local.json
 # AI / IDE rules
 .cursor/
 
+# Publish artifacts
+_publish/
+*.publish.zip
+*_publish.zip
+
 # Personal docs
 _DOCS/

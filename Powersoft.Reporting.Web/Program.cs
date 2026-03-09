@@ -6,6 +6,7 @@ using Powersoft.Reporting.Data.Factories;
 using Powersoft.Reporting.Data.Helpers;
 using Powersoft.Reporting.Web.Options;
 using Powersoft.Reporting.Web.Services;
+using Powersoft.Reporting.Web.Services.AI;
 using Powersoft.Reporting.Web.Services.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,6 +33,14 @@ builder.Services.AddHostedService<ScheduleBackgroundService>();
 // DigitalOcean Spaces (S3-compatible cold storage)
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
 builder.Services.AddSingleton<IReportStorageService, S3ReportStorageService>();
+
+// AI Report Analyzer
+builder.Services.Configure<AiAnalyzerOptions>(builder.Configuration.GetSection("AiAnalyzer"));
+builder.Services.AddHttpClient("ClaudeAI");
+builder.Services.AddHttpClient("OpenAI");
+builder.Services.AddTransient<ClaudeReportAnalyzer>();
+builder.Services.AddTransient<OpenAIReportAnalyzer>();
+builder.Services.AddTransient<ReportAnalyzerFactory>();
 
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>

@@ -295,6 +295,9 @@
                 <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
                     <i class="bi bi-envelope me-1"></i>Send to Email
                 </button>
+                <button class="btn btn-sm btn-outline-info" onclick="analyzePsReport()" title="AI-powered report analysis" id="btnAnalyzePs">
+                    <i class="bi bi-robot me-1"></i>Analyze
+                </button>
             </div>
         </div>
         <div class="card-body p-0">
@@ -672,6 +675,61 @@ else
     </div>
 </div>
 
+<!-- AI Analysis Modal -->
+<div class="modal fade" id="aiAnalysisModal" tabindex="-1" aria-labelledby="aiAnalysisModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info bg-opacity-10">
+                <h5 class="modal-title" id="aiAnalysisModalLabel">
+                    <i class="bi bi-robot me-2"></i>AI Report Analysis
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="aiLoading" class="text-center py-5">
+                    <div class="spinner-border text-info mb-3" role="status">
+                        <span class="visually-hidden">Analyzing...</span>
+                    </div>
+                    <p class="text-muted">AI is analyzing your report data...<br><small>This may take 10-30 seconds</small></p>
+                </div>
+                <div id="aiError" class="d-none">
+                    <div class="alert alert-danger" id="aiErrorMsg"></div>
+                </div>
+                <div id="aiResults" class="d-none">
+                    <div class="mb-3">
+                        <h6><i class="bi bi-card-text me-1"></i>Summary</h6>
+                        <p id="aiSummary" class="ms-3"></p>
+                    </div>
+                    <div class="mb-3" id="aiKeyFindingsSection">
+                        <h6><i class="bi bi-lightbulb me-1 text-warning"></i>Key Findings</h6>
+                        <ul id="aiKeyFindings" class="ms-3"></ul>
+                    </div>
+                    <div class="mb-3" id="aiAlertsSection">
+                        <h6><i class="bi bi-exclamation-triangle me-1 text-danger"></i>Alerts</h6>
+                        <ul id="aiAlerts" class="ms-3"></ul>
+                    </div>
+                    <div class="mb-3" id="aiRecsSection">
+                        <h6><i class="bi bi-check-circle me-1 text-success"></i>Recommendations</h6>
+                        <ul id="aiRecs" class="ms-3"></ul>
+                    </div>
+                    <hr>
+                    <div class="text-muted small d-flex justify-content-between" id="aiMeta">
+                        <span>Model: <span id="aiModel"></span></span>
+                        <span>Tokens: <span id="aiTokens"></span></span>
+                        <span>Time: <span id="aiTime"></span></span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-info" onclick="analyzePsReport()" id="btnReanalyze" style="display:none;">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Re-analyze
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Send to Email Modal -->
 <div class="modal fade" id="sendEmailModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -803,6 +861,75 @@ function initColumnVisibilityFromServer(){var hc='@(Model.HiddenColumns??"")';if
 function applyPresetDates(preset){var today=new Date();var from,to;switch(preset){case'today':from=to=today;break;case'yesterday':from=to=new Date(today.getTime()-86400000);break;case'last7':from=new Date(today.getTime()-6*86400000);to=today;break;case'last30':from=new Date(today.getTime()-29*86400000);to=today;break;case'thisMonth':from=new Date(today.getFullYear(),today.getMonth(),1);to=today;break;case'lastMonth':var lm=new Date(today.getFullYear(),today.getMonth()-1,1);from=lm;to=new Date(lm.getFullYear(),lm.getMonth()+1,0);break;case'ytd':from=new Date(today.getFullYear(),0,1);to=today;break;case'lastYear':from=new Date(today.getFullYear()-1,0,1);to=new Date(today.getFullYear()-1,11,31);break;default:return;}function fmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}document.getElementById('DateFrom').value=fmt(from);document.getElementById('DateTo').value=fmt(to);}
 function resetPage(){document.getElementById('pageNumberHidden').value=1;}
 function showLoading(){var btn=document.getElementById('generateBtn');btn.querySelector('.btn-text').classList.add('d-none');btn.querySelector('.spinner-border').classList.remove('d-none');btn.disabled=true;}
-document.addEventListener('DOMContentLoaded',function(){updateStoreSelection();updateItemSelectionText();initColumnVisibilityFromServer();updateColVisibleCount();var colSearch=document.getElementById('colSearchInput');if(colSearch){colSearch.addEventListener('input',filterColumnList);colSearch.addEventListener('keyup',filterColumnList);}document.querySelectorAll('input[name="DatePreset"]').forEach(function(r){r.addEventListener('change',function(){applyPresetDates(this.value);});});var form=document.getElementById('reportForm');form.addEventListener('submit',function(){showLoading();});document.getElementById('generateBtn').addEventListener('click',function(){resetPage();});var schedModal=document.getElementById('scheduleModal');if(schedModal){schedModal.addEventListener('show.bs.modal',function(){loadExistingSchedules();onSchedDateRangeTypeChange();});}});
+document.addEventListener('DOMContentLoaded',function(){updateStoreSelection();updateItemSelectionText();initColumnVisibilityFromServer();updateColVisibleCount();var colSearch=document.getElementById('colSearchInput');if(colSearch){colSearch.addEventListener('input',filterColumnList);colSearch.addEventListener('keyup',filterColumnList);}document.querySelectorAll('input[name="DatePreset"]').forEach(function(r){r.addEventListener('change',function(){applyPresetDates(this.value);});});var form=document.getElementById('reportForm');form.addEventListener('submit',function(){showLoading();});document.getElementById('generateBtn').addEventListener('click',function(){resetPage();});var schedModal=document.getElementById('scheduleModal');if(schedModal){schedModal.addEventListener('show.bs.modal',function(){loadExistingSchedules();onSchedDateRangeTypeChange();});}
+    fetch('/Reports/GetAiStatus').then(r=>r.json()).then(d=>{if(!d.configured){var btn=document.getElementById('btnAnalyzePs');if(btn){btn.title='AI not configured — set API key in Settings';btn.classList.add('disabled');}}}).catch(()=>{});
+});
+
+function analyzePsReport() {
+    var modal = new bootstrap.Modal(document.getElementById('aiAnalysisModal'));
+    document.getElementById('aiLoading').classList.remove('d-none');
+    document.getElementById('aiError').classList.add('d-none');
+    document.getElementById('aiResults').classList.add('d-none');
+    document.getElementById('btnReanalyze').style.display = 'none';
+    modal.show();
+
+    var form = document.getElementById('reportForm');
+    var formData = new FormData(form);
+    formData.append('storeCodes', '@Model.SelectedStoreCodesString');
+    formData.append('itemIds', '@(Model.SelectedItemIdsString ?? "")');
+    formData.append('sortColumn', '@Model.SortColumn');
+    formData.append('sortDirection', '@Model.SortDirection');
+
+    fetch('/Reports/AnalyzePsReport', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('aiLoading').classList.add('d-none');
+            if (!data.success) {
+                document.getElementById('aiError').classList.remove('d-none');
+                document.getElementById('aiErrorMsg').textContent = data.message;
+                document.getElementById('btnReanalyze').style.display = 'inline-block';
+                return;
+            }
+            var a = data.analysis;
+            document.getElementById('aiSummary').textContent = a.summary || '';
+
+            var kfList = document.getElementById('aiKeyFindings');
+            kfList.innerHTML = '';
+            var kfSection = document.getElementById('aiKeyFindingsSection');
+            if (a.keyFindings && a.keyFindings.length > 0) {
+                kfSection.classList.remove('d-none');
+                a.keyFindings.forEach(function(f) { var li = document.createElement('li'); li.textContent = f; kfList.appendChild(li); });
+            } else { kfSection.classList.add('d-none'); }
+
+            var alertsList = document.getElementById('aiAlerts');
+            alertsList.innerHTML = '';
+            var alertsSection = document.getElementById('aiAlertsSection');
+            if (a.alerts && a.alerts.length > 0) {
+                alertsSection.classList.remove('d-none');
+                a.alerts.forEach(function(f) { var li = document.createElement('li'); li.textContent = f; alertsList.appendChild(li); });
+            } else { alertsSection.classList.add('d-none'); }
+
+            var recsList = document.getElementById('aiRecs');
+            recsList.innerHTML = '';
+            var recsSection = document.getElementById('aiRecsSection');
+            if (a.recommendations && a.recommendations.length > 0) {
+                recsSection.classList.remove('d-none');
+                a.recommendations.forEach(function(f) { var li = document.createElement('li'); li.textContent = f; recsList.appendChild(li); });
+            } else { recsSection.classList.add('d-none'); }
+
+            document.getElementById('aiModel').textContent = a.modelUsed || 'N/A';
+            document.getElementById('aiTokens').textContent = (a.inputTokens || 0) + ' in / ' + (a.outputTokens || 0) + ' out';
+            document.getElementById('aiTime').textContent = ((a.durationMs || 0) / 1000).toFixed(1) + 's';
+
+            document.getElementById('aiResults').classList.remove('d-none');
+            document.getElementById('btnReanalyze').style.display = 'inline-block';
+        })
+        .catch(err => {
+            document.getElementById('aiLoading').classList.add('d-none');
+            document.getElementById('aiError').classList.remove('d-none');
+            document.getElementById('aiErrorMsg').textContent = 'Network error: ' + err.message;
+            document.getElementById('btnReanalyze').style.display = 'inline-block';
+        });
+}
 </script>
 }

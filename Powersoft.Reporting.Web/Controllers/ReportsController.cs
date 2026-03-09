@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,6 +8,7 @@ using Powersoft.Reporting.Core.Helpers;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
 using Powersoft.Reporting.Web.Services;
+using Powersoft.Reporting.Web.Services.AI;
 using Powersoft.Reporting.Web.ViewModels;
 
 namespace Powersoft.Reporting.Web.Controllers;
@@ -17,6 +19,7 @@ public class ReportsController : Controller
     private readonly ITenantRepositoryFactory _repositoryFactory;
     private readonly ICentralRepository _centralRepository;
     private readonly IEmailSender _emailSender;
+    private readonly ReportAnalyzerFactory _analyzerFactory;
     private readonly ILogger<ReportsController> _logger;
 
     private static readonly Regex EmailRegex = new(
@@ -26,11 +29,13 @@ public class ReportsController : Controller
         ITenantRepositoryFactory repositoryFactory,
         ICentralRepository centralRepository,
         IEmailSender emailSender,
+        ReportAnalyzerFactory analyzerFactory,
         ILogger<ReportsController> logger)
     {
         _repositoryFactory = repositoryFactory;
         _centralRepository = centralRepository;
         _emailSender = emailSender;
+        _analyzerFactory = analyzerFactory;
         _logger = logger;
     }
     
@@ -1492,6 +1497,115 @@ public class ReportsController : Controller
         }
     }
 
+    // ==================== AI Report Analysis ====================
+
+    [HttpGet]
+    public IActionResult GetAiStatus()
+    {
+        return Json(new { configured = _analyzerFactory.IsConfigured });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeAbReport(
+        DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
+        GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear,
+        string? storeCodes, string? itemIds,
+        string sortColumn = "Period", string sortDirection = "ASC")
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy,
+            includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        if (result.Value.rows.Count == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvService = new CsvExportService();
+            var csvBytes = csvService.GenerateAverageBasketCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            var analyzer = _analyzerFactory.Create();
+            var analysis = await analyzer.AnalyzeAsync(csvData, "AverageBasket", ct: HttpContext.RequestAborted);
+
+            return Json(new
+            {
+                success = true,
+                analysis = new
+                {
+                    analysis.Summary,
+                    analysis.KeyFindings,
+                    analysis.Alerts,
+                    analysis.Recommendations,
+                    analysis.ModelUsed,
+                    analysis.InputTokens,
+                    analysis.OutputTokens,
+                    analysis.DurationMs
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Average Basket report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzePsReport(
+        DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
+        PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemIds,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        if (result.Value.rows.Count == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvService = new CsvExportService();
+            var csvBytes = csvService.GeneratePurchasesSalesCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            var analyzer = _analyzerFactory.Create();
+            var analysis = await analyzer.AnalyzeAsync(csvData, "PurchasesSales", ct: HttpContext.RequestAborted);
+
+            return Json(new
+            {
+                success = true,
+                analysis = new
+                {
+                    analysis.Summary,
+                    analysis.KeyFindings,
+                    analysis.Alerts,
+                    analysis.Recommendations,
+                    analysis.ModelUsed,
+                    analysis.InputTokens,
+                    analysis.OutputTokens,
+                    analysis.DurationMs
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Purchases vs Sales report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
     // ==================== PS Print Preview ====================
 
     [HttpGet]
@@ -1526,4 +1640,5 @@ public class ReportsController : Controller
 
         return View(model);
     }
+
 }

@@ -83,9 +83,14 @@ public class PurchasesSalesViewModel
 
     public decimal TotalPurchasedQty => Results.Sum(r => r.QuantityPurchased);
     public decimal TotalPurchasedNet => Results.Sum(r => r.NetPurchasedValue);
+    public decimal TotalPurchasedGross => Results.Sum(r => r.GrossPurchasedValue);
     public decimal TotalSoldQty => Results.Sum(r => r.QuantitySold);
     public decimal TotalSoldNet => Results.Sum(r => r.NetSoldValue);
+    public decimal TotalSoldGross => Results.Sum(r => r.GrossSoldValue);
     public decimal TotalProfit => Results.Sum(r => r.Profit);
+
+    public decimal TotalPurchasedValue => IncludeVat ? TotalPurchasedGross : TotalPurchasedNet;
+    public decimal TotalSoldValue => IncludeVat ? TotalSoldGross : TotalSoldNet;
 
     public PurchasesSalesFilter ToPurchasesSalesFilter()
     {

@@ -240,8 +240,8 @@
         </div>
         <div class="col-6 col-md-3">
             <div class="stat-card text-center">
-                <div class="stat-value">@Model.TotalPurchasedNet.ToString("N2")</div>
-                <div class="stat-label">Net Purchased</div>
+                <div class="stat-value">@Model.TotalPurchasedValue.ToString("N2")</div>
+                <div class="stat-label">@(useGross ? "Gross" : "Net") Purchased</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
@@ -340,47 +340,137 @@
                     <tbody>
                         @if (hasL1)
                         {
-                            var groupedResults = Model.Results.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A").ToList();
-                            foreach (var group in groupedResults)
+                            var l1Groups = Model.Results.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A").ToList();
+                            foreach (var l1Group in l1Groups)
                             {
-                                var groupRows = group.ToList();
+                                var l1Rows = l1Group.ToList();
                                 <tr class="group-header-row">
-                                    <td colspan="@totalColumns"><i class="bi bi-diagram-3 me-2"></i>@group.Key</td>
+                                    <td colspan="@totalColumns"><i class="bi bi-diagram-3 me-2"></i><strong>@Model.PrimaryGroup:</strong> @l1Group.Key</td>
                                 </tr>
-                                foreach (var row in groupRows)
+
+                                @if (hasL2)
                                 {
-                                    <tr>
-                                        @if (hasL1) { <td class="fw-semibold text-info">@(row.Level1Value ?? "N/A")</td> }
-                                        @if (hasL2) { <td class="text-info">@(row.Level2Value ?? "N/A")</td> }
-                                        @if (hasL3) { <td class="text-info">@(row.Level3Value ?? "N/A")</td> }
-                                        @if (showItem) { <td class="fw-semibold"><a href="#" class="text-decoration-none" onclick="drillDown('@row.ItemCode','all');return false;">@row.ItemCode</a></td><td>@row.ItemName</td> }
-                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
-                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
-                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
-                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
-                                        @if (Model.ShowProfit) { var pC = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="text-end @pC fw-semibold">@row.Profit.ToString("N2")</td> }
-                                        <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
-                                        <td class="text-end">@row.ValPercent.ToString("N1")%</td>
-                                        @if (Model.ShowStock) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
-                                    </tr>
+                                    var l2Groups = l1Rows.GroupBy(r => r.Level2Value ?? "N/A").ToList();
+                                    foreach (var l2Group in l2Groups)
+                                    {
+                                        var l2Rows = l2Group.ToList();
+                                        <tr class="group-header-row" style="background:#e8f0fe;">
+                                            <td colspan="@totalColumns" class="ps-4"><i class="bi bi-chevron-right me-1"></i><strong>@Model.SecondaryGroup:</strong> @l2Group.Key</td>
+                                        </tr>
+
+                                        @if (hasL3)
+                                        {
+                                            var l3Groups = l2Rows.GroupBy(r => r.Level3Value ?? "N/A").ToList();
+                                            foreach (var l3Group in l3Groups)
+                                            {
+                                                var l3Rows = l3Group.ToList();
+                                                <tr class="group-header-row" style="background:#f0f4f8;">
+                                                    <td colspan="@totalColumns" class="ps-5"><i class="bi bi-dash me-1"></i><strong>@Model.ThirdGroup:</strong> @l3Group.Key</td>
+                                                </tr>
+                                                @foreach (var row in l3Rows)
+                                                {
+                                                    <tr>
+                                                        @if (hasL1) { <td class="fw-semibold text-info">@(row.Level1Value ?? "N/A")</td> }
+                                                        @if (hasL2) { <td class="text-info">@(row.Level2Value ?? "N/A")</td> }
+                                                        @if (hasL3) { <td class="text-info">@(row.Level3Value ?? "N/A")</td> }
+                                                        @if (showItem) { <td class="fw-semibold"><a href="#" class="text-decoration-none" onclick="drillDown('@row.ItemCode','all');return false;">@row.ItemCode</a></td><td>@row.ItemName</td> }
+                                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
+                                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
+                                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
+                                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
+                                                        @if (Model.ShowProfit) { var pC = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="text-end @pC fw-semibold">@row.Profit.ToString("N2")</td> }
+                                                        <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
+                                                        <td class="text-end">@row.ValPercent.ToString("N1")%</td>
+                                                        @if (Model.ShowStock) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
+                                                    </tr>
+                                                }
+                                                var l3QP = l3Rows.Sum(r => r.QuantityPurchased);
+                                                var l3VP = l3Rows.Sum(r => useGross ? r.GrossPurchasedValue : r.NetPurchasedValue);
+                                                var l3QS = l3Rows.Sum(r => r.QuantitySold);
+                                                var l3VS = l3Rows.Sum(r => useGross ? r.GrossSoldValue : r.NetSoldValue);
+                                                var l3Profit = l3Rows.Sum(r => r.Profit);
+                                                <tr class="group-subtotal-row" style="background:#f0f4f8;">
+                                                    @for (int i = 0; i < (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0); i++) { <td></td> }
+                                                    @if (showItem) { <td class="fw-semibold text-muted small">@l3Group.Key subtotal</td><td></td> }
+                                                    <td class="text-end fw-semibold">@l3QP.ToString("N0")</td>
+                                                    <td class="text-end fw-semibold">@l3VP.ToString("N2")</td>
+                                                    <td class="text-end fw-semibold">@l3QS.ToString("N0")</td>
+                                                    <td class="text-end fw-semibold">@l3VS.ToString("N2")</td>
+                                                    @if (Model.ShowProfit) { <td class="text-end fw-semibold">@l3Profit.ToString("N2")</td> }
+                                                    <td class="text-end">-</td><td class="text-end">-</td>
+                                                    @if (Model.ShowStock) { <td></td> }
+                                                </tr>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            @foreach (var row in l2Rows)
+                                            {
+                                                <tr>
+                                                    @if (hasL1) { <td class="fw-semibold text-info">@(row.Level1Value ?? "N/A")</td> }
+                                                    @if (hasL2) { <td class="text-info">@(row.Level2Value ?? "N/A")</td> }
+                                                    @if (showItem) { <td class="fw-semibold"><a href="#" class="text-decoration-none" onclick="drillDown('@row.ItemCode','all');return false;">@row.ItemCode</a></td><td>@row.ItemName</td> }
+                                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
+                                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
+                                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
+                                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
+                                                    @if (Model.ShowProfit) { var pC = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="text-end @pC fw-semibold">@row.Profit.ToString("N2")</td> }
+                                                    <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
+                                                    <td class="text-end">@row.ValPercent.ToString("N1")%</td>
+                                                    @if (Model.ShowStock) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
+                                                </tr>
+                                            }
+                                        }
+                                        var l2QP = l2Rows.Sum(r => r.QuantityPurchased);
+                                        var l2VP = l2Rows.Sum(r => useGross ? r.GrossPurchasedValue : r.NetPurchasedValue);
+                                        var l2QS = l2Rows.Sum(r => r.QuantitySold);
+                                        var l2VS = l2Rows.Sum(r => useGross ? r.GrossSoldValue : r.NetSoldValue);
+                                        var l2Profit = l2Rows.Sum(r => r.Profit);
+                                        <tr class="group-subtotal-row" style="background:#e8f0fe;">
+                                            @for (int i = 0; i < (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0); i++) { <td></td> }
+                                            @if (showItem) { <td class="fw-semibold text-muted">@l2Group.Key subtotal</td><td></td> }
+                                            <td class="text-end fw-semibold">@l2QP.ToString("N0")</td>
+                                            <td class="text-end fw-semibold">@l2VP.ToString("N2")</td>
+                                            <td class="text-end fw-semibold">@l2QS.ToString("N0")</td>
+                                            <td class="text-end fw-semibold">@l2VS.ToString("N2")</td>
+                                            @if (Model.ShowProfit) { <td class="text-end fw-semibold">@l2Profit.ToString("N2")</td> }
+                                            <td class="text-end">-</td><td class="text-end">-</td>
+                                            @if (Model.ShowStock) { <td></td> }
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    @foreach (var row in l1Rows)
+                                    {
+                                        <tr>
+                                            @if (hasL1) { <td class="fw-semibold text-info">@(row.Level1Value ?? "N/A")</td> }
+                                            @if (showItem) { <td class="fw-semibold"><a href="#" class="text-decoration-none" onclick="drillDown('@row.ItemCode','all');return false;">@row.ItemCode</a></td><td>@row.ItemName</td> }
+                                            <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
+                                            <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
+                                            <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
+                                            <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
+                                            @if (Model.ShowProfit) { var pC = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="text-end @pC fw-semibold">@row.Profit.ToString("N2")</td> }
+                                            <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
+                                            <td class="text-end">@row.ValPercent.ToString("N1")%</td>
+                                            @if (Model.ShowStock) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
+                                        </tr>
+                                    }
                                 }
 
-                                var gQP = groupRows.Sum(r => r.QuantityPurchased);
-                                var gVP = groupRows.Sum(r => useGross ? r.GrossPurchasedValue : r.NetPurchasedValue);
-                                var gQS = groupRows.Sum(r => r.QuantitySold);
-                                var gVS = groupRows.Sum(r => useGross ? r.GrossSoldValue : r.NetSoldValue);
-                                var gProfit = groupRows.Sum(r => r.Profit);
-
+                                var l1QP = l1Rows.Sum(r => r.QuantityPurchased);
+                                var l1VP = l1Rows.Sum(r => useGross ? r.GrossPurchasedValue : r.NetPurchasedValue);
+                                var l1QS = l1Rows.Sum(r => r.QuantitySold);
+                                var l1VS = l1Rows.Sum(r => useGross ? r.GrossSoldValue : r.NetSoldValue);
+                                var l1Profit = l1Rows.Sum(r => r.Profit);
                                 <tr class="group-subtotal-row">
-                                    @if (hasL1) { <td></td> }
-                                    @if (hasL2) { <td></td> }
-                                    @if (hasL3) { <td></td> }
-                                    @if (showItem) { <td class="fw-semibold text-uppercase text-muted">Subtotal</td><td></td> }
-                                    <td class="text-end fw-semibold">@gQP.ToString("N0")</td>
-                                    <td class="text-end fw-semibold">@gVP.ToString("N2")</td>
-                                    <td class="text-end fw-semibold">@gQS.ToString("N0")</td>
-                                    <td class="text-end fw-semibold">@gVS.ToString("N2")</td>
-                                    @if (Model.ShowProfit) { <td class="text-end fw-semibold">@gProfit.ToString("N2")</td> }
+                                    @for (int i = 0; i < (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0); i++) { <td></td> }
+                                    @if (showItem) { <td class="fw-semibold text-uppercase text-muted">@l1Group.Key total</td><td></td> }
+                                    <td class="text-end fw-semibold">@l1QP.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@l1VP.ToString("N2")</td>
+                                    <td class="text-end fw-semibold">@l1QS.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@l1VS.ToString("N2")</td>
+                                    @if (Model.ShowProfit) { <td class="text-end fw-semibold">@l1Profit.ToString("N2")</td> }
                                     <td class="text-end fw-semibold">-</td>
                                     <td class="text-end fw-semibold">-</td>
                                     @if (Model.ShowStock) { <td></td> }
@@ -392,9 +482,6 @@
                             foreach (var row in Model.Results)
                             {
                                 <tr>
-                                    @if (hasL1) { <td class="fw-semibold text-info">@(row.Level1Value ?? "N/A")</td> }
-                                    @if (hasL2) { <td class="text-info">@(row.Level2Value ?? "N/A")</td> }
-                                    @if (hasL3) { <td class="text-info">@(row.Level3Value ?? "N/A")</td> }
                                     @if (showItem) { <td class="fw-semibold"><a href="#" class="text-decoration-none" onclick="drillDown('@row.ItemCode','all');return false;">@row.ItemCode</a></td><td>@row.ItemName</td> }
                                     <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
                                     <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
@@ -414,9 +501,9 @@
                             @for(int i=0;i<emptyCols;i++){<td></td>}
                             @if (showItem) { <td><i class="bi bi-calculator me-1"></i>GRAND TOTAL</td><td></td> }
                             <td class="text-end">@Model.TotalPurchasedQty.ToString("N0")</td>
-                            <td class="text-end">@Model.TotalPurchasedNet.ToString("N2")</td>
+                            <td class="text-end">@Model.TotalPurchasedValue.ToString("N2")</td>
                             <td class="text-end">@Model.TotalSoldQty.ToString("N0")</td>
-                            <td class="text-end">@Model.TotalSoldNet.ToString("N2")</td>
+                            <td class="text-end">@Model.TotalSoldValue.ToString("N2")</td>
                             @if (Model.ShowProfit) { <td class="text-end fw-semibold">@Model.TotalProfit.ToString("N2")</td> }
                             <td class="text-end">-</td>
                             <td class="text-end">-</td>

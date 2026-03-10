@@ -120,8 +120,8 @@
                         @if (hasL2) { <th style="text-align:left;">@Model.SecondaryGroup</th> }
                         @if (hasL3) { <th style="text-align:left;">@Model.ThirdGroup</th> }
                         @if (showItem) { <th style="text-align:left;">Item Code</th> <th style="text-align:left;">Description</th> }
-                        <th colspan="2" style="text-align:center;border-right:1px solid #94a3b8;">Net Purchases</th>
-                        <th colspan="3" style="text-align:center;">Sales</th>
+                        <th colspan="2" style="text-align:center;border-right:1px solid #94a3b8;">Purchases</th>
+                        <th colspan="2" style="text-align:center;">Sales</th>
                         @if (Model.ShowProfit) { <th>Profit</th> }
                         @if (Model.ShowStock) { <th>Stock</th> }
                     </tr>
@@ -131,10 +131,9 @@
                         @if (hasL3) { <th></th> }
                         @if (showItem) { <th></th><th></th> }
                         <th>Qty</th>
-                        <th style="border-right:1px solid #cbd5e1;">@(useGross?"Gross":"Cost") Value</th>
+                        <th style="border-right:1px solid #cbd5e1;">@(useGross?"Gross":"Net") Value</th>
                         <th>Qty</th>
-                        <th>@(useGross?"Gross":"Net") Sales</th>
-                        <th>@(useGross?"Gross":"Net") Sales</th>
+                        <th>@(useGross?"Gross":"Net") Value</th>
                         @if (Model.ShowProfit) { <th></th> }
                         @if (Model.ShowStock) { <th></th> }
                     </tr>
@@ -158,7 +157,6 @@
                                 <td>@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</td>
                                 <td>@row.QuantitySold.ToString("N2")</td>
                                 <td>@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</td>
-                                <td>@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</td>
                                 @if (Model.ShowProfit) { var pCls = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="@pCls">@row.Profit.ToString("N2")</td> }
                                 @if (Model.ShowStock) { <td>@row.TotalStockQty.ToString("N0")</td> }
                             </tr>
@@ -176,7 +174,7 @@
                             @if (hasL3) { <td></td> }
                             @if (showItem) { <td style="text-align:left;">Subtotal</td><td></td> } else { <td style="text-align:left;">Subtotal</td> }
                             <td>@gQP.ToString("N2")</td><td>@gVP.ToString("N2")</td>
-                            <td>@gQS.ToString("N2")</td><td>@gVS.ToString("N2")</td><td>@gVS.ToString("N2")</td>
+                            <td>@gQS.ToString("N2")</td><td>@gVS.ToString("N2")</td>
                             @if (Model.ShowProfit) { <td>@gProfit.ToString("N2")</td> }
                             @if (Model.ShowStock) { <td></td> }
                         </tr>
@@ -194,7 +192,6 @@
                             <td>@row.QuantityPurchased.ToString("N2")</td>
                             <td>@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</td>
                             <td>@row.QuantitySold.ToString("N2")</td>
-                            <td>@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</td>
                             <td>@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</td>
                             @if (Model.ShowProfit) { var pCls = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="@pCls">@row.Profit.ToString("N2")</td> }
                             @if (Model.ShowStock) { <td>@row.TotalStockQty.ToString("N0")</td> }
@@ -214,7 +211,7 @@
                     @if (hasL3) { <td></td> }
                     @if (showItem) { <td style="text-align:left;">Grand Total</td><td></td> } else { <td style="text-align:left;">Grand Total</td> }
                     <td>@tQP.ToString("N2")</td><td>@tVP.ToString("N2")</td>
-                    <td>@tQS.ToString("N2")</td><td>@tVS.ToString("N2")</td><td>@tVS.ToString("N2")</td>
+                    <td>@tQS.ToString("N2")</td><td>@tVS.ToString("N2")</td>
                     @if (Model.ShowProfit) { <td>@tProfit.ToString("N2")</td> }
                     @if (Model.ShowStock) { <td></td> }
                 </tr>

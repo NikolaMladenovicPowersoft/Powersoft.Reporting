@@ -690,4 +690,152 @@ FROM (
     }
 
     #endregion
+
+    #region Drill-Down: Transaction Details
+
+    public async Task<List<TransactionDetailRow>> GetTransactionDetailsAsync(
+        string itemCode, string transactionType, DateTime dateFrom, DateTime dateTo, List<string>? storeCodes = null)
+    {
+        var sql = BuildTransactionDetailSql(transactionType, storeCodes);
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.CommandTimeout = 60;
+        cmd.Parameters.AddWithValue("@ItemCode", itemCode);
+        cmd.Parameters.AddWithValue("@DateFrom", dateFrom.Date);
+        cmd.Parameters.AddWithValue("@DateTo", dateTo.Date);
+
+        if (storeCodes?.Any() == true)
+        {
+            for (int i = 0; i < storeCodes.Count; i++)
+                cmd.Parameters.AddWithValue($"@SC{i}", storeCodes[i]);
+        }
+
+        var results = new List<TransactionDetailRow>();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new TransactionDetailRow
+            {
+                DateTrans = reader.GetDateTime(reader.GetOrdinal("DateTrans")),
+                Kind = reader.IsDBNull(reader.GetOrdinal("Kind")) ? "" : reader.GetString(reader.GetOrdinal("Kind")),
+                DocumentNumber = reader.IsDBNull(reader.GetOrdinal("DocumentNumber")) ? "" : reader.GetString(reader.GetOrdinal("DocumentNumber")),
+                EntityCode = reader.IsDBNull(reader.GetOrdinal("EntityCode")) ? "" : reader.GetString(reader.GetOrdinal("EntityCode")),
+                EntityName = reader.IsDBNull(reader.GetOrdinal("EntityName")) ? "" : reader.GetString(reader.GetOrdinal("EntityName")),
+                StoreCode = reader.IsDBNull(reader.GetOrdinal("StoreCode")) ? "" : reader.GetString(reader.GetOrdinal("StoreCode")),
+                ItemCode = reader.IsDBNull(reader.GetOrdinal("ItemCode")) ? "" : reader.GetString(reader.GetOrdinal("ItemCode")),
+                ItemName = reader.IsDBNull(reader.GetOrdinal("ItemName")) ? "" : reader.GetString(reader.GetOrdinal("ItemName")),
+                Quantity = reader.GetDecimal(reader.GetOrdinal("Quantity")),
+                UnitPrice = reader.GetDecimal(reader.GetOrdinal("UnitPrice")),
+                Discount = reader.GetDecimal(reader.GetOrdinal("Discount")),
+                NetAmount = reader.GetDecimal(reader.GetOrdinal("NetAmount")),
+                VatAmount = reader.GetDecimal(reader.GetOrdinal("VatAmount")),
+                GrossAmount = reader.GetDecimal(reader.GetOrdinal("GrossAmount"))
+            });
+        }
+
+        foreach (var r in results)
+            r.KindDescription = TransactionDetailRow.GetKindDescription(r.Kind);
+
+        return results;
+    }
+
+    private static string BuildTransactionDetailSql(string transactionType, List<string>? storeCodes)
+    {
+        var storeIn = "";
+        if (storeCodes?.Any() == true)
+        {
+            var paramNames = string.Join(",", storeCodes.Select((_, i) => $"@SC{i}"));
+            storeIn = $" AND h.fk_StoreCode IN ({paramNames})";
+        }
+
+        var parts = new List<string>();
+
+        if (transactionType is "purchases" or "all")
+        {
+            parts.Add($@"
+SELECT CONVERT(DATE, h.DateTrans) AS DateTrans, 'P' AS Kind,
+       ISNULL(h.PurchInvoiceNumber,'') AS DocumentNumber,
+       ISNULL(sup.pk_SupplierNo,'') AS EntityCode,
+       CASE WHEN ISNULL(sup.Company,0) = 1 THEN ISNULL(sup.LastCompanyName,'') ELSE ISNULL(sup.FirstName,'') + ' ' + ISNULL(sup.LastCompanyName,'') END AS EntityName,
+       ISNULL(h.fk_StoreCode,'') AS StoreCode,
+       it.ItemCode, it.ItemNamePrimary AS ItemName,
+       d.Quantity, ISNULL(d.ItemCost,0) AS UnitPrice,
+       (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0)) AS Discount,
+       (d.Amount - (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0))) AS NetAmount,
+       ISNULL(d.VatAmount,0) AS VatAmount,
+       (d.Amount - (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0)) + ISNULL(d.VatAmount,0)) AS GrossAmount
+FROM tbl_PurchInvoiceDetails d
+INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID
+INNER JOIN tbl_PurchInvoiceHeader h ON d.fk_PurchInvoiceID = h.pk_PurchInvoiceID
+LEFT JOIN tbl_Supplier sup ON h.fk_SupplierCode = sup.pk_SupplierNo
+WHERE it.ItemCode = @ItemCode
+  AND CONVERT(DATE, h.DateTrans) BETWEEN @DateFrom AND @DateTo{storeIn}");
+
+            parts.Add($@"
+SELECT CONVERT(DATE, h.DateTrans) AS DateTrans, 'E' AS Kind,
+       ISNULL(h.InvoiceNumber,'') AS DocumentNumber,
+       ISNULL(sup.pk_SupplierNo,'') AS EntityCode,
+       CASE WHEN ISNULL(sup.Company,0) = 1 THEN ISNULL(sup.LastCompanyName,'') ELSE ISNULL(sup.FirstName,'') + ' ' + ISNULL(sup.LastCompanyName,'') END AS EntityName,
+       ISNULL(h.fk_StoreCode,'') AS StoreCode,
+       it.ItemCode, it.ItemNamePrimary AS ItemName,
+       (d.Quantity * -1) AS Quantity, ISNULL(d.ItemCost,0) AS UnitPrice,
+       (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0)) AS Discount,
+       ((d.Amount - (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0))) * -1) AS NetAmount,
+       (ISNULL(d.VatAmount,0) * -1) AS VatAmount,
+       ((d.Amount - (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0)) + ISNULL(d.VatAmount,0)) * -1) AS GrossAmount
+FROM tbl_PurchReturnDetails d
+INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID
+INNER JOIN tbl_PurchReturnHeader h ON d.fk_PurchReturnID = h.pk_PurchReturnID
+LEFT JOIN tbl_Supplier sup ON h.fk_SupplierCode = sup.pk_SupplierNo
+WHERE it.ItemCode = @ItemCode
+  AND CONVERT(DATE, h.DateTrans) BETWEEN @DateFrom AND @DateTo{storeIn}");
+        }
+
+        if (transactionType is "sales" or "all")
+        {
+            parts.Add($@"
+SELECT CONVERT(DATE, h.DateTrans) AS DateTrans, 'I' AS Kind,
+       ISNULL(h.pk_InvoiceID,'') AS DocumentNumber,
+       ISNULL(c.pk_CustomerNo,'') AS EntityCode,
+       CASE WHEN ISNULL(c.Company,0) = 1 THEN ISNULL(c.LastCompanyName,'') ELSE ISNULL(c.FirstName,'') + ' ' + ISNULL(c.LastCompanyName,'') END AS EntityName,
+       ISNULL(h.fk_StoreCode,'') AS StoreCode,
+       it.ItemCode, it.ItemNamePrimary AS ItemName,
+       d.Quantity, ISNULL(d.ItemPriceExcl,0) AS UnitPrice,
+       (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0)) AS Discount,
+       (d.Amount - (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0))) AS NetAmount,
+       ISNULL(d.VatAmount,0) AS VatAmount,
+       (d.Amount - (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0)) + ISNULL(d.VatAmount,0)) AS GrossAmount
+FROM tbl_InvoiceDetails d
+INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID
+INNER JOIN tbl_InvoiceHeader h ON d.fk_Invoice = h.pk_InvoiceID
+LEFT JOIN tbl_Customer c ON h.fk_CustomerCode = c.pk_CustomerNo
+WHERE it.ItemCode = @ItemCode
+  AND CONVERT(DATE, h.DateTrans) BETWEEN @DateFrom AND @DateTo{storeIn}");
+
+            parts.Add($@"
+SELECT CONVERT(DATE, h.DateTrans) AS DateTrans, 'C' AS Kind,
+       ISNULL(h.pk_CreditID,'') AS DocumentNumber,
+       ISNULL(c.pk_CustomerNo,'') AS EntityCode,
+       CASE WHEN ISNULL(c.Company,0) = 1 THEN ISNULL(c.LastCompanyName,'') ELSE ISNULL(c.FirstName,'') + ' ' + ISNULL(c.LastCompanyName,'') END AS EntityName,
+       ISNULL(h.fk_StoreCode,'') AS StoreCode,
+       it.ItemCode, it.ItemNamePrimary AS ItemName,
+       (d.Quantity * -1) AS Quantity, ISNULL(d.ItemPriceExcl,0) AS UnitPrice,
+       (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0)) AS Discount,
+       ((d.Amount - (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0))) * -1) AS NetAmount,
+       (ISNULL(d.VatAmount,0) * -1) AS VatAmount,
+       ((d.Amount - (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0)) + ISNULL(d.VatAmount,0)) * -1) AS GrossAmount
+FROM tbl_CreditDetails d
+INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID
+INNER JOIN tbl_CreditHeader h ON d.fk_Credit = h.pk_CreditID
+LEFT JOIN tbl_Customer c ON h.fk_CustomerCode = c.pk_CustomerNo
+WHERE it.ItemCode = @ItemCode
+  AND CONVERT(DATE, h.DateTrans) BETWEEN @DateFrom AND @DateTo{storeIn}");
+        }
+
+        return string.Join("\nUNION ALL\n", parts) + "\nORDER BY DateTrans DESC, DocumentNumber";
+    }
+
+    #endregion
 }

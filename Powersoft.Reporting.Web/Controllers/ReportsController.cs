@@ -1606,6 +1606,66 @@ public class ReportsController : Controller
         }
     }
 
+    // ==================== PS Drill-Down ====================
+
+    [HttpGet]
+    public async Task<IActionResult> GetTransactionDetails(
+        string itemCode, string type, DateTime dateFrom, DateTime dateTo, string? storeCodes)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (string.IsNullOrWhiteSpace(itemCode))
+            return Json(new { success = false, message = "Item code is required" });
+
+        var validTypes = new[] { "purchases", "sales", "all" };
+        if (!validTypes.Contains(type?.ToLowerInvariant()))
+            type = "all";
+
+        var storeList = string.IsNullOrEmpty(storeCodes)
+            ? null
+            : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        try
+        {
+            var repo = _repositoryFactory.CreatePurchasesSalesRepository(tenantConnString);
+            var details = await repo.GetTransactionDetailsAsync(itemCode, type!.ToLowerInvariant(), dateFrom, dateTo, storeList);
+
+            return Json(new
+            {
+                success = true,
+                count = details.Count,
+                totalQty = details.Sum(d => d.Quantity),
+                totalNet = details.Sum(d => d.NetAmount),
+                totalGross = details.Sum(d => d.GrossAmount),
+                rows = details.Select(d => new
+                {
+                    date = d.DateTrans.ToString("yyyy-MM-dd"),
+                    d.Kind,
+                    d.KindDescription,
+                    doc = d.DocumentNumber,
+                    d.EntityCode,
+                    d.EntityName,
+                    store = d.StoreCode,
+                    d.ItemCode,
+                    d.ItemName,
+                    qty = d.Quantity,
+                    price = d.UnitPrice,
+                    discount = d.Discount,
+                    net = d.NetAmount,
+                    vat = d.VatAmount,
+                    gross = d.GrossAmount
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching transaction details for {ItemCode}", itemCode);
+            return Json(new { success = false, message = "Failed to load transaction details." });
+        }
+    }
+
     // ==================== PS Print Preview ====================
 
     [HttpGet]

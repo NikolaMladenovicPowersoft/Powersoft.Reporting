@@ -80,7 +80,18 @@
                                 <td class="text-center">
                                     @if (t.IsDefault)
                                     {
-                                        <span class="badge bg-success">Default</span>
+                                        @switch (t.ReportType)
+                                        {
+                                            case "AverageBasket":
+                                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Default for Average Basket</span>
+                                                break;
+                                            case "PurchasesSales":
+                                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Default for Purchases vs Sales</span>
+                                                break;
+                                            default:
+                                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Default for All Reports</span>
+                                                break;
+                                        }
                                     }
                                 </td>
                                 <td class="text-muted small">@t.CreatedDate.ToString("yyyy-MM-dd")</td>

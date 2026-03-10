@@ -48,6 +48,7 @@
                             </a>
                             <ul class="dropdown-menu">
                                 <li><a class="dropdown-item" asp-controller="Settings" asp-action="Database"><i class="bi bi-database me-2"></i>Database Settings</a></li>
+                                <li><a class="dropdown-item" asp-controller="Settings" asp-action="EmailTemplates"><i class="bi bi-envelope-paper me-2"></i>Email Templates</a></li>
                                 @if (rankingStr.HasValue && rankingStr.Value < 15)
                                 {
                                     <li><hr class="dropdown-divider"></li>

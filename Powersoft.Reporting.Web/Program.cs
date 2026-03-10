@@ -11,6 +11,9 @@ using Powersoft.Reporting.Web.Services.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.Configure<HostOptions>(opts =>
+    opts.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
+
 builder.Services.AddControllersWithViews();
 
 // Email

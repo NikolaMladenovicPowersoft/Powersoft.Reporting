@@ -27,8 +27,15 @@ public sealed class ScheduleBackgroundService : BackgroundService
     {
         _logger.LogInformation("Schedule background service started — polling every {Interval}s", _interval.TotalSeconds);
 
-        // Small initial delay to let the rest of the app start
-        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Schedule background service cancelled during startup delay");
+            return;
+        }
 
         using var timer = new PeriodicTimer(_interval);
 

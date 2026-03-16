@@ -1843,4 +1843,62 @@ public class ReportsController : Controller
         return View(model);
     }
 
+    // ==================== Charts ====================
+
+    public async Task<IActionResult> Charts()
+    {
+        var connectedDb = GetConnectedDatabaseName();
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+        var stores = await storeRepo.GetActiveStoresAsync();
+
+        ViewBag.ConnectedDatabase = connectedDb;
+        ViewBag.Stores = stores;
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetChartData(
+        DateTime dateFrom, DateTime dateTo,
+        ChartDimension dimension = ChartDimension.Category,
+        ChartMetric metric = ChartMetric.Value,
+        int topN = 10, bool showOthers = true,
+        bool compareLastYear = false, bool includeVat = false,
+        string? storeCodes = null, string chartType = "pie")
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        var filter = new ChartFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            Dimension = dimension,
+            Metric = metric,
+            TopN = topN,
+            ShowOthers = showOthers,
+            CompareLastYear = compareLastYear,
+            IncludeVat = includeVat,
+            StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
+                : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            ChartType = chartType
+        };
+
+        try
+        {
+            var repo = _repositoryFactory.CreateChartRepository(tenantConnString);
+            var data = await repo.GetSalesBreakdownAsync(filter);
+            return Json(new { success = true, data, filter.ChartType });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting chart data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
 }

@@ -31,6 +31,11 @@
                             <i class="bi bi-file-earmark-bar-graph me-1"></i> Reports
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" asp-controller="Reports" asp-action="Charts">
+                            <i class="bi bi-pie-chart me-1"></i> Charts
+                        </a>
+                    </li>
                     @{
                         var rankingStr = Context.Session.GetInt32("Ranking");
                         var showSettings = rankingStr.HasValue && rankingStr.Value <= 15;

@@ -8,4 +8,5 @@ public interface ITenantRepositoryFactory
     IPurchasesSalesRepository CreatePurchasesSalesRepository(string connectionString);
     IScheduleRepository CreateScheduleRepository(string connectionString);
     IIniRepository CreateIniRepository(string connectionString);
+    IChartRepository CreateChartRepository(string connectionString);
 }

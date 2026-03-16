@@ -17,9 +17,8 @@
                 <a class="nav-link" asp-action="PurchasesSales">
                     <i class="bi bi-arrow-left-right me-2"></i>Purchases vs Sales
                 </a>
-                <a class="nav-link disabled" href="#">
-                    <i class="bi bi-graph-up me-2"></i>Sales Analysis
-                    <span class="badge bg-secondary ms-auto">Soon</span>
+                <a class="nav-link" asp-action="Charts">
+                    <i class="bi bi-pie-chart me-2"></i>Charts & Dashboards
                 </a>
                 <a class="nav-link disabled" href="#">
                     <i class="bi bi-box-seam me-2"></i>Stock Movement
@@ -89,6 +88,28 @@
                                 </p>
                                 <a asp-action="PurchasesSales" class="btn btn-success">
                                     <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-info">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-info bg-opacity-10 rounded-circle p-3 me-3">
+                                        <i class="bi bi-pie-chart text-info" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Charts & Dashboards</h5>
+                                        <p class="text-muted small mb-0">Visual data exploration</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted">
+                                    Interactive pie charts, top 10 bar charts, and comparative dashboards 
+                                    by category, brand, store, customer, and more.
+                                </p>
+                                <a asp-action="Charts" class="btn btn-info text-white">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Charts
                                 </a>
                             </div>
                         </div>

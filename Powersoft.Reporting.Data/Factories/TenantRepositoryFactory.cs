@@ -52,4 +52,12 @@ public class TenantRepositoryFactory : ITenantRepositoryFactory
             
         return new IniRepository(connectionString);
     }
+
+    public IChartRepository CreateChartRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+            
+        return new ChartRepository(connectionString);
+    }
 }

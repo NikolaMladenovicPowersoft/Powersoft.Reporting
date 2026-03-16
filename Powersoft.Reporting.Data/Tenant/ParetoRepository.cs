@@ -21,11 +21,11 @@ public class ParetoRepository : IParetoRepository
 
         var sql = $@"
             SELECT {codeExpr} AS Code, {nameExpr} AS Name, {valueExpr} AS Val
-            FROM tbl_InvoiceDetail d
-            INNER JOIN tbl_InvoiceHeader h ON d.InvoiceNumber = h.InvoiceNumber
+            FROM tbl_InvoiceDetails t1
+            INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID
+            INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
             {joinSql}
-            WHERE h.InvoiceDate >= @DateFrom AND h.InvoiceDate <= @DateTo
-              AND h.DocType = 'I'
+            WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo
               {storeWhere}
             GROUP BY {groupBy}
             ORDER BY Val DESC";
@@ -107,46 +107,46 @@ public class ParetoRepository : IParetoRepository
     private static (string codeExpr, string nameExpr, string joinSql, string groupBy) GetDimensionSql(ParetoDimension dim) => dim switch
     {
         ParetoDimension.Item => (
-            "d.ItemCode",
-            "ISNULL(i.Description, d.ItemCode)",
-            "LEFT JOIN tbl_Item i ON d.ItemCode = i.ItemCode",
-            "d.ItemCode, i.Description"),
+            "t2.ItemCode",
+            "ISNULL(t2.ItemNamePrimary, t2.ItemCode)",
+            "",
+            "t2.ItemCode, t2.ItemNamePrimary"),
         ParetoDimension.Customer => (
-            "ISNULL(h.CustomerCode, '')",
-            "ISNULL(c.Name, 'Unknown')",
-            "LEFT JOIN tbl_Customer c ON h.CustomerCode = c.CustomerCode",
-            "h.CustomerCode, c.Name"),
+            "ISNULL(t3.fk_CustomerCode, '')",
+            "ISNULL(CASE WHEN c.Company=1 THEN c.LastCompanyName ELSE c.FirstName+' '+c.LastCompanyName END, 'Unknown')",
+            "LEFT JOIN tbl_Customer c ON t3.fk_CustomerCode = c.pk_CustomerNo",
+            "t3.fk_CustomerCode, c.Company, c.FirstName, c.LastCompanyName"),
         ParetoDimension.Category => (
-            "ISNULL(CAST(i.CategoryId AS VARCHAR), '')",
-            "ISNULL(cat.Description, 'Uncategorized')",
-            "LEFT JOIN tbl_Item i ON d.ItemCode = i.ItemCode LEFT JOIN tbl_ItemCategory cat ON i.CategoryId = cat.Id",
-            "i.CategoryId, cat.Description"),
+            "ISNULL(cat.CategoryCode, 'N/A')",
+            "ISNULL(LTRIM(RTRIM(cat.CategoryCode))+' - '+LTRIM(RTRIM(cat.CategoryDescr)), 'Uncategorized')",
+            "LEFT JOIN tbl_ItemCategory cat ON t2.fk_CategoryID = cat.pk_CategoryID",
+            "cat.CategoryCode, cat.CategoryDescr"),
         ParetoDimension.Supplier => (
-            "ISNULL(i.MainSupplier, '')",
-            "ISNULL(s.Name, 'Unknown')",
-            "LEFT JOIN tbl_Item i ON d.ItemCode = i.ItemCode LEFT JOIN tbl_Supplier s ON i.MainSupplier = s.SupplierCode",
-            "i.MainSupplier, s.Name"),
+            "ISNULL(sup.pk_SupplierNo, '')",
+            "ISNULL(CASE WHEN sup.Company=1 THEN sup.LastCompanyName ELSE sup.FirstName+' '+sup.LastCompanyName END, 'Unknown')",
+            "LEFT JOIN tbl_RelItemSuppliers ris ON t2.pk_ItemID = ris.fk_ItemID AND ISNULL(ris.PrimarySupplier,0)=1 LEFT JOIN tbl_Supplier sup ON ris.fk_SupplierNo = sup.pk_SupplierNo",
+            "sup.pk_SupplierNo, sup.Company, sup.FirstName, sup.LastCompanyName"),
         ParetoDimension.Brand => (
-            "ISNULL(i.Brand, '')",
-            "ISNULL(i.Brand, 'No Brand')",
-            "LEFT JOIN tbl_Item i ON d.ItemCode = i.ItemCode",
-            "i.Brand"),
-        _ => ("d.ItemCode", "d.ItemCode", "", "d.ItemCode")
+            "ISNULL(br.BrandCode, 'N/A')",
+            "ISNULL(LTRIM(RTRIM(br.BrandCode))+' - '+LTRIM(RTRIM(br.BrandDesc)), 'No Brand')",
+            "LEFT JOIN tbl_Brands br ON t2.fk_BrandID = br.pk_BrandID",
+            "br.BrandCode, br.BrandDesc"),
+        _ => ("t2.ItemCode", "t2.ItemCode", "", "t2.ItemCode")
     };
 
     private static string GetValueExpression(ParetoFilter filter)
     {
         if (filter.Metric == ParetoMetric.Quantity)
-            return "SUM(d.Quantity)";
+            return "SUM(t1.Quantity)";
         return filter.IncludeVat
-            ? "SUM(d.Quantity * d.UnitPrice)"
-            : "SUM(d.NetAmount)";
+            ? "SUM(t1.Amount - (t1.Discount + t1.ExtraDiscount) + t1.VatAmount)"
+            : "SUM(t1.Amount - (t1.Discount + t1.ExtraDiscount))";
     }
 
     private static string BuildStoreWhere(List<string>? storeCodes)
     {
         if (storeCodes == null || storeCodes.Count == 0) return "";
         var list = string.Join(",", storeCodes.Select((_, i) => $"@SC{i}"));
-        return $"AND h.StoreCode IN ({list})";
+        return $"AND t3.fk_StoreCode IN ({list})";
     }
 }

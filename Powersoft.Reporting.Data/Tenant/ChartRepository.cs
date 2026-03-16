@@ -20,39 +20,38 @@ public class ChartRepository : IChartRepository
         var valueExpr = GetValueExpression(filter);
         var storeWhere = BuildStoreWhere(filter.StoreCodes);
 
-        var sb = new StringBuilder();
-        sb.Append($@"
+        var mainSql = $@"
             SELECT TOP(@TopN) {dimSelect} AS Label, {valueExpr} AS Val
-            FROM tbl_InvoiceDetail d
-            INNER JOIN tbl_InvoiceHeader h ON d.InvoiceNumber = h.InvoiceNumber
+            FROM tbl_InvoiceDetails t1
+            INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID
+            INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
             {dimJoin}
-            WHERE h.InvoiceDate >= @DateFrom AND h.InvoiceDate <= @DateTo
-              AND h.DocType = 'I'
+            WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo
               {storeWhere}
             GROUP BY {dimGroup}
-            ORDER BY Val DESC");
+            ORDER BY Val DESC";
 
-        var othersSql = "";
+        string? othersSql = null;
         if (filter.ShowOthers)
         {
             othersSql = $@"
                 ;WITH TopN AS (
                     SELECT TOP(@TopN) {dimGroup} AS DimKey
-                    FROM tbl_InvoiceDetail d
-                    INNER JOIN tbl_InvoiceHeader h ON d.InvoiceNumber = h.InvoiceNumber
+                    FROM tbl_InvoiceDetails t1
+                    INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID
+                    INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
                     {dimJoin}
-                    WHERE h.InvoiceDate >= @DateFrom AND h.InvoiceDate <= @DateTo
-                      AND h.DocType = 'I'
+                    WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo
                       {storeWhere}
                     GROUP BY {dimGroup}
                     ORDER BY {valueExpr} DESC
                 )
                 SELECT 'Others' AS Label, {valueExpr} AS Val
-                FROM tbl_InvoiceDetail d
-                INNER JOIN tbl_InvoiceHeader h ON d.InvoiceNumber = h.InvoiceNumber
+                FROM tbl_InvoiceDetails t1
+                INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID
+                INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
                 {dimJoin}
-                WHERE h.InvoiceDate >= @DateFrom AND h.InvoiceDate <= @DateTo
-                  AND h.DocType = 'I'
+                WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo
                   {storeWhere}
                   AND {dimGroup} NOT IN (SELECT DimKey FROM TopN)";
         }
@@ -62,11 +61,11 @@ public class ChartRepository : IChartRepository
         {
             compareSql = $@"
                 SELECT TOP(@TopN) {dimSelect} AS Label, {valueExpr} AS Val
-                FROM tbl_InvoiceDetail d
-                INNER JOIN tbl_InvoiceHeader h ON d.InvoiceNumber = h.InvoiceNumber
+                FROM tbl_InvoiceDetails t1
+                INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID
+                INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
                 {dimJoin}
-                WHERE h.InvoiceDate >= @LYDateFrom AND h.InvoiceDate <= @LYDateTo
-                  AND h.DocType = 'I'
+                WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @LYDateFrom AND @LYDateTo
                   {storeWhere}
                 GROUP BY {dimGroup}
                 ORDER BY Val DESC";
@@ -79,7 +78,7 @@ public class ChartRepository : IChartRepository
 
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = sb.ToString();
+            cmd.CommandText = mainSql;
             cmd.CommandTimeout = 30;
             AddParameters(cmd, filter);
 
@@ -94,7 +93,7 @@ public class ChartRepository : IChartRepository
             }
         }
 
-        if (filter.ShowOthers && !string.IsNullOrEmpty(othersSql))
+        if (filter.ShowOthers && othersSql != null)
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = othersSql;
@@ -110,7 +109,7 @@ public class ChartRepository : IChartRepository
             }
         }
 
-        if (filter.CompareLastYear && !string.IsNullOrEmpty(compareSql))
+        if (filter.CompareLastYear && compareSql != null)
         {
             var lyData = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
             using var cmd = conn.CreateCommand();
@@ -127,9 +126,7 @@ public class ChartRepository : IChartRepository
             }
 
             foreach (var pt in results)
-            {
                 pt.CompareValue = lyData.GetValueOrDefault(pt.Label, 0);
-            }
         }
 
         return results;
@@ -138,50 +135,50 @@ public class ChartRepository : IChartRepository
     private static (string select, string join, string group) GetDimensionSql(ChartDimension dim) => dim switch
     {
         ChartDimension.Category => (
-            "ISNULL(cat.Description, 'Uncategorized')",
-            "LEFT JOIN tbl_Item i ON d.ItemCode = i.ItemCode LEFT JOIN tbl_ItemCategory cat ON i.CategoryId = cat.Id",
-            "cat.Description"),
+            "ISNULL(LTRIM(RTRIM(cat.CategoryCode))+' - '+LTRIM(RTRIM(cat.CategoryDescr)), 'Uncategorized')",
+            "LEFT JOIN tbl_ItemCategory cat ON t2.fk_CategoryID = cat.pk_CategoryID",
+            "cat.CategoryCode, cat.CategoryDescr"),
         ChartDimension.Store => (
-            "ISNULL(h.StoreCode, 'N/A')",
-            "",
-            "h.StoreCode"),
+            "ISNULL(LTRIM(RTRIM(st.pk_StoreCode))+' - '+LTRIM(RTRIM(st.StoreName)), 'N/A')",
+            "LEFT JOIN tbl_Store st ON t3.fk_StoreCode = st.pk_StoreCode",
+            "st.pk_StoreCode, st.StoreName"),
         ChartDimension.Brand => (
-            "ISNULL(i.Brand, 'No Brand')",
-            "LEFT JOIN tbl_Item i ON d.ItemCode = i.ItemCode",
-            "i.Brand"),
+            "ISNULL(LTRIM(RTRIM(br.BrandCode))+' - '+LTRIM(RTRIM(br.BrandDesc)), 'No Brand')",
+            "LEFT JOIN tbl_Brands br ON t2.fk_BrandID = br.pk_BrandID",
+            "br.BrandCode, br.BrandDesc"),
         ChartDimension.Customer => (
-            "ISNULL(c.Name, 'Unknown')",
-            "LEFT JOIN tbl_Customer c ON h.CustomerCode = c.CustomerCode",
-            "c.Name"),
+            "ISNULL(CASE WHEN c.Company=1 THEN c.LastCompanyName ELSE c.FirstName+' '+c.LastCompanyName END, 'Unknown')",
+            "LEFT JOIN tbl_Customer c ON t3.fk_CustomerCode = c.pk_CustomerNo",
+            "c.Company, c.FirstName, c.LastCompanyName"),
         ChartDimension.Item => (
-            "ISNULL(i.Description, d.ItemCode)",
-            "LEFT JOIN tbl_Item i ON d.ItemCode = i.ItemCode",
-            "ISNULL(i.Description, d.ItemCode)"),
+            "ISNULL(t2.ItemCode+' - '+t2.ItemNamePrimary, t2.ItemCode)",
+            "",
+            "t2.ItemCode, t2.ItemNamePrimary"),
         ChartDimension.Supplier => (
-            "ISNULL(s.Name, 'Unknown')",
-            "LEFT JOIN tbl_Item i ON d.ItemCode = i.ItemCode LEFT JOIN tbl_Supplier s ON i.MainSupplier = s.SupplierCode",
-            "s.Name"),
+            "ISNULL(CASE WHEN sup.Company=1 THEN sup.LastCompanyName ELSE sup.FirstName+' '+sup.LastCompanyName END, 'Unknown')",
+            "LEFT JOIN tbl_RelItemSuppliers ris ON t2.pk_ItemID = ris.fk_ItemID AND ISNULL(ris.PrimarySupplier,0)=1 LEFT JOIN tbl_Supplier sup ON ris.fk_SupplierNo = sup.pk_SupplierNo",
+            "sup.Company, sup.FirstName, sup.LastCompanyName"),
         ChartDimension.Department => (
-            "ISNULL(dep.Description, 'No Department')",
-            "LEFT JOIN tbl_Item i ON d.ItemCode = i.ItemCode LEFT JOIN tbl_ItemDepartment dep ON i.DepartmentId = dep.Id",
-            "dep.Description"),
+            "ISNULL(LTRIM(RTRIM(dep.DepartmentCode))+' - '+LTRIM(RTRIM(dep.DepartmentDescr)), 'No Department')",
+            "LEFT JOIN tbl_ItemDepartment dep ON t2.fk_DepartmentID = dep.pk_DepartmentID",
+            "dep.DepartmentCode, dep.DepartmentDescr"),
         _ => ("'Unknown'", "", "'Unknown'")
     };
 
     private static string GetValueExpression(ChartFilter filter)
     {
         if (filter.Metric == ChartMetric.Quantity)
-            return "SUM(d.Quantity)";
+            return "SUM(t1.Quantity)";
         return filter.IncludeVat
-            ? "SUM(d.Quantity * d.UnitPrice)"
-            : "SUM(d.NetAmount)";
+            ? "SUM(t1.Amount - (t1.Discount + t1.ExtraDiscount) + t1.VatAmount)"
+            : "SUM(t1.Amount - (t1.Discount + t1.ExtraDiscount))";
     }
 
     private static string BuildStoreWhere(List<string>? storeCodes)
     {
         if (storeCodes == null || storeCodes.Count == 0) return "";
         var list = string.Join(",", storeCodes.Select((_, i) => $"@SC{i}"));
-        return $"AND h.StoreCode IN ({list})";
+        return $"AND t3.fk_StoreCode IN ({list})";
     }
 
     private static void AddParameters(SqlCommand cmd, ChartFilter filter)
@@ -197,9 +194,7 @@ public class ChartRepository : IChartRepository
         }
 
         if (filter.StoreCodes != null)
-        {
             for (int i = 0; i < filter.StoreCodes.Count; i++)
                 cmd.Parameters.AddWithValue($"@SC{i}", filter.StoreCodes[i]);
-        }
     }
 }

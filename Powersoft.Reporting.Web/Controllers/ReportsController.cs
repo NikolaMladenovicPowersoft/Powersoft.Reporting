@@ -1743,6 +1743,33 @@ public class ReportsController : Controller
         }
     }
 
+    [HttpGet]
+    public async Task<IActionResult> DocumentPreview(string docType, string docNumber)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Content("Not connected to database.");
+
+        var validTypes = new[] { "P", "E", "I", "C" };
+        if (string.IsNullOrWhiteSpace(docType) || !validTypes.Contains(docType) || string.IsNullOrWhiteSpace(docNumber))
+            return Content("Invalid document type or number.");
+
+        try
+        {
+            var repo = _repositoryFactory.CreatePurchasesSalesRepository(tenantConnString);
+            var doc = await repo.GetDocumentDetailAsync(docType, docNumber);
+            if (doc == null)
+                return Content("Document not found.");
+
+            return View(doc);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading document preview for {DocType} {DocNumber}", docType, docNumber);
+            return Content("Failed to load document.");
+        }
+    }
+
     // ==================== PS Print Preview ====================
 
     [HttpGet]

@@ -874,6 +874,12 @@ else
                 </div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" id="btnDocFullView" onclick="openDocFullView()">
+                    <i class="bi bi-arrows-fullscreen me-1"></i>Full View
+                </button>
+                <button type="button" class="btn btn-outline-success" id="btnDocPrint" onclick="printDocFromModal()">
+                    <i class="bi bi-printer me-1"></i>Print
+                </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -1194,7 +1200,26 @@ function analyzePsReport() {
         });
 }
 
+var _currentDocType = '', _currentDocNumber = '';
+
+function openDocFullView() {
+    if (_currentDocType && _currentDocNumber) {
+        window.open('/Reports/DocumentPreview?docType=' + encodeURIComponent(_currentDocType)
+            + '&docNumber=' + encodeURIComponent(_currentDocNumber), '_blank');
+    }
+}
+
+function printDocFromModal() {
+    if (_currentDocType && _currentDocNumber) {
+        var w = window.open('/Reports/DocumentPreview?docType=' + encodeURIComponent(_currentDocType)
+            + '&docNumber=' + encodeURIComponent(_currentDocNumber), '_blank');
+        if (w) { w.addEventListener('load', function() { w.print(); }); }
+    }
+}
+
 function openDocument(docType, docNumber) {
+    _currentDocType = docType;
+    _currentDocNumber = docNumber;
     var modal = new bootstrap.Modal(document.getElementById('docDetailModal'));
     var hdr = document.getElementById('docDetailHeader');
     var isPurch = (docType === 'P' || docType === 'E');

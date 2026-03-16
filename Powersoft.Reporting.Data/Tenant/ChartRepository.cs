@@ -31,29 +31,17 @@ public class ChartRepository : IChartRepository
             GROUP BY {dimGroup}
             ORDER BY Val DESC";
 
-        string? othersSql = null;
+        string? totalSql = null;
         if (filter.ShowOthers)
         {
-            othersSql = $@"
-                ;WITH TopN AS (
-                    SELECT TOP(@TopN) {dimGroup} AS DimKey
-                    FROM tbl_InvoiceDetails t1
-                    INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID
-                    INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
-                    {dimJoin}
-                    WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo
-                      {storeWhere}
-                    GROUP BY {dimGroup}
-                    ORDER BY {valueExpr} DESC
-                )
-                SELECT 'Others' AS Label, {valueExpr} AS Val
+            totalSql = $@"
+                SELECT {valueExpr} AS Val
                 FROM tbl_InvoiceDetails t1
                 INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID
                 INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
                 {dimJoin}
                 WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo
-                  {storeWhere}
-                  AND {dimGroup} NOT IN (SELECT DimKey FROM TopN)";
+                  {storeWhere}";
         }
 
         string? compareSql = null;
@@ -93,18 +81,20 @@ public class ChartRepository : IChartRepository
             }
         }
 
-        if (filter.ShowOthers && othersSql != null)
+        if (filter.ShowOthers && totalSql != null)
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = othersSql;
+            cmd.CommandText = totalSql;
             cmd.CommandTimeout = 30;
             AddParameters(cmd, filter);
 
             using var reader = await cmd.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
-                var othersVal = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
-                if (othersVal != 0)
+                var grandTotal = reader.IsDBNull(0) ? 0 : reader.GetDecimal(0);
+                var topNSum = results.Sum(r => r.Value);
+                var othersVal = grandTotal - topNSum;
+                if (othersVal > 0)
                     results.Add(new ChartDataPoint { Label = "Others", Value = othersVal });
             }
         }

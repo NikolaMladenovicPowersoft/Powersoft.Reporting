@@ -830,7 +830,7 @@ else
     </div>
 </div>
 
-<!-- Document Detail Modal -->
+<!-- Document Detail Modal (compact) -->
 <div class="modal fade" id="docDetailModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
@@ -874,13 +874,31 @@ else
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-primary" id="btnDocFullView" onclick="openDocFullView()">
+                <button type="button" class="btn btn-outline-primary" onclick="openDocFullView()">
                     <i class="bi bi-arrows-fullscreen me-1"></i>Full View
                 </button>
-                <button type="button" class="btn btn-outline-success" id="btnDocPrint" onclick="printDocFromModal()">
+                <button type="button" class="btn btn-outline-success" onclick="printDocFromModal()">
                     <i class="bi bi-printer me-1"></i>Print
                 </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Document Full View Modal (fullscreen, stays in page) -->
+<div class="modal fade" id="docFullViewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header py-2" id="docFullHeader" style="background:#2c3e50;color:white;">
+                <h6 class="modal-title" id="docFullTitle"><i class="bi bi-file-earmark-text me-2"></i>Document</h6>
+                <div class="ms-auto d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="printFullViewDoc()"><i class="bi bi-printer me-1"></i>Print</button>
+                    <button type="button" class="btn btn-sm btn-outline-light" data-bs-dismiss="modal"><i class="bi bi-x-lg me-1"></i>Close</button>
+                </div>
+            </div>
+            <div class="modal-body p-0" style="background:#525659;overflow-y:auto;">
+                <div id="docFullContent" style="max-width:900px;margin:24px auto;background:white;padding:48px 56px;box-shadow:0 2px 12px rgba(0,0,0,0.3);"></div>
             </div>
         </div>
     </div>
@@ -1202,24 +1220,82 @@ function analyzePsReport() {
 
 var _currentDocType = '', _currentDocNumber = '';
 
+function buildFullViewHtml(d) {
+    var isPurch = (d.docType === 'P' || d.docType === 'E');
+    var accent = isPurch ? '#2563eb' : '#059669';
+    var accentBg = isPurch ? '#eff6ff' : '#ecfdf5';
+    var entityLabel = isPurch ? 'Supplier' : 'Customer';
+    var fmt2 = function(v) { return v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); };
+
+    return '<div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid '+accent+'">'
+        + '<div style="font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:'+accent+'">'+d.docTypeDescription+'</div>'
+        + '<div style="font-size:14px;font-weight:600;color:#475569;margin-top:2px">Document #: '+d.documentNumber+'</div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;margin-bottom:20px;padding:12px 16px;background:'+accentBg+';border-radius:6px">'
+        + '<div><div style="color:#64748b;font-size:10px;text-transform:uppercase;font-weight:600">Date</div><div style="font-weight:500;margin-top:1px">'+d.date+'</div></div>'
+        + '<div><div style="color:#64748b;font-size:10px;text-transform:uppercase;font-weight:600">Store</div><div style="font-weight:500;margin-top:1px">'+(d.storeCode||'—')+'</div></div>'
+        + '<div><div style="color:#64748b;font-size:10px;text-transform:uppercase;font-weight:600">'+entityLabel+'</div><div style="font-weight:500;margin-top:1px">'+(d.entityCode ? d.entityCode+' — ' : '')+d.entityName+'</div></div>'
+        + '<div><div style="color:#64748b;font-size:10px;text-transform:uppercase;font-weight:600">Line Items</div><div style="font-weight:500;margin-top:1px">'+d.lineCount+'</div></div>'
+        + '</div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:11px">'
+        + '<thead><tr style="background:#e2e8f0">'
+        + '<th style="padding:6px 10px;text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Item Code</th>'
+        + '<th style="padding:6px 10px;text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Description</th>'
+        + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Qty</th>'
+        + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Unit Price</th>'
+        + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Discount</th>'
+        + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Net</th>'
+        + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">VAT</th>'
+        + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Gross</th>'
+        + '</tr></thead><tbody>'
+        + d.lines.map(function(l){
+            return '<tr>'
+                + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;font-weight:600">'+l.itemCode+'</td>'
+                + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9">'+l.itemName+'</td>'
+                + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">'+l.qty.toLocaleString(undefined,{maximumFractionDigits:2})+'</td>'
+                + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">'+fmt2(l.price)+'</td>'
+                + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">'+fmt2(l.discount)+'</td>'
+                + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">'+fmt2(l.net)+'</td>'
+                + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">'+fmt2(l.vat)+'</td>'
+                + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">'+fmt2(l.gross)+'</td>'
+                + '</tr>';
+        }).join('')
+        + '</tbody><tfoot><tr style="font-weight:700;border-top:3px double #1e293b;background:#f1f5f9">'
+        + '<td colspan="5" style="padding:8px 10px;text-align:right">Totals</td>'
+        + '<td style="padding:8px 10px;text-align:right">'+fmt2(d.totalNet)+'</td>'
+        + '<td style="padding:8px 10px;text-align:right">'+fmt2(d.totalVat)+'</td>'
+        + '<td style="padding:8px 10px;text-align:right">'+fmt2(d.totalGross)+'</td>'
+        + '</tr></tfoot></table>'
+        + '<div style="text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8">Powersoft Reporting</div>';
+}
+
 function openDocFullView() {
-    if (_currentDocType && _currentDocNumber) {
-        window.open('/Reports/DocumentPreview?docType=' + encodeURIComponent(_currentDocType)
-            + '&docNumber=' + encodeURIComponent(_currentDocNumber), '_blank');
-    }
+    if (!_currentDocData) return;
+    bootstrap.Modal.getInstance(document.getElementById('docDetailModal'))?.hide();
+    var d = _currentDocData;
+    var isPurch = (d.docType === 'P' || d.docType === 'E');
+    document.getElementById('docFullTitle').innerHTML = '<i class="bi bi-file-earmark-text me-2"></i>' + d.docTypeDescription + ' — ' + d.documentNumber;
+    document.getElementById('docFullContent').innerHTML = buildFullViewHtml(d);
+    new bootstrap.Modal(document.getElementById('docFullViewModal')).show();
 }
 
 function printDocFromModal() {
-    if (_currentDocType && _currentDocNumber) {
-        var w = window.open('/Reports/DocumentPreview?docType=' + encodeURIComponent(_currentDocType)
-            + '&docNumber=' + encodeURIComponent(_currentDocNumber), '_blank');
-        if (w) { w.addEventListener('load', function() { w.print(); }); }
-    }
+    if (!_currentDocData) return;
+    var content = document.getElementById('docFullContent');
+    content.innerHTML = buildFullViewHtml(_currentDocData);
+    var printWin = window.open('', '_blank', 'width=900,height=700');
+    printWin.document.write('<html><head><title>' + _currentDocData.docTypeDescription + ' — ' + _currentDocData.documentNumber + '</title>'
+        + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Segoe UI,system-ui,sans-serif;padding:24px;color:#1e293b}</style>'
+        + '</head><body>' + buildFullViewHtml(_currentDocData) + '</body></html>');
+    printWin.document.close();
+    printWin.focus();
+    printWin.print();
 }
 
 function openDocument(docType, docNumber) {
     _currentDocType = docType;
     _currentDocNumber = docNumber;
+    _currentDocData = null;
     var modal = new bootstrap.Modal(document.getElementById('docDetailModal'));
     var hdr = document.getElementById('docDetailHeader');
     var isPurch = (docType === 'P' || docType === 'E');
@@ -1269,6 +1345,7 @@ function openDocument(docType, docNumber) {
             document.getElementById('docTotalGross').textContent = fmt2(d.totalGross);
             document.getElementById('docLineCount').textContent = d.lineCount + ' line item(s)';
 
+            _currentDocData = d;
             document.getElementById('docDetailContent').classList.remove('d-none');
         })
         .catch(function(err) {

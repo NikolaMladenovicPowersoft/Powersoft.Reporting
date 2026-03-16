@@ -345,17 +345,17 @@ public class ScheduleExecutionService
         switch (format)
         {
             case "pdf":
-                fileBytes = new PdfExportService().GeneratePurchasesSalesPdf(result.Items, null, filter);
+                fileBytes = new PdfExportService().GeneratePurchasesSalesPdf(result.Items, result.PsTotals, filter);
                 fileName = $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
                 contentType = "application/pdf";
                 break;
             case "csv":
-                fileBytes = new CsvExportService().GeneratePurchasesSalesCsv(result.Items, null, filter);
+                fileBytes = new CsvExportService().GeneratePurchasesSalesCsv(result.Items, result.PsTotals, filter);
                 fileName = $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
                 contentType = "text/csv";
                 break;
             default:
-                fileBytes = new ExcelExportService().GeneratePurchasesSalesExcel(result.Items, null, filter);
+                fileBytes = new ExcelExportService().GeneratePurchasesSalesExcel(result.Items, result.PsTotals, filter);
                 fileName = $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 break;

@@ -170,9 +170,12 @@
                     <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
                     <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                 </button>
-                <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
-                    <i class="bi bi-clock-history me-2"></i>Schedule
-                </button>
+                @if (Model.CanSchedule)
+                {
+                    <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                        <i class="bi bi-clock-history me-2"></i>Schedule
+                    </button>
+                }
                 <div class="btn-group ms-auto">
                     <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Save current parameters as your default layout">
                         <i class="bi bi-save me-1"></i>Save Layout

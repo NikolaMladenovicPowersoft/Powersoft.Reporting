@@ -149,27 +149,58 @@ public class ScheduleRepository : IScheduleRepository
 
     public async Task<List<ReportSchedule>> GetDueSchedulesAsync(DateTime asOfUtc)
     {
-        const string sql = @"
-            SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
-                   RecurrenceType, RecurrenceDay, ScheduleTime, NextRunDate, LastRunDate,
-                   ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject
-            FROM tbl_ReportSchedule
-            WHERE IsActive = 1
-              AND NextRunDate IS NOT NULL
-              AND NextRunDate <= @AsOf
-            ORDER BY NextRunDate";
-
         var schedules = new List<ReportSchedule>();
 
         using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
-        using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AsOf", asOfUtc);
+        using var tran = (SqlTransaction)await conn.BeginTransactionAsync();
 
-        using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        try
         {
-            schedules.Add(MapSchedule(reader));
+            using var lockCmd = new SqlCommand(
+                "EXEC @rc = sp_getapplock @Resource=N'ReportScheduler', @LockMode=N'Exclusive', @LockTimeout=0", conn, tran);
+            var rcParam = lockCmd.Parameters.Add("@rc", System.Data.SqlDbType.Int);
+            rcParam.Direction = System.Data.ParameterDirection.Output;
+            await lockCmd.ExecuteNonQueryAsync();
+
+            int lockResult = (int)rcParam.Value;
+            if (lockResult < 0)
+                return schedules;
+
+            const string sql = @"
+                SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
+                       RecurrenceType, RecurrenceDay, ScheduleTime, NextRunDate, LastRunDate,
+                       ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject
+                FROM tbl_ReportSchedule
+                WHERE IsActive = 1
+                  AND NextRunDate IS NOT NULL
+                  AND NextRunDate <= @AsOf
+                ORDER BY NextRunDate";
+
+            using var cmd = new SqlCommand(sql, conn, tran);
+            cmd.Parameters.AddWithValue("@AsOf", asOfUtc);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                schedules.Add(MapSchedule(reader));
+            }
+            reader.Close();
+
+            if (schedules.Count > 0)
+            {
+                var ids = string.Join(",", schedules.Select(s => s.ScheduleId));
+                using var claimCmd = new SqlCommand(
+                    $"UPDATE tbl_ReportSchedule SET NextRunDate = NULL WHERE pk_ScheduleID IN ({ids})", conn, tran);
+                await claimCmd.ExecuteNonQueryAsync();
+            }
+
+            await tran.CommitAsync();
+        }
+        catch
+        {
+            try { await tran.RollbackAsync(); } catch { }
+            throw;
         }
 
         return schedules;

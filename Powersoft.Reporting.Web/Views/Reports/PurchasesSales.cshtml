@@ -183,9 +183,12 @@
                     <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
                     <span class="spinner-border spinner-border-sm d-none" role="status"></span>
                 </button>
-                <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
-                    <i class="bi bi-clock-history me-2"></i>Schedule
-                </button>
+                @if (Model.CanSchedule)
+                {
+                    <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                        <i class="bi bi-clock-history me-2"></i>Schedule
+                    </button>
+                }
                 <div class="btn-group ms-auto">
                     <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Save current parameters as your default layout">
                         <i class="bi bi-save me-1"></i>Save Layout
@@ -277,7 +280,8 @@
                        asp-route-reportMode="@Model.ReportMode" asp-route-primaryGroup="@Model.PrimaryGroup"
                        asp-route-secondaryGroup="@Model.SecondaryGroup" asp-route-thirdGroup="@Model.ThirdGroup"
                        asp-route-includeVat="@Model.IncludeVat" asp-route-showProfit="@Model.ShowProfit" asp-route-showStock="@Model.ShowStock"
-                       asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                       asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-itemIds="@Model.SelectedItemIdsString"
+                       asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
                         <i class="bi bi-filetype-csv me-1"></i>CSV
                     </a>
                     <a class="btn btn-outline-success" asp-action="ExportPsExcel"
@@ -285,7 +289,8 @@
                        asp-route-reportMode="@Model.ReportMode" asp-route-primaryGroup="@Model.PrimaryGroup"
                        asp-route-secondaryGroup="@Model.SecondaryGroup" asp-route-thirdGroup="@Model.ThirdGroup"
                        asp-route-includeVat="@Model.IncludeVat" asp-route-showProfit="@Model.ShowProfit" asp-route-showStock="@Model.ShowStock"
-                       asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                       asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-itemIds="@Model.SelectedItemIdsString"
+                       asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
                         <i class="bi bi-filetype-xlsx me-1"></i>Excel
                     </a>
                     <a class="btn btn-outline-danger" asp-action="ExportPsPdf"
@@ -293,7 +298,8 @@
                        asp-route-reportMode="@Model.ReportMode" asp-route-primaryGroup="@Model.PrimaryGroup"
                        asp-route-secondaryGroup="@Model.SecondaryGroup" asp-route-thirdGroup="@Model.ThirdGroup"
                        asp-route-includeVat="@Model.IncludeVat" asp-route-showProfit="@Model.ShowProfit" asp-route-showStock="@Model.ShowStock"
-                       asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                       asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-itemIds="@Model.SelectedItemIdsString"
+                       asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
                         <i class="bi bi-filetype-pdf me-1"></i>PDF
                     </a>
                 </div>

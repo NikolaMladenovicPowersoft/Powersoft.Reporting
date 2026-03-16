@@ -81,13 +81,13 @@ public class PurchasesSalesViewModel
     public bool HasThirdGroup => ThirdGroup != PsGroupBy.None;
     public bool HasAnyGroup => HasPrimaryGroup || HasSecondaryGroup || HasThirdGroup;
 
-    public decimal TotalPurchasedQty => Results.Sum(r => r.QuantityPurchased);
-    public decimal TotalPurchasedNet => Results.Sum(r => r.NetPurchasedValue);
-    public decimal TotalPurchasedGross => Results.Sum(r => r.GrossPurchasedValue);
-    public decimal TotalSoldQty => Results.Sum(r => r.QuantitySold);
-    public decimal TotalSoldNet => Results.Sum(r => r.NetSoldValue);
-    public decimal TotalSoldGross => Results.Sum(r => r.GrossSoldValue);
-    public decimal TotalProfit => Results.Sum(r => r.Profit);
+    public decimal TotalPurchasedQty => Totals?.TotalQtyPurchased ?? Results.Sum(r => r.QuantityPurchased);
+    public decimal TotalPurchasedNet => Totals?.TotalNetPurchased ?? Results.Sum(r => r.NetPurchasedValue);
+    public decimal TotalPurchasedGross => Totals?.TotalGrossPurchased ?? Results.Sum(r => r.GrossPurchasedValue);
+    public decimal TotalSoldQty => Totals?.TotalQtySold ?? Results.Sum(r => r.QuantitySold);
+    public decimal TotalSoldNet => Totals?.TotalNetSold ?? Results.Sum(r => r.NetSoldValue);
+    public decimal TotalSoldGross => Totals?.TotalGrossSold ?? Results.Sum(r => r.GrossSoldValue);
+    public decimal TotalProfit => Totals != null ? Totals.TotalProfit : Results.Sum(r => r.Profit);
 
     public decimal TotalPurchasedValue => IncludeVat ? TotalPurchasedGross : TotalPurchasedNet;
     public decimal TotalSoldValue => IncludeVat ? TotalSoldGross : TotalSoldNet;

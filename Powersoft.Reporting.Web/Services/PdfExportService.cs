@@ -208,12 +208,35 @@ public class PdfExportService
         if (filter.ShowStock) AddHeaderCell(table, "Stock");
 
         bool alternate = false;
-        foreach (var row in rows)
+        string? prevL1 = null, prevL2 = null, prevL3 = null;
+        var l1Agg = new SubtotalAgg(); var l2Agg = new SubtotalAgg(); var l3Agg = new SubtotalAgg();
+
+        for (int ri = 0; ri < rows.Count; ri++)
         {
+            var row = rows[ri];
+            string curL1 = hasL1 ? (row.Level1Value ?? row.Level1 ?? "N/A") : "";
+            string curL2 = hasL2 ? (row.Level2Value ?? row.Level2 ?? "N/A") : "";
+            string curL3 = hasL3 ? (row.Level3Value ?? row.Level3 ?? "N/A") : "";
+
+            bool l1Changed = hasL1 && curL1 != prevL1 && ri > 0;
+            bool l2Changed = hasL2 && (curL2 != prevL2 || l1Changed) && ri > 0;
+            bool l3Changed = hasL3 && (curL3 != prevL3 || l2Changed) && ri > 0;
+
+            if (l3Changed) WritePdfSubtotalRow(table, $"Subtotal: {prevL3}", l3Agg, filter, colCount, hasL1, hasL2, hasL3, hasItem);
+            if (l2Changed) WritePdfSubtotalRow(table, $"Subtotal: {prevL2}", l2Agg, filter, colCount, hasL1, hasL2, hasL3, hasItem);
+            if (l1Changed) WritePdfSubtotalRow(table, $"Subtotal: {prevL1}", l1Agg, filter, colCount, hasL1, hasL2, hasL3, hasItem);
+
+            if (l1Changed || ri == 0) { l1Agg = new SubtotalAgg(); l2Agg = new SubtotalAgg(); l3Agg = new SubtotalAgg(); }
+            else if (l2Changed) { l2Agg = new SubtotalAgg(); l3Agg = new SubtotalAgg(); }
+            else if (l3Changed) { l3Agg = new SubtotalAgg(); }
+            prevL1 = curL1; prevL2 = curL2; prevL3 = curL3;
+
+            l1Agg.Add(row, filter.IncludeVat); l2Agg.Add(row, filter.IncludeVat); l3Agg.Add(row, filter.IncludeVat);
+
             var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
-            if (hasL1) AddDataCell(table, row.Level1Value ?? "N/A", bg);
-            if (hasL2) AddDataCell(table, row.Level2Value ?? "N/A", bg);
-            if (hasL3) AddDataCell(table, row.Level3Value ?? "N/A", bg);
+            if (hasL1) AddDataCell(table, curL1, bg);
+            if (hasL2) AddDataCell(table, curL2, bg);
+            if (hasL3) AddDataCell(table, curL3, bg);
             if (hasItem) { AddDataCell(table, row.ItemCode ?? "", bg); AddDataCell(table, row.ItemName ?? "", bg); }
             AddDataCell(table, row.QuantityPurchased.ToString("N0"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, (filter.IncludeVat ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"), bg, Element.ALIGN_RIGHT);
@@ -224,6 +247,13 @@ public class PdfExportService
             AddDataCell(table, $"{row.ValPercent:N1}%", bg, Element.ALIGN_RIGHT);
             if (filter.ShowStock) AddDataCell(table, row.TotalStockQty.ToString("N0"), bg, Element.ALIGN_RIGHT);
             alternate = !alternate;
+        }
+
+        if (rows.Count > 0)
+        {
+            if (hasL3) WritePdfSubtotalRow(table, $"Subtotal: {prevL3}", l3Agg, filter, colCount, hasL1, hasL2, hasL3, hasItem);
+            if (hasL2) WritePdfSubtotalRow(table, $"Subtotal: {prevL2}", l2Agg, filter, colCount, hasL1, hasL2, hasL3, hasItem);
+            if (hasL1) WritePdfSubtotalRow(table, $"Subtotal: {prevL1}", l1Agg, filter, colCount, hasL1, hasL2, hasL3, hasItem);
         }
 
         if (totals != null)
@@ -244,5 +274,38 @@ public class PdfExportService
         document.Add(table);
         document.Close();
         return ms.ToArray();
+    }
+
+    private void WritePdfSubtotalRow(PdfPTable table, string label, SubtotalAgg agg,
+        PurchasesSalesFilter filter, int colCount,
+        bool hasL1, bool hasL2, bool hasL3, bool hasItem)
+    {
+        var subtotalBg = new BaseColor(241, 245, 249);
+        var subtotalFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 7, BaseColor.DarkGray);
+        int skip = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+        for (int i = 0; i < skip; i++) AddSubtotalCell(table, "", subtotalBg, subtotalFont);
+        if (hasItem) { AddSubtotalCell(table, label, subtotalBg, subtotalFont); AddSubtotalCell(table, "", subtotalBg, subtotalFont); }
+        else AddSubtotalCell(table, label, subtotalBg, subtotalFont);
+        AddSubtotalCell(table, agg.QtyPurchased.ToString("N0"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        AddSubtotalCell(table, agg.ValPurchased.ToString("N2"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        AddSubtotalCell(table, agg.QtySold.ToString("N0"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        AddSubtotalCell(table, agg.ValSold.ToString("N2"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        AddSubtotalCell(table, agg.Profit.ToString("N2"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        AddSubtotalCell(table, $"{agg.QtyPct:N1}%", subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        AddSubtotalCell(table, $"{agg.ValPct:N1}%", subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        if (filter.ShowStock) AddSubtotalCell(table, agg.StockQty.ToString("N0"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+    }
+
+    private void AddSubtotalCell(PdfPTable table, string text, BaseColor bg, Font font, int align = Element.ALIGN_LEFT)
+    {
+        var cell = new PdfPCell(new Phrase(text, font))
+        {
+            BackgroundColor = bg,
+            HorizontalAlignment = align,
+            Padding = 3f,
+            BorderWidth = 0.5f,
+            BorderColor = new BaseColor(200, 200, 200)
+        };
+        table.AddCell(cell);
     }
 }

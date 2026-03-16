@@ -115,12 +115,35 @@ public class CsvExportService
         if (filter.ShowStock) headers.Add("Stock Qty");
         sb.AppendLine(string.Join(",", headers.Select(Escape)));
 
-        foreach (var row in rows)
+        string? prevL1 = null, prevL2 = null, prevL3 = null;
+        var l1Agg = new SubtotalAgg(); var l2Agg = new SubtotalAgg(); var l3Agg = new SubtotalAgg();
+
+        for (int ri = 0; ri < rows.Count; ri++)
         {
+            var row = rows[ri];
+            string curL1 = hasL1 ? (row.Level1Value ?? row.Level1 ?? "N/A") : "";
+            string curL2 = hasL2 ? (row.Level2Value ?? row.Level2 ?? "N/A") : "";
+            string curL3 = hasL3 ? (row.Level3Value ?? row.Level3 ?? "N/A") : "";
+
+            bool l1Changed = hasL1 && curL1 != prevL1 && ri > 0;
+            bool l2Changed = hasL2 && (curL2 != prevL2 || l1Changed) && ri > 0;
+            bool l3Changed = hasL3 && (curL3 != prevL3 || l2Changed) && ri > 0;
+
+            if (l3Changed) WriteCsvSubtotalRow(sb, $"Subtotal: {prevL3}", l3Agg, filter, hasL1, hasL2, hasL3, hasItem);
+            if (l2Changed) WriteCsvSubtotalRow(sb, $"Subtotal: {prevL2}", l2Agg, filter, hasL1, hasL2, hasL3, hasItem);
+            if (l1Changed) WriteCsvSubtotalRow(sb, $"Subtotal: {prevL1}", l1Agg, filter, hasL1, hasL2, hasL3, hasItem);
+
+            if (l1Changed || ri == 0) { l1Agg = new SubtotalAgg(); l2Agg = new SubtotalAgg(); l3Agg = new SubtotalAgg(); }
+            else if (l2Changed) { l2Agg = new SubtotalAgg(); l3Agg = new SubtotalAgg(); }
+            else if (l3Changed) { l3Agg = new SubtotalAgg(); }
+            prevL1 = curL1; prevL2 = curL2; prevL3 = curL3;
+
+            l1Agg.Add(row, filter.IncludeVat); l2Agg.Add(row, filter.IncludeVat); l3Agg.Add(row, filter.IncludeVat);
+
             var cells = new List<string>();
-            if (hasL1) cells.Add(row.Level1Value ?? row.Level1 ?? "N/A");
-            if (hasL2) cells.Add(row.Level2Value ?? row.Level2 ?? "N/A");
-            if (hasL3) cells.Add(row.Level3Value ?? row.Level3 ?? "N/A");
+            if (hasL1) cells.Add(curL1);
+            if (hasL2) cells.Add(curL2);
+            if (hasL3) cells.Add(curL3);
             if (hasItem) { cells.Add(row.ItemCode ?? ""); cells.Add(row.ItemName ?? ""); }
             cells.Add(row.QuantityPurchased.ToString(CultureInfo.InvariantCulture));
             cells.Add((filter.IncludeVat ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("F2", CultureInfo.InvariantCulture));
@@ -131,6 +154,13 @@ public class CsvExportService
             cells.Add(row.ValPercent.ToString("F2", CultureInfo.InvariantCulture));
             if (filter.ShowStock) cells.Add(row.TotalStockQty.ToString(CultureInfo.InvariantCulture));
             sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        if (rows.Count > 0)
+        {
+            if (hasL3) WriteCsvSubtotalRow(sb, $"Subtotal: {prevL3}", l3Agg, filter, hasL1, hasL2, hasL3, hasItem);
+            if (hasL2) WriteCsvSubtotalRow(sb, $"Subtotal: {prevL2}", l2Agg, filter, hasL1, hasL2, hasL3, hasItem);
+            if (hasL1) WriteCsvSubtotalRow(sb, $"Subtotal: {prevL1}", l1Agg, filter, hasL1, hasL2, hasL3, hasItem);
         }
 
         if (totals != null)
@@ -151,6 +181,24 @@ public class CsvExportService
         }
 
         return new UTF8Encoding(true).GetBytes(sb.ToString());
+    }
+
+    private void WriteCsvSubtotalRow(StringBuilder sb, string label, SubtotalAgg agg,
+        PurchasesSalesFilter filter, bool hasL1, bool hasL2, bool hasL3, bool hasItem)
+    {
+        var cells = new List<string>();
+        int skip = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+        for (int i = 0; i < skip; i++) cells.Add("");
+        if (hasItem) { cells.Add(label); cells.Add(""); } else cells.Add(label);
+        cells.Add(agg.QtyPurchased.ToString(CultureInfo.InvariantCulture));
+        cells.Add(agg.ValPurchased.ToString("F2", CultureInfo.InvariantCulture));
+        cells.Add(agg.QtySold.ToString(CultureInfo.InvariantCulture));
+        cells.Add(agg.ValSold.ToString("F2", CultureInfo.InvariantCulture));
+        cells.Add(agg.Profit.ToString("F2", CultureInfo.InvariantCulture));
+        cells.Add(agg.QtyPct.ToString("F2", CultureInfo.InvariantCulture));
+        cells.Add(agg.ValPct.ToString("F2", CultureInfo.InvariantCulture));
+        if (filter.ShowStock) cells.Add(agg.StockQty.ToString(CultureInfo.InvariantCulture));
+        sb.AppendLine(string.Join(",", cells.Select(Escape)));
     }
 
     private static string Escape(string value)

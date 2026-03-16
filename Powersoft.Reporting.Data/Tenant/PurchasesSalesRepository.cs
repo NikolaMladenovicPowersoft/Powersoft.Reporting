@@ -53,7 +53,7 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
             TotalCount = totalCount,
             PageNumber = filter.PageNumber,
             PageSize = filter.PageSize,
-            GrandTotals = null
+            PsTotals = totals
         };
     }
 

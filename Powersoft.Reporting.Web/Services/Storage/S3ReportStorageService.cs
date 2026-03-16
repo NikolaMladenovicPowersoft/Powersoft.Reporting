@@ -76,6 +76,52 @@ public sealed class S3ReportStorageService : IReportStorageService, IDisposable
         return _client.GetPreSignedURL(request);
     }
 
+    public async Task<int> DeleteOlderThanAsync(DateTime cutoffUtc, CancellationToken ct = default)
+    {
+        if (_client == null) return 0;
+
+        int deleted = 0;
+        string? continuationToken = null;
+
+        do
+        {
+            var listRequest = new ListObjectsV2Request
+            {
+                BucketName = _opt.BucketName,
+                Prefix = _opt.KeyPrefix,
+                ContinuationToken = continuationToken
+            };
+
+            var response = await _client.ListObjectsV2Async(listRequest, ct);
+
+            var oldKeys = response.S3Objects
+                .Where(o => o.LastModified < cutoffUtc)
+                .Select(o => o.Key)
+                .ToList();
+
+            foreach (var key in oldKeys)
+            {
+                try
+                {
+                    await _client.DeleteObjectAsync(_opt.BucketName, key, ct);
+                    deleted++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete S3 object: {Key}", key);
+                }
+            }
+
+            continuationToken = response.IsTruncated ? response.NextContinuationToken : null;
+        }
+        while (continuationToken != null);
+
+        if (deleted > 0)
+            _logger.LogInformation("Retention cleanup: deleted {Count} objects older than {Cutoff:u}", deleted, cutoffUtc);
+
+        return deleted;
+    }
+
     public void Dispose()
     {
         _client?.Dispose();

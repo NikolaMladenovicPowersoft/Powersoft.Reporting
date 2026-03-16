@@ -389,7 +389,7 @@ public class ReportsController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> SaveEmailTemplate(string templateName, string emailSubject, string emailBodyHtml, bool isDefault = false)
+    public async Task<IActionResult> SaveEmailTemplate(string templateName, string emailSubject, string emailBodyHtml, string? reportType = null, bool isDefault = false)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
@@ -398,14 +398,16 @@ public class ReportsController : Controller
         if (string.IsNullOrWhiteSpace(templateName))
             return Json(new { success = false, message = "Template name is required" });
 
+        if (string.IsNullOrWhiteSpace(reportType))
+            reportType = null;
+
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-            var template = new ReportSchedule(); // Using EmailTemplate model
             var id = await repo.CreateEmailTemplateAsync(new Core.Models.EmailTemplate
             {
                 TemplateName = templateName,
-                ReportType = ReportTypeConstants.AverageBasket,
+                ReportType = reportType,
                 EmailSubject = emailSubject ?? "",
                 EmailBodyHtml = emailBodyHtml ?? "",
                 IsDefault = isDefault,
@@ -991,12 +993,20 @@ public class ReportsController : Controller
             return RedirectToAction("Index", "Home");
         }
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewPurchasesSales))
+        {
+            _logger.LogWarning("User {User} denied access to Purchases vs Sales (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewPurchasesSales);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
         var viewModel = new PurchasesSalesViewModel
         {
             ConnectedDatabase = connectedDb,
             IsConnected = true,
             DateFrom = new DateTime(DateTime.Today.Year, 1, 1),
-            DateTo = DateTime.Today
+            DateTo = DateTime.Today,
+            CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePurchasesSales)
         };
 
         await ApplyPsSavedLayoutAsync(viewModel, tenantConnString);
@@ -1016,8 +1026,12 @@ public class ReportsController : Controller
             return RedirectToAction("Index", "Home");
         }
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewPurchasesSales))
+            return RedirectToAction("AccessDenied", "Account");
+
         model.ConnectedDatabase = connectedDb;
         model.IsConnected = true;
+        model.CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePurchasesSales);
         await LoadPsStoresAsync(model, tenantConnString);
 
         var filter = model.ToPurchasesSalesFilter();
@@ -1036,6 +1050,7 @@ public class ReportsController : Controller
             model.TotalCount = result.TotalCount;
             model.PageNumber = result.PageNumber;
             model.PageSize = result.PageSize;
+            model.Totals = result.PsTotals;
         }
         catch (Exception ex)
         {
@@ -1273,7 +1288,7 @@ public class ReportsController : Controller
         {
             var repo = _repositoryFactory.CreatePurchasesSalesRepository(tenantConnString);
             var result = await repo.GetPurchasesSalesDataAsync(filter);
-            return (result.Items, null, filter);
+            return (result.Items, result.PsTotals, filter);
         }
         catch (Exception ex)
         {
@@ -1427,6 +1442,9 @@ public class ReportsController : Controller
         string scheduleTime, string exportFormat, string recipients,
         string? emailSubject, string? parametersJson, string? recurrenceJson)
     {
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePurchasesSales))
+            return Json(new { success = false, message = "You don't have permission to create schedules." });
+
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
             return Json(new { success = false, message = "Not connected to database" });

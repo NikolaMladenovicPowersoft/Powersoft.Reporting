@@ -174,12 +174,39 @@ public class ExcelExportService
         headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
         int dataRow = headerRow + 1;
-        foreach (var row in rows)
+        int totalCols = col - 1;
+        string? prevL1 = null, prevL2 = null, prevL3 = null;
+        var l1Agg = new SubtotalAgg(); var l2Agg = new SubtotalAgg(); var l3Agg = new SubtotalAgg();
+
+        for (int ri = 0; ri < rows.Count; ri++)
         {
+            var row = rows[ri];
+            string curL1 = hasL1 ? (row.Level1Value ?? row.Level1 ?? "N/A") : "";
+            string curL2 = hasL2 ? (row.Level2Value ?? row.Level2 ?? "N/A") : "";
+            string curL3 = hasL3 ? (row.Level3Value ?? row.Level3 ?? "N/A") : "";
+
+            bool l1Changed = hasL1 && curL1 != prevL1 && ri > 0;
+            bool l2Changed = hasL2 && (curL2 != prevL2 || l1Changed) && ri > 0;
+            bool l3Changed = hasL3 && (curL3 != prevL3 || l2Changed) && ri > 0;
+
+            if (l3Changed)
+                dataRow = WriteExcelSubtotalRow(ws, dataRow, totalCols, $"Subtotal: {prevL3}", l3Agg, filter, hasL1, hasL2, hasL3, hasItem);
+            if (l2Changed)
+                dataRow = WriteExcelSubtotalRow(ws, dataRow, totalCols, $"Subtotal: {prevL2}", l2Agg, filter, hasL1, hasL2, hasL3, hasItem);
+            if (l1Changed)
+                dataRow = WriteExcelSubtotalRow(ws, dataRow, totalCols, $"Subtotal: {prevL1}", l1Agg, filter, hasL1, hasL2, hasL3, hasItem);
+
+            if (l1Changed || ri == 0) { l1Agg = new SubtotalAgg(); l2Agg = new SubtotalAgg(); l3Agg = new SubtotalAgg(); }
+            else if (l2Changed) { l2Agg = new SubtotalAgg(); l3Agg = new SubtotalAgg(); }
+            else if (l3Changed) { l3Agg = new SubtotalAgg(); }
+            prevL1 = curL1; prevL2 = curL2; prevL3 = curL3;
+
+            l1Agg.Add(row, filter.IncludeVat); l2Agg.Add(row, filter.IncludeVat); l3Agg.Add(row, filter.IncludeVat);
+
             col = 1;
-            if (hasL1) ws.Cell(dataRow, col++).Value = row.Level1Value ?? row.Level1 ?? "N/A";
-            if (hasL2) ws.Cell(dataRow, col++).Value = row.Level2Value ?? row.Level2 ?? "N/A";
-            if (hasL3) ws.Cell(dataRow, col++).Value = row.Level3Value ?? row.Level3 ?? "N/A";
+            if (hasL1) ws.Cell(dataRow, col++).Value = curL1;
+            if (hasL2) ws.Cell(dataRow, col++).Value = curL2;
+            if (hasL3) ws.Cell(dataRow, col++).Value = curL3;
             if (hasItem) { ws.Cell(dataRow, col++).Value = row.ItemCode ?? ""; ws.Cell(dataRow, col++).Value = row.ItemName ?? ""; }
             ws.Cell(dataRow, col++).Value = row.QuantityPurchased;
             ws.Cell(dataRow, col++).Value = filter.IncludeVat ? row.GrossPurchasedValue : row.NetPurchasedValue;
@@ -190,6 +217,13 @@ public class ExcelExportService
             ws.Cell(dataRow, col++).Value = row.ValPercent;
             if (filter.ShowStock) ws.Cell(dataRow, col++).Value = row.TotalStockQty;
             dataRow++;
+        }
+
+        if (rows.Count > 0)
+        {
+            if (hasL3) dataRow = WriteExcelSubtotalRow(ws, dataRow, totalCols, $"Subtotal: {prevL3}", l3Agg, filter, hasL1, hasL2, hasL3, hasItem);
+            if (hasL2) dataRow = WriteExcelSubtotalRow(ws, dataRow, totalCols, $"Subtotal: {prevL2}", l2Agg, filter, hasL1, hasL2, hasL3, hasItem);
+            if (hasL1) dataRow = WriteExcelSubtotalRow(ws, dataRow, totalCols, $"Subtotal: {prevL1}", l1Agg, filter, hasL1, hasL2, hasL3, hasItem);
         }
 
         if (totals != null)
@@ -220,4 +254,30 @@ public class ExcelExportService
         workbook.SaveAs(stream);
         return stream.ToArray();
     }
+
+    private int WriteExcelSubtotalRow(IXLWorksheet ws, int dataRow, int totalCols,
+        string label, SubtotalAgg agg, PurchasesSalesFilter filter,
+        bool hasL1, bool hasL2, bool hasL3, bool hasItem)
+    {
+        int col = 1;
+        int skipCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+        for (int i = 0; i < skipCols; i++) ws.Cell(dataRow, col++).Value = "";
+        if (hasItem) { ws.Cell(dataRow, col++).Value = label; ws.Cell(dataRow, col++).Value = ""; }
+        else ws.Cell(dataRow, col++).Value = label;
+        ws.Cell(dataRow, col++).Value = agg.QtyPurchased;
+        ws.Cell(dataRow, col++).Value = agg.ValPurchased;
+        ws.Cell(dataRow, col++).Value = agg.QtySold;
+        ws.Cell(dataRow, col++).Value = agg.ValSold;
+        ws.Cell(dataRow, col++).Value = agg.Profit;
+        ws.Cell(dataRow, col++).Value = agg.QtyPct;
+        ws.Cell(dataRow, col++).Value = agg.ValPct;
+        if (filter.ShowStock) ws.Cell(dataRow, col++).Value = agg.StockQty;
+
+        var range = ws.Range(dataRow, 1, dataRow, totalCols);
+        range.Style.Font.Bold = true;
+        range.Style.Font.Italic = true;
+        range.Style.Fill.BackgroundColor = XLColor.FromHtml("#f1f5f9");
+        return dataRow + 1;
+    }
 }
+

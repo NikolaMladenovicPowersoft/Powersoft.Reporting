@@ -820,6 +820,7 @@ public class AverageBasketRepository : IAverageBasketRepository
 
     private void AddCommonParameters(SqlCommand cmd, ReportFilter filter)
     {
+        cmd.CommandTimeout = 120;
         cmd.Parameters.AddWithValue("@DateFrom", filter.DateFrom.Date);
         cmd.Parameters.AddWithValue("@DateTo", filter.DateTo.Date);
         

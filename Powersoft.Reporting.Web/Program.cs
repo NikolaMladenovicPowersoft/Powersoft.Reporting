@@ -32,6 +32,7 @@ if (!string.IsNullOrEmpty(centralConnString))
 builder.Services.AddSingleton<ITenantRepositoryFactory, TenantRepositoryFactory>();
 builder.Services.AddScoped<ScheduleExecutionService>();
 builder.Services.AddHostedService<ScheduleBackgroundService>();
+builder.Services.AddHostedService<RetentionCleanupService>();
 
 // DigitalOcean Spaces (S3-compatible cold storage)
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));

@@ -31,6 +31,8 @@ public static class ModuleConstants
 
     public const int ActionViewAvgBasket = 6025;
     public const int ActionScheduleAvgBasket = 6026;
+    public const int ActionViewPurchasesSales = 6027;
+    public const int ActionSchedulePurchasesSales = 6028;
 
     /// <summary>
     /// Ranking threshold for DB filtering. Users with Ranking below this value (1, 5, 10)

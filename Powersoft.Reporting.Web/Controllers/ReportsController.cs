@@ -1843,6 +1843,75 @@ public class ReportsController : Controller
         return View(model);
     }
 
+    // ==================== Pareto 80/20 ====================
+
+    public async Task<IActionResult> Pareto()
+    {
+        var connectedDb = GetConnectedDatabaseName();
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+        var stores = await storeRepo.GetActiveStoresAsync();
+
+        ViewBag.ConnectedDatabase = connectedDb;
+        ViewBag.Stores = stores;
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetParetoData(
+        DateTime dateFrom, DateTime dateTo,
+        ParetoDimension dimension = ParetoDimension.Item,
+        ParetoMetric metric = ParetoMetric.Value,
+        bool includeVat = false,
+        string? storeCodes = null,
+        decimal classAThreshold = 80,
+        decimal classBThreshold = 95)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        var filter = new ParetoFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            Dimension = dimension,
+            Metric = metric,
+            IncludeVat = includeVat,
+            StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
+                : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            ClassAThreshold = classAThreshold,
+            ClassBThreshold = classBThreshold
+        };
+
+        try
+        {
+            var repo = _repositoryFactory.CreateParetoRepository(tenantConnString);
+            var result = await repo.GetParetoDataAsync(filter);
+            return Json(new
+            {
+                success = true,
+                rows = result.Rows,
+                grandTotal = result.GrandTotal,
+                classACount = result.ClassACount,
+                classBCount = result.ClassBCount,
+                classCCount = result.ClassCCount,
+                classAValue = result.ClassAValue,
+                classBValue = result.ClassBValue,
+                classCValue = result.ClassCValue,
+                totalItems = result.Rows.Count
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting Pareto data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
     // ==================== Charts ====================
 
     public async Task<IActionResult> Charts()

@@ -1,0 +1,272 @@
+@using Powersoft.Reporting.Core.Models
+@{
+    ViewData["Title"] = "Pareto 80/20 Analysis";
+    var stores = ViewBag.Stores as List<Store> ?? new List<Store>();
+    var dbName = ViewBag.ConnectedDatabase as string ?? "Unknown";
+}
+
+<style>
+    .class-a { background: #dcfce7 !important; }
+    .class-b { background: #fef9c3 !important; }
+    .class-c { background: #fee2e2 !important; }
+    .badge-a { background: #16a34a; }
+    .badge-b { background: #ca8a04; }
+    .badge-c { background: #dc2626; }
+    .stat-card { border-radius: 8px; padding: 16px; text-align: center; }
+    .stat-card h3 { margin: 0; font-size: 1.5rem; }
+    .stat-card .label { font-size: 0.8rem; color: #6b7280; }
+</style>
+
+<div class="card mb-4">
+    <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-funnel me-2"></i>Pareto 80/20 Analysis — @dbName</span>
+    </div>
+    <div class="card-body">
+        <form id="paretoForm" class="row g-3 mb-4">
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Date From</label>
+                <input type="date" class="form-control form-control-sm" id="dateFrom"
+                       value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Date To</label>
+                <input type="date" class="form-control form-control-sm" id="dateTo"
+                       value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Dimension</label>
+                <select class="form-select form-select-sm" id="dimension">
+                    <option value="Item">By Item</option>
+                    <option value="Customer">By Customer</option>
+                    <option value="Category">By Category</option>
+                    <option value="Supplier">By Supplier</option>
+                    <option value="Brand">By Brand</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-semibold">Metric</label>
+                <select class="form-select form-select-sm" id="metric">
+                    <option value="Value">Value (€)</option>
+                    <option value="Quantity">Quantity</option>
+                </select>
+            </div>
+            @if (stores.Any())
+            {
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Store Filter</label>
+                    <select class="form-select form-select-sm" id="storeFilter" multiple size="3">
+                        @foreach (var s in stores)
+                        {
+                            <option value="@s.StoreCode">@s.DisplayName</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="col-md-3 d-flex align-items-end gap-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="includeVat">
+                    <label class="form-check-label small" for="includeVat">Inc. VAT</label>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="loadPareto()">
+                    <i class="bi bi-funnel me-1"></i>Generate
+                </button>
+            </div>
+        </form>
+
+        <div id="paretoLoading" class="text-center py-5 d-none">
+            <div class="spinner-border text-primary"></div>
+            <p class="text-muted mt-2">Calculating Pareto analysis...</p>
+        </div>
+        <div id="paretoError" class="alert alert-danger d-none"></div>
+
+        <div id="paretoResults" class="d-none">
+            <div class="row g-3 mb-4" id="summaryCards"></div>
+
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body" style="position:relative;height:400px;">
+                            <canvas id="paretoChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header small fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-table me-1"></i>Detailed Breakdown</span>
+                    <span id="rowCountBadge" class="badge bg-secondary"></span>
+                </div>
+                <div class="card-body p-0" style="max-height:500px;overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr class="small">
+                                <th>#</th>
+                                <th>Code</th>
+                                <th>Name</th>
+                                <th class="text-end">Value</th>
+                                <th class="text-end">%</th>
+                                <th class="text-end">Cumul. %</th>
+                                <th class="text-center">Class</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paretoTable" class="small"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="emptyState" class="text-center py-5 text-muted">
+            <i class="bi bi-funnel" style="font-size:3rem;"></i>
+            <p class="mt-3">Select parameters and click <strong>Generate</strong> for Pareto 80/20 analysis.</p>
+            <p class="small">The Pareto principle suggests ~20% of items generate ~80% of value.</p>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+var _paretoChart = null;
+
+function loadPareto() {
+    var dateFrom = document.getElementById('dateFrom').value;
+    var dateTo = document.getElementById('dateTo').value;
+    if (!dateFrom || !dateTo) { alert('Please select dates.'); return; }
+
+    var storeEl = document.getElementById('storeFilter');
+    var storeCodes = storeEl ? Array.from(storeEl.selectedOptions).map(o => o.value).join(',') : '';
+
+    document.getElementById('paretoLoading').classList.remove('d-none');
+    document.getElementById('paretoError').classList.add('d-none');
+    document.getElementById('paretoResults').classList.add('d-none');
+    document.getElementById('emptyState').classList.add('d-none');
+
+    var fd = new FormData();
+    fd.append('dateFrom', dateFrom);
+    fd.append('dateTo', dateTo);
+    fd.append('dimension', document.getElementById('dimension').value);
+    fd.append('metric', document.getElementById('metric').value);
+    fd.append('includeVat', document.getElementById('includeVat').checked);
+    fd.append('storeCodes', storeCodes);
+
+    fetch('/Reports/GetParetoData', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('paretoLoading').classList.add('d-none');
+            if (!data.success) {
+                document.getElementById('paretoError').textContent = data.message;
+                document.getElementById('paretoError').classList.remove('d-none');
+                return;
+            }
+            renderPareto(data);
+        })
+        .catch(err => {
+            document.getElementById('paretoLoading').classList.add('d-none');
+            document.getElementById('paretoError').textContent = 'Network error: ' + err.message;
+            document.getElementById('paretoError').classList.remove('d-none');
+        });
+}
+
+function renderPareto(data) {
+    document.getElementById('paretoResults').classList.remove('d-none');
+    var isQty = document.getElementById('metric').value === 'Quantity';
+    var fmt = function(v) { return isQty ? v.toLocaleString() : '€' + v.toLocaleString(undefined, {minimumFractionDigits:2}); };
+
+    var cards = document.getElementById('summaryCards');
+    var gt = data.grandTotal;
+    var aPct = gt > 0 ? (data.classAValue / gt * 100).toFixed(1) : 0;
+    var bPct = gt > 0 ? (data.classBValue / gt * 100).toFixed(1) : 0;
+    var cPct = gt > 0 ? (data.classCValue / gt * 100).toFixed(1) : 0;
+    var aItemPct = data.totalItems > 0 ? (data.classACount / data.totalItems * 100).toFixed(1) : 0;
+    var bItemPct = data.totalItems > 0 ? (data.classBCount / data.totalItems * 100).toFixed(1) : 0;
+    var cItemPct = data.totalItems > 0 ? (data.classCCount / data.totalItems * 100).toFixed(1) : 0;
+
+    cards.innerHTML =
+        '<div class="col-md-3"><div class="stat-card border" style="border-left:4px solid #2563eb !important;"><h3>' + fmt(gt) + '</h3><div class="label">Grand Total (' + data.totalItems + ' items)</div></div></div>' +
+        '<div class="col-md-3"><div class="stat-card class-a border" style="border-left:4px solid #16a34a !important;"><h3>' + data.classACount + ' <small class="text-muted" style="font-size:0.7rem;">(' + aItemPct + '% of items)</small></h3><div class="label">Class A — ' + aPct + '% of value</div></div></div>' +
+        '<div class="col-md-3"><div class="stat-card class-b border" style="border-left:4px solid #ca8a04 !important;"><h3>' + data.classBCount + ' <small class="text-muted" style="font-size:0.7rem;">(' + bItemPct + '% of items)</small></h3><div class="label">Class B — ' + bPct + '% of value</div></div></div>' +
+        '<div class="col-md-3"><div class="stat-card class-c border" style="border-left:4px solid #dc2626 !important;"><h3>' + data.classCCount + ' <small class="text-muted" style="font-size:0.7rem;">(' + cItemPct + '% of items)</small></h3><div class="label">Class C — ' + cPct + '% of value</div></div></div>';
+
+    var rows = data.rows;
+    var maxRows = Math.min(rows.length, 50);
+    var labels = rows.slice(0, maxRows).map(r => r.name.length > 25 ? r.name.substring(0, 22) + '...' : r.name);
+    var values = rows.slice(0, maxRows).map(r => r.value);
+    var cumPcts = rows.slice(0, maxRows).map(r => r.cumulativePercentage);
+    var barColors = rows.slice(0, maxRows).map(r => r.classification === 'A' ? '#16a34a' : r.classification === 'B' ? '#ca8a04' : '#dc2626');
+
+    if (_paretoChart) _paretoChart.destroy();
+
+    var ctx = document.getElementById('paretoChart').getContext('2d');
+    _paretoChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    type: 'bar',
+                    label: isQty ? 'Quantity' : 'Value',
+                    data: values,
+                    backgroundColor: barColors.map(c => c + 'CC'),
+                    borderColor: barColors,
+                    borderWidth: 1,
+                    yAxisID: 'y',
+                    order: 2
+                },
+                {
+                    type: 'line',
+                    label: 'Cumulative %',
+                    data: cumPcts,
+                    borderColor: '#2563eb',
+                    backgroundColor: '#2563eb22',
+                    borderWidth: 2,
+                    pointRadius: 2,
+                    fill: false,
+                    yAxisID: 'y1',
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'top', labels: { font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            if (ctx.dataset.yAxisID === 'y1') return 'Cumul: ' + ctx.parsed.y.toFixed(1) + '%';
+                            return ctx.dataset.label + ': ' + fmt(ctx.parsed.y);
+                        }
+                    }
+                },
+                annotation: undefined
+            },
+            scales: {
+                x: { ticks: { font: { size: 9 }, maxRotation: 60 } },
+                y: { beginAtZero: true, position: 'left', title: { display: true, text: isQty ? 'Quantity' : 'Value (€)' } },
+                y1: { beginAtZero: true, max: 100, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Cumul. %' } }
+            }
+        }
+    });
+
+    document.getElementById('rowCountBadge').textContent = rows.length + ' rows';
+    var tbody = document.getElementById('paretoTable');
+    tbody.innerHTML = '';
+    rows.forEach(function(r) {
+        var cls = r.classification === 'A' ? 'class-a' : r.classification === 'B' ? 'class-b' : 'class-c';
+        var badge = r.classification === 'A' ? 'badge-a' : r.classification === 'B' ? 'badge-b' : 'badge-c';
+        tbody.innerHTML += '<tr class="' + cls + '">'
+            + '<td>' + r.rank + '</td>'
+            + '<td class="text-nowrap">' + r.code + '</td>'
+            + '<td>' + r.name + '</td>'
+            + '<td class="text-end">' + fmt(r.value) + '</td>'
+            + '<td class="text-end">' + r.percentage.toFixed(2) + '%</td>'
+            + '<td class="text-end fw-semibold">' + r.cumulativePercentage.toFixed(1) + '%</td>'
+            + '<td class="text-center"><span class="badge ' + badge + '">' + r.classification + '</span></td>'
+            + '</tr>';
+    });
+}
+</script>
+}

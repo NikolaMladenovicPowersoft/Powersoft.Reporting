@@ -830,7 +830,7 @@ else
     </div>
 </div>
 
-<!-- Document Detail Modal (compact) -->
+<!-- Document Detail Modal -->
 <div class="modal fade" id="docDetailModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
@@ -845,7 +845,8 @@ else
                     <span class="spinner-border spinner-border-sm me-2"></span>Loading document...
                 </div>
                 <div id="docDetailError" class="alert alert-danger d-none"></div>
-                <div id="docDetailContent" class="d-none">
+                <!-- Compact view -->
+                <div id="docCompactView" class="d-none">
                     <div class="row mb-3 small">
                         <div class="col-md-3"><strong>Date:</strong> <span id="docDate"></span></div>
                         <div class="col-md-3"><strong>Store:</strong> <span id="docStore"></span></div>
@@ -872,33 +873,17 @@ else
                     </table>
                     <div class="text-muted small" id="docLineCount"></div>
                 </div>
+                <!-- Full view (print-ready, inside same modal) -->
+                <div id="docFullView" class="d-none"></div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-primary" onclick="openDocFullView()">
+            <div class="modal-footer" id="docModalFooter">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btnDocToggleView" onclick="toggleDocView()">
                     <i class="bi bi-arrows-fullscreen me-1"></i>Full View
                 </button>
-                <button type="button" class="btn btn-outline-success" onclick="printDocFromModal()">
+                <button type="button" class="btn btn-outline-success btn-sm" onclick="printDocFromModal()">
                     <i class="bi bi-printer me-1"></i>Print
                 </button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Document Full View Modal (fullscreen, stays in page) -->
-<div class="modal fade" id="docFullViewModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-fullscreen">
-        <div class="modal-content">
-            <div class="modal-header py-2" id="docFullHeader" style="background:#2c3e50;color:white;">
-                <h6 class="modal-title" id="docFullTitle"><i class="bi bi-file-earmark-text me-2"></i>Document</h6>
-                <div class="ms-auto d-flex gap-2">
-                    <button type="button" class="btn btn-sm btn-outline-light" onclick="printFullViewDoc()"><i class="bi bi-printer me-1"></i>Print</button>
-                    <button type="button" class="btn btn-sm btn-outline-light" data-bs-dismiss="modal"><i class="bi bi-x-lg me-1"></i>Close</button>
-                </div>
-            </div>
-            <div class="modal-body p-0" style="background:#525659;overflow-y:auto;">
-                <div id="docFullContent" style="max-width:900px;margin:24px auto;background:white;padding:48px 56px;box-shadow:0 2px 12px rgba(0,0,0,0.3);"></div>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -1269,20 +1254,27 @@ function buildFullViewHtml(d) {
         + '<div style="text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8">Powersoft Reporting</div>';
 }
 
-function openDocFullView() {
+var _docViewMode = 'compact';
+
+function toggleDocView() {
     if (!_currentDocData) return;
-    bootstrap.Modal.getInstance(document.getElementById('docDetailModal'))?.hide();
-    var d = _currentDocData;
-    var isPurch = (d.docType === 'P' || d.docType === 'E');
-    document.getElementById('docFullTitle').innerHTML = '<i class="bi bi-file-earmark-text me-2"></i>' + d.docTypeDescription + ' — ' + d.documentNumber;
-    document.getElementById('docFullContent').innerHTML = buildFullViewHtml(d);
-    new bootstrap.Modal(document.getElementById('docFullViewModal')).show();
+    if (_docViewMode === 'compact') {
+        document.getElementById('docCompactView').classList.add('d-none');
+        var fv = document.getElementById('docFullView');
+        fv.innerHTML = buildFullViewHtml(_currentDocData);
+        fv.classList.remove('d-none');
+        document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-list me-1"></i>Compact';
+        _docViewMode = 'full';
+    } else {
+        document.getElementById('docFullView').classList.add('d-none');
+        document.getElementById('docCompactView').classList.remove('d-none');
+        document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-arrows-fullscreen me-1"></i>Full View';
+        _docViewMode = 'compact';
+    }
 }
 
 function printDocFromModal() {
     if (!_currentDocData) return;
-    var content = document.getElementById('docFullContent');
-    content.innerHTML = buildFullViewHtml(_currentDocData);
     var printWin = window.open('', '_blank', 'width=900,height=700');
     printWin.document.write('<html><head><title>' + _currentDocData.docTypeDescription + ' — ' + _currentDocData.documentNumber + '</title>'
         + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Segoe UI,system-ui,sans-serif;padding:24px;color:#1e293b}</style>'
@@ -1296,6 +1288,10 @@ function openDocument(docType, docNumber) {
     _currentDocType = docType;
     _currentDocNumber = docNumber;
     _currentDocData = null;
+    _docViewMode = 'compact';
+    document.getElementById('docFullView').classList.add('d-none');
+    document.getElementById('docFullView').innerHTML = '';
+    document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-arrows-fullscreen me-1"></i>Full View';
     var modal = new bootstrap.Modal(document.getElementById('docDetailModal'));
     var hdr = document.getElementById('docDetailHeader');
     var isPurch = (docType === 'P' || docType === 'E');
@@ -1303,7 +1299,7 @@ function openDocument(docType, docNumber) {
 
     document.getElementById('docDetailLoading').classList.remove('d-none');
     document.getElementById('docDetailError').classList.add('d-none');
-    document.getElementById('docDetailContent').classList.add('d-none');
+    document.getElementById('docCompactView').classList.add('d-none');
 
     var typeNames = { P: 'Purchase Invoice', E: 'Purchase Return', I: 'Sales Invoice', C: 'Credit Note' };
     document.getElementById('docDetailTitle').innerHTML =
@@ -1346,7 +1342,7 @@ function openDocument(docType, docNumber) {
             document.getElementById('docLineCount').textContent = d.lineCount + ' line item(s)';
 
             _currentDocData = d;
-            document.getElementById('docDetailContent').classList.remove('d-none');
+            document.getElementById('docCompactView').classList.remove('d-none');
         })
         .catch(function(err) {
             document.getElementById('docDetailLoading').classList.add('d-none');

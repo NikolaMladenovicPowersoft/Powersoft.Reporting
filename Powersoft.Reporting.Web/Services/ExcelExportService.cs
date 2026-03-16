@@ -19,11 +19,22 @@ public class ExcelExportService
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 14;
         
-        ws.Cell(2, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
-        ws.Cell(3, 1).Value = $"Breakdown: {filter.Breakdown} | Group By: {filter.GroupBy}";
-        ws.Cell(4, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(selRow++, 1).Value = $"Breakdown: {filter.Breakdown}";
+        ws.Cell(selRow++, 1).Value = $"Group By: {filter.GroupBy}";
+        if (filter.SecondaryGroupBy != GroupByType.None)
+            ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.SecondaryGroupBy}";
+        ws.Cell(selRow++, 1).Value = $"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}";
+        if (filter.CompareLastYear)
+            ws.Cell(selRow++, 1).Value = "Compare Last Year: Yes";
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            ws.Cell(selRow++, 1).Value = $"Stores: {string.Join(", ", filter.StoreCodes)}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
         
-        int headerRow = 6;
+        int headerRow = selRow + 1;
         int col = 1;
         bool hasGrouping = filter.GroupBy != Core.Enums.GroupByType.None;
         bool includeVat = filter.IncludeVat;
@@ -143,10 +154,25 @@ public class ExcelExportService
         ws.Cell(1, 1).Value = "Purchases vs Sales Report";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 14;
-        ws.Cell(2, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
-        ws.Cell(3, 1).Value = $"Mode: {filter.ReportMode} | Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(selRow++, 1).Value = $"Mode: {filter.ReportMode}";
+        if (filter.PrimaryGroup != PsGroupBy.None)
+            ws.Cell(selRow++, 1).Value = $"Primary Group: {filter.PrimaryGroup}";
+        if (filter.SecondaryGroup != PsGroupBy.None)
+            ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.SecondaryGroup}";
+        if (filter.ThirdGroup != PsGroupBy.None)
+            ws.Cell(selRow++, 1).Value = $"Third Group: {filter.ThirdGroup}";
+        ws.Cell(selRow++, 1).Value = $"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}";
+        if (filter.ShowProfit) ws.Cell(selRow++, 1).Value = "Show Profit: Yes";
+        if (filter.ShowStock) ws.Cell(selRow++, 1).Value = "Show Stock: Yes";
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            ws.Cell(selRow++, 1).Value = $"Stores: {string.Join(", ", filter.StoreCodes)}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
 
-        int headerRow = 5;
+        int headerRow = selRow + 1;
         int col = 1;
 
         bool hasL1 = filter.PrimaryGroup != PsGroupBy.None;

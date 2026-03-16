@@ -17,7 +17,19 @@ public class CsvExportService
 
         var sb = new StringBuilder();
 
-        // Headers
+        sb.AppendLine($"# Average Basket Report");
+        sb.AppendLine($"# Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}");
+        sb.AppendLine($"# Breakdown: {filter.Breakdown}");
+        sb.AppendLine($"# Group By: {filter.GroupBy}");
+        if (filter.SecondaryGroupBy != Core.Enums.GroupByType.None)
+            sb.AppendLine($"# Secondary Group: {filter.SecondaryGroupBy}");
+        sb.AppendLine($"# Include VAT: {(includeVat ? "Yes" : "No")}");
+        if (compareLY) sb.AppendLine("# Compare Last Year: Yes");
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            sb.AppendLine($"# Stores: {string.Join(", ", filter.StoreCodes)}");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
         var headers = new List<string>();
         if (hasGrouping) headers.Add(filter.GroupBy.ToString());
         headers.AddRange(new[]
@@ -101,6 +113,21 @@ public class CsvExportService
         bool hasItem = !filter.IsSummary || (!hasL1 && !hasL2 && !hasL3);
 
         var sb = new StringBuilder();
+
+        sb.AppendLine($"# Purchases vs Sales Report");
+        sb.AppendLine($"# Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}");
+        sb.AppendLine($"# Mode: {filter.ReportMode}");
+        if (hasL1) sb.AppendLine($"# Primary Group: {filter.PrimaryGroup}");
+        if (hasL2) sb.AppendLine($"# Secondary Group: {filter.SecondaryGroup}");
+        if (hasL3) sb.AppendLine($"# Third Group: {filter.ThirdGroup}");
+        sb.AppendLine($"# Include VAT: {(filter.IncludeVat ? "Yes" : "No")}");
+        if (filter.ShowProfit) sb.AppendLine("# Show Profit: Yes");
+        if (filter.ShowStock) sb.AppendLine("# Show Stock: Yes");
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            sb.AppendLine($"# Stores: {string.Join(", ", filter.StoreCodes)}");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
         var headers = new List<string>();
         if (hasL1) headers.Add(filter.PrimaryGroup.ToString());
         if (hasL2) headers.Add(filter.SecondaryGroup.ToString());

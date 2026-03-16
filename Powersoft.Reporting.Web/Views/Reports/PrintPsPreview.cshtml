@@ -106,10 +106,14 @@
                 <div class="meta-right">
                     <strong>From:</strong> @Model.DateFrom.ToString("dd/MM/yyyy") &nbsp;
                     <strong>To:</strong> @Model.DateTo.ToString("dd/MM/yyyy")<br />
-                    @if (Model.IncludeVat) { <span>Includes VAT &nbsp;</span> }
-                    @if (hasL1) { <span>Group: @Model.PrimaryGroup &nbsp;</span> }
+                    <strong>Mode:</strong> @Model.ReportMode &nbsp;
+                    @if (Model.IncludeVat) { <span>| VAT &nbsp;</span> }
+                    @if (Model.ShowProfit) { <span>| Profit &nbsp;</span> }
+                    @if (Model.ShowStock) { <span>| Stock &nbsp;</span> }
+                    @if (hasL1) { <br /><span><strong>Group:</strong> @Model.PrimaryGroup &nbsp;</span> }
                     @if (hasL2) { <span>> @Model.SecondaryGroup &nbsp;</span> }
                     @if (hasL3) { <span>> @Model.ThirdGroup</span> }
+                    @if (!string.IsNullOrEmpty(Model.SelectedStoreCodesString)) { <br /><span><strong>Stores:</strong> @Model.SelectedStoreCodesString</span> }
                 </div>
             </div>
 

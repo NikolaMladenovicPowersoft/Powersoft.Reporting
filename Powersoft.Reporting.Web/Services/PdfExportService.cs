@@ -30,11 +30,14 @@ public class PdfExportService
         PdfWriter.GetInstance(document, ms);
         document.Open();
 
-        // Title
         document.Add(new Paragraph("Average Basket Report", TitleFont));
-        document.Add(new Paragraph(
-            $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd} | Breakdown: {filter.Breakdown} | Group By: {filter.GroupBy}",
-            SubtitleFont));
+        document.Add(new Paragraph($"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}", SubtitleFont));
+        document.Add(new Paragraph($"Breakdown: {filter.Breakdown} | Group By: {filter.GroupBy}" +
+            (filter.SecondaryGroupBy != Core.Enums.GroupByType.None ? $" | Secondary: {filter.SecondaryGroupBy}" : ""), SubtitleFont));
+        document.Add(new Paragraph($"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}" +
+            (filter.CompareLastYear ? " | Compare Last Year: Yes" : ""), SubtitleFont));
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            document.Add(new Paragraph($"Stores: {string.Join(", ", filter.StoreCodes)}", SubtitleFont));
         document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
         document.Add(new Paragraph(" "));
 
@@ -186,9 +189,16 @@ public class PdfExportService
         document.Open();
 
         document.Add(new Paragraph("Purchases vs Sales Report", TitleFont));
-        document.Add(new Paragraph(
-            $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd} | Mode: {filter.ReportMode}",
-            SubtitleFont));
+        document.Add(new Paragraph($"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}", SubtitleFont));
+        document.Add(new Paragraph($"Mode: {filter.ReportMode}" +
+            (hasL1 ? $" | Primary: {filter.PrimaryGroup}" : "") +
+            (hasL2 ? $" | Secondary: {filter.SecondaryGroup}" : "") +
+            (hasL3 ? $" | Third: {filter.ThirdGroup}" : ""), SubtitleFont));
+        document.Add(new Paragraph($"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}" +
+            (filter.ShowProfit ? " | Profit: Yes" : "") +
+            (filter.ShowStock ? " | Stock: Yes" : ""), SubtitleFont));
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            document.Add(new Paragraph($"Stores: {string.Join(", ", filter.StoreCodes)}", SubtitleFont));
         document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
         document.Add(new Paragraph(" "));
 

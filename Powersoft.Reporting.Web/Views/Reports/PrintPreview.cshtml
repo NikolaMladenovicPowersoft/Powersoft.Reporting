@@ -358,9 +358,11 @@
                 <div class="meta-right">
                     <strong>Period:</strong> @Model.DateFrom.ToString("dd/MM/yyyy") — @Model.DateTo.ToString("dd/MM/yyyy")<br />
                     <strong>Breakdown:</strong> @Model.Breakdown
-                    @if (Model.IncludeVat) { <span> &nbsp;| Includes VAT</span> }
+                    @if (Model.IncludeVat) { <span> &nbsp;| VAT</span> }
+                    @if (Model.CompareLastYear) { <span> &nbsp;| Compare LY</span> }
                     @if (hasGrouping) { <span> &nbsp;| Group: @Model.GroupBy</span> }
                     @if (hasGroup2) { <span> &gt; @Model.SecondaryGroupBy</span> }
+                    @if (!string.IsNullOrEmpty(Model.SelectedStoreCodesString)) { <br /><span><strong>Stores:</strong> @Model.SelectedStoreCodesString</span> }
                 </div>
             </div>
 

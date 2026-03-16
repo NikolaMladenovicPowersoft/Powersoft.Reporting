@@ -1021,8 +1021,19 @@ else
         <div class="modal-content">
             <div class="modal-header bg-info bg-opacity-10">
                 <h5 class="modal-title" id="aiAnalysisModalLabel">
-                    <i class="bi bi-robot me-2"></i>AI Report Analysis
+                    <i class="bi bi-stars me-2"></i>AI Report Analysis
                 </h5>
+                <div class="ms-auto me-3 d-flex align-items-center">
+                    <label class="text-muted small me-2 mb-0" for="aiLangSelect"><i class="bi bi-translate me-1"></i>Language:</label>
+                    <select id="aiLangSelect" class="form-select form-select-sm" style="width:auto;min-width:120px;" onchange="saveAiLang(this.value)">
+                        <option value="el">Ελληνικά</option>
+                        <option value="en">English</option>
+                        <option value="sr">Srpski</option>
+                        <option value="de">Deutsch</option>
+                        <option value="fr">Français</option>
+                        <option value="bg">Български</option>
+                    </select>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -2098,6 +2109,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ==================== AI Analysis ====================
 
+function saveAiLang(v) { localStorage.setItem('ps_ai_lang', v); }
+function getAiLang() { return localStorage.getItem('ps_ai_lang') || 'el'; }
+(function() { var s = document.getElementById('aiLangSelect'); if (s) s.value = getAiLang(); })();
+
 function analyzeReport() {
     var modal = new bootstrap.Modal(document.getElementById('aiAnalysisModal'));
     document.getElementById('aiLoading').classList.remove('d-none');
@@ -2112,6 +2127,7 @@ function analyzeReport() {
     formData.append('itemIds', '@(Model.SelectedItemIdsString ?? "")');
     formData.append('sortColumn', '@Model.SortColumn');
     formData.append('sortDirection', '@Model.SortDirection');
+    formData.append('locale', getAiLang());
 
     fetch('/Reports/AnalyzeAbReport', { method: 'POST', body: formData })
         .then(r => r.json())

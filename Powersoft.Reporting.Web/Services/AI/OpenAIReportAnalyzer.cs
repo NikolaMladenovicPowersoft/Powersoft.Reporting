@@ -146,9 +146,16 @@ public class OpenAIReportAnalyzer : IReportAnalyzer
 
     private static string BuildSystemPrompt(string reportType, string? locale)
     {
-        var lang = string.Equals(locale, "sr", StringComparison.OrdinalIgnoreCase)
-            ? "Respond in Serbian (latin script)."
-            : "Respond in English.";
+        var lang = (locale ?? "el").ToLowerInvariant() switch
+        {
+            "el" => "Respond in Greek (Ελληνικά).",
+            "en" => "Respond in English.",
+            "sr" => "Respond in Serbian (latin script).",
+            "de" => "Respond in German.",
+            "fr" => "Respond in French.",
+            "bg" => "Respond in Bulgarian.",
+            _ => "Respond in English."
+        };
 
         return $@"You are a senior financial data analyst working for a retail/ERP company.
 You analyze sales, purchasing, and inventory reports with precision.

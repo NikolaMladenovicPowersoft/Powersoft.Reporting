@@ -19,6 +19,8 @@
     a.dd-link-purch:hover { color: #1d4ed8; border-bottom-style: solid; }
     a.dd-link-sales { color: #059669; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #059669; }
     a.dd-link-sales:hover { color: #047857; border-bottom-style: solid; }
+    th.col-purch { background: #eff6ff !important; color: #1e40af; }
+    th.col-sales { background: #ecfdf5 !important; color: #065f46; }
 </style>
 
 <div class="row mb-4">
@@ -332,10 +334,10 @@
                                 <th data-col="ItemCode" class="@SortClass("ItemCode")" onclick="sortBy('ItemCode')">Code<i class="bi @SortIcon("ItemCode") sort-icon"></i></th>
                                 <th data-col="ItemName" class="@SortClass("ItemName")" onclick="sortBy('ItemName')">Name<i class="bi @SortIcon("ItemName") sort-icon"></i></th>
                             }
-                            <th data-col="QuantityPurchased" class="text-end @SortClass("QuantityPurchased")" onclick="sortBy('QuantityPurchased')">Qty Purch<i class="bi @SortIcon("QuantityPurchased") sort-icon"></i></th>
-                            <th data-col="@(useGross?"GrossPurchasedValue":"NetPurchasedValue")" class="text-end @SortClass(useGross?"GrossPurchasedValue":"NetPurchasedValue")" onclick="sortBy('@(useGross?"GrossPurchasedValue":"NetPurchasedValue")')">@(useGross?"Gross":"Net") Purch<i class="bi @SortIcon(useGross?"GrossPurchasedValue":"NetPurchasedValue") sort-icon"></i></th>
-                            <th data-col="QuantitySold" class="text-end @SortClass("QuantitySold")" onclick="sortBy('QuantitySold')">Qty Sold<i class="bi @SortIcon("QuantitySold") sort-icon"></i></th>
-                            <th data-col="@(useGross?"GrossSoldValue":"NetSoldValue")" class="text-end @SortClass(useGross?"GrossSoldValue":"NetSoldValue")" onclick="sortBy('@(useGross?"GrossSoldValue":"NetSoldValue")')">@(useGross?"Gross":"Net") Sold<i class="bi @SortIcon(useGross?"GrossSoldValue":"NetSoldValue") sort-icon"></i></th>
+                            <th data-col="QuantityPurchased" class="text-end col-purch @SortClass("QuantityPurchased")" onclick="sortBy('QuantityPurchased')">Qty Purch<i class="bi @SortIcon("QuantityPurchased") sort-icon"></i></th>
+                            <th data-col="@(useGross?"GrossPurchasedValue":"NetPurchasedValue")" class="text-end col-purch @SortClass(useGross?"GrossPurchasedValue":"NetPurchasedValue")" onclick="sortBy('@(useGross?"GrossPurchasedValue":"NetPurchasedValue")')">@(useGross?"Gross":"Net") Purch<i class="bi @SortIcon(useGross?"GrossPurchasedValue":"NetPurchasedValue") sort-icon"></i></th>
+                            <th data-col="QuantitySold" class="text-end col-sales @SortClass("QuantitySold")" onclick="sortBy('QuantitySold')">Qty Sold<i class="bi @SortIcon("QuantitySold") sort-icon"></i></th>
+                            <th data-col="@(useGross?"GrossSoldValue":"NetSoldValue")" class="text-end col-sales @SortClass(useGross?"GrossSoldValue":"NetSoldValue")" onclick="sortBy('@(useGross?"GrossSoldValue":"NetSoldValue")')">@(useGross?"Gross":"Net") Sold<i class="bi @SortIcon(useGross?"GrossSoldValue":"NetSoldValue") sort-icon"></i></th>
                             @if (Model.ShowProfit) { <th data-col="Profit" class="text-end @SortClass("Profit")" onclick="sortBy('Profit')">Profit<i class="bi @SortIcon("Profit") sort-icon"></i></th> }
                             <th class="text-end">Qty %</th>
                             <th class="text-end">Val %</th>
@@ -781,8 +783,19 @@ else
         <div class="modal-content">
             <div class="modal-header bg-info bg-opacity-10">
                 <h5 class="modal-title" id="aiAnalysisModalLabel">
-                    <i class="bi bi-robot me-2"></i>AI Report Analysis
+                    <i class="bi bi-stars me-2"></i>AI Report Analysis
                 </h5>
+                <div class="ms-auto me-3 d-flex align-items-center">
+                    <label class="text-muted small me-2 mb-0" for="aiLangSelect"><i class="bi bi-translate me-1"></i>Language:</label>
+                    <select id="aiLangSelect" class="form-select form-select-sm" style="width:auto;min-width:120px;" onchange="saveAiLang(this.value)">
+                        <option value="el">Ελληνικά</option>
+                        <option value="en">English</option>
+                        <option value="sr">Srpski</option>
+                        <option value="de">Deutsch</option>
+                        <option value="fr">Français</option>
+                        <option value="bg">Български</option>
+                    </select>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -877,8 +890,8 @@ else
                 <div id="docFullView" class="d-none"></div>
             </div>
             <div class="modal-footer" id="docModalFooter">
-                <button type="button" class="btn btn-outline-primary btn-sm" id="btnDocToggleView" onclick="toggleDocView()">
-                    <i class="bi bi-arrows-fullscreen me-1"></i>Full View
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btnDocToggleView" onclick="toggleDocView()" title="Toggle document preview">
+                    <i class="bi bi-eye me-1"></i>Preview
                 </button>
                 <button type="button" class="btn btn-outline-success btn-sm" onclick="printDocFromModal()">
                     <i class="bi bi-printer me-1"></i>Print
@@ -1136,6 +1149,10 @@ function drillDown(itemCode, type) {
         });
 }
 
+function saveAiLang(v) { localStorage.setItem('ps_ai_lang', v); }
+function getAiLang() { return localStorage.getItem('ps_ai_lang') || 'el'; }
+(function() { var s = document.getElementById('aiLangSelect'); if (s) s.value = getAiLang(); })();
+
 function analyzePsReport() {
     var modal = new bootstrap.Modal(document.getElementById('aiAnalysisModal'));
     document.getElementById('aiLoading').classList.remove('d-none');
@@ -1150,6 +1167,7 @@ function analyzePsReport() {
     formData.append('itemIds', '@(Model.SelectedItemIdsString ?? "")');
     formData.append('sortColumn', '@Model.SortColumn');
     formData.append('sortDirection', '@Model.SortDirection');
+    formData.append('locale', getAiLang());
 
     fetch('/Reports/AnalyzePsReport', { method: 'POST', body: formData })
         .then(r => r.json())
@@ -1263,12 +1281,12 @@ function toggleDocView() {
         var fv = document.getElementById('docFullView');
         fv.innerHTML = buildFullViewHtml(_currentDocData);
         fv.classList.remove('d-none');
-        document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-list me-1"></i>Compact';
+        document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-eye-slash me-1"></i>Compact';
         _docViewMode = 'full';
     } else {
         document.getElementById('docFullView').classList.add('d-none');
         document.getElementById('docCompactView').classList.remove('d-none');
-        document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-arrows-fullscreen me-1"></i>Full View';
+        document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
         _docViewMode = 'compact';
     }
 }
@@ -1291,7 +1309,7 @@ function openDocument(docType, docNumber) {
     _docViewMode = 'compact';
     document.getElementById('docFullView').classList.add('d-none');
     document.getElementById('docFullView').innerHTML = '';
-    document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-arrows-fullscreen me-1"></i>Full View';
+    document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
     var modal = new bootstrap.Modal(document.getElementById('docDetailModal'));
     var hdr = document.getElementById('docDetailHeader');
     var isPurch = (docType === 'P' || docType === 'E');

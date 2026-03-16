@@ -787,6 +787,20 @@ public class ReportsController : Controller
             ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Average Basket Report — {period}")
             : emailSubject;
 
+        var selectionLines = new List<string>
+        {
+            $"Breakdown: {breakdown}",
+            $"Group By: {groupBy}",
+            $"Include VAT: {(includeVat ? "Yes" : "No")}"
+        };
+        if (secondaryGroupBy != GroupByType.None) selectionLines.Add($"Secondary Group: {secondaryGroupBy}");
+        if (compareLastYear) selectionLines.Add("Compare Last Year: Yes");
+        if (!string.IsNullOrWhiteSpace(storeCodes)) selectionLines.Add($"Stores: {storeCodes}");
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
         var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
             ? ReplaceMergeFields(templateBody)
             : $@"
@@ -802,10 +816,13 @@ public class ReportsController : Controller
         <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Format</td>
             <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{exportFormat}</td></tr>
     </table>
+    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
+    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
     <p style='color: #6b7280; font-size: 13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
 </div>";
 
-        var textBody = $"Average Basket Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}";
+        var selectionsText = string.Join("\n", selectionLines);
+        var textBody = $"Average Basket Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
 
         var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
         var sentCount = 0;
@@ -1208,6 +1225,22 @@ public class ReportsController : Controller
             ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Purchases vs Sales Report — {period}")
             : emailSubject;
 
+        var selectionLines = new List<string>
+        {
+            $"Mode: {reportMode}",
+            $"Include VAT: {(includeVat ? "Yes" : "No")}"
+        };
+        if (primaryGroup != PsGroupBy.None) selectionLines.Add($"Primary Group: {primaryGroup}");
+        if (secondaryGroup != PsGroupBy.None) selectionLines.Add($"Secondary Group: {secondaryGroup}");
+        if (thirdGroup != PsGroupBy.None) selectionLines.Add($"Third Group: {thirdGroup}");
+        if (showProfit) selectionLines.Add("Show Profit: Yes");
+        if (showStock) selectionLines.Add("Show Stock: Yes");
+        if (!string.IsNullOrWhiteSpace(storeCodes)) selectionLines.Add($"Stores: {storeCodes}");
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
         var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
             ? ReplaceMergeFields(templateBody)
             : $@"
@@ -1223,9 +1256,12 @@ public class ReportsController : Controller
         <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
             <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{exportFormat}</td></tr>
     </table>
+    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
+    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
     <p style='color:#6b7280;font-size:13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
 </div>";
-        var textBody = $"Purchases vs Sales Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}";
+        var selectionsText = string.Join("\n", selectionLines);
+        var textBody = $"Purchases vs Sales Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
 
         var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
         var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
@@ -1528,7 +1564,8 @@ public class ReportsController : Controller
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear,
         string? storeCodes, string? itemIds,
-        string sortColumn = "Period", string sortDirection = "ASC")
+        string sortColumn = "Period", string sortDirection = "ASC",
+        string? locale = "el")
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
@@ -1548,7 +1585,7 @@ public class ReportsController : Controller
             var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
 
             var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "AverageBasket", ct: HttpContext.RequestAborted);
+            var analysis = await analyzer.AnalyzeAsync(csvData, "AverageBasket", locale: locale, ct: HttpContext.RequestAborted);
 
             return Json(new
             {
@@ -1579,7 +1616,8 @@ public class ReportsController : Controller
         PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
         bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemIds,
-        string sortColumn = "ItemCode", string sortDirection = "ASC")
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        string? locale = "el")
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
@@ -1599,7 +1637,7 @@ public class ReportsController : Controller
             var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
 
             var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "PurchasesSales", ct: HttpContext.RequestAborted);
+            var analysis = await analyzer.AnalyzeAsync(csvData, "PurchasesSales", locale: locale, ct: HttpContext.RequestAborted);
 
             return Json(new
             {

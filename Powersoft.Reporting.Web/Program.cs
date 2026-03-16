@@ -8,8 +8,25 @@ using Powersoft.Reporting.Web.Options;
 using Powersoft.Reporting.Web.Services;
 using Powersoft.Reporting.Web.Services.AI;
 using Powersoft.Reporting.Web.Services.Storage;
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File("logs/reporting-startup-.txt", rollingInterval: RollingInterval.Day)
+    .CreateBootstrapLogger();
+
+try
+{
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services));
+
+Serilog.Debugging.SelfLog.Enable(msg => Console.Error.WriteLine($"[Serilog SelfLog] {msg}"));
 
 builder.Services.Configure<HostOptions>(opts =>
     opts.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
@@ -119,3 +136,13 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}

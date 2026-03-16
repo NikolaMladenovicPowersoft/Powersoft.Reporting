@@ -15,8 +15,10 @@
 }
 
 <style>
-    a.dd-link { color: #0d6efd; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #0d6efd; }
-    a.dd-link:hover { color: #0a58ca; border-bottom-style: solid; }
+    a.dd-link-purch { color: #2563eb; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #2563eb; }
+    a.dd-link-purch:hover { color: #1d4ed8; border-bottom-style: solid; }
+    a.dd-link-sales { color: #059669; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #059669; }
+    a.dd-link-sales:hover { color: #047857; border-bottom-style: solid; }
 </style>
 
 <div class="row mb-4">
@@ -307,7 +309,7 @@
                     <i class="bi bi-envelope me-1"></i>Send to Email
                 </button>
                 <button class="btn btn-sm btn-outline-info" onclick="analyzePsReport()" title="AI-powered report analysis" id="btnAnalyzePs">
-                    <i class="bi bi-robot me-1"></i>Analyze
+                    <i class="bi bi-stars me-1"></i>AI Analyze
                 </button>
             </div>
         </div>
@@ -380,10 +382,10 @@
                                                         @if (hasL2) { <td class="text-info">@(row.Level2Value ?? "N/A")</td> }
                                                         @if (hasL3) { <td class="text-info">@(row.Level3Value ?? "N/A")</td> }
                                                         @if (showItem) { <td class="fw-semibold"><a href="#" class="text-decoration-none" onclick="drillDown('@row.ItemCode','all');return false;">@row.ItemCode</a></td><td>@row.ItemName</td> }
-                                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
-                                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
-                                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
-                                                        <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
+                                                        <td class="text-end"><a href="#" class="dd-link-purch" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
+                                                        <td class="text-end"><a href="#" class="dd-link-purch" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
+                                                        <td class="text-end"><a href="#" class="dd-link-sales" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
+                                                        <td class="text-end"><a href="#" class="dd-link-sales" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
                                                         @if (Model.ShowProfit) { var pC = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="text-end @pC fw-semibold">@row.Profit.ToString("N2")</td> }
                                                         <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
                                                         <td class="text-end">@row.ValPercent.ToString("N1")%</td>
@@ -416,10 +418,10 @@
                                                     @if (hasL1) { <td class="fw-semibold text-info">@(row.Level1Value ?? "N/A")</td> }
                                                     @if (hasL2) { <td class="text-info">@(row.Level2Value ?? "N/A")</td> }
                                                     @if (showItem) { <td class="fw-semibold"><a href="#" class="text-decoration-none" onclick="drillDown('@row.ItemCode','all');return false;">@row.ItemCode</a></td><td>@row.ItemName</td> }
-                                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
-                                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
-                                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
-                                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
+                                                    <td class="text-end"><a href="#" class="dd-link-purch" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
+                                                    <td class="text-end"><a href="#" class="dd-link-purch" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
+                                                    <td class="text-end"><a href="#" class="dd-link-sales" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
+                                                    <td class="text-end"><a href="#" class="dd-link-sales" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
                                                     @if (Model.ShowProfit) { var pC = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="text-end @pC fw-semibold">@row.Profit.ToString("N2")</td> }
                                                     <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
                                                     <td class="text-end">@row.ValPercent.ToString("N1")%</td>
@@ -452,10 +454,10 @@
                                         <tr>
                                             @if (hasL1) { <td class="fw-semibold text-info">@(row.Level1Value ?? "N/A")</td> }
                                             @if (showItem) { <td class="fw-semibold"><a href="#" class="text-decoration-none" onclick="drillDown('@row.ItemCode','all');return false;">@row.ItemCode</a></td><td>@row.ItemName</td> }
-                                            <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
-                                            <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
-                                            <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
-                                            <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
+                                            <td class="text-end"><a href="#" class="dd-link-purch" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
+                                            <td class="text-end"><a href="#" class="dd-link-purch" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
+                                            <td class="text-end"><a href="#" class="dd-link-sales" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
+                                            <td class="text-end"><a href="#" class="dd-link-sales" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
                                             @if (Model.ShowProfit) { var pC = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="text-end @pC fw-semibold">@row.Profit.ToString("N2")</td> }
                                             <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
                                             <td class="text-end">@row.ValPercent.ToString("N1")%</td>
@@ -489,10 +491,10 @@
                             {
                                 <tr>
                                     @if (showItem) { <td class="fw-semibold"><a href="#" class="text-decoration-none" onclick="drillDown('@row.ItemCode','all');return false;">@row.ItemCode</a></td><td>@row.ItemName</td> }
-                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
-                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
-                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
-                                    <td class="text-end"><a href="#" class="dd-link" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
+                                    <td class="text-end"><a href="#" class="dd-link-purch" onclick="drillDown('@row.ItemCode','purchases');return false;">@row.QuantityPurchased.ToString("N0")</a></td>
+                                    <td class="text-end"><a href="#" class="dd-link-purch" onclick="drillDown('@row.ItemCode','purchases');return false;">@((useGross ? row.GrossPurchasedValue : row.NetPurchasedValue).ToString("N2"))</a></td>
+                                    <td class="text-end"><a href="#" class="dd-link-sales" onclick="drillDown('@row.ItemCode','sales');return false;">@row.QuantitySold.ToString("N0")</a></td>
+                                    <td class="text-end"><a href="#" class="dd-link-sales" onclick="drillDown('@row.ItemCode','sales');return false;">@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</a></td>
                                     @if (Model.ShowProfit) { var pC = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="text-end @pC fw-semibold">@row.Profit.ToString("N2")</td> }
                                     <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
                                     <td class="text-end">@row.ValPercent.ToString("N1")%</td>
@@ -1023,19 +1025,24 @@ function drillDown(itemCode, type) {
 
             var kindColors = { 'P': 'bg-info', 'E': 'bg-warning', 'I': 'bg-success', 'C': 'bg-danger' };
             var typeLabels = { purchases: 'Purchase', sales: 'Sales', all: 'All' };
+            var headerTheme = type === 'purchases'
+                ? { bg: 'background:#e8f0fe;border-color:#2563eb;', border: 'border-color:#2563eb;', tblBg: '#f0f4ff' }
+                : type === 'sales'
+                ? { bg: 'background:#d1fae5;border-color:#059669;', border: 'border-color:#059669;', tblBg: '#f0fdf4' }
+                : { bg: 'background:#e8f0fe;border-color:#6366f1;', border: 'border-color:#6366f1;', tblBg: '#f5f3ff' };
 
             var headerRow = document.createElement('tr');
             headerRow.className = 'dd-row';
             headerRow.dataset.key = key;
             headerRow.innerHTML = '<td colspan="' + colSpan + '" class="p-0">'
-                + '<div class="bg-primary bg-opacity-10 border-top border-bottom border-primary px-3 py-2">'
+                + '<div style="' + headerTheme.bg + 'padding:8px 12px;border-top:2px solid;border-bottom:2px solid;' + headerTheme.border + '">'
                 + '<strong><i class="bi bi-list-columns-reverse me-1"></i>' + (typeLabels[type] || '') + ' Transactions for ' + itemCode + '</strong>'
                 + '<span class="ms-3 text-muted">' + data.count + ' transactions | Qty: ' + data.totalQty.toLocaleString(undefined,{maximumFractionDigits:2})
                 + ' | Net: ' + data.totalNet.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})
                 + '</span>'
                 + '<button class="btn btn-sm btn-outline-secondary float-end py-0" onclick="drillDown(\'' + itemCode + '\',\'' + type + '\')"><i class="bi bi-x-lg"></i></button>'
                 + '</div>'
-                + '<table class="table table-sm table-bordered mb-0" style="background:#f8f9ff;">'
+                + '<table class="table table-sm table-bordered mb-0" style="background:' + headerTheme.tblBg + ';">'
                 + '<thead><tr class="table-light small">'
                 + '<th>Date</th><th>Type</th><th>Doc #</th><th>Entity</th><th>Store</th>'
                 + '<th class="text-end">Qty</th><th class="text-end">Price</th><th class="text-end">Discount</th>'

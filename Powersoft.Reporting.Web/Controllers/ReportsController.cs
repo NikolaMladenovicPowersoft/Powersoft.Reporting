@@ -1684,6 +1684,65 @@ public class ReportsController : Controller
         }
     }
 
+    [HttpGet]
+    public async Task<IActionResult> GetDocumentDetail(string docType, string docNumber)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (string.IsNullOrWhiteSpace(docType) || string.IsNullOrWhiteSpace(docNumber))
+            return Json(new { success = false, message = "Document type and number are required" });
+
+        var validTypes = new[] { "P", "E", "I", "C" };
+        if (!validTypes.Contains(docType))
+            return Json(new { success = false, message = "Invalid document type" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreatePurchasesSalesRepository(tenantConnString);
+            var doc = await repo.GetDocumentDetailAsync(docType, docNumber);
+
+            if (doc == null)
+                return Json(new { success = false, message = "Document not found" });
+
+            return Json(new
+            {
+                success = true,
+                doc = new
+                {
+                    doc.DocType,
+                    doc.DocTypeDescription,
+                    doc.DocumentNumber,
+                    date = doc.DocumentDate.ToString("yyyy-MM-dd"),
+                    doc.EntityCode,
+                    doc.EntityName,
+                    doc.StoreCode,
+                    totalNet = doc.TotalNet,
+                    totalVat = doc.TotalVat,
+                    totalGross = doc.TotalGross,
+                    lineCount = doc.Lines.Count,
+                    lines = doc.Lines.Select(l => new
+                    {
+                        l.ItemCode,
+                        l.ItemName,
+                        qty = l.Quantity,
+                        price = l.UnitPrice,
+                        discount = l.Discount,
+                        net = l.NetAmount,
+                        vat = l.VatAmount,
+                        gross = l.GrossAmount
+                    })
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching document detail for {DocType} {DocNumber}", docType, docNumber);
+            return Json(new { success = false, message = "Failed to load document details." });
+        }
+    }
+
     // ==================== PS Print Preview ====================
 
     [HttpGet]

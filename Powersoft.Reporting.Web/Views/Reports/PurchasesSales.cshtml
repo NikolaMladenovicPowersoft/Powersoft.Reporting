@@ -830,6 +830,56 @@ else
     </div>
 </div>
 
+<!-- Document Detail Modal -->
+<div class="modal fade" id="docDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" id="docDetailHeader">
+                <h5 class="modal-title" id="docDetailTitle">
+                    <i class="bi bi-file-earmark-text me-2"></i>Document Detail
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="docDetailLoading" class="text-center py-4">
+                    <span class="spinner-border spinner-border-sm me-2"></span>Loading document...
+                </div>
+                <div id="docDetailError" class="alert alert-danger d-none"></div>
+                <div id="docDetailContent" class="d-none">
+                    <div class="row mb-3 small">
+                        <div class="col-md-3"><strong>Date:</strong> <span id="docDate"></span></div>
+                        <div class="col-md-3"><strong>Store:</strong> <span id="docStore"></span></div>
+                        <div class="col-md-6"><strong>Entity:</strong> <span id="docEntity"></span></div>
+                    </div>
+                    <table class="table table-sm table-bordered table-hover mb-3">
+                        <thead class="table-light">
+                            <tr class="small">
+                                <th>Item Code</th><th>Item Name</th>
+                                <th class="text-end">Qty</th><th class="text-end">Unit Price</th>
+                                <th class="text-end">Discount</th><th class="text-end">Net</th>
+                                <th class="text-end">VAT</th><th class="text-end">Gross</th>
+                            </tr>
+                        </thead>
+                        <tbody id="docDetailLines" class="small"></tbody>
+                        <tfoot>
+                            <tr class="fw-bold small table-light">
+                                <td colspan="5" class="text-end">Totals:</td>
+                                <td class="text-end" id="docTotalNet"></td>
+                                <td class="text-end" id="docTotalVat"></td>
+                                <td class="text-end" id="docTotalGross"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <div class="text-muted small" id="docLineCount"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Send to Email Modal -->
 <div class="modal fade" id="sendEmailModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -1053,7 +1103,7 @@ function drillDown(itemCode, type) {
                     return '<tr class="small">'
                         + '<td>' + r.date + '</td>'
                         + '<td><span class="badge ' + bc + ' badge-sm">' + r.kindDescription + '</span></td>'
-                        + '<td class="fw-semibold">' + r.doc + '</td>'
+                        + '<td class="fw-semibold"><a href="#" class="text-primary text-decoration-underline" onclick="openDocument(\'' + r.kind + '\',\'' + r.doc.replace(/'/g, "\\'") + '\');return false;" title="View document details">' + r.doc + '</a></td>'
                         + '<td>' + (r.entityCode ? r.entityCode + ' — ' : '') + r.entityName + '</td>'
                         + '<td>' + r.store + '</td>'
                         + '<td class="text-end">' + r.qty.toLocaleString(undefined,{maximumFractionDigits:2}) + '</td>'
@@ -1141,6 +1191,65 @@ function analyzePsReport() {
             document.getElementById('aiError').classList.remove('d-none');
             document.getElementById('aiErrorMsg').textContent = 'Network error: ' + err.message;
             document.getElementById('btnReanalyze').style.display = 'inline-block';
+        });
+}
+
+function openDocument(docType, docNumber) {
+    var modal = new bootstrap.Modal(document.getElementById('docDetailModal'));
+    var hdr = document.getElementById('docDetailHeader');
+    var isPurch = (docType === 'P' || docType === 'E');
+    hdr.className = 'modal-header ' + (isPurch ? 'bg-primary bg-opacity-10' : 'bg-success bg-opacity-10');
+
+    document.getElementById('docDetailLoading').classList.remove('d-none');
+    document.getElementById('docDetailError').classList.add('d-none');
+    document.getElementById('docDetailContent').classList.add('d-none');
+
+    var typeNames = { P: 'Purchase Invoice', E: 'Purchase Return', I: 'Sales Invoice', C: 'Credit Note' };
+    document.getElementById('docDetailTitle').innerHTML =
+        '<i class="bi bi-file-earmark-text me-2"></i>' + (typeNames[docType] || 'Document') + ' — ' + docNumber;
+
+    modal.show();
+
+    fetch('/Reports/GetDocumentDetail?docType=' + encodeURIComponent(docType) + '&docNumber=' + encodeURIComponent(docNumber))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            document.getElementById('docDetailLoading').classList.add('d-none');
+            if (!data.success) {
+                document.getElementById('docDetailError').classList.remove('d-none');
+                document.getElementById('docDetailError').textContent = data.message;
+                return;
+            }
+            var d = data.doc;
+            document.getElementById('docDate').textContent = d.date;
+            document.getElementById('docStore').textContent = d.storeCode || '—';
+            document.getElementById('docEntity').textContent = d.entityCode ? (d.entityCode + ' — ' + d.entityName) : (d.entityName || '—');
+
+            var fmt2 = function(v) { return v.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}); };
+            var tbody = document.getElementById('docDetailLines');
+            tbody.innerHTML = d.lines.map(function(l) {
+                return '<tr>'
+                    + '<td class="fw-semibold">' + l.itemCode + '</td>'
+                    + '<td>' + l.itemName + '</td>'
+                    + '<td class="text-end">' + l.qty.toLocaleString(undefined,{maximumFractionDigits:2}) + '</td>'
+                    + '<td class="text-end">' + fmt2(l.price) + '</td>'
+                    + '<td class="text-end">' + fmt2(l.discount) + '</td>'
+                    + '<td class="text-end">' + fmt2(l.net) + '</td>'
+                    + '<td class="text-end">' + fmt2(l.vat) + '</td>'
+                    + '<td class="text-end">' + fmt2(l.gross) + '</td>'
+                    + '</tr>';
+            }).join('');
+
+            document.getElementById('docTotalNet').textContent = fmt2(d.totalNet);
+            document.getElementById('docTotalVat').textContent = fmt2(d.totalVat);
+            document.getElementById('docTotalGross').textContent = fmt2(d.totalGross);
+            document.getElementById('docLineCount').textContent = d.lineCount + ' line item(s)';
+
+            document.getElementById('docDetailContent').classList.remove('d-none');
+        })
+        .catch(function(err) {
+            document.getElementById('docDetailLoading').classList.add('d-none');
+            document.getElementById('docDetailError').classList.remove('d-none');
+            document.getElementById('docDetailError').textContent = 'Network error: ' + err.message;
         });
 }
 </script>

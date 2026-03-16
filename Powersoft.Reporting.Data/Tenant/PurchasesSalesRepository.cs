@@ -838,4 +838,161 @@ WHERE it.ItemCode = @ItemCode
     }
 
     #endregion
+
+    #region Document Detail
+
+    public async Task<DocumentDetailResult?> GetDocumentDetailAsync(string docType, string documentNumber)
+    {
+        var (headerSql, detailSql) = BuildDocumentDetailSql(docType);
+        if (headerSql == null) return null;
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        var result = new DocumentDetailResult
+        {
+            DocType = docType,
+            DocTypeDescription = DocumentDetailResult.GetDocTypeDescription(docType),
+            DocumentNumber = documentNumber
+        };
+
+        using (var cmd = new SqlCommand(headerSql, conn))
+        {
+            cmd.CommandTimeout = 30;
+            cmd.Parameters.AddWithValue("@DocNumber", documentNumber);
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync()) return null;
+
+            result.DocumentDate = reader.GetDateTime(reader.GetOrdinal("DocumentDate"));
+            result.EntityCode = reader.IsDBNull(reader.GetOrdinal("EntityCode")) ? "" : reader.GetString(reader.GetOrdinal("EntityCode"));
+            result.EntityName = reader.IsDBNull(reader.GetOrdinal("EntityName")) ? "" : reader.GetString(reader.GetOrdinal("EntityName"));
+            result.StoreCode = reader.IsDBNull(reader.GetOrdinal("StoreCode")) ? "" : reader.GetString(reader.GetOrdinal("StoreCode"));
+        }
+
+        using (var cmd = new SqlCommand(detailSql, conn))
+        {
+            cmd.CommandTimeout = 30;
+            cmd.Parameters.AddWithValue("@DocNumber", documentNumber);
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var line = new DocumentLineItem
+                {
+                    ItemCode = reader.IsDBNull(reader.GetOrdinal("ItemCode")) ? "" : reader.GetString(reader.GetOrdinal("ItemCode")),
+                    ItemName = reader.IsDBNull(reader.GetOrdinal("ItemName")) ? "" : reader.GetString(reader.GetOrdinal("ItemName")),
+                    Quantity = reader.GetDecimal(reader.GetOrdinal("Quantity")),
+                    UnitPrice = reader.GetDecimal(reader.GetOrdinal("UnitPrice")),
+                    Discount = reader.GetDecimal(reader.GetOrdinal("Discount")),
+                    NetAmount = reader.GetDecimal(reader.GetOrdinal("NetAmount")),
+                    VatAmount = reader.GetDecimal(reader.GetOrdinal("VatAmount")),
+                    GrossAmount = reader.GetDecimal(reader.GetOrdinal("GrossAmount"))
+                };
+                result.Lines.Add(line);
+            }
+        }
+
+        result.TotalNet = result.Lines.Sum(l => l.NetAmount);
+        result.TotalVat = result.Lines.Sum(l => l.VatAmount);
+        result.TotalGross = result.Lines.Sum(l => l.GrossAmount);
+
+        return result;
+    }
+
+    private static (string? headerSql, string? detailSql) BuildDocumentDetailSql(string docType)
+    {
+        return docType switch
+        {
+            "P" => (
+                @"SELECT TOP 1 CONVERT(DATE, h.DateTrans) AS DocumentDate,
+                         h.fk_StoreCode AS StoreCode,
+                         ISNULL(sup.pk_SupplierNo,'') AS EntityCode,
+                         CASE WHEN ISNULL(sup.Company,0)=1 THEN ISNULL(sup.LastCompanyName,'')
+                              ELSE ISNULL(sup.FirstName,'')+' '+ISNULL(sup.LastCompanyName,'') END AS EntityName
+                  FROM tbl_PurchInvoiceHeader h
+                  LEFT JOIN tbl_Supplier sup ON h.fk_SupplierCode = sup.pk_SupplierNo
+                  WHERE h.PurchInvoiceNumber = @DocNumber",
+                @"SELECT it.ItemCode, it.ItemNamePrimary AS ItemName,
+                         d.Quantity,
+                         ISNULL(d.ItemCost,0) AS UnitPrice,
+                         (ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0)) AS Discount,
+                         (d.Amount-(ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0))) AS NetAmount,
+                         ISNULL(d.VatAmount,0) AS VatAmount,
+                         (d.Amount-(ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0))+ISNULL(d.VatAmount,0)) AS GrossAmount
+                  FROM tbl_PurchInvoiceDetails d
+                  INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID
+                  INNER JOIN tbl_PurchInvoiceHeader h ON d.fk_PurchInvoiceID = h.pk_PurchInvoiceID
+                  WHERE h.PurchInvoiceNumber = @DocNumber
+                  ORDER BY it.ItemCode"),
+
+            "E" => (
+                @"SELECT TOP 1 CONVERT(DATE, h.DateTrans) AS DocumentDate,
+                         h.fk_StoreCode AS StoreCode,
+                         ISNULL(sup.pk_SupplierNo,'') AS EntityCode,
+                         CASE WHEN ISNULL(sup.Company,0)=1 THEN ISNULL(sup.LastCompanyName,'')
+                              ELSE ISNULL(sup.FirstName,'')+' '+ISNULL(sup.LastCompanyName,'') END AS EntityName
+                  FROM tbl_PurchReturnHeader h
+                  LEFT JOIN tbl_Supplier sup ON h.fk_SupplierCode = sup.pk_SupplierNo
+                  WHERE h.InvoiceNumber = @DocNumber",
+                @"SELECT it.ItemCode, it.ItemNamePrimary AS ItemName,
+                         d.Quantity,
+                         ISNULL(d.ItemCost,0) AS UnitPrice,
+                         (ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0)) AS Discount,
+                         (d.Amount-(ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0))) AS NetAmount,
+                         ISNULL(d.VatAmount,0) AS VatAmount,
+                         (d.Amount-(ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0))+ISNULL(d.VatAmount,0)) AS GrossAmount
+                  FROM tbl_PurchReturnDetails d
+                  INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID
+                  INNER JOIN tbl_PurchReturnHeader h ON d.fk_PurchReturnID = h.pk_PurchReturnID
+                  WHERE h.InvoiceNumber = @DocNumber
+                  ORDER BY it.ItemCode"),
+
+            "I" => (
+                @"SELECT TOP 1 CONVERT(DATE, h.DateTrans) AS DocumentDate,
+                         h.fk_StoreCode AS StoreCode,
+                         ISNULL(c.pk_CustomerNo,'') AS EntityCode,
+                         CASE WHEN ISNULL(c.Company,0)=1 THEN ISNULL(c.LastCompanyName,'')
+                              ELSE ISNULL(c.FirstName,'')+' '+ISNULL(c.LastCompanyName,'') END AS EntityName
+                  FROM tbl_InvoiceHeader h
+                  LEFT JOIN tbl_Customer c ON h.fk_CustomerCode = c.pk_CustomerNo
+                  WHERE h.pk_InvoiceID = @DocNumber",
+                @"SELECT it.ItemCode, it.ItemNamePrimary AS ItemName,
+                         d.Quantity,
+                         ISNULL(d.ItemPriceExcl,0) AS UnitPrice,
+                         (ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0)) AS Discount,
+                         (d.Amount-(ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0))) AS NetAmount,
+                         ISNULL(d.VatAmount,0) AS VatAmount,
+                         (d.Amount-(ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0))+ISNULL(d.VatAmount,0)) AS GrossAmount
+                  FROM tbl_InvoiceDetails d
+                  INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID
+                  INNER JOIN tbl_InvoiceHeader h ON d.fk_Invoice = h.pk_InvoiceID
+                  WHERE h.pk_InvoiceID = @DocNumber
+                  ORDER BY it.ItemCode"),
+
+            "C" => (
+                @"SELECT TOP 1 CONVERT(DATE, h.DateTrans) AS DocumentDate,
+                         h.fk_StoreCode AS StoreCode,
+                         ISNULL(c.pk_CustomerNo,'') AS EntityCode,
+                         CASE WHEN ISNULL(c.Company,0)=1 THEN ISNULL(c.LastCompanyName,'')
+                              ELSE ISNULL(c.FirstName,'')+' '+ISNULL(c.LastCompanyName,'') END AS EntityName
+                  FROM tbl_CreditHeader h
+                  LEFT JOIN tbl_Customer c ON h.fk_CustomerCode = c.pk_CustomerNo
+                  WHERE h.pk_CreditID = @DocNumber",
+                @"SELECT it.ItemCode, it.ItemNamePrimary AS ItemName,
+                         d.Quantity,
+                         ISNULL(d.ItemPriceExcl,0) AS UnitPrice,
+                         (ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0)) AS Discount,
+                         (d.Amount-(ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0))) AS NetAmount,
+                         ISNULL(d.VatAmount,0) AS VatAmount,
+                         (d.Amount-(ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0))+ISNULL(d.VatAmount,0)) AS GrossAmount
+                  FROM tbl_CreditDetails d
+                  INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID
+                  INNER JOIN tbl_CreditHeader h ON d.fk_Credit = h.pk_CreditID
+                  WHERE h.pk_CreditID = @DocNumber
+                  ORDER BY it.ItemCode"),
+
+            _ => (null, null)
+        };
+    }
+
+    #endregion
 }

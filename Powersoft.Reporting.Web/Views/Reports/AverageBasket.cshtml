@@ -173,7 +173,8 @@
     ShowCustomers = false,
     ShowStores = true,
     ShowItems = true,
-    StoresJson = storesJson
+    StoresJson = storesJson,
+    SavedFilterJson = Model.ItemsSelectionJson ?? ""
 })
 
 @if (!string.IsNullOrEmpty(Model.ErrorMessage))
@@ -1722,6 +1723,11 @@ function collectCurrentLayout() {
     });
     parms['HiddenColumns'] = hidden.join(',');
 
+    // Items selection filters
+    if (typeof getItemsSelectionFilter === 'function') {
+        parms['ItemsSelectionJson'] = JSON.stringify(getItemsSelectionFilter());
+    }
+
     return parms;
 }
 
@@ -1865,6 +1871,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (input.value.trim() !== '') input.classList.add('filter-active');
     });
     
+    // Restore date preset selection from model
+    var savedPreset = '@(Model.DatePreset ?? "")';
+    if (savedPreset) {
+        var presetRadio = document.querySelector('input[name="DatePreset"][value="' + savedPreset + '"]');
+        if (presetRadio) presetRadio.checked = true;
+    }
+
     // Wire preset radios to update date fields
     document.querySelectorAll('input[name="DatePreset"]').forEach(function(radio) {
         radio.addEventListener('change', function() {

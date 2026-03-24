@@ -86,6 +86,7 @@
     const _selected = {};
     const _modes = {};
     const _storesJson = @Html.Raw(Model.StoresJson);
+    const _savedFilterJson = '@Html.Raw((Model.SavedFilterJson ?? "").Replace("'", "\\'"))';
     let _modalDim = null;
     let _modalTempSelected = new Set();
     let _bsModal = null;
@@ -105,6 +106,56 @@
             name: s.name || s.Name || s.code || s.Code
         }));
     }
+
+    function restoreFromJson(json) {
+        if (!json) return;
+        try {
+            var saved = JSON.parse(json);
+            var keyToDim = {
+                categories: 'category', departments: 'department', brands: 'brand',
+                seasons: 'season', suppliers: 'supplier', customers: 'customer',
+                stores: 'store', items: 'item'
+            };
+            var hasAny = false;
+            Object.keys(saved).forEach(function (key) {
+                var dim = keyToDim[key.toLowerCase()] || key.toLowerCase();
+                var entry = saved[key];
+                if (!entry) return;
+                var mode = entry.mode;
+                if (typeof mode === 'number') mode = mode === 1 ? 'include' : (mode === 2 ? 'exclude' : 'all');
+                if (!mode || mode === 'all') return;
+                var ids = entry.ids || [];
+                if (!ids.length) return;
+                _modes[dim] = mode;
+                _selected[dim] = new Set(ids.map(String));
+                hasAny = true;
+                var modeBtn = document.querySelector('[data-dim="' + dim + '"] .btn-group .btn[data-mode="' + mode + '"]');
+                if (modeBtn) {
+                    var grp = modeBtn.closest('.btn-group');
+                    grp.querySelectorAll('.btn').forEach(function (b) {
+                        b.classList.remove('active', 'btn-outline-secondary', 'btn-outline-success', 'btn-outline-danger',
+                            'btn-secondary', 'btn-success', 'btn-danger');
+                        var m = b.getAttribute('data-mode');
+                        if (m === mode) {
+                            b.classList.add('active', m === 'include' ? 'btn-success' : 'btn-danger');
+                        } else {
+                            b.classList.add(m === 'all' ? 'btn-outline-secondary' : m === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
+                        }
+                    });
+                }
+                updateTrigger(dim);
+            });
+            if (hasAny) {
+                updateBadge();
+                var body = document.getElementById('isBody');
+                var txt = document.getElementById('isToggleText');
+                body.classList.remove('d-none');
+                txt.innerHTML = '<i class="bi bi-eye-slash me-1"></i>Hide Filters';
+            }
+        } catch (e) { }
+    }
+
+    restoreFromJson(_savedFilterJson);
 
     window.toggleItemsSelection = function () {
         var body = document.getElementById('isBody');

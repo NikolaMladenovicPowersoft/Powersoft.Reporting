@@ -1023,6 +1023,8 @@ public class ReportsController : Controller
                 model.PageSize = pageSize;
             if (parms.TryGetValue("HiddenColumns", out var hc) && !string.IsNullOrEmpty(hc))
                 model.HiddenColumns = hc;
+            if (parms.TryGetValue("ItemsSelectionJson", out var isj) && !string.IsNullOrEmpty(isj))
+                model.ItemsSelectionJson = isj;
         }
         catch (Exception ex)
         {
@@ -1484,6 +1486,8 @@ public class ReportsController : Controller
                 model.PageSize = pageSize;
             if (parms.TryGetValue("HiddenColumns", out var hc) && !string.IsNullOrEmpty(hc))
                 model.HiddenColumns = hc;
+            if (parms.TryGetValue("ItemsSelectionJson", out var isj) && !string.IsNullOrEmpty(isj))
+                model.ItemsSelectionJson = isj;
         }
         catch (Exception ex)
         {

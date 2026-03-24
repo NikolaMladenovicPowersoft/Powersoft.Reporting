@@ -45,4 +45,5 @@ public class ItemsSelectionConfig
     public bool ShowCustomers { get; set; }
     public bool ShowStores { get; set; } = true;
     public string StoresJson { get; set; } = "[]";
+    public string SavedFilterJson { get; set; } = "";
 }

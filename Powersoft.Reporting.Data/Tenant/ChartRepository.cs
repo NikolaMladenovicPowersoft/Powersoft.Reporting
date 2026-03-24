@@ -19,6 +19,7 @@ public class ChartRepository : IChartRepository
         var (dimSelect, dimJoin, dimGroup) = GetDimensionSql(filter.Dimension);
         var valueExpr = GetValueExpression(filter);
         var storeWhere = BuildStoreWhere(filter.StoreCodes);
+        var (dimWhere, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection);
 
         var mainSql = $@"
             SELECT TOP(@TopN) {dimSelect} AS Label, {valueExpr} AS Val
@@ -27,7 +28,7 @@ public class ChartRepository : IChartRepository
             INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
             {dimJoin}
             WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo
-              {storeWhere}
+              {storeWhere}{dimWhere}
             GROUP BY {dimGroup}
             ORDER BY Val DESC";
 
@@ -41,7 +42,7 @@ public class ChartRepository : IChartRepository
                 INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
                 {dimJoin}
                 WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo
-                  {storeWhere}";
+                  {storeWhere}{dimWhere}";
         }
 
         string? compareSql = null;
@@ -54,7 +55,7 @@ public class ChartRepository : IChartRepository
                 INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
                 {dimJoin}
                 WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @LYDateFrom AND @LYDateTo
-                  {storeWhere}
+                  {storeWhere}{dimWhere}
                 GROUP BY {dimGroup}
                 ORDER BY Val DESC";
         }
@@ -186,5 +187,12 @@ public class ChartRepository : IChartRepository
         if (filter.StoreCodes != null)
             for (int i = 0; i < filter.StoreCodes.Count; i++)
                 cmd.Parameters.AddWithValue($"@SC{i}", filter.StoreCodes[i]);
+
+        var (_, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection);
+        foreach (var p in dimParams)
+        {
+            if (!cmd.Parameters.Contains(p.ParameterName))
+                cmd.Parameters.Add(p);
+        }
     }
 }

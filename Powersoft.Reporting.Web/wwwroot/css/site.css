@@ -269,6 +269,11 @@ body {
     align-items: center;
 }
 
+/* --- Items Selection Component --- */
+#dimModalList .list-group-item { border-radius: 0; border-left: 0; border-right: 0; }
+#dimModalList .list-group-item:hover { background-color: #f0f4ff; }
+#dimModalList .form-check-input { width: 1.1em; height: 1.1em; }
+
 /* --- Date Presets - Responsive --- */
 .date-presets {
     display: flex;

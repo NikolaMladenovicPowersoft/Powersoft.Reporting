@@ -10,4 +10,5 @@ public interface ITenantRepositoryFactory
     IIniRepository CreateIniRepository(string connectionString);
     IChartRepository CreateChartRepository(string connectionString);
     IParetoRepository CreateParetoRepository(string connectionString);
+    IDimensionRepository CreateDimensionRepository(string connectionString);
 }

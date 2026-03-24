@@ -7,6 +7,7 @@ using Powersoft.Reporting.Core.Enums;
 using Powersoft.Reporting.Core.Helpers;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
+using System.Text.Json;
 using Powersoft.Reporting.Web.Services;
 using Powersoft.Reporting.Web.Services.AI;
 using Powersoft.Reporting.Web.ViewModels;
@@ -86,6 +87,67 @@ public class ReportsController : Controller
             return roleId;
         }
         return 0;
+    }
+
+    private static ItemsSelectionFilter? ParseItemsSelection(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            var filter = new ItemsSelectionFilter();
+
+            ParseDimension(root, "categories", filter.Categories);
+            ParseDimension(root, "departments", filter.Departments);
+            ParseDimension(root, "brands", filter.Brands);
+            ParseDimension(root, "seasons", filter.Seasons);
+            ParseDimension(root, "suppliers", filter.Suppliers);
+            ParseDimension(root, "customers", filter.Customers);
+            ParseDimension(root, "stores", filter.Stores);
+            ParseDimension(root, "items", filter.Items);
+
+            return filter;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void ParseDimension(JsonElement root, string key, DimensionFilter target)
+    {
+        if (!root.TryGetProperty(key, out var el)) return;
+        if (el.TryGetProperty("mode", out var modeEl))
+        {
+            if (modeEl.ValueKind == JsonValueKind.Number)
+            {
+                target.Mode = modeEl.GetInt32() switch
+                {
+                    1 => FilterMode.Include,
+                    2 => FilterMode.Exclude,
+                    _ => FilterMode.All
+                };
+            }
+            else
+            {
+                var modeStr = modeEl.GetString() ?? "all";
+                target.Mode = modeStr switch
+                {
+                    "include" => FilterMode.Include,
+                    "exclude" => FilterMode.Exclude,
+                    _ => FilterMode.All
+                };
+            }
+        }
+        if (el.TryGetProperty("ids", out var idsEl) && idsEl.ValueKind == JsonValueKind.Array)
+        {
+            target.Ids = idsEl.EnumerateArray()
+                .Select(e => e.ValueKind == JsonValueKind.Number ? e.GetInt32().ToString() : e.GetString() ?? "")
+                .Where(s => s.Length > 0)
+                .ToList();
+        }
     }
 
     /// <summary>
@@ -209,6 +271,11 @@ public class ReportsController : Controller
         ApplyDatePreset(model);
         
         var filter = model.ToReportFilter();
+        filter.ItemsSelection = ParseItemsSelection(model.ItemsSelectionJson);
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
+        {
+            filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+        }
         if (!filter.IsValid(out var validationErrors))
         {
             model.ErrorMessage = string.Join(" ", validationErrors);
@@ -282,6 +349,37 @@ public class ReportsController : Controller
         {
             _logger.LogError(ex, "Error loading stores");
             return Json(new { error = "Failed to load stores" });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetDimensions(string type, string? search = null)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { error = "Not connected to database" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateDimensionRepository(tenantConnString);
+            List<DimensionItem> results = type?.ToLowerInvariant() switch
+            {
+                "category" or "categories" => await repo.GetCategoriesAsync(),
+                "department" or "departments" => await repo.GetDepartmentsAsync(),
+                "brand" or "brands" => await repo.GetBrandsAsync(),
+                "season" or "seasons" => await repo.GetSeasonsAsync(),
+                "supplier" or "suppliers" => await repo.GetSuppliersAsync(search),
+                "customer" or "customers" => await repo.GetCustomersAsync(search),
+                "store" or "stores" => new List<DimensionItem>(),
+                "item" or "items" => new List<DimensionItem>(),
+                _ => new List<DimensionItem>()
+            };
+            return Json(results);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading dimensions: {Type}", type);
+            return Json(new { error = $"Failed to load {type}" });
         }
     }
     
@@ -860,7 +958,7 @@ public class ReportsController : Controller
     private async Task<(List<AverageBasketRow> rows, ReportGrandTotals? totals, ReportFilter filter)?> RunExportQuery(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
-        string sortColumn, string sortDirection)
+        string sortColumn, string sortDirection, string? itemsSelection = null)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString)) return null;
@@ -877,6 +975,7 @@ public class ReportsController : Controller
             StoreCodes = string.IsNullOrEmpty(storeCodes) ? new() : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
             ItemIds = string.IsNullOrEmpty(itemIds) ? new() : itemIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Where(s => int.TryParse(s.Trim(), out _)).Select(s => int.Parse(s.Trim())).ToList(),
+            ItemsSelection = ParseItemsSelection(itemsSelection),
             SortColumn = sortColumn,
             SortDirection = sortDirection,
             PageSize = int.MaxValue
@@ -1052,6 +1151,11 @@ public class ReportsController : Controller
         await LoadPsStoresAsync(model, tenantConnString);
 
         var filter = model.ToPurchasesSalesFilter();
+        filter.ItemsSelection = ParseItemsSelection(model.ItemsSelectionJson);
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
+        {
+            filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+        }
         if (!filter.IsValid(out var errors))
         {
             model.ErrorMessage = string.Join(" ", errors);
@@ -1587,21 +1691,7 @@ public class ReportsController : Controller
             var analyzer = _analyzerFactory.Create();
             var analysis = await analyzer.AnalyzeAsync(csvData, "AverageBasket", locale: locale, ct: HttpContext.RequestAborted);
 
-            return Json(new
-            {
-                success = true,
-                analysis = new
-                {
-                    analysis.Summary,
-                    analysis.KeyFindings,
-                    analysis.Alerts,
-                    analysis.Recommendations,
-                    analysis.ModelUsed,
-                    analysis.InputTokens,
-                    analysis.OutputTokens,
-                    analysis.DurationMs
-                }
-            });
+            return Json(new { success = true, analysis });
         }
         catch (Exception ex)
         {
@@ -1639,21 +1729,7 @@ public class ReportsController : Controller
             var analyzer = _analyzerFactory.Create();
             var analysis = await analyzer.AnalyzeAsync(csvData, "PurchasesSales", locale: locale, ct: HttpContext.RequestAborted);
 
-            return Json(new
-            {
-                success = true,
-                analysis = new
-                {
-                    analysis.Summary,
-                    analysis.KeyFindings,
-                    analysis.Alerts,
-                    analysis.Recommendations,
-                    analysis.ModelUsed,
-                    analysis.InputTokens,
-                    analysis.OutputTokens,
-                    analysis.DurationMs
-                }
-            });
+            return Json(new { success = true, analysis });
         }
         catch (Exception ex)
         {
@@ -1868,7 +1944,8 @@ public class ReportsController : Controller
         bool includeVat = false,
         string? storeCodes = null,
         decimal classAThreshold = 80,
-        decimal classBThreshold = 95)
+        decimal classBThreshold = 95,
+        string? itemsSelection = null)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
@@ -1884,7 +1961,8 @@ public class ReportsController : Controller
             StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
                 : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
             ClassAThreshold = classAThreshold,
-            ClassBThreshold = classBThreshold
+            ClassBThreshold = classBThreshold,
+            ItemsSelection = ParseItemsSelection(itemsSelection)
         };
 
         try
@@ -1912,6 +1990,135 @@ public class ReportsController : Controller
         }
     }
 
+    // ==================== Pareto Export ====================
+
+    private async Task<ParetoResult?> RunParetoQuery(
+        DateTime dateFrom, DateTime dateTo,
+        ParetoDimension dimension, ParetoMetric metric,
+        bool includeVat, string? storeCodes,
+        decimal classAThreshold, decimal classBThreshold)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var filter = new ParetoFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            Dimension = dimension,
+            Metric = metric,
+            IncludeVat = includeVat,
+            StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
+                : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            ClassAThreshold = classAThreshold,
+            ClassBThreshold = classBThreshold
+        };
+
+        var repo = _repositoryFactory.CreateParetoRepository(tenantConnString);
+        return await repo.GetParetoDataAsync(filter);
+    }
+
+    private static ParetoFilter BuildParetoFilter(
+        DateTime dateFrom, DateTime dateTo,
+        ParetoDimension dimension, ParetoMetric metric,
+        bool includeVat, string? storeCodes,
+        decimal classAThreshold, decimal classBThreshold)
+    {
+        return new ParetoFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            Dimension = dimension,
+            Metric = metric,
+            IncludeVat = includeVat,
+            StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
+                : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            ClassAThreshold = classAThreshold,
+            ClassBThreshold = classBThreshold
+        };
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportParetoExcel(
+        DateTime dateFrom, DateTime dateTo,
+        ParetoDimension dimension = ParetoDimension.Item,
+        ParetoMetric metric = ParetoMetric.Value,
+        bool includeVat = false, string? storeCodes = null,
+        decimal classAThreshold = 80, decimal classBThreshold = 95)
+    {
+        try
+        {
+            var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            if (result == null) return RedirectToAction("Pareto");
+
+            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            var service = new ExcelExportService();
+            var bytes = service.GenerateParetoExcel(result, filter);
+            var filename = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting Pareto Excel");
+            TempData["Error"] = ex.Message;
+            return RedirectToAction("Pareto");
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportParetoPdf(
+        DateTime dateFrom, DateTime dateTo,
+        ParetoDimension dimension = ParetoDimension.Item,
+        ParetoMetric metric = ParetoMetric.Value,
+        bool includeVat = false, string? storeCodes = null,
+        decimal classAThreshold = 80, decimal classBThreshold = 95)
+    {
+        try
+        {
+            var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            if (result == null) return RedirectToAction("Pareto");
+
+            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            var service = new PdfExportService();
+            var bytes = service.GenerateParetoPdf(result, filter);
+            var filename = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+            return File(bytes, "application/pdf", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting Pareto PDF");
+            TempData["Error"] = ex.Message;
+            return RedirectToAction("Pareto");
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportParetoCsv(
+        DateTime dateFrom, DateTime dateTo,
+        ParetoDimension dimension = ParetoDimension.Item,
+        ParetoMetric metric = ParetoMetric.Value,
+        bool includeVat = false, string? storeCodes = null,
+        decimal classAThreshold = 80, decimal classBThreshold = 95)
+    {
+        try
+        {
+            var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            if (result == null) return RedirectToAction("Pareto");
+
+            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            var service = new CsvExportService();
+            var bytes = service.GenerateParetoCsv(result, filter);
+            var filename = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+            return File(bytes, "text/csv", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting Pareto CSV");
+            TempData["Error"] = ex.Message;
+            return RedirectToAction("Pareto");
+        }
+    }
+
     // ==================== Charts ====================
 
     public async Task<IActionResult> Charts()
@@ -1929,6 +2136,93 @@ public class ReportsController : Controller
         return View();
     }
 
+    private async Task<List<ChartDataPoint>?> RunChartQuery(ChartFilter filter)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var repo = _repositoryFactory.CreateChartRepository(tenantConnString);
+        return await repo.GetSalesBreakdownAsync(filter);
+    }
+
+    private static ChartFilter BuildChartFilter(
+        DateTime dateFrom, DateTime dateTo,
+        ChartDimension dimension, ChartMetric metric,
+        int topN, bool showOthers, bool compareLastYear, bool includeVat,
+        string? storeCodes, string chartType)
+    {
+        return new ChartFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            Dimension = dimension,
+            Metric = metric,
+            TopN = topN,
+            ShowOthers = showOthers,
+            CompareLastYear = compareLastYear,
+            IncludeVat = includeVat,
+            StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
+                : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            ChartType = chartType
+        };
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportChartExcel(
+        DateTime dateFrom, DateTime dateTo,
+        ChartDimension dimension = ChartDimension.Category,
+        ChartMetric metric = ChartMetric.Value,
+        int topN = 10, bool showOthers = true,
+        bool compareLastYear = false, bool includeVat = false,
+        string? storeCodes = null, string chartType = "pie")
+    {
+        try
+        {
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType);
+            var data = await RunChartQuery(filter);
+            if (data == null) return RedirectToAction("Charts");
+
+            var service = new ExcelExportService();
+            var bytes = service.GenerateChartExcel(data, filter);
+            var filename = $"Chart_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting Chart Excel");
+            TempData["Error"] = ex.Message;
+            return RedirectToAction("Charts");
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportChartCsv(
+        DateTime dateFrom, DateTime dateTo,
+        ChartDimension dimension = ChartDimension.Category,
+        ChartMetric metric = ChartMetric.Value,
+        int topN = 10, bool showOthers = true,
+        bool compareLastYear = false, bool includeVat = false,
+        string? storeCodes = null, string chartType = "pie")
+    {
+        try
+        {
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType);
+            var data = await RunChartQuery(filter);
+            if (data == null) return RedirectToAction("Charts");
+
+            var service = new CsvExportService();
+            var bytes = service.GenerateChartCsv(data, filter);
+            var filename = $"Chart_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+            return File(bytes, "text/csv", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting Chart CSV");
+            TempData["Error"] = ex.Message;
+            return RedirectToAction("Charts");
+        }
+    }
+
     [HttpPost]
     public async Task<IActionResult> GetChartData(
         DateTime dateFrom, DateTime dateTo,
@@ -1936,7 +2230,8 @@ public class ReportsController : Controller
         ChartMetric metric = ChartMetric.Value,
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
-        string? storeCodes = null, string chartType = "pie")
+        string? storeCodes = null, string chartType = "pie",
+        string? itemsSelection = null)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
@@ -1954,7 +2249,8 @@ public class ReportsController : Controller
             IncludeVat = includeVat,
             StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
                 : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
-            ChartType = chartType
+            ChartType = chartType,
+            ItemsSelection = ParseItemsSelection(itemsSelection)
         };
 
         try

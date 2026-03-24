@@ -286,6 +286,95 @@ public class PdfExportService
         return ms.ToArray();
     }
 
+    public byte[] GenerateParetoPdf(ParetoResult result, ParetoFilter filter)
+    {
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4, 30, 30, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Pareto 80/20 Analysis", TitleFont));
+        document.Add(new Paragraph($"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}", SubtitleFont));
+        document.Add(new Paragraph($"Dimension: {filter.Dimension} | Metric: {filter.Metric}", SubtitleFont));
+        document.Add(new Paragraph($"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}", SubtitleFont));
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            document.Add(new Paragraph($"Stores: {string.Join(", ", filter.StoreCodes)}", SubtitleFont));
+        document.Add(new Paragraph($"Thresholds: A ≤ {filter.ClassAThreshold}% | B ≤ {filter.ClassBThreshold}%", SubtitleFont));
+        document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var summaryFont = FontFactory.GetFont(FontFactory.HELVETICA, 8);
+        var summaryBold = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 8);
+        decimal aPct = result.GrandTotal > 0 ? result.ClassAValue / result.GrandTotal * 100 : 0;
+        decimal bPct = result.GrandTotal > 0 ? result.ClassBValue / result.GrandTotal * 100 : 0;
+        decimal cPct = result.GrandTotal > 0 ? result.ClassCValue / result.GrandTotal * 100 : 0;
+
+        var summaryTable = new PdfPTable(4) { WidthPercentage = 100, SpacingBefore = 2f, SpacingAfter = 8f };
+        summaryTable.SetWidths(new float[] { 25f, 25f, 25f, 25f });
+
+        AddSummaryCard(summaryTable, $"Total: {result.GrandTotal:N2}", $"{result.Rows.Count} items", new BaseColor(219, 234, 254), summaryBold, summaryFont);
+        AddSummaryCard(summaryTable, $"Class A: {result.ClassACount}", $"{aPct:N1}% of value", new BaseColor(220, 252, 231), summaryBold, summaryFont);
+        AddSummaryCard(summaryTable, $"Class B: {result.ClassBCount}", $"{bPct:N1}% of value", new BaseColor(254, 249, 195), summaryBold, summaryFont);
+        AddSummaryCard(summaryTable, $"Class C: {result.ClassCCount}", $"{cPct:N1}% of value", new BaseColor(254, 226, 226), summaryBold, summaryFont);
+        document.Add(summaryTable);
+
+        var table = new PdfPTable(7) { WidthPercentage = 100, SpacingBefore = 5f };
+        table.SetWidths(new float[] { 5f, 12f, 30f, 15f, 10f, 12f, 8f });
+
+        AddHeaderCell(table, "#");
+        AddHeaderCell(table, "Code");
+        AddHeaderCell(table, "Name");
+        AddHeaderCell(table, filter.Metric == ParetoMetric.Quantity ? "Quantity" : "Value");
+        AddHeaderCell(table, "%");
+        AddHeaderCell(table, "Cumul. %");
+        AddHeaderCell(table, "Class");
+
+        foreach (var row in result.Rows)
+        {
+            var bg = row.Classification switch
+            {
+                "A" => new BaseColor(220, 252, 231),
+                "B" => new BaseColor(254, 249, 195),
+                _ => new BaseColor(254, 226, 226)
+            };
+
+            AddDataCell(table, row.Rank.ToString(), bg, Element.ALIGN_CENTER);
+            AddDataCell(table, row.Code, bg);
+            AddDataCell(table, row.Name, bg);
+            AddDataCell(table, row.Value.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, $"{row.Percentage:N2}%", bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, $"{row.CumulativePercentage:N1}%", bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.Classification, bg, Element.ALIGN_CENTER);
+        }
+
+        AddTotalCell(table, "");
+        AddTotalCell(table, "");
+        AddTotalCell(table, "TOTAL");
+        AddTotalCell(table, result.GrandTotal.ToString("N2"), Element.ALIGN_RIGHT);
+        AddTotalCell(table, "100%", Element.ALIGN_RIGHT);
+        AddTotalCell(table, "");
+        AddTotalCell(table, "");
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
+
+    private static void AddSummaryCard(PdfPTable table, string title, string subtitle, BaseColor bg, Font titleFont, Font subFont)
+    {
+        var phrase = new Phrase();
+        phrase.Add(new Chunk(title + "\n", titleFont));
+        phrase.Add(new Chunk(subtitle, subFont));
+        var cell = new PdfPCell(phrase)
+        {
+            BackgroundColor = bg,
+            Padding = 8f,
+            HorizontalAlignment = Element.ALIGN_CENTER,
+            BorderColor = new BaseColor(226, 232, 240)
+        };
+        table.AddCell(cell);
+    }
+
     private void WritePdfSubtotalRow(PdfPTable table, string label, SubtotalAgg agg,
         PurchasesSalesFilter filter, int colCount,
         bool hasL1, bool hasL2, bool hasL3, bool hasItem)

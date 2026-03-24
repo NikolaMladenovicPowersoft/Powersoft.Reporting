@@ -68,4 +68,12 @@ public class TenantRepositoryFactory : ITenantRepositoryFactory
             
         return new ParetoRepository(connectionString);
     }
+
+    public IDimensionRepository CreateDimensionRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+
+        return new DimensionRepository(connectionString);
+    }
 }

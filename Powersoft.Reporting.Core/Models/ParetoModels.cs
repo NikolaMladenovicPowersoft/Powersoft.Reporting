@@ -22,6 +22,8 @@ public class ParetoFilter
     public List<string>? StoreCodes { get; set; }
     public decimal ClassAThreshold { get; set; } = 80;
     public decimal ClassBThreshold { get; set; } = 95;
+
+    public ItemsSelectionFilter? ItemsSelection { get; set; }
 }
 
 public class ParetoResult

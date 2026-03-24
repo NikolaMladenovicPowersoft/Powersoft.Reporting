@@ -1,118 +1,184 @@
 @using Powersoft.Reporting.Core.Models
+@using System.Text.Json
 @{
     ViewData["Title"] = "Charts & Dashboards";
     var stores = ViewBag.Stores as List<Store> ?? new List<Store>();
     var dbName = ViewBag.ConnectedDatabase as string ?? "Unknown";
+    var storesJson = JsonSerializer.Serialize(stores.Select(s => new { s.StoreCode, s.StoreName }));
 }
 
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
+                <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
+                <li class="breadcrumb-item active">Charts & Dashboards</li>
+            </ol>
+        </nav>
+        <h2 class="mb-0">
+            <i class="bi bi-pie-chart me-2 text-primary"></i>Charts & Dashboards
+        </h2>
+        <p class="text-muted mb-0">Visual data exploration — @dbName</p>
+    </div>
+</div>
+
 <div class="card mb-4">
-    <div class="card-header d-flex align-items-center justify-content-between">
-        <span><i class="bi bi-pie-chart me-2"></i>Charts & Dashboards — @dbName</span>
+    <div class="card-header">
+        <i class="bi bi-funnel me-2"></i>Chart Parameters
     </div>
     <div class="card-body">
-        <form id="chartForm" class="row g-3 mb-4">
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Date From</label>
-                <input type="date" class="form-control form-control-sm" name="dateFrom" id="dateFrom"
-                       value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Date To</label>
-                <input type="date" class="form-control form-control-sm" name="dateTo" id="dateTo"
-                       value="@DateTime.Today.ToString("yyyy-MM-dd")" />
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Dimension</label>
-                <select class="form-select form-select-sm" name="dimension" id="dimension">
-                    <option value="Category">Category</option>
-                    <option value="Store">Store / Shop</option>
-                    <option value="Brand">Brand</option>
-                    <option value="Customer">Customer</option>
-                    <option value="Item">Item</option>
-                    <option value="Supplier">Supplier</option>
-                    <option value="Department">Department</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Metric</label>
-                <select class="form-select form-select-sm" name="metric" id="metric">
-                    <option value="Value">Value (€)</option>
-                    <option value="Quantity">Quantity</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Chart Type</label>
-                <select class="form-select form-select-sm" name="chartType" id="chartType">
-                    <option value="pie">Pie Chart</option>
-                    <option value="doughnut">Doughnut</option>
-                    <option value="bar">Bar Chart</option>
-                    <option value="horizontalBar">Horizontal Bar</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Top N</label>
-                <select class="form-select form-select-sm" name="topN" id="topN">
-                    <option value="5">Top 5</option>
-                    <option value="10" selected>Top 10</option>
-                    <option value="15">Top 15</option>
-                    <option value="20">Top 20</option>
-                </select>
+        <form id="chartForm">
+            <div class="row mb-3">
+                <div class="col-12">
+                    <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                    <div class="date-presets btn-group flex-wrap" role="group">
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetYesterday" value="yesterday" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetYesterday">Yesterday</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLast7" value="last7" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLast7">Last 7 Days</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                    </div>
+                </div>
             </div>
 
-            @if (stores.Any())
-            {
-                <div class="col-md-4">
-                    <label class="form-label small fw-semibold">Store Filter</label>
-                    <select class="form-select form-select-sm" id="storeFilter" multiple size="3">
-                        @foreach (var s in stores)
-                        {
-                            <option value="@s.StoreCode">@s.DisplayName</option>
-                        }
+            <hr class="my-3">
+
+            <div class="row g-3 mb-3 align-items-end">
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Date From</label>
+                    <input type="date" class="form-control" id="dateFrom" onchange="clearPreset()"
+                           value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Date To</label>
+                    <input type="date" class="form-control" id="dateTo" onchange="clearPreset()"
+                           value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Dimension</label>
+                    <select class="form-select" id="dimension">
+                        <option value="Category">Category</option>
+                        <option value="Store">Store / Shop</option>
+                        <option value="Brand">Brand</option>
+                        <option value="Customer">Customer</option>
+                        <option value="Item">Item</option>
+                        <option value="Supplier">Supplier</option>
+                        <option value="Department">Department</option>
                     </select>
-                    <div class="form-text">Hold Ctrl to select multiple. Empty = all stores.</div>
                 </div>
-            }
-
-            <div class="col-md-4 d-flex align-items-end gap-3">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="showOthers" checked>
-                    <label class="form-check-label small" for="showOthers">Show Others</label>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Metric</label>
+                    <select class="form-select" id="metric">
+                        <option value="Value">Value (€)</option>
+                        <option value="Quantity">Quantity</option>
+                    </select>
                 </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="compareLastYear">
-                    <label class="form-check-label small" for="compareLastYear">Compare LY</label>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Chart Type</label>
+                    <select class="form-select" id="chartType">
+                        <option value="pie">Pie Chart</option>
+                        <option value="doughnut">Doughnut</option>
+                        <option value="bar">Bar Chart</option>
+                        <option value="horizontalBar">Horizontal Bar</option>
+                    </select>
                 </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="includeVat">
-                    <label class="form-check-label small" for="includeVat">Inc. VAT</label>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Top N</label>
+                    <select class="form-select" id="topN">
+                        <option value="5">Top 5</option>
+                        <option value="10" selected>Top 10</option>
+                        <option value="15">Top 15</option>
+                        <option value="20">Top 20</option>
+                    </select>
                 </div>
             </div>
 
-            <div class="col-md-4 d-flex align-items-end">
-                <button type="button" class="btn btn-primary" onclick="loadChart()">
-                    <i class="bi bi-bar-chart me-1"></i>Generate Chart
+            <div class="row g-3 mb-4 align-items-end">
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="showOthers" checked>
+                        <label class="form-check-label" for="showOthers">Show Others</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="compareLastYear">
+                        <label class="form-check-label" for="compareLastYear">Compare with Last Year</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="includeVat">
+                        <label class="form-check-label" for="includeVat">Include VAT</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
+                <button type="button" class="btn btn-primary btn-lg" onclick="loadChart()" id="generateBtn">
+                    <i class="bi bi-play-fill me-2"></i>Generate Chart
+                </button>
+                <div class="btn-group ms-auto" id="exportGroup" style="display:none;">
+                    <button type="button" class="btn btn-outline-success" onclick="exportChart('excel')" title="Export data to Excel">
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="exportChart('csv')" title="Export data to CSV">
+                        <i class="bi bi-filetype-csv me-1"></i>CSV
+                    </button>
+                </div>
+                <button type="button" class="btn btn-outline-info" id="aiAnalyzeBtn" style="display:none;" onclick="analyzeChart()">
+                    <i class="bi bi-stars me-1"></i>AI Analyze
                 </button>
             </div>
         </form>
+    </div>
+</div>
 
-        <div id="chartLoading" class="text-center py-5 d-none">
-            <div class="spinner-border text-primary"></div>
-            <p class="text-muted mt-2">Loading chart data...</p>
+@await Html.PartialAsync("_ItemsSelection", new ItemsSelectionConfig
+{
+    ShowCategories = true,
+    ShowDepartments = true,
+    ShowBrands = true,
+    ShowSeasons = true,
+    ShowSuppliers = true,
+    ShowCustomers = false,
+    ShowStores = true,
+    StoresJson = storesJson
+})
+
+<div id="chartLoading" class="text-center py-5 d-none">
+    <div class="spinner-border text-primary"></div>
+    <p class="text-muted mt-2">Loading chart data...</p>
+</div>
+<div id="chartError" class="alert alert-danger d-none"></div>
+
+<div id="chartArea" class="d-none">
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-bar-chart me-2"></i>Chart Results</span>
         </div>
-        <div id="chartError" class="alert alert-danger d-none"></div>
-
-        <div id="chartArea" class="d-none">
+        <div class="card-body">
             <div class="row">
                 <div class="col-lg-8">
-                    <div class="card">
-                        <div class="card-body" style="position:relative;height:500px;">
-                            <canvas id="mainChart"></canvas>
-                        </div>
+                    <div style="position:relative;height:500px;">
+                        <canvas id="mainChart"></canvas>
                     </div>
                 </div>
                 <div class="col-lg-4">
                     <div class="card">
-                        <div class="card-header small fw-semibold">
+                        <div class="card-header small fw-semibold py-2">
                             <i class="bi bi-table me-1"></i>Data Summary
                         </div>
                         <div class="card-body p-0" style="max-height:460px;overflow-y:auto;">
@@ -132,19 +198,18 @@
                 </div>
             </div>
         </div>
-
-        <div id="emptyState" class="text-center py-5 text-muted">
-            <i class="bi bi-pie-chart" style="font-size:3rem;"></i>
-            <p class="mt-3">Select your parameters and click <strong>Generate Chart</strong> to begin.</p>
-        </div>
     </div>
+</div>
+
+<div id="emptyState" class="text-center py-5 text-muted">
+    <i class="bi bi-pie-chart" style="font-size:3rem;opacity:0.3;"></i>
+    <p class="mt-3">Select your parameters and click <strong>Generate Chart</strong> to begin.</p>
 </div>
 
 @section Scripts {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
 var _chart = null;
-
 var COLORS = [
     '#2563eb','#059669','#d97706','#dc2626','#7c3aed',
     '#0891b2','#be185d','#65a30d','#ea580c','#4f46e5',
@@ -153,34 +218,91 @@ var COLORS = [
     '#94a3b8'
 ];
 
+document.querySelectorAll('input[name="DatePreset"]').forEach(function(el) {
+    el.addEventListener('change', function() {
+        var now = new Date();
+        var y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+        var from, to;
+        switch (this.value) {
+            case 'today': from = to = new Date(y, m, d); break;
+            case 'yesterday': from = to = new Date(y, m, d - 1); break;
+            case 'last7': from = new Date(y, m, d - 7); to = new Date(y, m, d); break;
+            case 'last30': from = new Date(y, m, d - 30); to = new Date(y, m, d); break;
+            case 'thisMonth': from = new Date(y, m, 1); to = new Date(y, m, d); break;
+            case 'lastMonth': from = new Date(y, m - 1, 1); to = new Date(y, m, 0); break;
+            case 'ytd': from = new Date(y, 0, 1); to = new Date(y, m, d); break;
+            case 'lastYear': from = new Date(y - 1, 0, 1); to = new Date(y - 1, 11, 31); break;
+        }
+        if (from) document.getElementById('dateFrom').value = from.toISOString().split('T')[0];
+        if (to) document.getElementById('dateTo').value = to.toISOString().split('T')[0];
+    });
+});
+function clearPreset() { document.querySelectorAll('input[name="DatePreset"]').forEach(function(r) { r.checked = false; }); }
+
+function getItemsSelectionJson() {
+    if (typeof getItemsSelectionFilter === 'function') {
+        var f = getItemsSelectionFilter();
+        return Object.keys(f).length > 0 ? JSON.stringify(f) : '';
+    }
+    return '';
+}
+
+function getSelectedStoreCodes() {
+    return typeof getItemsSelectionStoreCodes === 'function'
+        ? getItemsSelectionStoreCodes() : '';
+}
+
+function exportChart(format) {
+    var dateFrom = document.getElementById('dateFrom').value;
+    var dateTo = document.getElementById('dateTo').value;
+    if (!dateFrom || !dateTo) { alert('Please select dates first.'); return; }
+
+    var params = new URLSearchParams({
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        dimension: document.getElementById('dimension').value,
+        metric: document.getElementById('metric').value,
+        topN: document.getElementById('topN').value,
+        showOthers: document.getElementById('showOthers').checked,
+        compareLastYear: document.getElementById('compareLastYear').checked,
+        includeVat: document.getElementById('includeVat').checked,
+        storeCodes: getSelectedStoreCodes(),
+        chartType: document.getElementById('chartType').value
+    });
+
+    var action = format === 'excel' ? 'ExportChartExcel' : 'ExportChartCsv';
+    window.location.href = '/Reports/' + action + '?' + params.toString();
+}
+
 function loadChart() {
     var dateFrom = document.getElementById('dateFrom').value;
     var dateTo = document.getElementById('dateTo').value;
     if (!dateFrom || !dateTo) { alert('Please select dates.'); return; }
 
-    var storeEl = document.getElementById('storeFilter');
-    var storeCodes = storeEl ? Array.from(storeEl.selectedOptions).map(o => o.value).join(',') : '';
-
     document.getElementById('chartLoading').classList.remove('d-none');
     document.getElementById('chartError').classList.add('d-none');
     document.getElementById('chartArea').classList.add('d-none');
     document.getElementById('emptyState').classList.add('d-none');
+    document.getElementById('exportGroup').style.display = 'none';
+    document.getElementById('aiAnalyzeBtn').style.display = 'none';
 
-    var formData = new FormData();
-    formData.append('dateFrom', dateFrom);
-    formData.append('dateTo', dateTo);
-    formData.append('dimension', document.getElementById('dimension').value);
-    formData.append('metric', document.getElementById('metric').value);
-    formData.append('topN', document.getElementById('topN').value);
-    formData.append('showOthers', document.getElementById('showOthers').checked);
-    formData.append('compareLastYear', document.getElementById('compareLastYear').checked);
-    formData.append('includeVat', document.getElementById('includeVat').checked);
-    formData.append('storeCodes', storeCodes);
-    formData.append('chartType', document.getElementById('chartType').value);
+    var fd = new FormData();
+    fd.append('dateFrom', dateFrom);
+    fd.append('dateTo', dateTo);
+    fd.append('dimension', document.getElementById('dimension').value);
+    fd.append('metric', document.getElementById('metric').value);
+    fd.append('topN', document.getElementById('topN').value);
+    fd.append('showOthers', document.getElementById('showOthers').checked);
+    fd.append('compareLastYear', document.getElementById('compareLastYear').checked);
+    fd.append('includeVat', document.getElementById('includeVat').checked);
+    fd.append('storeCodes', getSelectedStoreCodes());
+    fd.append('chartType', document.getElementById('chartType').value);
+    var isJson = getItemsSelectionJson();
+    if (isJson) fd.append('itemsSelection', isJson);
 
-    fetch('/Reports/GetChartData', { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(result => {
+    fetch('/Reports/GetChartData', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(result) {
             document.getElementById('chartLoading').classList.add('d-none');
             if (!result.success) {
                 document.getElementById('chartError').textContent = result.message;
@@ -188,12 +310,17 @@ function loadChart() {
                 return;
             }
             renderChart(result.data, result.chartType);
+            document.getElementById('aiAnalyzeBtn').style.display = '';
         })
-        .catch(err => {
+        .catch(function(err) {
             document.getElementById('chartLoading').classList.add('d-none');
             document.getElementById('chartError').textContent = 'Network error: ' + err.message;
             document.getElementById('chartError').classList.remove('d-none');
         });
+}
+
+function analyzeChart() {
+    alert('AI Analysis will be available soon. This button will trigger AI analysis of the chart data.');
 }
 
 function renderChart(data, chartType) {
@@ -204,13 +331,13 @@ function renderChart(data, chartType) {
     }
 
     document.getElementById('chartArea').classList.remove('d-none');
-    var labels = data.map(d => d.label);
-    var values = data.map(d => d.value);
-    var total = values.reduce((a, b) => a + b, 0);
-    var hasCompare = data.some(d => d.compareValue !== null && d.compareValue !== undefined);
-    var compareValues = hasCompare ? data.map(d => d.compareValue || 0) : null;
-
-    var colors = labels.map((_, i) => COLORS[i % COLORS.length]);
+    document.getElementById('exportGroup').style.display = '';
+    var labels = data.map(function(d) { return d.label; });
+    var values = data.map(function(d) { return d.value; });
+    var total = values.reduce(function(a, b) { return a + b; }, 0);
+    var hasCompare = data.some(function(d) { return d.compareValue !== null && d.compareValue !== undefined; });
+    var compareValues = hasCompare ? data.map(function(d) { return d.compareValue || 0; }) : null;
+    var colors = labels.map(function(_, i) { return COLORS[i % COLORS.length]; });
     var isPie = chartType === 'pie' || chartType === 'doughnut';
     var isHoriz = chartType === 'horizontalBar';
     var cjsType = isHoriz ? 'bar' : (isPie ? chartType : 'bar');
@@ -220,17 +347,16 @@ function renderChart(data, chartType) {
     var datasets = [{
         label: document.getElementById('metric').value === 'Quantity' ? 'Quantity' : 'Value',
         data: values,
-        backgroundColor: isPie ? colors : colors.map(c => c + 'CC'),
+        backgroundColor: isPie ? colors : colors.map(function(c) { return c + 'CC'; }),
         borderColor: isPie ? '#fff' : colors,
         borderWidth: isPie ? 2 : 1
     }];
-
     if (hasCompare) {
         datasets.push({
             label: 'Last Year',
             data: compareValues,
-            backgroundColor: isPie ? colors.map(c => c + '66') : colors.map(c => c + '44'),
-            borderColor: colors.map(c => c + '88'),
+            backgroundColor: isPie ? colors.map(function(c) { return c + '66'; }) : colors.map(function(c) { return c + '44'; }),
+            borderColor: colors.map(function(c) { return c + '88'; }),
             borderWidth: 1
         });
     }
@@ -250,8 +376,8 @@ function renderChart(data, chartType) {
                         label: function(ctx) {
                             var v = ctx.parsed !== undefined ? (isPie ? ctx.parsed : (isHoriz ? ctx.parsed.x : ctx.parsed.y)) : 0;
                             var pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0';
-                            var metric = document.getElementById('metric').value;
-                            return metric === 'Quantity'
+                            var isQty = document.getElementById('metric').value === 'Quantity';
+                            return isQty
                                 ? ctx.dataset.label + ': ' + v.toLocaleString() + ' (' + pct + '%)'
                                 : ctx.dataset.label + ': €' + v.toLocaleString(undefined, {minimumFractionDigits:2}) + ' (' + pct + '%)';
                         }
@@ -265,27 +391,26 @@ function renderChart(data, chartType) {
         }
     });
 
+    var isQty = document.getElementById('metric').value === 'Quantity';
+    var fmt = function(v) { return isQty ? v.toLocaleString() : '€' + v.toLocaleString(undefined, {minimumFractionDigits:2}); };
     var tbody = document.getElementById('dataSummary');
     tbody.innerHTML = '';
     data.forEach(function(d, i) {
         var pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : '0.0';
-        var metric = document.getElementById('metric').value;
-        var valStr = metric === 'Quantity' ? d.value.toLocaleString() : '€' + d.value.toLocaleString(undefined, {minimumFractionDigits:2});
-        var colorDot = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + COLORS[i % COLORS.length] + ';margin-right:6px;"></span>';
-        var row = '<tr><td>' + (i + 1) + '</td><td>' + colorDot + d.label + '</td><td class="text-end">' + valStr + '</td><td class="text-end">' + pct + '%</td></tr>';
+        var dot = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + COLORS[i % COLORS.length] + ';margin-right:6px;"></span>';
+        var row;
         if (hasCompare && d.compareValue !== null && d.compareValue !== undefined) {
-            var lyStr = metric === 'Quantity' ? d.compareValue.toLocaleString() : '€' + d.compareValue.toLocaleString(undefined, {minimumFractionDigits:2});
             var diff = d.compareValue > 0 ? (((d.value - d.compareValue) / d.compareValue) * 100).toFixed(1) : 'N/A';
-            var diffClass = diff !== 'N/A' && parseFloat(diff) >= 0 ? 'text-success' : 'text-danger';
-            row = '<tr><td>' + (i + 1) + '</td><td>' + colorDot + d.label + '</td><td class="text-end">' + valStr + '<br><small class="text-muted">LY: ' + lyStr + '</small></td><td class="text-end">' + pct + '%<br><small class="' + diffClass + '">' + (diff !== 'N/A' ? diff + '%' : diff) + '</small></td></tr>';
+            var cls = diff !== 'N/A' && parseFloat(diff) >= 0 ? 'text-success' : 'text-danger';
+            row = '<tr><td>' + (i+1) + '</td><td>' + dot + d.label + '</td><td class="text-end">' + fmt(d.value)
+                + '<br><small class="text-muted">LY: ' + fmt(d.compareValue) + '</small></td><td class="text-end">' + pct
+                + '%<br><small class="' + cls + '">' + (diff !== 'N/A' ? diff + '%' : diff) + '</small></td></tr>';
+        } else {
+            row = '<tr><td>' + (i+1) + '</td><td>' + dot + d.label + '</td><td class="text-end">' + fmt(d.value) + '</td><td class="text-end">' + pct + '%</td></tr>';
         }
         tbody.innerHTML += row;
     });
-
-    var totalRow = '<tr class="fw-bold table-light"><td></td><td>Total</td><td class="text-end">'
-        + (document.getElementById('metric').value === 'Quantity' ? total.toLocaleString() : '€' + total.toLocaleString(undefined, {minimumFractionDigits:2}))
-        + '</td><td class="text-end">100%</td></tr>';
-    tbody.innerHTML += totalRow;
+    tbody.innerHTML += '<tr class="fw-bold table-light"><td></td><td>Total</td><td class="text-end">' + fmt(total) + '</td><td class="text-end">100%</td></tr>';
 }
 </script>
 }

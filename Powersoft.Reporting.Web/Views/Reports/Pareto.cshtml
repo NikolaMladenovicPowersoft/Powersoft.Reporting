@@ -1,8 +1,10 @@
 @using Powersoft.Reporting.Core.Models
+@using System.Text.Json
 @{
     ViewData["Title"] = "Pareto 80/20 Analysis";
     var stores = ViewBag.Stores as List<Store> ?? new List<Store>();
     var dbName = ViewBag.ConnectedDatabase as string ?? "Unknown";
+    var storesJson = JsonSerializer.Serialize(stores.Select(s => new { s.StoreCode, s.StoreName }));
 }
 
 <style>
@@ -17,111 +19,172 @@
     .stat-card .label { font-size: 0.8rem; color: #6b7280; }
 </style>
 
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
+                <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
+                <li class="breadcrumb-item active">Pareto 80/20</li>
+            </ol>
+        </nav>
+        <h2 class="mb-0">
+            <i class="bi bi-funnel me-2 text-primary"></i>Pareto 80/20 Analysis
+        </h2>
+        <p class="text-muted mb-0">ABC classification of sales data — @dbName</p>
+    </div>
+</div>
+
 <div class="card mb-4">
-    <div class="card-header d-flex align-items-center justify-content-between">
-        <span><i class="bi bi-funnel me-2"></i>Pareto 80/20 Analysis — @dbName</span>
+    <div class="card-header">
+        <i class="bi bi-funnel me-2"></i>Report Parameters
     </div>
     <div class="card-body">
-        <form id="paretoForm" class="row g-3 mb-4">
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Date From</label>
-                <input type="date" class="form-control form-control-sm" id="dateFrom"
-                       value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Date To</label>
-                <input type="date" class="form-control form-control-sm" id="dateTo"
-                       value="@DateTime.Today.ToString("yyyy-MM-dd")" />
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Dimension</label>
-                <select class="form-select form-select-sm" id="dimension">
-                    <option value="Item">By Item</option>
-                    <option value="Customer">By Customer</option>
-                    <option value="Category">By Category</option>
-                    <option value="Supplier">By Supplier</option>
-                    <option value="Brand">By Brand</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label small fw-semibold">Metric</label>
-                <select class="form-select form-select-sm" id="metric">
-                    <option value="Value">Value (€)</option>
-                    <option value="Quantity">Quantity</option>
-                </select>
-            </div>
-            @if (stores.Any())
-            {
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Store Filter</label>
-                    <select class="form-select form-select-sm" id="storeFilter" multiple size="3">
-                        @foreach (var s in stores)
-                        {
-                            <option value="@s.StoreCode">@s.DisplayName</option>
-                        }
-                    </select>
-                </div>
-            }
-            <div class="col-md-3 d-flex align-items-end gap-3">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="includeVat">
-                    <label class="form-check-label small" for="includeVat">Inc. VAT</label>
-                </div>
-                <button type="button" class="btn btn-primary btn-sm" onclick="loadPareto()">
-                    <i class="bi bi-funnel me-1"></i>Generate
-                </button>
-            </div>
-        </form>
-
-        <div id="paretoLoading" class="text-center py-5 d-none">
-            <div class="spinner-border text-primary"></div>
-            <p class="text-muted mt-2">Calculating Pareto analysis...</p>
-        </div>
-        <div id="paretoError" class="alert alert-danger d-none"></div>
-
-        <div id="paretoResults" class="d-none">
-            <div class="row g-3 mb-4" id="summaryCards"></div>
-
-            <div class="row mb-4">
+        <form id="paretoForm">
+            <div class="row mb-3">
                 <div class="col-12">
-                    <div class="card">
-                        <div class="card-body" style="position:relative;height:400px;">
-                            <canvas id="paretoChart"></canvas>
-                        </div>
+                    <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                    <div class="date-presets btn-group flex-wrap" role="group">
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
                     </div>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header small fw-semibold d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-table me-1"></i>Detailed Breakdown</span>
-                    <span id="rowCountBadge" class="badge bg-secondary"></span>
+            <hr class="my-3">
+
+            <div class="row g-3 mb-3 align-items-end">
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Date From</label>
+                    <input type="date" class="form-control" id="dateFrom" onchange="clearPreset()"
+                           value="@DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd")" />
                 </div>
-                <div class="card-body p-0" style="max-height:500px;overflow-y:auto;">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light sticky-top">
-                            <tr class="small">
-                                <th>#</th>
-                                <th>Code</th>
-                                <th>Name</th>
-                                <th class="text-end">Value</th>
-                                <th class="text-end">%</th>
-                                <th class="text-end">Cumul. %</th>
-                                <th class="text-center">Class</th>
-                            </tr>
-                        </thead>
-                        <tbody id="paretoTable" class="small"></tbody>
-                    </table>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Date To</label>
+                    <input type="date" class="form-control" id="dateTo" onchange="clearPreset()"
+                           value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Dimension</label>
+                    <select class="form-select" id="dimension">
+                        <option value="Item">By Item</option>
+                        <option value="Customer">By Customer</option>
+                        <option value="Category">By Category</option>
+                        <option value="Supplier">By Supplier</option>
+                        <option value="Brand">By Brand</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Metric</label>
+                    <select class="form-select" id="metric">
+                        <option value="Value">Value (€)</option>
+                        <option value="Quantity">Quantity</option>
+                    </select>
                 </div>
             </div>
-        </div>
 
-        <div id="emptyState" class="text-center py-5 text-muted">
-            <i class="bi bi-funnel" style="font-size:3rem;"></i>
-            <p class="mt-3">Select parameters and click <strong>Generate</strong> for Pareto 80/20 analysis.</p>
-            <p class="small">The Pareto principle suggests ~20% of items generate ~80% of value.</p>
+            <!-- Items Selection will be rendered after the form -->
+            <div class="row g-3 mb-3 align-items-end d-none">
+                <!-- removed inline store dropdown - now in _ItemsSelection partial -->
+            </div>
+
+            <div class="row g-3 mb-4 align-items-end">
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="includeVat">
+                        <label class="form-check-label" for="includeVat">Include VAT</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
+                <button type="button" class="btn btn-primary btn-lg" onclick="loadPareto()" id="generateBtn">
+                    <i class="bi bi-play-fill me-2"></i>Generate Report
+                </button>
+                <div class="btn-group ms-auto" id="exportGroup" style="display:none;">
+                    <button type="button" class="btn btn-outline-success" onclick="exportPareto('excel')" title="Export to Excel">
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" onclick="exportPareto('pdf')" title="Export to PDF">
+                        <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="exportPareto('csv')" title="Export to CSV">
+                        <i class="bi bi-filetype-csv me-1"></i>CSV
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@await Html.PartialAsync("_ItemsSelection", new ItemsSelectionConfig
+{
+    ShowCategories = true,
+    ShowDepartments = true,
+    ShowBrands = true,
+    ShowSeasons = true,
+    ShowSuppliers = true,
+    ShowCustomers = false,
+    ShowStores = true,
+    StoresJson = storesJson
+})
+
+<div id="paretoLoading" class="text-center py-5 d-none">
+    <div class="spinner-border text-primary"></div>
+    <p class="text-muted mt-2">Calculating Pareto analysis...</p>
+</div>
+<div id="paretoError" class="alert alert-danger d-none"></div>
+
+<div id="paretoResults" class="d-none">
+    <div class="row g-3 mb-4" id="summaryCards"></div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="bi bi-bar-chart me-2"></i>Pareto Chart
+        </div>
+        <div class="card-body" style="position:relative;height:400px;">
+            <canvas id="paretoChart"></canvas>
         </div>
     </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-table me-2"></i>Detailed Breakdown</span>
+            <span id="rowCountBadge" class="badge bg-secondary"></span>
+        </div>
+        <div class="card-body p-0" style="max-height:500px;overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light sticky-top">
+                    <tr class="small">
+                        <th>#</th>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th class="text-end">Value</th>
+                        <th class="text-end">%</th>
+                        <th class="text-end">Cumul. %</th>
+                        <th class="text-center">Class</th>
+                    </tr>
+                </thead>
+                <tbody id="paretoTable" class="small"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="emptyState" class="text-center py-5 text-muted">
+    <i class="bi bi-funnel" style="font-size:3rem;opacity:0.3;"></i>
+    <p class="mt-3">Select parameters and click <strong>Generate Report</strong> for Pareto 80/20 analysis.</p>
+    <p class="small">The Pareto principle: ~20% of items generate ~80% of value.</p>
 </div>
 
 @section Scripts {
@@ -129,18 +192,67 @@
 <script>
 var _paretoChart = null;
 
+document.querySelectorAll('input[name="DatePreset"]').forEach(function(el) {
+    el.addEventListener('change', function() {
+        var now = new Date();
+        var y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+        var from, to;
+        switch (this.value) {
+            case 'today': from = to = new Date(y, m, d); break;
+            case 'last30': from = new Date(y, m, d - 30); to = new Date(y, m, d); break;
+            case 'thisMonth': from = new Date(y, m, 1); to = new Date(y, m, d); break;
+            case 'lastMonth': from = new Date(y, m - 1, 1); to = new Date(y, m, 0); break;
+            case 'ytd': from = new Date(y, 0, 1); to = new Date(y, m, d); break;
+            case 'lastYear': from = new Date(y - 1, 0, 1); to = new Date(y - 1, 11, 31); break;
+        }
+        if (from) document.getElementById('dateFrom').value = from.toISOString().split('T')[0];
+        if (to) document.getElementById('dateTo').value = to.toISOString().split('T')[0];
+    });
+});
+function clearPreset() { document.querySelectorAll('input[name="DatePreset"]').forEach(function(r) { r.checked = false; }); }
+
+function getItemsSelectionJson() {
+    if (typeof getItemsSelectionFilter === 'function') {
+        var f = getItemsSelectionFilter();
+        return Object.keys(f).length > 0 ? JSON.stringify(f) : '';
+    }
+    return '';
+}
+function getSelectedStoreCodes() {
+    return typeof getItemsSelectionStoreCodes === 'function'
+        ? getItemsSelectionStoreCodes() : '';
+}
+
+function exportPareto(format) {
+    var dateFrom = document.getElementById('dateFrom').value;
+    var dateTo = document.getElementById('dateTo').value;
+    if (!dateFrom || !dateTo) { alert('Please select dates first.'); return; }
+
+    var params = new URLSearchParams({
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        dimension: document.getElementById('dimension').value,
+        metric: document.getElementById('metric').value,
+        includeVat: document.getElementById('includeVat').checked,
+        storeCodes: getSelectedStoreCodes(),
+        classAThreshold: '80',
+        classBThreshold: '95'
+    });
+
+    var action = format === 'excel' ? 'ExportParetoExcel' : format === 'pdf' ? 'ExportParetoPdf' : 'ExportParetoCsv';
+    window.location.href = '/Reports/' + action + '?' + params.toString();
+}
+
 function loadPareto() {
     var dateFrom = document.getElementById('dateFrom').value;
     var dateTo = document.getElementById('dateTo').value;
     if (!dateFrom || !dateTo) { alert('Please select dates.'); return; }
 
-    var storeEl = document.getElementById('storeFilter');
-    var storeCodes = storeEl ? Array.from(storeEl.selectedOptions).map(o => o.value).join(',') : '';
-
     document.getElementById('paretoLoading').classList.remove('d-none');
     document.getElementById('paretoError').classList.add('d-none');
     document.getElementById('paretoResults').classList.add('d-none');
     document.getElementById('emptyState').classList.add('d-none');
+    document.getElementById('exportGroup').style.display = 'none';
 
     var fd = new FormData();
     fd.append('dateFrom', dateFrom);
@@ -148,11 +260,13 @@ function loadPareto() {
     fd.append('dimension', document.getElementById('dimension').value);
     fd.append('metric', document.getElementById('metric').value);
     fd.append('includeVat', document.getElementById('includeVat').checked);
-    fd.append('storeCodes', storeCodes);
+    fd.append('storeCodes', getSelectedStoreCodes());
+    var isJson = getItemsSelectionJson();
+    if (isJson) fd.append('itemsSelection', isJson);
 
     fetch('/Reports/GetParetoData', { method: 'POST', body: fd })
-        .then(r => r.json())
-        .then(data => {
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
             document.getElementById('paretoLoading').classList.add('d-none');
             if (!data.success) {
                 document.getElementById('paretoError').textContent = data.message;
@@ -161,7 +275,7 @@ function loadPareto() {
             }
             renderPareto(data);
         })
-        .catch(err => {
+        .catch(function(err) {
             document.getElementById('paretoLoading').classList.add('d-none');
             document.getElementById('paretoError').textContent = 'Network error: ' + err.message;
             document.getElementById('paretoError').classList.remove('d-none');
@@ -170,6 +284,7 @@ function loadPareto() {
 
 function renderPareto(data) {
     document.getElementById('paretoResults').classList.remove('d-none');
+    document.getElementById('exportGroup').style.display = '';
     var isQty = document.getElementById('metric').value === 'Quantity';
     var fmt = function(v) { return isQty ? v.toLocaleString() : '€' + v.toLocaleString(undefined, {minimumFractionDigits:2}); };
 
@@ -184,65 +299,32 @@ function renderPareto(data) {
 
     cards.innerHTML =
         '<div class="col-md-3"><div class="stat-card border" style="border-left:4px solid #2563eb !important;"><h3>' + fmt(gt) + '</h3><div class="label">Grand Total (' + data.totalItems + ' items)</div></div></div>' +
-        '<div class="col-md-3"><div class="stat-card class-a border" style="border-left:4px solid #16a34a !important;"><h3>' + data.classACount + ' <small class="text-muted" style="font-size:0.7rem;">(' + aItemPct + '% of items)</small></h3><div class="label">Class A — ' + aPct + '% of value</div></div></div>' +
-        '<div class="col-md-3"><div class="stat-card class-b border" style="border-left:4px solid #ca8a04 !important;"><h3>' + data.classBCount + ' <small class="text-muted" style="font-size:0.7rem;">(' + bItemPct + '% of items)</small></h3><div class="label">Class B — ' + bPct + '% of value</div></div></div>' +
-        '<div class="col-md-3"><div class="stat-card class-c border" style="border-left:4px solid #dc2626 !important;"><h3>' + data.classCCount + ' <small class="text-muted" style="font-size:0.7rem;">(' + cItemPct + '% of items)</small></h3><div class="label">Class C — ' + cPct + '% of value</div></div></div>';
+        '<div class="col-md-3"><div class="stat-card class-a border" style="border-left:4px solid #16a34a !important;"><h3>' + data.classACount + ' <small class="text-muted" style="font-size:0.7rem;">(' + aItemPct + '%)</small></h3><div class="label">Class A — ' + aPct + '% of value</div></div></div>' +
+        '<div class="col-md-3"><div class="stat-card class-b border" style="border-left:4px solid #ca8a04 !important;"><h3>' + data.classBCount + ' <small class="text-muted" style="font-size:0.7rem;">(' + bItemPct + '%)</small></h3><div class="label">Class B — ' + bPct + '% of value</div></div></div>' +
+        '<div class="col-md-3"><div class="stat-card class-c border" style="border-left:4px solid #dc2626 !important;"><h3>' + data.classCCount + ' <small class="text-muted" style="font-size:0.7rem;">(' + cItemPct + '%)</small></h3><div class="label">Class C — ' + cPct + '% of value</div></div></div>';
 
     var rows = data.rows;
     var maxRows = Math.min(rows.length, 50);
-    var labels = rows.slice(0, maxRows).map(r => r.name.length > 25 ? r.name.substring(0, 22) + '...' : r.name);
-    var values = rows.slice(0, maxRows).map(r => r.value);
-    var cumPcts = rows.slice(0, maxRows).map(r => r.cumulativePercentage);
-    var barColors = rows.slice(0, maxRows).map(r => r.classification === 'A' ? '#16a34a' : r.classification === 'B' ? '#ca8a04' : '#dc2626');
+    var labels = rows.slice(0, maxRows).map(function(r) { return r.name.length > 25 ? r.name.substring(0, 22) + '...' : r.name; });
+    var values = rows.slice(0, maxRows).map(function(r) { return r.value; });
+    var cumPcts = rows.slice(0, maxRows).map(function(r) { return r.cumulativePercentage; });
+    var barColors = rows.slice(0, maxRows).map(function(r) { return r.classification === 'A' ? '#16a34a' : r.classification === 'B' ? '#ca8a04' : '#dc2626'; });
 
     if (_paretoChart) _paretoChart.destroy();
-
     var ctx = document.getElementById('paretoChart').getContext('2d');
     _paretoChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
             datasets: [
-                {
-                    type: 'bar',
-                    label: isQty ? 'Quantity' : 'Value',
-                    data: values,
-                    backgroundColor: barColors.map(c => c + 'CC'),
-                    borderColor: barColors,
-                    borderWidth: 1,
-                    yAxisID: 'y',
-                    order: 2
-                },
-                {
-                    type: 'line',
-                    label: 'Cumulative %',
-                    data: cumPcts,
-                    borderColor: '#2563eb',
-                    backgroundColor: '#2563eb22',
-                    borderWidth: 2,
-                    pointRadius: 2,
-                    fill: false,
-                    yAxisID: 'y1',
-                    order: 1
-                }
+                { type: 'bar', label: isQty ? 'Quantity' : 'Value', data: values, backgroundColor: barColors.map(function(c) { return c + 'CC'; }), borderColor: barColors, borderWidth: 1, yAxisID: 'y', order: 2 },
+                { type: 'line', label: 'Cumulative %', data: cumPcts, borderColor: '#2563eb', backgroundColor: '#2563eb22', borderWidth: 2, pointRadius: 2, fill: false, yAxisID: 'y1', order: 1 }
             ]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
-            plugins: {
-                legend: { position: 'top', labels: { font: { size: 11 } } },
-                tooltip: {
-                    callbacks: {
-                        label: function(ctx) {
-                            if (ctx.dataset.yAxisID === 'y1') return 'Cumul: ' + ctx.parsed.y.toFixed(1) + '%';
-                            return ctx.dataset.label + ': ' + fmt(ctx.parsed.y);
-                        }
-                    }
-                },
-                annotation: undefined
-            },
+            plugins: { legend: { position: 'top', labels: { font: { size: 11 } } }, tooltip: { callbacks: { label: function(ctx) { if (ctx.dataset.yAxisID === 'y1') return 'Cumul: ' + ctx.parsed.y.toFixed(1) + '%'; return ctx.dataset.label + ': ' + fmt(ctx.parsed.y); } } } },
             scales: {
                 x: { ticks: { font: { size: 9 }, maxRotation: 60 } },
                 y: { beginAtZero: true, position: 'left', title: { display: true, text: isQty ? 'Quantity' : 'Value (€)' } },
@@ -257,15 +339,7 @@ function renderPareto(data) {
     rows.forEach(function(r) {
         var cls = r.classification === 'A' ? 'class-a' : r.classification === 'B' ? 'class-b' : 'class-c';
         var badge = r.classification === 'A' ? 'badge-a' : r.classification === 'B' ? 'badge-b' : 'badge-c';
-        tbody.innerHTML += '<tr class="' + cls + '">'
-            + '<td>' + r.rank + '</td>'
-            + '<td class="text-nowrap">' + r.code + '</td>'
-            + '<td>' + r.name + '</td>'
-            + '<td class="text-end">' + fmt(r.value) + '</td>'
-            + '<td class="text-end">' + r.percentage.toFixed(2) + '%</td>'
-            + '<td class="text-end fw-semibold">' + r.cumulativePercentage.toFixed(1) + '%</td>'
-            + '<td class="text-center"><span class="badge ' + badge + '">' + r.classification + '</span></td>'
-            + '</tr>';
+        tbody.innerHTML += '<tr class="' + cls + '"><td>' + r.rank + '</td><td class="text-nowrap">' + r.code + '</td><td>' + r.name + '</td><td class="text-end">' + fmt(r.value) + '</td><td class="text-end">' + r.percentage.toFixed(2) + '%</td><td class="text-end fw-semibold">' + r.cumulativePercentage.toFixed(1) + '%</td><td class="text-center"><span class="badge ' + badge + '">' + r.classification + '</span></td></tr>';
     });
 }
 </script>

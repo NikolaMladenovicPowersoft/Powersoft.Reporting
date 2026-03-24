@@ -1,0 +1,16 @@
+@model (string DimType, string Label, string Icon)
+
+<div class="dim-col" data-dim="@Model.DimType">
+    <label class="form-label fw-semibold mb-1 small"><i class="bi @Model.Icon me-1"></i>@Model.Label</label>
+    <div class="btn-group btn-group-sm mb-1 d-flex" role="group">
+        <button type="button" class="btn btn-outline-secondary active" data-mode="all" onclick="setDimMode('@Model.DimType',this)">All</button>
+        <button type="button" class="btn btn-outline-success" data-mode="include" onclick="setDimMode('@Model.DimType',this)">Include</button>
+        <button type="button" class="btn btn-outline-danger" data-mode="exclude" onclick="setDimMode('@Model.DimType',this)">Exclude</button>
+    </div>
+    <button type="button" class="btn btn-outline-secondary btn-sm w-100 text-start" id="dimTrigger_@Model.DimType"
+            onclick="openDimModal('@Model.DimType', '@Model.Label')">
+        <i class="bi @Model.Icon me-1 text-muted"></i>
+        <span class="dim-text text-muted">All @Model.Label</span>
+        <i class="bi bi-chevron-right float-end mt-1 text-muted small"></i>
+    </button>
+</div>

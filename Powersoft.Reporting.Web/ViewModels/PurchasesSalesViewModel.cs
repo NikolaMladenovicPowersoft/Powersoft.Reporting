@@ -57,6 +57,8 @@ public class PurchasesSalesViewModel
                 .Where(s => int.TryParse(s.Trim(), out _)).Select(s => int.Parse(s.Trim())).ToList();
     }
 
+    public string? ItemsSelectionJson { get; set; }
+
     public List<Store> AvailableStores { get; set; } = new();
 
     public int PageNumber { get; set; } = 1;

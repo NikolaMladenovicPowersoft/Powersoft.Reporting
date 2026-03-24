@@ -29,6 +29,8 @@ public class PurchasesSalesFilter : IValidatableObject
     public List<string> BrandIds { get; set; } = new();
     public List<string> SeasonIds { get; set; } = new();
 
+    public ItemsSelectionFilter? ItemsSelection { get; set; }
+
     public string SortColumn { get; set; } = "ItemCode";
     public string SortDirection { get; set; } = "ASC";
 

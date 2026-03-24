@@ -281,6 +281,186 @@ public class ExcelExportService
         return stream.ToArray();
     }
 
+    public byte[] GenerateChartExcel(List<ChartDataPoint> data, ChartFilter filter)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Chart Data");
+
+        ws.Cell(1, 1).Value = "Charts & Dashboards — Data Export";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(selRow++, 1).Value = $"Dimension: {filter.Dimension}";
+        ws.Cell(selRow++, 1).Value = $"Metric: {filter.Metric}";
+        ws.Cell(selRow++, 1).Value = $"Top N: {filter.TopN}";
+        ws.Cell(selRow++, 1).Value = $"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}";
+        if (filter.CompareLastYear)
+            ws.Cell(selRow++, 1).Value = "Compare Last Year: Yes";
+        if (filter.ShowOthers)
+            ws.Cell(selRow++, 1).Value = "Show Others: Yes";
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            ws.Cell(selRow++, 1).Value = $"Stores: {string.Join(", ", filter.StoreCodes)}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        int headerRow = selRow + 1;
+        bool hasCompare = filter.CompareLastYear && data.Any(d => d.CompareValue.HasValue);
+        int colCount = hasCompare ? 5 : 3;
+
+        ws.Cell(headerRow, 1).Value = "#";
+        ws.Cell(headerRow, 2).Value = filter.Dimension.ToString();
+        ws.Cell(headerRow, 3).Value = filter.Metric == ChartMetric.Quantity ? "Quantity" : "Value";
+        if (hasCompare)
+        {
+            ws.Cell(headerRow, 4).Value = "Last Year";
+            ws.Cell(headerRow, 5).Value = "YoY %";
+        }
+
+        var headerRange = ws.Range(headerRow, 1, headerRow, colCount);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+        decimal total = data.Sum(d => d.Value);
+        for (int i = 0; i < data.Count; i++)
+        {
+            var d = data[i];
+            ws.Cell(dataRow, 1).Value = i + 1;
+            ws.Cell(dataRow, 2).Value = d.Label;
+            ws.Cell(dataRow, 3).Value = d.Value;
+            ws.Cell(dataRow, 3).Style.NumberFormat.Format = filter.Metric == ChartMetric.Quantity ? "#,##0" : "#,##0.00";
+            if (hasCompare)
+            {
+                ws.Cell(dataRow, 4).Value = d.CompareValue ?? 0;
+                ws.Cell(dataRow, 4).Style.NumberFormat.Format = filter.Metric == ChartMetric.Quantity ? "#,##0" : "#,##0.00";
+                var yoy = d.CompareValue.HasValue && d.CompareValue.Value > 0
+                    ? (d.Value - d.CompareValue.Value) / d.CompareValue.Value * 100 : 0;
+                ws.Cell(dataRow, 5).Value = yoy;
+                ws.Cell(dataRow, 5).Style.NumberFormat.Format = "0.0";
+            }
+            dataRow++;
+        }
+
+        ws.Cell(dataRow, 1).Value = "";
+        ws.Cell(dataRow, 2).Value = "TOTAL";
+        ws.Cell(dataRow, 3).Value = total;
+        ws.Cell(dataRow, 3).Style.NumberFormat.Format = filter.Metric == ChartMetric.Quantity ? "#,##0" : "#,##0.00";
+        var totalRange = ws.Range(dataRow, 1, dataRow, colCount);
+        totalRange.Style.Font.Bold = true;
+        totalRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
+        totalRange.Style.Border.TopBorder = XLBorderStyleValues.Medium;
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    public byte[] GenerateParetoExcel(ParetoResult result, ParetoFilter filter)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Pareto 80-20");
+
+        ws.Cell(1, 1).Value = "Pareto 80/20 Analysis";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(selRow++, 1).Value = $"Dimension: {filter.Dimension}";
+        ws.Cell(selRow++, 1).Value = $"Metric: {filter.Metric}";
+        ws.Cell(selRow++, 1).Value = $"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}";
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            ws.Cell(selRow++, 1).Value = $"Stores: {string.Join(", ", filter.StoreCodes)}";
+        ws.Cell(selRow++, 1).Value = $"Class A Threshold: {filter.ClassAThreshold}%";
+        ws.Cell(selRow++, 1).Value = $"Class B Threshold: {filter.ClassBThreshold}%";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        int sRow = selRow;
+        ws.Cell(sRow, 1).Value = "Summary";
+        ws.Cell(sRow, 1).Style.Font.Bold = true;
+        sRow++;
+        ws.Cell(sRow, 1).Value = $"Grand Total: {result.GrandTotal:N2}";
+        ws.Cell(sRow, 2).Value = $"Total Items: {result.Rows.Count}";
+        sRow++;
+        ws.Cell(sRow, 1).Value = $"Class A: {result.ClassACount} items ({(result.GrandTotal > 0 ? result.ClassAValue / result.GrandTotal * 100 : 0):N1}% of value)";
+        sRow++;
+        ws.Cell(sRow, 1).Value = $"Class B: {result.ClassBCount} items ({(result.GrandTotal > 0 ? result.ClassBValue / result.GrandTotal * 100 : 0):N1}% of value)";
+        sRow++;
+        ws.Cell(sRow, 1).Value = $"Class C: {result.ClassCCount} items ({(result.GrandTotal > 0 ? result.ClassCValue / result.GrandTotal * 100 : 0):N1}% of value)";
+
+        int headerRow = sRow + 2;
+        ws.Cell(headerRow, 1).Value = "#";
+        ws.Cell(headerRow, 2).Value = "Code";
+        ws.Cell(headerRow, 3).Value = "Name";
+        ws.Cell(headerRow, 4).Value = filter.Metric == ParetoMetric.Quantity ? "Quantity" : "Value";
+        ws.Cell(headerRow, 5).Value = "%";
+        ws.Cell(headerRow, 6).Value = "Cumul. %";
+        ws.Cell(headerRow, 7).Value = "Class";
+
+        var headerRange = ws.Range(headerRow, 1, headerRow, 7);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+        foreach (var row in result.Rows)
+        {
+            var bgColor = row.Classification switch
+            {
+                "A" => XLColor.FromHtml("#dcfce7"),
+                "B" => XLColor.FromHtml("#fef9c3"),
+                _ => XLColor.FromHtml("#fee2e2")
+            };
+
+            ws.Cell(dataRow, 1).Value = row.Rank;
+            ws.Cell(dataRow, 2).Value = row.Code;
+            ws.Cell(dataRow, 3).Value = row.Name;
+            ws.Cell(dataRow, 4).Value = row.Value;
+            ws.Cell(dataRow, 5).Value = row.Percentage;
+            ws.Cell(dataRow, 6).Value = row.CumulativePercentage;
+            ws.Cell(dataRow, 7).Value = row.Classification;
+
+            var rowRange = ws.Range(dataRow, 1, dataRow, 7);
+            rowRange.Style.Fill.BackgroundColor = bgColor;
+
+            ws.Cell(dataRow, 4).Style.NumberFormat.Format = filter.Metric == ParetoMetric.Quantity ? "#,##0" : "#,##0.00";
+            ws.Cell(dataRow, 5).Style.NumberFormat.Format = "0.00";
+            ws.Cell(dataRow, 6).Style.NumberFormat.Format = "0.0";
+            ws.Cell(dataRow, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            dataRow++;
+        }
+
+        var totalRange = ws.Range(dataRow, 1, dataRow, 7);
+        ws.Cell(dataRow, 1).Value = "";
+        ws.Cell(dataRow, 2).Value = "";
+        ws.Cell(dataRow, 3).Value = "TOTAL";
+        ws.Cell(dataRow, 4).Value = result.GrandTotal;
+        ws.Cell(dataRow, 5).Value = 100;
+        ws.Cell(dataRow, 6).Value = "";
+        ws.Cell(dataRow, 7).Value = "";
+        totalRange.Style.Font.Bold = true;
+        totalRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
+        totalRange.Style.Border.TopBorder = XLBorderStyleValues.Medium;
+        ws.Cell(dataRow, 4).Style.NumberFormat.Format = filter.Metric == ParetoMetric.Quantity ? "#,##0" : "#,##0.00";
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
     private int WriteExcelSubtotalRow(IXLWorksheet ws, int dataRow, int totalCols,
         string label, SubtotalAgg agg, PurchasesSalesFilter filter,
         bool hasL1, bool hasL2, bool hasL3, bool hasItem)

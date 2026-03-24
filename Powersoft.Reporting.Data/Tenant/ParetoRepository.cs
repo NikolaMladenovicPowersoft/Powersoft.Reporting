@@ -18,6 +18,7 @@ public class ParetoRepository : IParetoRepository
         var (codeExpr, nameExpr, joinSql, groupBy) = GetDimensionSql(filter.Dimension);
         var valueExpr = GetValueExpression(filter);
         var storeWhere = BuildStoreWhere(filter.StoreCodes);
+        var (dimWhere, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection);
 
         var sql = $@"
             SELECT {codeExpr} AS Code, {nameExpr} AS Name, {valueExpr} AS Val
@@ -26,7 +27,7 @@ public class ParetoRepository : IParetoRepository
             INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID
             {joinSql}
             WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo
-              {storeWhere}
+              {storeWhere}{dimWhere}
             GROUP BY {groupBy}
             ORDER BY Val DESC";
 
@@ -44,6 +45,8 @@ public class ParetoRepository : IParetoRepository
             if (filter.StoreCodes != null)
                 for (int i = 0; i < filter.StoreCodes.Count; i++)
                     cmd.Parameters.AddWithValue($"@SC{i}", filter.StoreCodes[i]);
+            foreach (var p in dimParams)
+                cmd.Parameters.Add(p);
 
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())

@@ -494,6 +494,21 @@ FROM (
             sb.Append($" AND t2.fk_SeasonID IN ({string.Join(",", names)})");
         }
 
+        if (filter.ItemsSelection != null)
+        {
+            var psDimCols = new DimensionFilterBuilder.ColumnMap(
+                Category: "t2.fk_CategoryID",
+                Department: "t2.fk_DepartmentID",
+                Brand: "t2.fk_BrandID",
+                Season: "t2.fk_SeasonID",
+                Item: "t1.fk_ItemID",
+                Store: "t3.fk_StoreCode",
+                Supplier: "t4.fk_SupplierNo");
+            var (dimWhere, dimParms) = DimensionFilterBuilder.Build(filter.ItemsSelection, psDimCols, idx);
+            sb.Append(dimWhere);
+            parms.AddRange(dimParms);
+        }
+
         return new ItemFilterInfo(sb.ToString(), parms);
     }
 

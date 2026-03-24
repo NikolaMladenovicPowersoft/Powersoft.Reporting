@@ -1,0 +1,288 @@
+@using Powersoft.Reporting.Core.Models
+@model ItemsSelectionConfig
+
+<div class="card mb-3" id="itemsSelectionCard">
+    <div class="card-header bg-light py-2 d-flex align-items-center" style="cursor:pointer;"
+         onclick="toggleItemsSelection()">
+        <i class="bi bi-funnel me-2"></i>
+        <strong class="small">Items Selection</strong>
+        <span id="isActiveBadge" class="badge bg-primary ms-2 d-none">0 filters</span>
+        <span class="ms-auto small text-primary" id="isToggleText">
+            <i class="bi bi-eye me-1"></i>Show Filters
+        </span>
+    </div>
+    <div class="card-body py-2 d-none" id="isBody">
+        <div class="row g-2">
+            @if (Model.ShowCategories) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("category", "Category", "bi-tag"))</div>
+            }
+            @if (Model.ShowDepartments) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("department", "Department", "bi-grid"))</div>
+            }
+            @if (Model.ShowBrands) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("brand", "Brand", "bi-bookmark"))</div>
+            }
+            @if (Model.ShowSeasons) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("season", "Season", "bi-calendar3"))</div>
+            }
+            @if (Model.ShowSuppliers) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("supplier", "Supplier", "bi-truck"))</div>
+            }
+            @if (Model.ShowCustomers) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("customer", "Customer", "bi-people"))</div>
+            }
+            @if (Model.ShowStores) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("store", "Store", "bi-shop"))</div>
+            }
+            @if (Model.ShowItems) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("item", "Items", "bi-box-seam"))</div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Shared modal for dimension selection -->
+<div class="modal fade" id="dimModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="dimModalTitle">
+                    <i class="bi bi-funnel me-1"></i>Select Items
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="p-2 border-bottom bg-light">
+                    <input type="text" class="form-control form-control-sm" id="dimModalSearch"
+                           placeholder="Search..." oninput="filterDimModalList(this.value)" />
+                </div>
+                <div class="p-2 border-bottom d-flex justify-content-between align-items-center">
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAllDimModal()">
+                            <i class="bi bi-check-all me-1"></i>Select All
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectNoneDimModal()">
+                            <i class="bi bi-x-lg me-1"></i>Clear All
+                        </button>
+                    </div>
+                    <span class="text-muted small" id="dimModalCount">0 items</span>
+                </div>
+                <div id="dimModalList" style="max-height:400px; overflow-y:auto;"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <span class="me-auto small text-muted" id="dimModalSelected">0 selected</span>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="applyDimModal()">
+                    <i class="bi bi-check-lg me-1"></i>Apply
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const _dims = {};
+    const _selected = {};
+    const _modes = {};
+    const _storesJson = @Html.Raw(Model.StoresJson);
+    let _modalDim = null;
+    let _modalTempSelected = new Set();
+    let _bsModal = null;
+
+    function initDim(dim) {
+        _dims[dim] = [];
+        _selected[dim] = new Set();
+        _modes[dim] = 'all';
+    }
+
+    ['category','department','brand','season','supplier','customer','store','item'].forEach(initDim);
+
+    if (_storesJson && _storesJson.length) {
+        _dims['store'] = _storesJson.map(s => ({
+            id: s.code || s.Code || s.id,
+            code: s.code || s.Code || '',
+            name: s.name || s.Name || s.code || s.Code
+        }));
+    }
+
+    window.toggleItemsSelection = function () {
+        var body = document.getElementById('isBody');
+        var txt = document.getElementById('isToggleText');
+        var showing = !body.classList.contains('d-none');
+        if (showing) {
+            body.classList.add('d-none');
+            txt.innerHTML = '<i class="bi bi-eye me-1"></i>Show Filters';
+        } else {
+            body.classList.remove('d-none');
+            txt.innerHTML = '<i class="bi bi-eye-slash me-1"></i>Hide Filters';
+        }
+    };
+
+    window.setDimMode = function (dim, btn) {
+        var grp = btn.closest('.btn-group');
+        grp.querySelectorAll('.btn').forEach(function (b) {
+            b.classList.remove('active', 'btn-outline-secondary', 'btn-outline-success', 'btn-outline-danger',
+                'btn-secondary', 'btn-success', 'btn-danger');
+        });
+        var prevMode = _modes[dim];
+        var mode = btn.getAttribute('data-mode');
+        _modes[dim] = mode;
+        grp.querySelectorAll('.btn').forEach(function (b) {
+            var m = b.getAttribute('data-mode');
+            if (m === mode) {
+                b.classList.add('active', m === 'all' ? 'btn-secondary' : m === 'include' ? 'btn-success' : 'btn-danger');
+            } else {
+                b.classList.add(m === 'all' ? 'btn-outline-secondary' : m === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
+            }
+        });
+        if (mode === 'all') {
+            _selected[dim].clear();
+        } else if (prevMode !== mode && prevMode !== 'all') {
+            _selected[dim].clear();
+        }
+        updateTrigger(dim);
+        updateBadge();
+    };
+
+    function loadDimData(dim) {
+        if (_dims[dim] && _dims[dim].length) return Promise.resolve();
+        return fetch('/Reports/GetDimensions?type=' + dim)
+            .then(function (r) { return r.json(); })
+            .then(function (data) { _dims[dim] = data; });
+    }
+
+    window.openDimModal = function (dim, label) {
+        _modalDim = dim;
+        _modalTempSelected = new Set(_selected[dim]);
+        document.getElementById('dimModalTitle').innerHTML = '<i class="bi bi-funnel me-1"></i>Select ' + label;
+        document.getElementById('dimModalSearch').value = '';
+        document.getElementById('dimModalList').innerHTML =
+            '<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary me-2"></span>Loading...</div>';
+
+        if (!_bsModal) _bsModal = new bootstrap.Modal(document.getElementById('dimModal'));
+        _bsModal.show();
+
+        loadDimData(dim).then(function () {
+            renderModalList();
+            updateModalCount();
+        });
+    };
+
+    function renderModalList(filter) {
+        var list = document.getElementById('dimModalList');
+        var items = _dims[_modalDim] || [];
+        if (filter) {
+            var f = filter.toLowerCase();
+            items = items.filter(function (i) {
+                return (i.code || '').toLowerCase().indexOf(f) >= 0 || (i.name || '').toLowerCase().indexOf(f) >= 0;
+            });
+        }
+        if (!items.length) {
+            list.innerHTML = '<div class="text-muted text-center py-4">No items found</div>';
+            return;
+        }
+        var html = '';
+        items.forEach(function (item) {
+            var chk = _modalTempSelected.has(item.id) ? 'checked' : '';
+            html += '<label class="list-group-item list-group-item-action d-flex align-items-center py-2 px-3" style="cursor:pointer">' +
+                '<input class="form-check-input me-3 flex-shrink-0" type="checkbox" value="' + item.id + '" ' + chk +
+                ' onchange="toggleDimModalItem(\'' + item.id + '\',this.checked)">' +
+                '<span class="text-muted small me-2" style="min-width:60px">' + (item.code || '') + '</span>' +
+                '<span>' + (item.name || '') + '</span></label>';
+        });
+        list.innerHTML = html;
+    }
+
+    window.filterDimModalList = function (val) { renderModalList(val); };
+
+    window.toggleDimModalItem = function (id, on) {
+        if (on) _modalTempSelected.add(id); else _modalTempSelected.delete(id);
+        updateModalCount();
+    };
+
+    window.selectAllDimModal = function () {
+        (_dims[_modalDim] || []).forEach(function (i) { _modalTempSelected.add(i.id); });
+        renderModalList(document.getElementById('dimModalSearch').value);
+        updateModalCount();
+    };
+
+    window.selectNoneDimModal = function () {
+        _modalTempSelected.clear();
+        renderModalList(document.getElementById('dimModalSearch').value);
+        updateModalCount();
+    };
+
+    function updateModalCount() {
+        var total = (_dims[_modalDim] || []).length;
+        document.getElementById('dimModalCount').textContent = total + ' item' + (total !== 1 ? 's' : '');
+        var sel = _modalTempSelected.size;
+        document.getElementById('dimModalSelected').textContent = sel + ' selected';
+    }
+
+    window.applyDimModal = function () {
+        _selected[_modalDim] = new Set(_modalTempSelected);
+        if (_modes[_modalDim] === 'all' && _selected[_modalDim].size > 0) {
+            var incBtn = document.querySelector('[data-dim="' + _modalDim + '"] .btn-group .btn[data-mode="include"]');
+            if (incBtn) setDimMode(_modalDim, incBtn);
+        }
+        updateTrigger(_modalDim);
+        updateBadge();
+        _bsModal.hide();
+    };
+
+    function updateTrigger(dim) {
+        var txt = document.querySelector('#dimTrigger_' + dim + ' .dim-text');
+        if (!txt) return;
+        var cnt = _selected[dim].size;
+        var mode = _modes[dim];
+        var trigger = document.getElementById('dimTrigger_' + dim);
+        trigger.classList.remove('btn-outline-secondary', 'btn-outline-success', 'btn-outline-danger');
+        if (mode === 'all' || cnt === 0) {
+            txt.textContent = 'All';
+            txt.className = 'dim-text text-muted';
+            trigger.classList.add('btn-outline-secondary');
+        } else {
+            var label = mode === 'include' ? 'included' : 'excluded';
+            txt.textContent = cnt + ' ' + label;
+            txt.className = 'dim-text fw-semibold ' + (mode === 'include' ? 'text-success' : 'text-danger');
+            trigger.classList.add(mode === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
+        }
+    }
+
+    function updateBadge() {
+        var cnt = 0;
+        Object.keys(_modes).forEach(function (d) {
+            if (_modes[d] !== 'all' && _selected[d].size > 0) cnt++;
+        });
+        var badge = document.getElementById('isActiveBadge');
+        if (badge) {
+            if (cnt > 0) {
+                badge.textContent = cnt + ' filter' + (cnt > 1 ? 's' : '');
+                badge.classList.remove('d-none');
+            } else {
+                badge.classList.add('d-none');
+            }
+        }
+    }
+
+    window.getItemsSelectionFilter = function () {
+        var filter = {};
+        var dimKeyMap = {
+            category: 'categories', department: 'departments', brand: 'brands',
+            season: 'seasons', supplier: 'suppliers', customer: 'customers',
+            store: 'stores', item: 'items'
+        };
+        Object.keys(_modes).forEach(function (dim) {
+            var key = dimKeyMap[dim] || dim;
+            filter[key] = { ids: Array.from(_selected[dim]), mode: _modes[dim] };
+        });
+        return filter;
+    };
+
+    window.getItemsSelectionStoreCodes = function () {
+        if (_modes['store'] === 'all' || _selected['store'].size === 0) return '';
+        return Array.from(_selected['store']).join(',');
+    };
+})();
+</script>

@@ -228,6 +228,102 @@ public class CsvExportService
         sb.AppendLine(string.Join(",", cells.Select(Escape)));
     }
 
+    public byte[] GenerateChartCsv(List<ChartDataPoint> data, ChartFilter filter)
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine("# Charts & Dashboards — Data Export");
+        sb.AppendLine($"# Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}");
+        sb.AppendLine($"# Dimension: {filter.Dimension}");
+        sb.AppendLine($"# Metric: {filter.Metric}");
+        sb.AppendLine($"# Top N: {filter.TopN}");
+        sb.AppendLine($"# Include VAT: {(filter.IncludeVat ? "Yes" : "No")}");
+        if (filter.CompareLastYear) sb.AppendLine("# Compare Last Year: Yes");
+        if (filter.ShowOthers) sb.AppendLine("# Show Others: Yes");
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            sb.AppendLine($"# Stores: {string.Join(", ", filter.StoreCodes)}");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
+        bool hasCompare = filter.CompareLastYear && data.Any(d => d.CompareValue.HasValue);
+        var metricLabel = filter.Metric == Core.Models.ChartMetric.Quantity ? "Quantity" : "Value";
+        var headers = new List<string> { "#", filter.Dimension.ToString(), metricLabel, "%" };
+        if (hasCompare) { headers.Add("Last Year"); headers.Add("YoY %"); }
+        sb.AppendLine(string.Join(",", headers.Select(Escape)));
+
+        decimal total = data.Sum(d => d.Value);
+        for (int i = 0; i < data.Count; i++)
+        {
+            var d = data[i];
+            var pct = total > 0 ? (d.Value / total * 100) : 0;
+            var cells = new List<string>
+            {
+                (i + 1).ToString(CultureInfo.InvariantCulture),
+                d.Label,
+                d.Value.ToString("F2", CultureInfo.InvariantCulture),
+                pct.ToString("F1", CultureInfo.InvariantCulture)
+            };
+            if (hasCompare)
+            {
+                cells.Add((d.CompareValue ?? 0).ToString("F2", CultureInfo.InvariantCulture));
+                var yoy = d.CompareValue.HasValue && d.CompareValue.Value > 0
+                    ? ((d.Value - d.CompareValue.Value) / d.CompareValue.Value * 100) : 0;
+                cells.Add(yoy.ToString("F1", CultureInfo.InvariantCulture));
+            }
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        var totalCells = new List<string> { "", "TOTAL",
+            total.ToString("F2", CultureInfo.InvariantCulture), "100.0" };
+        if (hasCompare) { totalCells.Add(""); totalCells.Add(""); }
+        sb.AppendLine(string.Join(",", totalCells.Select(Escape)));
+
+        return new UTF8Encoding(true).GetBytes(sb.ToString());
+    }
+
+    public byte[] GenerateParetoCsv(ParetoResult result, ParetoFilter filter)
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine("# Pareto 80/20 Analysis");
+        sb.AppendLine($"# Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}");
+        sb.AppendLine($"# Dimension: {filter.Dimension}");
+        sb.AppendLine($"# Metric: {filter.Metric}");
+        sb.AppendLine($"# Include VAT: {(filter.IncludeVat ? "Yes" : "No")}");
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            sb.AppendLine($"# Stores: {string.Join(", ", filter.StoreCodes)}");
+        sb.AppendLine($"# Class A Threshold: {filter.ClassAThreshold}%");
+        sb.AppendLine($"# Class B Threshold: {filter.ClassBThreshold}%");
+        sb.AppendLine($"# Grand Total: {result.GrandTotal.ToString("F2", CultureInfo.InvariantCulture)}");
+        sb.AppendLine($"# Class A: {result.ClassACount} items | Class B: {result.ClassBCount} items | Class C: {result.ClassCCount} items");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
+        var metricLabel = filter.Metric == Core.Models.ParetoMetric.Quantity ? "Quantity" : "Value";
+        sb.AppendLine(string.Join(",", new[] { "Rank", "Code", "Name", metricLabel, "%", "Cumul. %", "Class" }.Select(Escape)));
+
+        foreach (var row in result.Rows)
+        {
+            var cells = new List<string>
+            {
+                row.Rank.ToString(CultureInfo.InvariantCulture),
+                row.Code,
+                row.Name,
+                row.Value.ToString("F2", CultureInfo.InvariantCulture),
+                row.Percentage.ToString("F2", CultureInfo.InvariantCulture),
+                row.CumulativePercentage.ToString("F1", CultureInfo.InvariantCulture),
+                row.Classification
+            };
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        var totalCells = new List<string> { "", "", "TOTAL",
+            result.GrandTotal.ToString("F2", CultureInfo.InvariantCulture), "100.00", "", "" };
+        sb.AppendLine(string.Join(",", totalCells.Select(Escape)));
+
+        return new UTF8Encoding(true).GetBytes(sb.ToString());
+    }
+
     private static string Escape(string value)
     {
         if (string.IsNullOrEmpty(value)) return "";

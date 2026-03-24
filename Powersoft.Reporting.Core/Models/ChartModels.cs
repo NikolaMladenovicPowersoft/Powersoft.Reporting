@@ -19,6 +19,8 @@ public class ChartFilter
     public bool IncludeVat { get; set; }
     public List<string>? StoreCodes { get; set; }
     public string ChartType { get; set; } = "pie";
+
+    public ItemsSelectionFilter? ItemsSelection { get; set; }
 }
 
 public enum ChartDimension

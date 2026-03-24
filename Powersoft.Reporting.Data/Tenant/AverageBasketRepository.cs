@@ -15,6 +15,14 @@ public class AverageBasketRepository : IAverageBasketRepository
         _connectionString = connectionString;
     }
 
+    private static readonly DimensionFilterBuilder.ColumnMap AbDimCols = new(
+        Category: "t_dim.fk_CategoryID",
+        Department: "t_dim.fk_DepartmentID",
+        Brand: "t_dim.fk_BrandID",
+        Season: "t_dim.fk_SeasonID",
+        Item: "t2.fk_ItemID",
+        Store: "t1.fk_StoreCode");
+
     public async Task<PagedResult<AverageBasketRow>> GetAverageBasketDataAsync(ReportFilter filter)
     {
         var periodField = GetPeriodField(filter.Breakdown);
@@ -22,10 +30,14 @@ public class AverageBasketRepository : IAverageBasketRepository
         var storeFilter = BuildStoreFilter(filter.StoreCodes);
         var itemFilter = BuildItemFilter(filter.ItemIds);
         bool anyGrouping = grouping.hasLevel1 || grouping.hasLevel2;
-        
+
+        var needsDimJoin = DimensionFilterBuilder.NeedsItemJoin(filter.ItemsSelection);
+        var dimJoin = needsDimJoin ? "\n            INNER JOIN tbl_Item t_dim ON t2.fk_ItemID = t_dim.pk_ItemID" : "";
+        var (dimWhere, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection, AbDimCols);
+
         var (ctes, dataSelect) = anyGrouping
-            ? BuildQueryPartsGrouped(periodField, grouping, storeFilter, itemFilter, filter)
-            : BuildQueryPartsNoGrouping(periodField, storeFilter.whereClause, itemFilter.whereClause, filter);
+            ? BuildQueryPartsGrouped(periodField, grouping, storeFilter, itemFilter, filter, dimJoin, dimWhere)
+            : BuildQueryPartsNoGrouping(periodField, storeFilter.whereClause, itemFilter.whereClause, filter, dimJoin, dimWhere);
         
         var (filterWhere, filterParams) = BuildColumnFilterClause(filter);
         var sortExpr = ResolveSortExpression(filter, anyGrouping);
@@ -40,14 +52,14 @@ public class AverageBasketRepository : IAverageBasketRepository
             Data AS ({dataSelect})
             SELECT COUNT(*) FROM Data d{filterWhere}";
         
-        var totalsSql = BuildGrandTotalsQuery(storeFilter, itemFilter, filter);
+        var totalsSql = BuildGrandTotalsQuery(storeFilter, itemFilter, filter, dimJoin, dimWhere);
         
         using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
         
-        int totalCount = await GetTotalCountAsync(conn, countSql, filter, filterParams);
-        var results = await ExecuteMainQueryAsync(conn, sql, filter, grouping.hasLevel1, grouping.hasLevel2, filterParams);
-        var grandTotals = await ExecuteGrandTotalsQueryAsync(conn, totalsSql, filter);
+        int totalCount = await GetTotalCountAsync(conn, countSql, filter, filterParams, dimParams);
+        var results = await ExecuteMainQueryAsync(conn, sql, filter, grouping.hasLevel1, grouping.hasLevel2, filterParams, dimParams);
+        var grandTotals = await ExecuteGrandTotalsQueryAsync(conn, totalsSql, filter, dimParams);
         
         return new PagedResult<AverageBasketRow>
         {
@@ -349,7 +361,8 @@ public class AverageBasketRepository : IAverageBasketRepository
         (string select, string join, string groupByFields, string codeOnly, bool hasLevel1, bool hasLevel2) grouping,
         (string whereClause, List<SqlParameter> parameters) storeFilter,
         (string whereClause, List<SqlParameter> parameters) itemFilter,
-        ReportFilter filter)
+        ReportFilter filter,
+        string dimJoin = "", string dimWhere = "")
     {
         var storeWhere = storeFilter.whereClause;
         var itemWhere = itemFilter.whereClause;
@@ -382,8 +395,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatSales
             FROM tbl_InvoiceHeader t1
             INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice
-            {groupJoinClause}
-            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}
+            {groupJoinClause}{dimJoin}
+            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}{dimWhere}
             GROUP BY {periodField}{groupByClause}";
 
         var creditJoin = groupJoinClause
@@ -399,8 +412,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatReturns
             FROM tbl_CreditHeader t1
             INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
-            {creditJoin}
-            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}
+            {creditJoin}{dimJoin}
+            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}{dimWhere}
             GROUP BY {periodField}{groupByClause}";
 
         var cyCte = $@"
@@ -442,8 +455,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatSales
             FROM tbl_InvoiceHeader t1
             INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice
-            {groupJoinClause}
-            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}
+            {groupJoinClause}{dimJoin}
+            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
             GROUP BY {periodField}{groupByClause}";
 
             var lyReturnsCte = $@"
@@ -455,8 +468,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatReturns
             FROM tbl_CreditHeader t1
             INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
-            {creditJoin}
-            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}
+            {creditJoin}{dimJoin}
+            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
             GROUP BY {periodField}{groupByClause}";
 
             var lyMergeCte = $@"
@@ -518,7 +531,8 @@ public class AverageBasketRepository : IAverageBasketRepository
     /// Returns (cteDefinitions, dataSelectClause) for non-grouped queries.
     /// </summary>
     private (string ctes, string dataSelect) BuildQueryPartsNoGrouping(
-        string periodField, string storeWhere, string itemWhere, ReportFilter filter)
+        string periodField, string storeWhere, string itemWhere, ReportFilter filter,
+        string dimJoin = "", string dimWhere = "")
     {
         var includeLastYear = filter.CompareLastYear;
         var lyCtes = "";
@@ -533,8 +547,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                 SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetSales,
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatSales
             FROM tbl_InvoiceHeader t1
-            INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice
-            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}
+            INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice{dimJoin}
+            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}{dimWhere}
             GROUP BY {periodField}";
 
         var returnsCte = $@"
@@ -545,8 +559,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                 SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetReturns,
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatReturns
             FROM tbl_CreditHeader t1
-            INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
-            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}
+            INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit{dimJoin}
+            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}{dimWhere}
             GROUP BY {periodField}";
 
         var cyCte = @"
@@ -575,8 +589,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                 SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetSales,
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatSales
             FROM tbl_InvoiceHeader t1
-            INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice
-            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}
+            INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice{dimJoin}
+            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
             GROUP BY {periodField}
                 ),
                 LYReturns AS (
@@ -585,8 +599,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                 SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetReturns,
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatReturns
             FROM tbl_CreditHeader t1
-            INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
-            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}
+            INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit{dimJoin}
+            WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
             GROUP BY {periodField}
                 ),
                 LY AS (
@@ -638,7 +652,8 @@ public class AverageBasketRepository : IAverageBasketRepository
     private string BuildGrandTotalsQuery(
         (string whereClause, List<SqlParameter> parameters) storeFilter,
         (string whereClause, List<SqlParameter> parameters) itemFilter,
-        ReportFilter filter)
+        ReportFilter filter,
+        string dimJoin = "", string dimWhere = "")
     {
         var storeWhere = storeFilter.whereClause;
         var itemWhere = itemFilter.whereClause;
@@ -663,16 +678,16 @@ public class AverageBasketRepository : IAverageBasketRepository
                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS LYNetSales,
                        SUM(ISNULL(t2.VatAmount, 0)) AS LYVatSales
                 FROM tbl_InvoiceHeader t1
-                INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice
-                WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}
+                INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice{dimJoin}
+                WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
             ) LYI ON 1=1
             LEFT JOIN (
                 SELECT COUNT(DISTINCT t1.pk_CreditID) AS LYCreditCount,
                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS LYNetReturns,
                        SUM(ISNULL(t2.VatAmount, 0)) AS LYVatReturns
                 FROM tbl_CreditHeader t1
-                INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
-                WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}
+                INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit{dimJoin}
+                WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
             ) LYC ON 1=1";
         }
 
@@ -692,8 +707,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetSales,
                        SUM(ISNULL(t2.VatAmount, 0)) AS VatSales
                 FROM tbl_InvoiceHeader t1
-                INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice
-                WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}
+                INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice{dimJoin}
+                WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}{dimWhere}
             ) SI
             LEFT JOIN (
                 SELECT COUNT(DISTINCT t1.pk_CreditID) AS CreditCount,
@@ -701,8 +716,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetReturns,
                        SUM(ISNULL(t2.VatAmount, 0)) AS VatReturns
                 FROM tbl_CreditHeader t1
-                INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
-                WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}
+                INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit{dimJoin}
+                WHERE CONVERT(DATE, t1.DateTrans) BETWEEN @DateFrom AND @DateTo{storeWhere}{itemWhere}{dimWhere}
             ) CR ON 1=1{lySubQueries}";
     }
 
@@ -711,11 +726,13 @@ public class AverageBasketRepository : IAverageBasketRepository
     #region Query Execution
 
     private async Task<int> GetTotalCountAsync(
-        SqlConnection conn, string countSql, ReportFilter filter, List<SqlParameter> filterParams)
+        SqlConnection conn, string countSql, ReportFilter filter, List<SqlParameter> filterParams,
+        List<SqlParameter>? dimParams = null)
     {
         using var cmd = new SqlCommand(countSql, conn);
         AddCommonParameters(cmd, filter);
         AddFilterParameters(cmd, filterParams);
+        if (dimParams != null) AddFilterParameters(cmd, dimParams);
         
         var result = await cmd.ExecuteScalarAsync();
         return result != null ? Convert.ToInt32(result) : 0;
@@ -727,13 +744,15 @@ public class AverageBasketRepository : IAverageBasketRepository
         ReportFilter filter, 
         bool hasLevel1,
         bool hasLevel2,
-        List<SqlParameter> filterParams)
+        List<SqlParameter> filterParams,
+        List<SqlParameter>? dimParams = null)
     {
         var results = new List<AverageBasketRow>();
         
         using var cmd = new SqlCommand(sql, conn);
         AddCommonParameters(cmd, filter);
         AddFilterParameters(cmd, filterParams);
+        if (dimParams != null) AddFilterParameters(cmd, dimParams);
         cmd.Parameters.AddWithValue("@Skip", filter.Skip);
         cmd.Parameters.AddWithValue("@PageSize", filter.PageSize);
         
@@ -785,12 +804,14 @@ public class AverageBasketRepository : IAverageBasketRepository
         return results;
     }
 
-    private async Task<ReportGrandTotals> ExecuteGrandTotalsQueryAsync(SqlConnection conn, string sql, ReportFilter filter)
+    private async Task<ReportGrandTotals> ExecuteGrandTotalsQueryAsync(SqlConnection conn, string sql, ReportFilter filter,
+        List<SqlParameter>? dimParams = null)
     {
         var totals = new ReportGrandTotals();
         
         using var cmd = new SqlCommand(sql, conn);
         AddCommonParameters(cmd, filter);
+        if (dimParams != null) AddFilterParameters(cmd, dimParams);
         
         using var reader = await cmd.ExecuteReaderAsync();
         if (await reader.ReadAsync())

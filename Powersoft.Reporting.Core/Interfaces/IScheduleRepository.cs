@@ -39,4 +39,12 @@ public interface IScheduleRepository
     Task<int> CreateEmailTemplateAsync(EmailTemplate template);
     Task<bool> UpdateEmailTemplateAsync(EmailTemplate template);
     Task<bool> DeleteEmailTemplateAsync(int templateId);
+
+    // AI Prompt templates
+    Task<List<AiPromptTemplate>> GetAiPromptTemplatesAsync(string? reportType = null);
+    Task<AiPromptTemplate?> GetAiPromptTemplateByIdAsync(int templateId);
+    Task<AiPromptTemplate?> GetDefaultAiPromptTemplateAsync(string? reportType = null);
+    Task<int> CreateAiPromptTemplateAsync(AiPromptTemplate template);
+    Task<bool> UpdateAiPromptTemplateAsync(AiPromptTemplate template);
+    Task<bool> DeleteAiPromptTemplateAsync(int templateId);
 }

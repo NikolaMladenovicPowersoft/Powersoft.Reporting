@@ -22,4 +22,9 @@ public class ReportSchedule
     public string ExportFormat { get; set; } = "Excel";
     public string Recipients { get; set; } = string.Empty;
     public string? EmailSubject { get; set; }
+
+    /// <summary>When true, AI analysis is generated and included in the scheduled email.</summary>
+    public bool IncludeAiAnalysis { get; set; }
+    /// <summary>Locale for AI analysis output (e.g. "el", "en", "sr"). Defaults to "el".</summary>
+    public string AiLocale { get; set; } = "el";
 }

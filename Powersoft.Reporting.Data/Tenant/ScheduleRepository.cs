@@ -18,10 +18,12 @@ public class ScheduleRepository : IScheduleRepository
         const string sql = @"
             INSERT INTO tbl_ReportSchedule 
                 (ReportType, ScheduleName, CreatedBy, RecurrenceType, RecurrenceDay,
-                 ScheduleTime, NextRunDate, ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject)
+                 ScheduleTime, NextRunDate, ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
+                 IncludeAiAnalysis, AiLocale)
             VALUES 
                 (@ReportType, @ScheduleName, @CreatedBy, @RecurrenceType, @RecurrenceDay,
-                 @ScheduleTime, @NextRunDate, @ParametersJson, @RecurrenceJson, @ExportFormat, @Recipients, @EmailSubject);
+                 @ScheduleTime, @NextRunDate, @ParametersJson, @RecurrenceJson, @ExportFormat, @Recipients, @EmailSubject,
+                 @IncludeAiAnalysis, @AiLocale);
             SELECT SCOPE_IDENTITY();";
 
         using var conn = new SqlConnection(_connectionString);
@@ -40,6 +42,8 @@ public class ScheduleRepository : IScheduleRepository
         cmd.Parameters.AddWithValue("@ExportFormat", schedule.ExportFormat);
         cmd.Parameters.AddWithValue("@Recipients", schedule.Recipients);
         cmd.Parameters.AddWithValue("@EmailSubject", (object?)schedule.EmailSubject ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@IncludeAiAnalysis", schedule.IncludeAiAnalysis);
+        cmd.Parameters.AddWithValue("@AiLocale", schedule.AiLocale ?? "el");
 
         var result = await cmd.ExecuteScalarAsync();
         return Convert.ToInt32(result);
@@ -50,7 +54,8 @@ public class ScheduleRepository : IScheduleRepository
         const string sql = @"
             SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
                    RecurrenceType, RecurrenceDay, ScheduleTime, NextRunDate, LastRunDate,
-                   ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject
+                   ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
+                   ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale
             FROM tbl_ReportSchedule
             WHERE ReportType = @ReportType AND IsActive = 1
             ORDER BY CreatedDate DESC";
@@ -76,7 +81,8 @@ public class ScheduleRepository : IScheduleRepository
         const string sql = @"
             SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
                    RecurrenceType, RecurrenceDay, ScheduleTime, NextRunDate, LastRunDate,
-                   ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject
+                   ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
+                   ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale
             FROM tbl_ReportSchedule
             WHERE pk_ScheduleID = @Id";
 
@@ -99,6 +105,7 @@ public class ScheduleRepository : IScheduleRepository
                 RecurrenceJson = @RecurrenceJson,
                 ExportFormat = @ExportFormat, Recipients = @Recipients,
                 EmailSubject = @EmailSubject, IsActive = @IsActive,
+                IncludeAiAnalysis = @IncludeAiAnalysis, AiLocale = @AiLocale,
                 ModifiedDate = GETDATE(), ModifiedBy = @ModifiedBy
             WHERE pk_ScheduleID = @Id";
 
@@ -118,6 +125,8 @@ public class ScheduleRepository : IScheduleRepository
         cmd.Parameters.AddWithValue("@Recipients", schedule.Recipients);
         cmd.Parameters.AddWithValue("@EmailSubject", (object?)schedule.EmailSubject ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@IsActive", schedule.IsActive);
+        cmd.Parameters.AddWithValue("@IncludeAiAnalysis", schedule.IncludeAiAnalysis);
+        cmd.Parameters.AddWithValue("@AiLocale", schedule.AiLocale ?? "el");
         cmd.Parameters.AddWithValue("@ModifiedBy", schedule.CreatedBy);
 
         return await cmd.ExecuteNonQueryAsync() > 0;
@@ -170,7 +179,8 @@ public class ScheduleRepository : IScheduleRepository
             const string sql = @"
                 SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
                        RecurrenceType, RecurrenceDay, ScheduleTime, NextRunDate, LastRunDate,
-                       ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject
+                       ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
+                       ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale
                 FROM tbl_ReportSchedule
                 WHERE IsActive = 1
                   AND NextRunDate IS NOT NULL
@@ -447,7 +457,7 @@ public class ScheduleRepository : IScheduleRepository
 
     private static ReportSchedule MapSchedule(SqlDataReader reader)
     {
-        return new ReportSchedule
+        var schedule = new ReportSchedule
         {
             ScheduleId = reader.GetInt32(0),
             ReportType = reader.GetString(1),
@@ -465,6 +475,161 @@ public class ScheduleRepository : IScheduleRepository
             ExportFormat = reader.GetString(13),
             Recipients = reader.GetString(14),
             EmailSubject = reader.IsDBNull(15) ? null : reader.GetString(15)
+        };
+
+        if (reader.FieldCount > 16)
+        {
+            schedule.IncludeAiAnalysis = !reader.IsDBNull(16) && reader.GetBoolean(16);
+            schedule.AiLocale = reader.FieldCount > 17 && !reader.IsDBNull(17) ? reader.GetString(17) : "el";
+        }
+
+        return schedule;
+    }
+
+    // ==================== AI Prompt Templates ====================
+
+    public async Task<List<AiPromptTemplate>> GetAiPromptTemplatesAsync(string? reportType = null)
+    {
+        var sql = @"SELECT pk_TemplateID, TemplateName, ReportType, SystemPrompt, IsDefault, IsActive, CreatedBy, CreatedDate, ModifiedDate, ModifiedBy
+                    FROM tbl_AiPromptTemplate WHERE IsActive = 1"
+            + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL OR ReportType = '')" : "")
+            + " ORDER BY IsDefault DESC, TemplateName";
+
+        var list = new List<AiPromptTemplate>();
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        if (reportType != null)
+            cmd.Parameters.AddWithValue("@ReportType", reportType);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            list.Add(MapAiPromptTemplate(reader));
+        return list;
+    }
+
+    public async Task<AiPromptTemplate?> GetAiPromptTemplateByIdAsync(int templateId)
+    {
+        const string sql = @"SELECT pk_TemplateID, TemplateName, ReportType, SystemPrompt, IsDefault, IsActive, CreatedBy, CreatedDate, ModifiedDate, ModifiedBy
+                             FROM tbl_AiPromptTemplate WHERE pk_TemplateID = @Id";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Id", templateId);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? MapAiPromptTemplate(reader) : null;
+    }
+
+    public async Task<AiPromptTemplate?> GetDefaultAiPromptTemplateAsync(string? reportType = null)
+    {
+        var sql = @"SELECT TOP 1 pk_TemplateID, TemplateName, ReportType, SystemPrompt, IsDefault, IsActive, CreatedBy, CreatedDate, ModifiedDate, ModifiedBy
+                    FROM tbl_AiPromptTemplate WHERE IsActive = 1 AND IsDefault = 1"
+            + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL OR ReportType = '')" : "")
+            + " ORDER BY ReportType DESC";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        if (reportType != null)
+            cmd.Parameters.AddWithValue("@ReportType", reportType);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? MapAiPromptTemplate(reader) : null;
+    }
+
+    public async Task<int> CreateAiPromptTemplateAsync(AiPromptTemplate template)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        if (template.IsDefault)
+            await ClearAiPromptDefaultFlagAsync(conn, null, template.ReportType);
+
+        const string sql = @"INSERT INTO tbl_AiPromptTemplate
+            (TemplateName, ReportType, SystemPrompt, IsDefault, CreatedBy)
+            VALUES (@Name, @ReportType, @SystemPrompt, @IsDefault, @CreatedBy);
+            SELECT SCOPE_IDENTITY();";
+
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Name", template.TemplateName);
+        cmd.Parameters.AddWithValue("@ReportType", (object?)template.ReportType ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@SystemPrompt", template.SystemPrompt);
+        cmd.Parameters.AddWithValue("@IsDefault", template.IsDefault);
+        cmd.Parameters.AddWithValue("@CreatedBy", template.CreatedBy);
+
+        var result = await cmd.ExecuteScalarAsync();
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<bool> UpdateAiPromptTemplateAsync(AiPromptTemplate template)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+
+        if (template.IsDefault)
+            await ClearAiPromptDefaultFlagAsync(conn, template.TemplateId, template.ReportType);
+
+        const string sql = @"UPDATE tbl_AiPromptTemplate
+            SET TemplateName = @Name, ReportType = @ReportType, SystemPrompt = @SystemPrompt,
+                IsDefault = @IsDefault, ModifiedDate = GETDATE(), ModifiedBy = @ModifiedBy
+            WHERE pk_TemplateID = @Id";
+
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Id", template.TemplateId);
+        cmd.Parameters.AddWithValue("@Name", template.TemplateName);
+        cmd.Parameters.AddWithValue("@ReportType", (object?)template.ReportType ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@SystemPrompt", template.SystemPrompt);
+        cmd.Parameters.AddWithValue("@IsDefault", template.IsDefault);
+        cmd.Parameters.AddWithValue("@ModifiedBy", template.CreatedBy);
+
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    public async Task<bool> DeleteAiPromptTemplateAsync(int templateId)
+    {
+        const string sql = "UPDATE tbl_AiPromptTemplate SET IsActive = 0, ModifiedDate = GETDATE() WHERE pk_TemplateID = @Id";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Id", templateId);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    private static async Task ClearAiPromptDefaultFlagAsync(SqlConnection conn, int? excludeId, string? reportType)
+    {
+        var sql = "UPDATE tbl_AiPromptTemplate SET IsDefault = 0 WHERE IsDefault = 1 AND IsActive = 1";
+        if (reportType != null)
+            sql += " AND ReportType = @ReportType";
+        else
+            sql += " AND (ReportType IS NULL OR ReportType = '')";
+        if (excludeId.HasValue)
+            sql += " AND pk_TemplateID <> @ExcludeId";
+
+        using var cmd = new SqlCommand(sql, conn);
+        if (reportType != null)
+            cmd.Parameters.AddWithValue("@ReportType", reportType);
+        if (excludeId.HasValue)
+            cmd.Parameters.AddWithValue("@ExcludeId", excludeId.Value);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static AiPromptTemplate MapAiPromptTemplate(SqlDataReader reader)
+    {
+        return new AiPromptTemplate
+        {
+            TemplateId = reader.GetInt32(0),
+            TemplateName = reader.GetString(1),
+            ReportType = reader.IsDBNull(2) ? null : reader.GetString(2),
+            SystemPrompt = reader.GetString(3),
+            IsDefault = reader.GetBoolean(4),
+            IsActive = reader.GetBoolean(5),
+            CreatedBy = reader.GetString(6),
+            CreatedDate = reader.GetDateTime(7),
+            ModifiedDate = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
+            ModifiedBy = reader.IsDBNull(9) ? null : reader.GetString(9)
         };
     }
 }

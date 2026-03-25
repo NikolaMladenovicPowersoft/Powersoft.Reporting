@@ -387,7 +387,8 @@ public class ReportsController : Controller
     public async Task<IActionResult> SaveSchedule(
         string scheduleName, string recurrenceType, int? recurrenceDay,
         string scheduleTime, string exportFormat, string recipients,
-        string? emailSubject, string? parametersJson, string? recurrenceJson)
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el")
     {
         if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleAvgBasket))
             return Json(new { success = false, message = "You don't have permission to create schedules." });
@@ -449,7 +450,9 @@ public class ReportsController : Controller
                 EmailSubject = emailSubject,
                 ParametersJson = parametersJson,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
-                NextRunDate = nextRun
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el"
             };
 
             var id = await repo.CreateScheduleAsync(schedule);
@@ -1584,7 +1587,8 @@ public class ReportsController : Controller
     public async Task<IActionResult> SavePsSchedule(
         string scheduleName, string recurrenceType, int? recurrenceDay,
         string scheduleTime, string exportFormat, string recipients,
-        string? emailSubject, string? parametersJson, string? recurrenceJson)
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el")
     {
         if (!await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePurchasesSales))
             return Json(new { success = false, message = "You don't have permission to create schedules." });
@@ -1646,7 +1650,9 @@ public class ReportsController : Controller
                 EmailSubject = emailSubject,
                 ParametersJson = parametersJson,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
-                NextRunDate = nextRun
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el"
             };
 
             var id = await repo.CreateScheduleAsync(schedule);
@@ -1667,13 +1673,111 @@ public class ReportsController : Controller
         return Json(new { configured = _analyzerFactory.IsConfigured });
     }
 
+    // ==================== AI Prompt Templates ====================
+
+    [HttpGet]
+    public async Task<IActionResult> GetAiPromptTemplates(string? reportType = null)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new List<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var templates = await repo.GetAiPromptTemplatesAsync(reportType);
+            return Json(templates.Select(t => new
+            {
+                templateId = t.TemplateId,
+                templateName = t.TemplateName,
+                reportType = t.ReportType,
+                systemPrompt = t.SystemPrompt,
+                isDefault = t.IsDefault
+            }));
+        }
+        catch
+        {
+            return Json(new List<object>());
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveAiPromptTemplate([FromBody] AiPromptTemplateDto dto)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (dto == null || string.IsNullOrWhiteSpace(dto.TemplateName) || string.IsNullOrWhiteSpace(dto.SystemPrompt))
+            return Json(new { success = false, message = "Template name and system prompt are required." });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var template = new AiPromptTemplate
+            {
+                TemplateName = dto.TemplateName,
+                ReportType = string.IsNullOrWhiteSpace(dto.ReportType) ? null : dto.ReportType,
+                SystemPrompt = dto.SystemPrompt,
+                IsDefault = dto.IsDefault,
+                CreatedBy = User.Identity?.Name ?? "Unknown"
+            };
+
+            if (dto.TemplateId > 0)
+            {
+                template.TemplateId = dto.TemplateId;
+                await repo.UpdateAiPromptTemplateAsync(template);
+                return Json(new { success = true, templateId = template.TemplateId, message = "Template updated." });
+            }
+            else
+            {
+                var id = await repo.CreateAiPromptTemplateAsync(template);
+                return Json(new { success = true, templateId = id, message = "Template saved." });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving AI prompt template");
+            return Json(new { success = false, message = "Failed to save template. The table may not exist yet — run the SQL migration." });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteAiPromptTemplate(int templateId)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            await repo.DeleteAiPromptTemplateAsync(templateId);
+            return Json(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting AI prompt template {Id}", templateId);
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    public class AiPromptTemplateDto
+    {
+        public int TemplateId { get; set; }
+        public string TemplateName { get; set; } = "";
+        public string? ReportType { get; set; }
+        public string SystemPrompt { get; set; } = "";
+        public bool IsDefault { get; set; }
+    }
+
     [HttpPost]
     public async Task<IActionResult> AnalyzeAbReport(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear,
         string? storeCodes, string? itemIds,
         string sortColumn = "Period", string sortDirection = "ASC",
-        string? locale = "el")
+        string? locale = "el", int? promptTemplateId = null)
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
@@ -1692,8 +1796,24 @@ public class ReportsController : Controller
             var csvBytes = csvService.GenerateAverageBasketCsv(result.Value.rows, result.Value.totals, result.Value.filter);
             var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
 
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
             var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "AverageBasket", locale: locale, ct: HttpContext.RequestAborted);
+            var analysis = await analyzer.AnalyzeAsync(csvData, "AverageBasket", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
 
             return Json(new { success = true, analysis });
         }
@@ -1711,7 +1831,7 @@ public class ReportsController : Controller
         bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemIds,
         string sortColumn = "ItemCode", string sortDirection = "ASC",
-        string? locale = "el")
+        string? locale = "el", int? promptTemplateId = null)
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
@@ -1730,8 +1850,24 @@ public class ReportsController : Controller
             var csvBytes = csvService.GeneratePurchasesSalesCsv(result.Value.rows, result.Value.totals, result.Value.filter);
             var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
 
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
             var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "PurchasesSales", locale: locale, ct: HttpContext.RequestAborted);
+            var analysis = await analyzer.AnalyzeAsync(csvData, "PurchasesSales", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
 
             return Json(new { success = true, analysis });
         }
@@ -1740,6 +1876,61 @@ public class ReportsController : Controller
             _logger.LogError(ex, "Error analyzing Purchases vs Sales report with AI");
             return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
         }
+    }
+
+    // ==================== AI Chat Follow-up ====================
+
+    [HttpPost]
+    public async Task<IActionResult> AiChatFollowup([FromBody] AiChatRequest request)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured." });
+
+        if (request == null || string.IsNullOrWhiteSpace(request.Message))
+            return Json(new { success = false, message = "Message is required." });
+
+        if (request.History == null || request.History.Count == 0)
+            return Json(new { success = false, message = "Conversation history is required." });
+
+        const int maxHistoryMessages = 20;
+        if (request.History.Count > maxHistoryMessages)
+            return Json(new { success = false, message = $"Conversation too long (max {maxHistoryMessages} messages). Please start a new analysis." });
+
+        try
+        {
+            var analyzer = _analyzerFactory.Create();
+            var history = request.History
+                .Select(m => new Services.AI.AiChatMessage(m.Role, m.Content))
+                .ToList();
+
+            var reply = await analyzer.ChatAsync(history, request.Message, HttpContext.RequestAborted);
+
+            return Json(new
+            {
+                success = true,
+                content = reply.Content,
+                inputTokens = reply.InputTokens,
+                outputTokens = reply.OutputTokens,
+                durationMs = reply.DurationMs
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "AI chat follow-up failed");
+            return Json(new { success = false, message = $"Chat failed: {ex.Message}" });
+        }
+    }
+
+    public class AiChatRequest
+    {
+        public List<AiChatMessageDto> History { get; set; } = new();
+        public string Message { get; set; } = "";
+    }
+
+    public class AiChatMessageDto
+    {
+        public string Role { get; set; } = "";
+        public string Content { get; set; } = "";
     }
 
     // ==================== PS Drill-Down ====================

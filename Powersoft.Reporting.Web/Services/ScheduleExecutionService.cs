@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using Powersoft.Reporting.Core.Constants;
 using Powersoft.Reporting.Core.Enums;
@@ -6,6 +7,7 @@ using Powersoft.Reporting.Core.Helpers;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
 using Powersoft.Reporting.Data.Helpers;
+using Powersoft.Reporting.Web.Services.AI;
 using Powersoft.Reporting.Web.Services.Storage;
 
 namespace Powersoft.Reporting.Web.Services;
@@ -21,7 +23,10 @@ public class ScheduleExecutionService
     private readonly ITenantRepositoryFactory _repositoryFactory;
     private readonly IEmailSender _emailSender;
     private readonly IReportStorageService _storageService;
+    private readonly ReportAnalyzerFactory _analyzerFactory;
     private readonly ILogger<ScheduleExecutionService> _logger;
+
+    private const int MaxCsvBytesForAi = 100_000;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -33,12 +38,14 @@ public class ScheduleExecutionService
         ITenantRepositoryFactory repositoryFactory,
         IEmailSender emailSender,
         IReportStorageService storageService,
+        ReportAnalyzerFactory analyzerFactory,
         ILogger<ScheduleExecutionService> logger)
     {
         _centralRepository = centralRepository;
         _repositoryFactory = repositoryFactory;
         _emailSender = emailSender;
         _storageService = storageService;
+        _analyzerFactory = analyzerFactory;
         _logger = logger;
     }
 
@@ -200,7 +207,21 @@ public class ScheduleExecutionService
                 }
             }
 
-            await SendReportEmailAsync(schedule, db, fileBytes, fileName, contentType, rowCount, period, storageKey, ct);
+            ReportAnalysis? aiAnalysis = null;
+            _logger.LogInformation(
+                "Schedule {Id} AI check: IncludeAiAnalysis={IncAi}, AnalyzerConfigured={Cfg}, RowCount={Rows}, AiLocale={Loc}",
+                schedule.ScheduleId, schedule.IncludeAiAnalysis, _analyzerFactory.IsConfigured, rowCount, schedule.AiLocale);
+
+            if (schedule.IncludeAiAnalysis && _analyzerFactory.IsConfigured && rowCount > 0)
+            {
+                aiAnalysis = await RunAiAnalysisSafe(schedule, connString, ct);
+            }
+            else if (schedule.IncludeAiAnalysis && !_analyzerFactory.IsConfigured)
+            {
+                _logger.LogWarning("Schedule {Id}: AI analysis requested but analyzer is not configured (no API key)", schedule.ScheduleId);
+            }
+
+            await SendReportEmailAsync(schedule, db, fileBytes, fileName, contentType, rowCount, period, storageKey, aiAnalysis, ct);
 
             var isOnce = string.Equals(schedule.RecurrenceType, "Once", StringComparison.OrdinalIgnoreCase);
             DateTime? nextRun = isOnce
@@ -260,8 +281,14 @@ public class ScheduleExecutionService
     private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
         GenerateAverageBasketReportAsync(ReportSchedule schedule, string connString)
     {
+        _logger.LogInformation("Schedule {Id} raw ParametersJson: {Json}", schedule.ScheduleId, schedule.ParametersJson ?? "(null)");
+
         var parameters = DeserializeParameters(schedule.ParametersJson);
         var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        _logger.LogInformation(
+            "Schedule {Id} AB report: DateRange type={Type}, resolved={From:yyyy-MM-dd} to {To:yyyy-MM-dd}",
+            schedule.ScheduleId, parameters.DateRange?.Type, dateFrom, dateTo);
 
         var filter = new ReportFilter
         {
@@ -365,10 +392,146 @@ public class ScheduleExecutionService
         return (result.Items.Count, fileBytes, fileName, contentType, period);
     }
 
+    private async Task<ReportAnalysis?> RunAiAnalysisSafe(
+        ReportSchedule schedule, string connString, CancellationToken ct)
+    {
+        try
+        {
+            var reportType = schedule.ReportType ?? ReportTypeConstants.AverageBasket;
+            var parameters = DeserializeParameters(schedule.ParametersJson);
+            var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+            byte[] csvBytes;
+            if (string.Equals(reportType, ReportTypeConstants.PurchasesSales, StringComparison.OrdinalIgnoreCase))
+            {
+                var filter = new PurchasesSalesFilter
+                {
+                    DateFrom = dateFrom, DateTo = dateTo,
+                    ReportMode = parameters.ReportMode,
+                    PrimaryGroup = parameters.PrimaryGroup,
+                    SecondaryGroup = parameters.SecondaryGroup,
+                    ThirdGroup = parameters.ThirdGroup,
+                    IncludeVat = parameters.IncludeVat,
+                    ShowProfit = parameters.ShowProfit,
+                    ShowStock = parameters.ShowStock,
+                    StoreCodes = parameters.StoreCodes ?? new(),
+                    ItemIds = parameters.ItemIds ?? new(),
+                    SortColumn = parameters.SortColumn ?? "ItemCode",
+                    SortDirection = parameters.SortDirection ?? "ASC",
+                    PageSize = int.MaxValue
+                };
+                var repo = _repositoryFactory.CreatePurchasesSalesRepository(connString);
+                var result = await repo.GetPurchasesSalesDataAsync(filter);
+                csvBytes = new CsvExportService().GeneratePurchasesSalesCsv(result.Items, result.PsTotals, filter);
+            }
+            else
+            {
+                var filter = new ReportFilter
+                {
+                    DateFrom = dateFrom, DateTo = dateTo,
+                    Breakdown = parameters.Breakdown,
+                    GroupBy = parameters.GroupBy,
+                    SecondaryGroupBy = parameters.SecondaryGroupBy,
+                    IncludeVat = parameters.IncludeVat,
+                    CompareLastYear = parameters.CompareLastYear,
+                    StoreCodes = parameters.StoreCodes ?? new(),
+                    ItemIds = parameters.ItemIds ?? new(),
+                    SortColumn = parameters.SortColumn,
+                    SortDirection = parameters.SortDirection,
+                    PageSize = int.MaxValue
+                };
+                var repo = _repositoryFactory.CreateAverageBasketRepository(connString);
+                var result = await repo.GetAverageBasketDataAsync(filter);
+                csvBytes = new CsvExportService().GenerateAverageBasketCsv(result.Items, result.GrandTotals, filter);
+            }
+
+            if (csvBytes.Length > MaxCsvBytesForAi)
+            {
+                _logger.LogInformation(
+                    "Schedule {Id}: CSV is {Size} bytes, truncating to {Max} for AI analysis",
+                    schedule.ScheduleId, csvBytes.Length, MaxCsvBytesForAi);
+                csvBytes = csvBytes[..MaxCsvBytesForAi];
+            }
+
+            var csvData = Encoding.UTF8.GetString(csvBytes);
+            var analyzer = _analyzerFactory.Create();
+            var analysis = await analyzer.AnalyzeAsync(csvData, reportType, locale: schedule.AiLocale, ct: ct);
+
+            _logger.LogInformation(
+                "Schedule {Id}: AI analysis completed — {InTok}+{OutTok} tokens",
+                schedule.ScheduleId, analysis.InputTokens, analysis.OutputTokens);
+
+            return analysis;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Schedule {Id}: AI analysis failed — email will be sent without AI section", schedule.ScheduleId);
+            return null;
+        }
+    }
+
+    private static string BuildAiAnalysisHtml(ReportAnalysis analysis)
+    {
+        var sb = new StringBuilder();
+        sb.Append(@"<div style='margin:24px 0;padding:20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-family:Arial,sans-serif;'>");
+        sb.Append(@"<h3 style='margin:0 0 12px;color:#6366f1;font-size:16px;'>");
+        sb.Append(@"&#10024; AI Business Intelligence</h3>");
+
+        if (!string.IsNullOrWhiteSpace(analysis.Summary))
+        {
+            sb.Append(@"<div style='padding:12px;background:#eef2ff;border-left:4px solid #6366f1;border-radius:4px;margin-bottom:16px;font-size:14px;color:#1e293b;'>");
+            sb.Append(System.Net.WebUtility.HtmlEncode(analysis.Summary));
+            sb.Append("</div>");
+        }
+
+        if (analysis.KeyFindings?.Count > 0)
+        {
+            sb.Append(@"<h4 style='margin:16px 0 8px;color:#1e293b;font-size:14px;'>&#128161; Key Findings</h4><ul style='margin:0;padding-left:20px;'>");
+            foreach (var f in analysis.KeyFindings)
+            {
+                var text = f is string s ? s : f?.ToString() ?? "";
+                if (!string.IsNullOrWhiteSpace(text))
+                    sb.Append($"<li style='margin-bottom:4px;font-size:13px;color:#334155;'>{System.Net.WebUtility.HtmlEncode(text)}</li>");
+            }
+            sb.Append("</ul>");
+        }
+
+        if (analysis.Recommendations?.Count > 0)
+        {
+            sb.Append(@"<h4 style='margin:16px 0 8px;color:#1e293b;font-size:14px;'>&#9989; Recommendations</h4><ol style='margin:0;padding-left:20px;'>");
+            foreach (var r in analysis.Recommendations)
+            {
+                var text = r is string s ? s : r?.ToString() ?? "";
+                if (!string.IsNullOrWhiteSpace(text))
+                    sb.Append($"<li style='margin-bottom:4px;font-size:13px;color:#334155;'>{System.Net.WebUtility.HtmlEncode(text)}</li>");
+            }
+            sb.Append("</ol>");
+        }
+
+        if (analysis.Alerts?.Count > 0)
+        {
+            sb.Append(@"<h4 style='margin:16px 0 8px;color:#dc2626;font-size:14px;'>&#9888;&#65039; Alerts</h4><ul style='margin:0;padding-left:20px;'>");
+            foreach (var a in analysis.Alerts)
+            {
+                var text = a is string s ? s : a?.ToString() ?? "";
+                if (!string.IsNullOrWhiteSpace(text))
+                    sb.Append($"<li style='margin-bottom:4px;font-size:13px;color:#dc2626;'>{System.Net.WebUtility.HtmlEncode(text)}</li>");
+            }
+            sb.Append("</ul>");
+        }
+
+        sb.Append($@"<p style='margin:16px 0 0;font-size:11px;color:#94a3b8;'>
+Model: {System.Net.WebUtility.HtmlEncode(analysis.ModelUsed)} | 
+Tokens: {analysis.InputTokens}+{analysis.OutputTokens} | 
+Time: {(analysis.DurationMs / 1000.0):F1}s</p>");
+        sb.Append("</div>");
+        return sb.ToString();
+    }
+
     private async Task SendReportEmailAsync(
         ReportSchedule schedule, Database db,
         byte[] fileBytes, string fileName, string contentType,
-        int rowCount, string period, string? storageKey, CancellationToken ct)
+        int rowCount, string period, string? storageKey, ReportAnalysis? aiAnalysis, CancellationToken ct)
     {
         var recipients = schedule.Recipients
             .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -420,12 +583,16 @@ public class ScheduleExecutionService
         string htmlBody;
         string textBody;
 
+        string? aiHtml = aiAnalysis != null ? BuildAiAnalysisHtml(aiAnalysis) : null;
+
         if (template != null && !string.IsNullOrWhiteSpace(template.EmailBodyHtml))
         {
             subject = !string.IsNullOrWhiteSpace(schedule.EmailSubject)
                 ? schedule.EmailSubject
                 : ReplaceMergeFields(template.EmailSubject, mergeValues);
             htmlBody = ReplaceMergeFields(template.EmailBodyHtml, mergeValues);
+            if (!string.IsNullOrEmpty(aiHtml))
+                htmlBody += aiHtml;
             if (!string.IsNullOrEmpty(downloadUrl))
                 htmlBody += BuildDownloadLinkHtml(downloadUrl);
             textBody = StripHtmlToPlainText(htmlBody);
@@ -436,6 +603,8 @@ public class ScheduleExecutionService
                 ? schedule.EmailSubject
                 : $"Scheduled Report: {schedule.ScheduleName} — {db.DBFriendlyName}";
             htmlBody = BuildEmailHtml(schedule, db, rowCount, period, fileName, downloadUrl);
+            if (!string.IsNullOrEmpty(aiHtml))
+                htmlBody += aiHtml;
             textBody = BuildEmailText(schedule, db, rowCount, period, downloadUrl);
         }
 

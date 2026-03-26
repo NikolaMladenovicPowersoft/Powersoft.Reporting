@@ -12,11 +12,13 @@ public class HomeController : Controller
 {
     private readonly ICentralRepository _centralRepository;
     private readonly ILogger<HomeController> _logger;
+    private readonly string? _psCentralConnString;
 
-    public HomeController(ICentralRepository centralRepository, ILogger<HomeController> logger)
+    public HomeController(ICentralRepository centralRepository, ILogger<HomeController> logger, IConfiguration configuration)
     {
         _centralRepository = centralRepository;
         _logger = logger;
+        _psCentralConnString = configuration.GetConnectionString("PSCentral");
     }
 
     private string GetUserCode() =>
@@ -203,9 +205,10 @@ public class HomeController : Controller
             return (false, null, "Database not found.");
         }
 
-        var tenantConnString = ConnectionStringBuilder.Build(database);
+        var tenantConnString = !string.IsNullOrEmpty(_psCentralConnString)
+            ? ConnectionStringBuilder.BuildFromReference(database, _psCentralConnString)
+            : ConnectionStringBuilder.Build(database);
 
-        // Verify the tenant database is reachable
         using var conn = new Microsoft.Data.SqlClient.SqlConnection(tenantConnString);
         await conn.OpenAsync();
 

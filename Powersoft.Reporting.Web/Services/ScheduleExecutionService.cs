@@ -25,6 +25,7 @@ public class ScheduleExecutionService
     private readonly IReportStorageService _storageService;
     private readonly ReportAnalyzerFactory _analyzerFactory;
     private readonly ILogger<ScheduleExecutionService> _logger;
+    private readonly string? _psCentralConnString;
 
     private const int MaxCsvBytesForAi = 100_000;
 
@@ -39,7 +40,8 @@ public class ScheduleExecutionService
         IEmailSender emailSender,
         IReportStorageService storageService,
         ReportAnalyzerFactory analyzerFactory,
-        ILogger<ScheduleExecutionService> logger)
+        ILogger<ScheduleExecutionService> logger,
+        IConfiguration configuration)
     {
         _centralRepository = centralRepository;
         _repositoryFactory = repositoryFactory;
@@ -47,6 +49,7 @@ public class ScheduleExecutionService
         _storageService = storageService;
         _analyzerFactory = analyzerFactory;
         _logger = logger;
+        _psCentralConnString = configuration.GetConnectionString("PSCentral");
     }
 
     public async Task<ScheduleRunSummary> RunAllDueSchedulesAsync(CancellationToken ct = default)
@@ -91,7 +94,9 @@ public class ScheduleExecutionService
 
             try
             {
-                var connString = ConnectionStringBuilder.Build(db);
+                var connString = !string.IsNullOrEmpty(_psCentralConnString)
+                    ? ConnectionStringBuilder.BuildFromReference(db, _psCentralConnString)
+                    : ConnectionStringBuilder.Build(db);
                 await ProcessDatabaseSchedulesAsync(db, connString, now, summary, ct);
             }
             catch (Exception ex)
@@ -570,7 +575,9 @@ Time: {(analysis.DurationMs / 1000.0):F1}s</p>");
         EmailTemplate? template = null;
         try
         {
-            var connString = ConnectionStringBuilder.Build(db);
+            var connString = !string.IsNullOrEmpty(_psCentralConnString)
+                ? ConnectionStringBuilder.BuildFromReference(db, _psCentralConnString)
+                : ConnectionStringBuilder.Build(db);
             var scheduleRepo = _repositoryFactory.CreateScheduleRepository(connString);
             template = await scheduleRepo.GetDefaultEmailTemplateAsync(schedule.ReportType);
         }

@@ -49,7 +49,8 @@ public class ScheduleExecutionService
         _storageService = storageService;
         _analyzerFactory = analyzerFactory;
         _logger = logger;
-        _psCentralConnString = configuration.GetConnectionString("PSCentral");
+        var raw = configuration.GetConnectionString("PSCentral");
+        _psCentralConnString = !string.IsNullOrEmpty(raw) ? Cryptography.DecryptPasswordInConnectionString(raw) : null;
     }
 
     public async Task<ScheduleRunSummary> RunAllDueSchedulesAsync(CancellationToken ct = default)

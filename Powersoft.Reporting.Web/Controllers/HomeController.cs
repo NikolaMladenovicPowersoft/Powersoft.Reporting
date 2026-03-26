@@ -18,7 +18,8 @@ public class HomeController : Controller
     {
         _centralRepository = centralRepository;
         _logger = logger;
-        _psCentralConnString = configuration.GetConnectionString("PSCentral");
+        var raw = configuration.GetConnectionString("PSCentral");
+        _psCentralConnString = !string.IsNullOrEmpty(raw) ? Cryptography.DecryptPasswordInConnectionString(raw) : null;
     }
 
     private string GetUserCode() =>

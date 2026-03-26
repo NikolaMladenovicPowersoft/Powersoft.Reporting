@@ -2419,6 +2419,78 @@ public class ReportsController : Controller
     }
 
     [HttpPost]
+    public async Task<IActionResult> AnalyzeChartReport(
+        DateTime dateFrom, DateTime dateTo,
+        ChartDimension dimension = ChartDimension.Category,
+        ChartMetric metric = ChartMetric.Value,
+        int topN = 10, bool showOthers = true,
+        bool compareLastYear = false, bool includeVat = false,
+        string? storeCodes = null, string? itemsSelection = null,
+        string? locale = "el", int? promptTemplateId = null)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        var filter = new ChartFilter
+        {
+            DateFrom = dateFrom, DateTo = dateTo,
+            Dimension = dimension, Metric = metric,
+            TopN = topN, ShowOthers = showOthers,
+            CompareLastYear = compareLastYear, IncludeVat = includeVat,
+            StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
+                : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            ItemsSelection = ParseItemsSelection(itemsSelection)
+        };
+
+        try
+        {
+            var repo = _repositoryFactory.CreateChartRepository(tenantConnString);
+            var data = await repo.GetSalesBreakdownAsync(filter);
+
+            if (data == null || data.Count == 0)
+                return Json(new { success = false, message = "No chart data to analyze. Please generate the chart first." });
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(compareLastYear ? "Label,Value,CompareValue" : "Label,Value");
+            foreach (var dp in data)
+            {
+                if (compareLastYear)
+                    sb.AppendLine($"\"{dp.Label}\",{dp.Value},{dp.CompareValue ?? 0}");
+                else
+                    sb.AppendLine($"\"{dp.Label}\",{dp.Value}");
+            }
+            var csvData = sb.ToString();
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                try
+                {
+                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+                    var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                    if (tpl != null) customPrompt = tpl.SystemPrompt;
+                }
+                catch { }
+            }
+
+            var reportContext = $"Charts ({dimension} by {metric}, Top {topN}, {dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd})";
+            var analyzer = _analyzerFactory.Create();
+            var analysis = await analyzer.AnalyzeAsync(csvData, reportContext, locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+
+            return Json(new { success = true, analysis });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Chart report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    [HttpPost]
     public async Task<IActionResult> GetChartData(
         DateTime dateFrom, DateTime dateTo,
         ChartDimension dimension = ChartDimension.Category,

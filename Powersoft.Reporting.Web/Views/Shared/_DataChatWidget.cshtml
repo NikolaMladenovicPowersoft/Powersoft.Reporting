@@ -1,0 +1,307 @@
+@{
+    var dbName = Context.Session.GetString("ConnectedDatabase") ?? "";
+}
+
+<!-- Floating Chat Button -->
+<button id="dcFab" onclick="dcToggle()" title="Chat with your data"
+        style="position:fixed;bottom:24px;right:24px;z-index:1050;width:56px;height:56px;
+               border-radius:50%;border:none;background:var(--ps-primary,#2563eb);color:#fff;
+               box-shadow:0 4px 12px rgba(0,0,0,.25);cursor:pointer;transition:transform .2s;">
+    <i class="bi bi-chat-dots-fill" style="font-size:1.5rem;" id="dcFabIcon"></i>
+</button>
+
+<!-- Chat Popup Window -->
+<div id="dcPopup" style="display:none;position:fixed;bottom:90px;right:24px;z-index:1049;
+     width:420px;max-width:calc(100vw - 32px);height:560px;max-height:calc(100vh - 120px);
+     border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2);
+     background:#fff;flex-direction:column;">
+
+    <!-- Header -->
+    <div style="background:var(--ps-primary,#2563eb);color:#fff;padding:14px 16px;
+                display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.2);
+                        display:flex;align-items:center;justify-content:center;">
+                <i class="bi bi-robot" style="font-size:1.2rem;"></i>
+            </div>
+            <div>
+                <div style="font-weight:600;font-size:.95rem;">Data Assistant</div>
+                <div style="font-size:.75rem;opacity:.85;">@dbName</div>
+            </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <select id="dcLocale" class="form-select form-select-sm"
+                    style="width:auto;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);
+                           font-size:.75rem;padding:2px 24px 2px 6px;"
+                    onchange="localStorage.setItem('dcLocale',this.value)">
+                <option value="en">EN</option>
+                <option value="el">EL</option>
+                <option value="ru">RU</option>
+                <option value="uk">UK</option>
+                <option value="et">ET</option>
+                <option value="nl">NL</option>
+                <option value="sr">SR</option>
+            </select>
+            <button onclick="dcClear()" style="background:none;border:none;color:#fff;opacity:.7;cursor:pointer;padding:4px;"
+                    title="Clear chat"><i class="bi bi-trash3"></i></button>
+            <button onclick="dcToggle()" style="background:none;border:none;color:#fff;opacity:.7;cursor:pointer;padding:4px;"
+                    title="Close"><i class="bi bi-x-lg"></i></button>
+        </div>
+    </div>
+
+    <!-- Messages Area -->
+    <div id="dcMessages" style="flex:1;overflow-y:auto;padding:12px;background:#f0f2f5;">
+        <div id="dcWelcome" style="text-align:center;padding:30px 10px;">
+            <i class="bi bi-robot" style="font-size:2.5rem;opacity:.25;"></i>
+            <p style="margin-top:12px;color:#666;font-size:.9rem;">Ask anything about your data</p>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px;">
+                <button class="btn btn-outline-primary btn-sm" style="font-size:.75rem;border-radius:16px;"
+                        onclick="dcSuggest(this)">Total sales this month</button>
+                <button class="btn btn-outline-primary btn-sm" style="font-size:.75rem;border-radius:16px;"
+                        onclick="dcSuggest(this)">Top 10 items by revenue</button>
+                <button class="btn btn-outline-primary btn-sm" style="font-size:.75rem;border-radius:16px;"
+                        onclick="dcSuggest(this)">Items with most stock</button>
+                <button class="btn btn-outline-primary btn-sm" style="font-size:.75rem;border-radius:16px;"
+                        onclick="dcSuggest(this)">Active customers count</button>
+                <button class="btn btn-outline-primary btn-sm" style="font-size:.75rem;border-radius:16px;"
+                        onclick="dcSuggest(this)">Monthly sales trend 2025</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Token Info -->
+    <div id="dcTokens" style="display:none;padding:2px 12px;background:#fff;border-top:1px solid #e5e7eb;
+         text-align:right;font-size:.7rem;color:#999;">
+        <i class="bi bi-cpu"></i> <span id="dcTokIn">0</span> + <span id="dcTokOut">0</span> tokens
+    </div>
+
+    <!-- Input Area -->
+    <div style="padding:10px 12px;background:#fff;border-top:1px solid #e5e7eb;flex-shrink:0;">
+        <form onsubmit="dcSend(event)" style="display:flex;gap:8px;">
+            <input type="text" id="dcInput" class="form-control form-control-sm"
+                   placeholder="Type a message..." autocomplete="off"
+                   style="border-radius:20px;font-size:.85rem;" />
+            <button type="submit" id="dcSendBtn" class="btn btn-primary btn-sm"
+                    style="border-radius:50%;width:34px;height:34px;padding:0;flex-shrink:0;">
+                <i class="bi bi-send-fill" style="font-size:.85rem;"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+(function(){
+    var _open = false, _hist = [], _tokIn = 0, _tokOut = 0, _busy = false;
+
+    var sl = localStorage.getItem('dcLocale');
+    if (sl) { var el = document.getElementById('dcLocale'); if (el) el.value = sl; }
+
+    window.dcToggle = function(){
+        _open = !_open;
+        var popup = document.getElementById('dcPopup');
+        var fab = document.getElementById('dcFab');
+        var icon = document.getElementById('dcFabIcon');
+        if (_open) {
+            popup.style.display = 'flex';
+            icon.className = 'bi bi-x-lg';
+            fab.style.transform = 'rotate(90deg)';
+            setTimeout(function(){ document.getElementById('dcInput').focus(); }, 100);
+        } else {
+            popup.style.display = 'none';
+            icon.className = 'bi bi-chat-dots-fill';
+            fab.style.transform = '';
+        }
+    };
+
+    window.dcSuggest = function(btn){
+        document.getElementById('dcInput').value = btn.textContent.trim();
+        dcSend(new Event('submit'));
+    };
+
+    window.dcClear = function(){
+        _hist = []; _tokIn = 0; _tokOut = 0;
+        var msgs = document.getElementById('dcMessages');
+        msgs.innerHTML = '';
+        rebuildWelcome(msgs);
+        document.getElementById('dcTokens').style.display = 'none';
+    };
+
+    function rebuildWelcome(container){
+        container.innerHTML =
+            '<div id="dcWelcome" style="text-align:center;padding:30px 10px;">' +
+                '<i class="bi bi-robot" style="font-size:2.5rem;opacity:.25;"></i>' +
+                '<p style="margin-top:12px;color:#666;font-size:.9rem;">Ask anything about your data</p>' +
+                '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:12px;">' +
+                    '<button class="btn btn-outline-primary btn-sm" style="font-size:.75rem;border-radius:16px;" onclick="dcSuggest(this)">Total sales this month</button>' +
+                    '<button class="btn btn-outline-primary btn-sm" style="font-size:.75rem;border-radius:16px;" onclick="dcSuggest(this)">Top 10 items by revenue</button>' +
+                    '<button class="btn btn-outline-primary btn-sm" style="font-size:.75rem;border-radius:16px;" onclick="dcSuggest(this)">Items with most stock</button>' +
+                '</div>' +
+            '</div>';
+    }
+
+    window.dcSend = function(e){
+        e.preventDefault();
+        if (_busy) return;
+        var input = document.getElementById('dcInput');
+        var msg = input.value.trim();
+        if (!msg) return;
+
+        var w = document.getElementById('dcWelcome');
+        if (w) w.remove();
+
+        addBubble('user', msg);
+        input.value = '';
+        _busy = true;
+
+        var btn = document.getElementById('dcSendBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" style="width:.85rem;height:.85rem;"></span>';
+
+        var thinkId = addThinking();
+
+        fetch('/DataChat/Ask', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                message: msg,
+                history: _hist,
+                locale: document.getElementById('dcLocale').value
+            })
+        })
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+            rmEl(thinkId);
+            _hist.push({role:'user', content: msg});
+            _hist.push({role:'assistant', content: data.answer || ''});
+            addAssistant(data);
+            _tokIn += (data.inputTokens||0);
+            _tokOut += (data.outputTokens||0);
+            updTokens();
+            if (_hist.length > 40) _hist = _hist.slice(-40);
+        })
+        .catch(function(err){
+            rmEl(thinkId);
+            addBubble('assistant','Connection error: '+err.message);
+        })
+        .finally(function(){
+            _busy = false;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send-fill" style="font-size:.85rem;"></i>';
+            scrollBot();
+        });
+    };
+
+    function addBubble(role, text){
+        var msgs = document.getElementById('dcMessages');
+        var d = document.createElement('div');
+        d.style.cssText = 'display:flex;margin-bottom:8px;' + (role==='user'?'justify-content:flex-end;':'');
+        var b = document.createElement('div');
+        b.style.cssText = 'max-width:80%;padding:8px 12px;border-radius:12px;font-size:.85rem;word-wrap:break-word;' +
+            (role==='user'
+                ? 'background:var(--ps-primary,#2563eb);color:#fff;border-bottom-right-radius:4px;'
+                : 'background:#fff;border:1px solid #e5e7eb;border-bottom-left-radius:4px;');
+        b.textContent = text;
+        d.appendChild(b);
+        msgs.appendChild(d);
+        scrollBot();
+    }
+
+    function addAssistant(data){
+        var msgs = document.getElementById('dcMessages');
+        var d = document.createElement('div');
+        d.style.cssText = 'display:flex;margin-bottom:8px;';
+
+        var outer = document.createElement('div');
+        outer.style.cssText = 'max-width:85%;';
+
+        var b = document.createElement('div');
+        b.style.cssText = 'padding:8px 12px;border-radius:12px;font-size:.85rem;background:#fff;border:1px solid #e5e7eb;border-bottom-left-radius:4px;word-wrap:break-word;';
+        b.innerHTML = fmtMd(data.answer || data.errorMessage || 'No response.');
+        outer.appendChild(b);
+
+        if (data.columns && data.rows && data.rows.length > 0) {
+            var tb = document.createElement('div');
+            tb.style.cssText = 'margin-top:4px;';
+            var thtml =
+                '<button class="btn btn-link btn-sm p-0" style="font-size:.7rem;text-decoration:none;" onclick="dcToggleTable(this)">' +
+                    '<i class="bi bi-table me-1"></i>Data (' + data.rows.length + ' rows)</button>' +
+                '<div class="d-none" style="max-height:200px;overflow:auto;margin-top:4px;">' +
+                '<table class="table table-sm table-striped table-bordered mb-0" style="font-size:.72rem;">' +
+                '<thead class="table-dark"><tr>';
+            data.columns.forEach(function(c){ thtml += '<th class="text-nowrap px-1">'+esc(c)+'</th>'; });
+            thtml += '</tr></thead><tbody>';
+            data.rows.slice(0,100).forEach(function(row){
+                thtml += '<tr>';
+                data.columns.forEach(function(c){
+                    var v = row[c];
+                    if (v===null||v===undefined) v='';
+                    else if (typeof v==='number') v=v.toLocaleString(undefined,{maximumFractionDigits:2});
+                    thtml += '<td class="text-nowrap px-1">'+esc(String(v))+'</td>';
+                });
+                thtml += '</tr>';
+            });
+            thtml += '</tbody></table></div>';
+            tb.innerHTML = thtml;
+            outer.appendChild(tb);
+        }
+
+        if (data.inputTokens || data.outputTokens) {
+            var meta = document.createElement('div');
+            meta.style.cssText = 'font-size:.65rem;color:#999;margin-top:2px;';
+            meta.innerHTML = '<i class="bi bi-cpu"></i> '+(data.inputTokens||0)+'+' +(data.outputTokens||0)+' tok &middot; '+((data.durationMs||0)/1000).toFixed(1)+'s';
+            outer.appendChild(meta);
+        }
+
+        d.appendChild(outer);
+        msgs.appendChild(d);
+        scrollBot();
+    }
+
+    function addThinking(){
+        var msgs = document.getElementById('dcMessages');
+        var id = 'dcThink_'+Date.now();
+        var d = document.createElement('div');
+        d.id = id;
+        d.style.cssText = 'display:flex;margin-bottom:8px;';
+        d.innerHTML = '<div style="padding:8px 12px;border-radius:12px;background:#fff;border:1px solid #e5e7eb;">' +
+            '<span class="spinner-border spinner-border-sm text-primary me-2" style="width:.8rem;height:.8rem;"></span>' +
+            '<span style="font-size:.82rem;color:#888;">Analyzing...</span></div>';
+        msgs.appendChild(d);
+        scrollBot();
+        return id;
+    }
+
+    function rmEl(id){ var el=document.getElementById(id); if(el) el.remove(); }
+
+    function updTokens(){
+        var el = document.getElementById('dcTokens');
+        el.style.display = '';
+        document.getElementById('dcTokIn').textContent = _tokIn.toLocaleString();
+        document.getElementById('dcTokOut').textContent = _tokOut.toLocaleString();
+    }
+
+    function scrollBot(){
+        var m = document.getElementById('dcMessages');
+        setTimeout(function(){ m.scrollTop = m.scrollHeight; }, 30);
+    }
+
+    window.dcToggleTable = function(btn){
+        btn.nextElementSibling.classList.toggle('d-none');
+    };
+
+    function fmtMd(t){
+        if (!t) return '';
+        var h = esc(t);
+        h = h.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+        h = h.replace(/\n- /g,'\n&bull; ');
+        h = h.replace(/\n/g,'<br>');
+        return h;
+    }
+
+    function esc(t){ var d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+
+    document.getElementById('dcInput').addEventListener('keydown',function(e){
+        if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); dcSend(e); }
+    });
+})();
+</script>

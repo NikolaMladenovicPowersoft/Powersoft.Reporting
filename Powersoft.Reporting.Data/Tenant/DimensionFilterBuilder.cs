@@ -14,7 +14,8 @@ internal static class DimensionFilterBuilder
         string Item = "t2.pk_ItemID",
         string Store = "t1.fk_StoreCode",
         string Supplier = "",
-        string Customer = "");
+        string Customer = "",
+        string ItemTableAlias = "t2");
 
     internal static readonly ColumnMap Default = new();
 
@@ -48,6 +49,8 @@ internal static class DimensionFilterBuilder
         if (!string.IsNullOrEmpty(cols.Customer))
             AppendFilter(sb, parms, sel.Customers, cols.Customer, "cus", ref idx);
 
+        AppendPropertyFilters(sb, parms, sel, cols.ItemTableAlias, ref idx);
+
         return (sb.ToString(), parms);
     }
 
@@ -55,7 +58,42 @@ internal static class DimensionFilterBuilder
     {
         if (sel == null) return false;
         return sel.Categories.HasFilter || sel.Departments.HasFilter
-            || sel.Brands.HasFilter || sel.Seasons.HasFilter;
+            || sel.Brands.HasFilter || sel.Seasons.HasFilter
+            || sel.HasPropertyFilters;
+    }
+
+    private static void AppendPropertyFilters(
+        StringBuilder sb, List<SqlParameter> parms,
+        ItemsSelectionFilter sel, string alias, ref int idx)
+    {
+        if (sel.Stock == StockFilter.WithStock)
+            sb.Append($" AND ISNULL({alias}.TotalStockQty, 0) > 0");
+        else if (sel.Stock == StockFilter.WithoutStock)
+            sb.Append($" AND ISNULL({alias}.TotalStockQty, 0) = 0");
+
+        if (sel.ECommerceOnly == true)
+            sb.Append($" AND ISNULL({alias}.ECommerce, 0) = 1");
+
+        if (sel.ModifiedAfter.HasValue)
+        {
+            var p = $"@pModAfter{idx++}";
+            sb.Append($" AND {alias}.LastModifiedDate >= {p}");
+            parms.Add(new SqlParameter(p, sel.ModifiedAfter.Value));
+        }
+
+        if (sel.CreatedAfter.HasValue)
+        {
+            var p = $"@pCreAfter{idx++}";
+            sb.Append($" AND {alias}.CreationDate >= {p}");
+            parms.Add(new SqlParameter(p, sel.CreatedAfter.Value));
+        }
+
+        if (sel.ReleasedAfter.HasValue)
+        {
+            var p = $"@pRelAfter{idx++}";
+            sb.Append($" AND {alias}.ReleaseDate >= {p}");
+            parms.Add(new SqlParameter(p, sel.ReleasedAfter.Value));
+        }
     }
 
     private static void AppendFilter(

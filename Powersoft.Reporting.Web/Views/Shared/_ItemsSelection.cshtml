@@ -38,6 +38,59 @@
                 <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("item", "Items", "bi-box-seam"))</div>
             }
         </div>
+
+        @if (Model.ShowStockFilter || Model.ShowECommerce || Model.ShowModifiedDate)
+        {
+            <hr class="my-2" />
+            <div class="row g-2 align-items-end">
+                @if (Model.ShowStockFilter)
+                {
+                    <div class="col-lg-2 col-md-3 col-sm-4">
+                        <label class="form-label fw-semibold mb-1 small">
+                            <i class="bi bi-box-seam me-1"></i>Stock
+                        </label>
+                        <select id="isPropStock" class="form-select form-select-sm" onchange="updatePropBadge()">
+                            <option value="all" selected>All</option>
+                            <option value="withStock">With Stock</option>
+                            <option value="withoutStock">Without Stock</option>
+                        </select>
+                    </div>
+                }
+                @if (Model.ShowECommerce)
+                {
+                    <div class="col-lg-2 col-md-3 col-sm-4">
+                        <label class="form-label fw-semibold mb-1 small">
+                            <i class="bi bi-globe me-1"></i>E-Commerce
+                        </label>
+                        <div class="form-check form-switch mt-1">
+                            <input class="form-check-input" type="checkbox" id="isPropEcommerce" onchange="updatePropBadge()">
+                            <label class="form-check-label small" for="isPropEcommerce">E-shop items only</label>
+                        </div>
+                    </div>
+                }
+                @if (Model.ShowModifiedDate)
+                {
+                    <div class="col-lg-2 col-md-3 col-sm-4">
+                        <label class="form-label fw-semibold mb-1 small">
+                            <i class="bi bi-pencil-square me-1"></i>Modified After
+                        </label>
+                        <input type="date" class="form-control form-control-sm" id="isPropModified" onchange="updatePropBadge()">
+                    </div>
+                    <div class="col-lg-2 col-md-3 col-sm-4">
+                        <label class="form-label fw-semibold mb-1 small">
+                            <i class="bi bi-plus-circle me-1"></i>Created After
+                        </label>
+                        <input type="date" class="form-control form-control-sm" id="isPropCreated" onchange="updatePropBadge()">
+                    </div>
+                    <div class="col-lg-2 col-md-3 col-sm-4">
+                        <label class="form-label fw-semibold mb-1 small">
+                            <i class="bi bi-calendar-check me-1"></i>Released After
+                        </label>
+                        <input type="date" class="form-control form-control-sm" id="isPropReleased" onchange="updatePropBadge()">
+                    </div>
+                }
+            </div>
+        }
     </div>
 </div>
 
@@ -145,6 +198,27 @@
                 }
                 updateTrigger(dim);
             });
+            if (saved.stock && saved.stock !== 'all') {
+                var stockEl = document.getElementById('isPropStock');
+                if (stockEl) { stockEl.value = saved.stock; hasAny = true; }
+            }
+            if (saved.ecommerceOnly) {
+                var ecomEl = document.getElementById('isPropEcommerce');
+                if (ecomEl) { ecomEl.checked = true; hasAny = true; }
+            }
+            if (saved.modifiedAfter) {
+                var modEl = document.getElementById('isPropModified');
+                if (modEl) { modEl.value = saved.modifiedAfter; hasAny = true; }
+            }
+            if (saved.createdAfter) {
+                var creEl = document.getElementById('isPropCreated');
+                if (creEl) { creEl.value = saved.createdAfter; hasAny = true; }
+            }
+            if (saved.releasedAfter) {
+                var relEl = document.getElementById('isPropReleased');
+                if (relEl) { relEl.value = saved.releasedAfter; hasAny = true; }
+            }
+
             if (hasAny) {
                 updateBadge();
                 var body = document.getElementById('isBody');
@@ -301,11 +375,27 @@
         }
     }
 
+    function countPropertyFilters() {
+        var cnt = 0;
+        var stockEl = document.getElementById('isPropStock');
+        if (stockEl && stockEl.value !== 'all') cnt++;
+        var ecomEl = document.getElementById('isPropEcommerce');
+        if (ecomEl && ecomEl.checked) cnt++;
+        var modEl = document.getElementById('isPropModified');
+        if (modEl && modEl.value) cnt++;
+        var creEl = document.getElementById('isPropCreated');
+        if (creEl && creEl.value) cnt++;
+        var relEl = document.getElementById('isPropReleased');
+        if (relEl && relEl.value) cnt++;
+        return cnt;
+    }
+
     function updateBadge() {
         var cnt = 0;
         Object.keys(_modes).forEach(function (d) {
             if (_modes[d] !== 'all' && _selected[d].size > 0) cnt++;
         });
+        cnt += countPropertyFilters();
         var badge = document.getElementById('isActiveBadge');
         if (badge) {
             if (cnt > 0) {
@@ -316,6 +406,8 @@
             }
         }
     }
+
+    window.updatePropBadge = function () { updateBadge(); };
 
     window.getItemsSelectionFilter = function () {
         var filter = {};
@@ -328,6 +420,18 @@
             var key = dimKeyMap[dim] || dim;
             filter[key] = { ids: Array.from(_selected[dim]), mode: _modes[dim] };
         });
+
+        var stockEl = document.getElementById('isPropStock');
+        if (stockEl) filter.stock = stockEl.value;
+        var ecomEl = document.getElementById('isPropEcommerce');
+        if (ecomEl) filter.ecommerceOnly = ecomEl.checked;
+        var modEl = document.getElementById('isPropModified');
+        if (modEl && modEl.value) filter.modifiedAfter = modEl.value;
+        var creEl = document.getElementById('isPropCreated');
+        if (creEl && creEl.value) filter.createdAfter = creEl.value;
+        var relEl = document.getElementById('isPropReleased');
+        if (relEl && relEl.value) filter.releasedAfter = relEl.value;
+
         return filter;
     };
 

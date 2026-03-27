@@ -62,6 +62,7 @@ builder.Services.AddHttpClient("OpenAI");
 builder.Services.AddTransient<ClaudeReportAnalyzer>();
 builder.Services.AddTransient<OpenAIReportAnalyzer>();
 builder.Services.AddTransient<ReportAnalyzerFactory>();
+builder.Services.AddTransient<DataChatService>();
 
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>

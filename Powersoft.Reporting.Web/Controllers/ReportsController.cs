@@ -108,6 +108,35 @@ public class ReportsController : Controller
             ParseDimension(root, "stores", filter.Stores);
             ParseDimension(root, "items", filter.Items);
 
+            if (root.TryGetProperty("stock", out var stockEl))
+            {
+                var sv = stockEl.GetString() ?? "all";
+                filter.Stock = sv switch
+                {
+                    "withStock" => StockFilter.WithStock,
+                    "withoutStock" => StockFilter.WithoutStock,
+                    _ => StockFilter.All
+                };
+            }
+
+            if (root.TryGetProperty("ecommerceOnly", out var ecomEl) && ecomEl.GetBoolean())
+                filter.ECommerceOnly = true;
+
+            if (root.TryGetProperty("modifiedAfter", out var modEl) && modEl.ValueKind == JsonValueKind.String)
+            {
+                if (DateTime.TryParse(modEl.GetString(), out var dt)) filter.ModifiedAfter = dt;
+            }
+
+            if (root.TryGetProperty("createdAfter", out var creEl) && creEl.ValueKind == JsonValueKind.String)
+            {
+                if (DateTime.TryParse(creEl.GetString(), out var dt)) filter.CreatedAfter = dt;
+            }
+
+            if (root.TryGetProperty("releasedAfter", out var relEl) && relEl.ValueKind == JsonValueKind.String)
+            {
+                if (DateTime.TryParse(relEl.GetString(), out var dt)) filter.ReleasedAfter = dt;
+            }
+
             return filter;
         }
         catch

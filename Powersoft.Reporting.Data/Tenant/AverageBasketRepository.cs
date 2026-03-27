@@ -21,7 +21,8 @@ public class AverageBasketRepository : IAverageBasketRepository
         Brand: "t_dim.fk_BrandID",
         Season: "t_dim.fk_SeasonID",
         Item: "t2.fk_ItemID",
-        Store: "t1.fk_StoreCode");
+        Store: "t1.fk_StoreCode",
+        ItemTableAlias: "t_dim");
 
     public async Task<PagedResult<AverageBasketRow>> GetAverageBasketDataAsync(ReportFilter filter)
     {

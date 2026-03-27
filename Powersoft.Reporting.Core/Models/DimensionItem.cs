@@ -22,6 +22,8 @@ public class DimensionFilter
     public bool HasFilter => Mode != FilterMode.All && Ids.Count > 0;
 }
 
+public enum StockFilter { All, WithStock, WithoutStock }
+
 public class ItemsSelectionFilter
 {
     public DimensionFilter Categories { get; set; } = new();
@@ -32,6 +34,17 @@ public class ItemsSelectionFilter
     public DimensionFilter Customers { get; set; } = new();
     public DimensionFilter Stores { get; set; } = new();
     public DimensionFilter Items { get; set; } = new();
+
+    // Item-level property filters (tbl_Item columns)
+    public StockFilter Stock { get; set; } = StockFilter.All;
+    public bool? ECommerceOnly { get; set; }
+    public DateTime? ModifiedAfter { get; set; }
+    public DateTime? CreatedAfter { get; set; }
+    public DateTime? ReleasedAfter { get; set; }
+
+    public bool HasPropertyFilters =>
+        Stock != StockFilter.All || ECommerceOnly.HasValue
+        || ModifiedAfter.HasValue || CreatedAfter.HasValue || ReleasedAfter.HasValue;
 }
 
 public class ItemsSelectionConfig
@@ -44,6 +57,9 @@ public class ItemsSelectionConfig
     public bool ShowItems { get; set; }
     public bool ShowCustomers { get; set; }
     public bool ShowStores { get; set; } = true;
+    public bool ShowStockFilter { get; set; } = true;
+    public bool ShowECommerce { get; set; } = true;
+    public bool ShowModifiedDate { get; set; } = true;
     public string StoresJson { get; set; } = "[]";
     public string SavedFilterJson { get; set; } = "";
 }

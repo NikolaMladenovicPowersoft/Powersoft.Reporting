@@ -72,7 +72,7 @@
     <!-- Token Info -->
     <div id="dcTokens" style="display:none;padding:2px 12px;background:#fff;border-top:1px solid #e5e7eb;
          text-align:right;font-size:.7rem;color:#999;">
-        <i class="bi bi-cpu"></i> <span id="dcTokIn">0</span> + <span id="dcTokOut">0</span> tokens
+        <i class="bi bi-currency-dollar"></i> <span id="dcTokCost">$0.00</span>
     </div>
 
     <!-- Input Area -->
@@ -248,7 +248,7 @@
         if (data.inputTokens || data.outputTokens) {
             var meta = document.createElement('div');
             meta.style.cssText = 'font-size:.65rem;color:#999;margin-top:2px;';
-            meta.innerHTML = '<i class="bi bi-cpu"></i> '+(data.inputTokens||0)+'+' +(data.outputTokens||0)+' tok &middot; '+((data.durationMs||0)/1000).toFixed(1)+'s';
+            meta.innerHTML = '<i class="bi bi-currency-dollar"></i> '+estimateAiCost(data.inputTokens||0, data.outputTokens||0)+' &middot; '+((data.durationMs||0)/1000).toFixed(1)+'s';
             outer.appendChild(meta);
         }
 
@@ -273,11 +273,15 @@
 
     function rmEl(id){ var el=document.getElementById(id); if(el) el.remove(); }
 
+    function estimateAiCost(inputTok, outputTok) {
+        var cost = (inputTok * 2.5 + outputTok * 10) / 1e6;
+        return cost < 0.005 ? '< $0.01' : '$' + cost.toFixed(2);
+    }
+
     function updTokens(){
         var el = document.getElementById('dcTokens');
         el.style.display = '';
-        document.getElementById('dcTokIn').textContent = _tokIn.toLocaleString();
-        document.getElementById('dcTokOut').textContent = _tokOut.toLocaleString();
+        document.getElementById('dcTokCost').textContent = estimateAiCost(_tokIn, _tokOut);
     }
 
     function scrollBot(){

@@ -137,6 +137,8 @@
 (function () {
     const _dims = {};
     const _selected = {};
+    const _selInclude = {};
+    const _selExclude = {};
     const _modes = {};
     const _storesJson = @Html.Raw(Model.StoresJson);
     const _savedFilterJson = '@Html.Raw((Model.SavedFilterJson ?? "").Replace("'", "\\'"))';
@@ -147,6 +149,8 @@
     function initDim(dim) {
         _dims[dim] = [];
         _selected[dim] = new Set();
+        _selInclude[dim] = new Set();
+        _selExclude[dim] = new Set();
         _modes[dim] = 'all';
     }
 
@@ -181,6 +185,8 @@
                 if (!ids.length) return;
                 _modes[dim] = mode;
                 _selected[dim] = new Set(ids.map(String));
+                if (mode === 'include') _selInclude[dim] = new Set(_selected[dim]);
+                else if (mode === 'exclude') _selExclude[dim] = new Set(_selected[dim]);
                 hasAny = true;
                 var modeBtn = document.querySelector('[data-dim="' + dim + '"] .btn-group .btn[data-mode="' + mode + '"]');
                 if (modeBtn) {
@@ -252,6 +258,10 @@
         });
         var prevMode = _modes[dim];
         var mode = btn.getAttribute('data-mode');
+
+        if (prevMode === 'include') _selInclude[dim] = new Set(_selected[dim]);
+        else if (prevMode === 'exclude') _selExclude[dim] = new Set(_selected[dim]);
+
         _modes[dim] = mode;
         grp.querySelectorAll('.btn').forEach(function (b) {
             var m = b.getAttribute('data-mode');
@@ -262,19 +272,28 @@
             }
         });
         if (mode === 'all') {
-            _selected[dim].clear();
-        } else if (prevMode !== mode && prevMode !== 'all') {
-            _selected[dim].clear();
+            _selected[dim] = new Set();
+        } else if (mode === 'include') {
+            _selected[dim] = new Set(_selInclude[dim]);
+        } else if (mode === 'exclude') {
+            _selected[dim] = new Set(_selExclude[dim]);
         }
         updateTrigger(dim);
         updateBadge();
     };
 
+    var _naDims = { category:1, department:1, brand:1, season:1, supplier:1 };
+
     function loadDimData(dim) {
         if (_dims[dim] && _dims[dim].length) return Promise.resolve();
         return fetch('/Reports/GetDimensions?type=' + dim)
             .then(function (r) { return r.json(); })
-            .then(function (data) { _dims[dim] = data; });
+            .then(function (data) {
+                if (_naDims[dim]) {
+                    data.unshift({ id: '__NA__', code: 'N/A', name: 'Not Applicable (empty)' });
+                }
+                _dims[dim] = data;
+            });
     }
 
     window.openDimModal = function (dim, label) {
@@ -351,6 +370,9 @@
             var incBtn = document.querySelector('[data-dim="' + _modalDim + '"] .btn-group .btn[data-mode="include"]');
             if (incBtn) setDimMode(_modalDim, incBtn);
         }
+        var curMode = _modes[_modalDim];
+        if (curMode === 'include') _selInclude[_modalDim] = new Set(_selected[_modalDim]);
+        else if (curMode === 'exclude') _selExclude[_modalDim] = new Set(_selected[_modalDim]);
         updateTrigger(_modalDim);
         updateBadge();
         _bsModal.hide();

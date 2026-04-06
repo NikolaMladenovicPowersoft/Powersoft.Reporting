@@ -22,6 +22,9 @@ public class ReportGrandTotals
     public int LYTotalInvoices { get; set; }
     public int LYTotalCredits { get; set; }
     public int LYNetTransactions => LYTotalInvoices - LYTotalCredits;
+    public decimal LYQtySold { get; set; }
+    public decimal LYQtyReturned { get; set; }
+    public decimal LYNetQty => LYQtySold - LYQtyReturned;
     public decimal LYNetSales { get; set; }
     public decimal LYNetReturns { get; set; }
     public decimal LYVatSales { get; set; }
@@ -30,6 +33,7 @@ public class ReportGrandTotals
     public decimal LYTotalGross => LYTotalNet + (LYVatSales - LYVatReturns);
     public decimal LYAverageBasketNet => LYNetTransactions > 0 ? LYTotalNet / LYNetTransactions : 0;
     public decimal LYAverageBasketGross => LYNetTransactions > 0 ? LYTotalGross / LYNetTransactions : 0;
+    public decimal LYAverageQty => LYNetTransactions > 0 ? LYNetQty / LYNetTransactions : 0;
 
     public decimal YoYChangePercent => LYTotalNet != 0
         ? Math.Round((NetSales - LYTotalNet) / Math.Abs(LYTotalNet) * 100, 2)

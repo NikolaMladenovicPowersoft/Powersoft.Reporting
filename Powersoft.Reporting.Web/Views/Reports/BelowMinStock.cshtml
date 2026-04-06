@@ -1,0 +1,355 @@
+@using Powersoft.Reporting.Core.Models
+@{
+    ViewData["Title"] = "Below Minimum Stock";
+    var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
+    var storesJson = ViewBag.StoresJson as string ?? "[]";
+}
+
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-start">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
+                    <li class="breadcrumb-item active">Below Minimum Stock</li>
+                </ol>
+            </nav>
+            <h2 class="mb-0">
+                <i class="bi bi-exclamation-triangle me-2 text-warning"></i>Below Minimum Stock
+            </h2>
+            <p class="text-muted mb-0">Items whose current stock is below the defined minimum threshold</p>
+        </div>
+        <div class="mt-3">
+            @await Html.PartialAsync("_TutorialButton", ("Below Minimum Stock", ""))
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-funnel me-2"></i>Report Parameters
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            This report shows all items where the current stock quantity is below the configured minimum stock threshold, per store.
+            Use the Items Selection filters below to narrow results by category, department, brand, season, supplier, or store.
+        </p>
+
+        <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
+            <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
+                <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
+                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            </button>
+            <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                <i class="bi bi-clock-history me-2"></i>Schedule
+            </button>
+            <div class="btn-group ms-auto">
+                <button type="button" class="btn btn-outline-secondary" onclick="exportCsv()" title="Export current results to CSV">
+                    <i class="bi bi-filetype-csv me-1"></i>CSV
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@await Html.PartialAsync("_ItemsSelection", new ItemsSelectionConfig
+{
+    ShowCategories = true,
+    ShowDepartments = true,
+    ShowBrands = true,
+    ShowSeasons = true,
+    ShowSuppliers = true,
+    ShowStores = true,
+    ShowCustomers = false,
+    ShowItems = false,
+    ShowStockFilter = false,
+    ShowECommerce = false,
+    ShowModifiedDate = false,
+    StoresJson = storesJson
+})
+
+<div id="reportAlert" style="display:none;"></div>
+
+<div id="reportLoading" style="display:none;" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2 text-muted">Loading report data...</p>
+</div>
+
+<div id="reportResults" style="display:none;">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-table me-2"></i>Results</span>
+            <span class="text-muted small" id="rowCountInfo"></span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0" id="reportTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="cursor:pointer" onclick="sortBy('ItemCode')">Item Code <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th style="cursor:pointer" onclick="sortBy('ItemName')">Item Name <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th style="cursor:pointer" onclick="sortBy('StoreCode')">Store <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th style="cursor:pointer" onclick="sortBy('Category')">Category <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th style="cursor:pointer" onclick="sortBy('Department')">Department <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th style="cursor:pointer" onclick="sortBy('Brand')">Brand <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" style="cursor:pointer" onclick="sortBy('CurrentStock')">Stock <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" style="cursor:pointer" onclick="sortBy('MinimumStock')">Min Stock <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" style="cursor:pointer" onclick="sortBy('Difference')">Difference <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" style="cursor:pointer" onclick="sortBy('Cost')">Cost <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" style="cursor:pointer" onclick="sortBy('StockValue')">Stock Value <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th style="cursor:pointer" onclick="sortBy('Shelf')">Shelf <i class="bi bi-arrow-down-up text-muted"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Schedule Modal -->
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-clock-history me-2 text-warning"></i>Schedule Report</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="scheduleAlert" style="display:none;"></div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Schedule Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="schedName" placeholder="e.g. Daily Stock Alert">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="schedRecipients" placeholder="user@example.com; user2@example.com">
+                        <small class="text-muted">Separate multiple emails with ; or ,</small>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Recurrence</label>
+                        <select class="form-select" id="schedRecurrence">
+                            <option value="Daily">Daily</option>
+                            <option value="Weekly">Weekly</option>
+                            <option value="Monthly">Monthly</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Time</label>
+                        <input type="time" class="form-control" id="schedTime" value="08:00">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Export Format</label>
+                        <select class="form-select" id="schedFormat">
+                            <option value="CSV">CSV</option>
+                            <option value="Excel">Excel</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email Subject</label>
+                        <input type="text" class="form-control" id="schedSubject" placeholder="Leave empty for auto-generated subject">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="schedSkipIfEmpty" checked>
+                            <label class="form-check-label fw-semibold" for="schedSkipIfEmpty">Don't send if empty</label>
+                        </div>
+                        <small class="text-muted d-block">When enabled, the email will not be sent if no items are below minimum stock. Recommended for this report type.</small>
+                    </div>
+                </div>
+                <hr>
+                <h6 class="text-muted mb-2"><i class="bi bi-list-ul me-1"></i>Existing Schedules</h6>
+                <div id="existingSchedules"><em class="text-muted">Loading...</em></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button class="btn btn-primary" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var _sortCol = 'Difference';
+var _sortDir = 'ASC';
+var _lastData = [];
+
+function generateReport() {
+    var alertEl = document.getElementById('reportAlert');
+    alertEl.style.display = 'none';
+    document.getElementById('reportResults').style.display = 'none';
+    document.getElementById('reportLoading').style.display = '';
+
+    var btn = document.getElementById('generateBtn');
+    btn.querySelector('.btn-text').classList.add('d-none');
+    btn.querySelector('.spinner-border').classList.remove('d-none');
+    btn.disabled = true;
+
+    var fd = new FormData();
+    if (typeof getItemsSelectionStoreCodes === 'function') {
+        fd.append('storeCodes', getItemsSelectionStoreCodes());
+    }
+    if (typeof getItemsSelectionFilter === 'function') {
+        fd.append('itemsSelection', JSON.stringify(getItemsSelectionFilter()));
+    }
+    fd.append('sortColumn', _sortCol);
+    fd.append('sortDirection', _sortDir);
+
+    fetch('@Url.Action("GetBelowMinStockData", "Reports")', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+
+            if (!d.success) {
+                alertEl.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>' + d.message + '</div>';
+                alertEl.style.display = '';
+                return;
+            }
+            _lastData = d.data || [];
+            renderTable(_lastData);
+            document.getElementById('rowCountInfo').textContent = _lastData.length + ' item(s) below minimum stock';
+            document.getElementById('reportResults').style.display = '';
+            if (_lastData.length === 0) {
+                alertEl.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle me-2"></i>All items are at or above minimum stock levels. No action required.</div>';
+                alertEl.style.display = '';
+            }
+        })
+        .catch(function(err) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            alertEl.innerHTML = '<div class="alert alert-danger"><i class="bi bi-wifi-off me-2"></i>Network error: ' + err.message + '</div>';
+            alertEl.style.display = '';
+        });
+}
+
+function renderTable(data) {
+    var body = document.getElementById('reportBody');
+    if (!data.length) {
+        body.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">No items below minimum stock</td></tr>';
+        return;
+    }
+    var html = '';
+    data.forEach(function(r) {
+        var diffCls = r.difference < 0 ? 'text-danger fw-bold' : 'text-warning';
+        html += '<tr>' +
+            '<td class="text-nowrap"><code>' + esc(r.itemCode) + '</code></td>' +
+            '<td>' + esc(r.itemName) + '</td>' +
+            '<td class="text-nowrap"><span class="badge bg-secondary">' + esc(r.storeCode) + '</span> ' + esc(r.storeName || '') + '</td>' +
+            '<td>' + esc(r.categoryName || '-') + '</td>' +
+            '<td>' + esc(r.departmentName || '-') + '</td>' +
+            '<td>' + esc(r.brandName || '-') + '</td>' +
+            '<td class="text-end">' + fmt(r.currentStock) + '</td>' +
+            '<td class="text-end">' + fmt(r.minimumStock) + '</td>' +
+            '<td class="text-end ' + diffCls + '">' + fmt(r.difference) + '</td>' +
+            '<td class="text-end">' + fmtMoney(r.cost) + '</td>' +
+            '<td class="text-end">' + fmtMoney(r.stockValue) + '</td>' +
+            '<td>' + esc(r.shelf || '-') + '</td>' +
+            '</tr>';
+    });
+    body.innerHTML = html;
+}
+
+function sortBy(col) {
+    if (_sortCol === col) _sortDir = _sortDir === 'ASC' ? 'DESC' : 'ASC';
+    else { _sortCol = col; _sortDir = 'ASC'; }
+    generateReport();
+}
+
+function exportCsv() {
+    if (!_lastData.length) return;
+    var csv = 'ItemCode,ItemName,Store,StoreName,Category,Department,Brand,CurrentStock,MinStock,Difference,Cost,StockValue,Shelf\n';
+    _lastData.forEach(function(r) {
+        csv += '"' + (r.itemCode||'') + '","' + (r.itemName||'') + '","' + (r.storeCode||'') + '","' + (r.storeName||'') + '",' +
+            '"' + (r.categoryName||'') + '","' + (r.departmentName||'') + '","' + (r.brandName||'') + '",' +
+            r.currentStock + ',' + r.minimumStock + ',' + r.difference + ',' + (r.cost||0) + ',' + (r.stockValue||0) + ',"' + (r.shelf||'') + '"\n';
+    });
+    var blob = new Blob([csv], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'BelowMinStock_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+}
+
+function fmt(v) { return v != null ? v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-'; }
+function fmtMoney(v) { return v != null ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'; }
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+function saveSchedule() {
+    var name = document.getElementById('schedName').value.trim();
+    var recipients = document.getElementById('schedRecipients').value.trim();
+    var alertDiv = document.getElementById('scheduleAlert');
+    if (!name || !recipients) {
+        alertDiv.innerHTML = '<div class="alert alert-warning mb-2">Please fill in schedule name and recipients.</div>';
+        alertDiv.style.display = '';
+        return;
+    }
+    var fd = new FormData();
+    fd.append('scheduleName', name);
+    fd.append('recurrenceType', document.getElementById('schedRecurrence').value);
+    fd.append('scheduleTime', document.getElementById('schedTime').value);
+    fd.append('exportFormat', document.getElementById('schedFormat').value);
+    fd.append('recipients', recipients);
+    fd.append('emailSubject', document.getElementById('schedSubject').value);
+    fd.append('skipIfEmpty', document.getElementById('schedSkipIfEmpty').checked);
+
+    var params = {
+        storeCodes: typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : '',
+        sortColumn: _sortCol,
+        sortDirection: _sortDir,
+        reportType: 'BelowMinStock'
+    };
+    fd.append('parametersJson', JSON.stringify(params));
+
+    var startDate = new Date().toISOString().slice(0, 10);
+    var recurrence = document.getElementById('schedRecurrence').value;
+    var recurrenceJson = {
+        type: recurrence,
+        time: document.getElementById('schedTime').value,
+        range: { startDate: startDate, noEndDate: true }
+    };
+    fd.append('recurrenceJson', JSON.stringify(recurrenceJson));
+
+    fetch('@Url.Action("SaveBmsSchedule", "Reports")', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.success) {
+                alertDiv.innerHTML = '<div class="alert alert-success mb-2"><i class="bi bi-check-circle me-1"></i>' + d.message + '</div>';
+                alertDiv.style.display = '';
+                document.getElementById('schedName').value = '';
+                loadExistingSchedules();
+            } else {
+                alertDiv.innerHTML = '<div class="alert alert-danger mb-2">' + d.message + '</div>';
+                alertDiv.style.display = '';
+            }
+        });
+}
+
+function loadExistingSchedules() {
+    fetch('@Url.Action("GetBmsSchedules", "Reports")')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var c = document.getElementById('existingSchedules');
+            if (!data || !data.length) { c.innerHTML = '<em class="text-muted">No schedules configured yet.</em>'; return; }
+            var h = '<table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th>Skip Empty</th></tr></thead><tbody>';
+            data.forEach(function(s) {
+                h += '<tr><td>' + s.scheduleName + '</td><td>' + s.recurrenceType + '</td><td>' + s.exportFormat + '</td>' +
+                     '<td>' + s.scheduleTime + '</td><td>' + (s.nextRun || '-') + '</td>' +
+                     '<td>' + (s.skipIfEmpty ? '<i class="bi bi-check-circle text-success"></i>' : '-') + '</td></tr>';
+            });
+            h += '</tbody></table>';
+            c.innerHTML = h;
+        })
+        .catch(function() { document.getElementById('existingSchedules').innerHTML = '<em class="text-muted">Could not load schedules.</em>'; });
+}
+
+document.getElementById('scheduleModal').addEventListener('show.bs.modal', function() {
+    loadExistingSchedules();
+});
+</script>

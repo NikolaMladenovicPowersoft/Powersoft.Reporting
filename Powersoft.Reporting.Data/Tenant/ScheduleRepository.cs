@@ -19,11 +19,11 @@ public class ScheduleRepository : IScheduleRepository
             INSERT INTO tbl_ReportSchedule 
                 (ReportType, ScheduleName, CreatedBy, RecurrenceType, RecurrenceDay,
                  ScheduleTime, NextRunDate, ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
-                 IncludeAiAnalysis, AiLocale)
+                 IncludeAiAnalysis, AiLocale, SkipIfEmpty)
             VALUES 
                 (@ReportType, @ScheduleName, @CreatedBy, @RecurrenceType, @RecurrenceDay,
                  @ScheduleTime, @NextRunDate, @ParametersJson, @RecurrenceJson, @ExportFormat, @Recipients, @EmailSubject,
-                 @IncludeAiAnalysis, @AiLocale);
+                 @IncludeAiAnalysis, @AiLocale, @SkipIfEmpty);
             SELECT SCOPE_IDENTITY();";
 
         using var conn = new SqlConnection(_connectionString);
@@ -44,6 +44,7 @@ public class ScheduleRepository : IScheduleRepository
         cmd.Parameters.AddWithValue("@EmailSubject", (object?)schedule.EmailSubject ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@IncludeAiAnalysis", schedule.IncludeAiAnalysis);
         cmd.Parameters.AddWithValue("@AiLocale", schedule.AiLocale ?? "el");
+        cmd.Parameters.AddWithValue("@SkipIfEmpty", schedule.SkipIfEmpty);
 
         var result = await cmd.ExecuteScalarAsync();
         return Convert.ToInt32(result);
@@ -55,7 +56,8 @@ public class ScheduleRepository : IScheduleRepository
             SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
                    RecurrenceType, RecurrenceDay, ScheduleTime, NextRunDate, LastRunDate,
                    ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
-                   ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale
+                   ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale,
+                   ISNULL(SkipIfEmpty, 0) AS SkipIfEmpty
             FROM tbl_ReportSchedule
             WHERE ReportType = @ReportType AND IsActive = 1
             ORDER BY CreatedDate DESC";
@@ -82,7 +84,8 @@ public class ScheduleRepository : IScheduleRepository
             SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
                    RecurrenceType, RecurrenceDay, ScheduleTime, NextRunDate, LastRunDate,
                    ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
-                   ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale
+                   ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale,
+                   ISNULL(SkipIfEmpty, 0) AS SkipIfEmpty
             FROM tbl_ReportSchedule
             WHERE pk_ScheduleID = @Id";
 
@@ -106,6 +109,7 @@ public class ScheduleRepository : IScheduleRepository
                 ExportFormat = @ExportFormat, Recipients = @Recipients,
                 EmailSubject = @EmailSubject, IsActive = @IsActive,
                 IncludeAiAnalysis = @IncludeAiAnalysis, AiLocale = @AiLocale,
+                SkipIfEmpty = @SkipIfEmpty,
                 ModifiedDate = GETDATE(), ModifiedBy = @ModifiedBy
             WHERE pk_ScheduleID = @Id";
 
@@ -127,6 +131,7 @@ public class ScheduleRepository : IScheduleRepository
         cmd.Parameters.AddWithValue("@IsActive", schedule.IsActive);
         cmd.Parameters.AddWithValue("@IncludeAiAnalysis", schedule.IncludeAiAnalysis);
         cmd.Parameters.AddWithValue("@AiLocale", schedule.AiLocale ?? "el");
+        cmd.Parameters.AddWithValue("@SkipIfEmpty", schedule.SkipIfEmpty);
         cmd.Parameters.AddWithValue("@ModifiedBy", schedule.CreatedBy);
 
         return await cmd.ExecuteNonQueryAsync() > 0;
@@ -180,7 +185,8 @@ public class ScheduleRepository : IScheduleRepository
                 SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
                        RecurrenceType, RecurrenceDay, ScheduleTime, NextRunDate, LastRunDate,
                        ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
-                       ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale
+                       ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale,
+                       ISNULL(SkipIfEmpty, 0) AS SkipIfEmpty
                 FROM tbl_ReportSchedule
                 WHERE IsActive = 1
                   AND NextRunDate IS NOT NULL
@@ -481,6 +487,10 @@ public class ScheduleRepository : IScheduleRepository
         {
             schedule.IncludeAiAnalysis = !reader.IsDBNull(16) && reader.GetBoolean(16);
             schedule.AiLocale = reader.FieldCount > 17 && !reader.IsDBNull(17) ? reader.GetString(17) : "el";
+        }
+        if (reader.FieldCount > 18)
+        {
+            schedule.SkipIfEmpty = !reader.IsDBNull(18) && reader.GetBoolean(18);
         }
 
         return schedule;

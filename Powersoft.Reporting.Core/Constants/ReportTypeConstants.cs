@@ -9,6 +9,7 @@ public static class ReportTypeConstants
 {
     public const string AverageBasket = "AverageBasket";
     public const string PurchasesSales = "PurchasesSales";
+    public const string BelowMinStock = "BelowMinStock";
 
     /// <summary>
     /// The set of report types that can be scheduled.
@@ -17,7 +18,8 @@ public static class ReportTypeConstants
     public static readonly HashSet<string> Schedulable = new(StringComparer.OrdinalIgnoreCase)
     {
         AverageBasket,
-        PurchasesSales
+        PurchasesSales,
+        BelowMinStock
     };
 
     public static bool IsSchedulable(string reportType) =>

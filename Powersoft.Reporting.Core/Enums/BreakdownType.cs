@@ -16,5 +16,9 @@ public enum GroupByType
     Brand,
     Season,
     Customer,
-    User
+    User,
+    Supplier,
+    Model,
+    Colour,
+    Size
 }

@@ -27,4 +27,7 @@ public class ReportSchedule
     public bool IncludeAiAnalysis { get; set; }
     /// <summary>Locale for AI analysis output (e.g. "el", "en", "sr"). Defaults to "el".</summary>
     public string AiLocale { get; set; } = "el";
+
+    /// <summary>When true, the scheduled email is suppressed if the report returns 0 rows.</summary>
+    public bool SkipIfEmpty { get; set; }
 }

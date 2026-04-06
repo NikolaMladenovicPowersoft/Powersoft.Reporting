@@ -18,5 +18,7 @@ public enum PsGroupBy
     Store = 6,
     Model = 7,
     Colour = 8,
-    Size = 9
+    Size = 9,
+    GroupSize = 10,
+    Fabric = 11
 }

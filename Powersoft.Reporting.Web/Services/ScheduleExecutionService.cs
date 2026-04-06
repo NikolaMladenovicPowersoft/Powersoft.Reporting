@@ -199,6 +199,15 @@ public class ScheduleExecutionService
             log.RowsGenerated = rowCount;
             log.FileSizeBytes = fileBytes.Length;
 
+            if (schedule.SkipIfEmpty && rowCount == 0)
+            {
+                _logger.LogInformation(
+                    "Schedule {Id} skipped — 0 rows and SkipIfEmpty is enabled", schedule.ScheduleId);
+                log.Status = ScheduleLogStatus.Skipped;
+                log.ErrorMessage = "Skipped: report returned 0 rows (SkipIfEmpty enabled)";
+                return;
+            }
+
             // Upload to cold storage (S3 / DigitalOcean Spaces) if configured
             string? storageKey = null;
             if (_storageService.IsConfigured)
@@ -280,6 +289,9 @@ public class ScheduleExecutionService
 
         if (string.Equals(reportType, ReportTypeConstants.PurchasesSales, StringComparison.OrdinalIgnoreCase))
             return await GeneratePurchasesSalesReportAsync(schedule, connString);
+
+        if (string.Equals(reportType, ReportTypeConstants.BelowMinStock, StringComparison.OrdinalIgnoreCase))
+            return await GenerateBelowMinStockReportAsync(schedule, connString);
 
         return await GenerateAverageBasketReportAsync(schedule, connString);
     }
@@ -396,6 +408,53 @@ public class ScheduleExecutionService
 
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
         return (result.Items.Count, fileBytes, fileName, contentType, period);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateBelowMinStockReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+
+        var filter = new BelowMinStockFilter
+        {
+            StoreCodes = parameters.StoreCodes,
+            SortColumn = parameters.SortColumn ?? "ItemCode",
+            SortDirection = parameters.SortDirection ?? "ASC"
+        };
+
+        var repo = _repositoryFactory.CreateBelowMinStockRepository(connString);
+        var data = await repo.GetBelowMinStockAsync(filter);
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        var csvService = new CsvExportService();
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("ItemCode,ItemName,Store,StoreName,Category,Department,Brand,CurrentStock,MinimumStock,Difference,Cost,StockValue,Shelf");
+        foreach (var r in data)
+        {
+            sb.AppendLine($"\"{r.ItemCode}\",\"{r.ItemName}\",\"{r.StoreCode}\",\"{r.StoreName}\"," +
+                $"\"{r.CategoryName}\",\"{r.DepartmentName}\",\"{r.BrandName}\"," +
+                $"{r.CurrentStock},{r.MinimumStock},{r.Difference},{r.Cost ?? 0},{r.StockValue ?? 0},\"{r.Shelf}\"");
+        }
+
+        switch (format)
+        {
+            case "csv":
+                fileBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+                fileName = $"BelowMinStock_{DateTime.Now:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+                fileName = $"BelowMinStock_{DateTime.Now:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+        }
+
+        return (data.Count, fileBytes, fileName, contentType, $"As of {DateTime.Now:yyyy-MM-dd}");
     }
 
     private async Task<ReportAnalysis?> RunAiAnalysisSafe(

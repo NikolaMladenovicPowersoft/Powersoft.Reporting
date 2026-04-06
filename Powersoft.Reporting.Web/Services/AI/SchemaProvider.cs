@@ -211,7 +211,11 @@ tbl_RelItemSuppliers (
 tbl_RelItemStore (
   fk_ItemID BIGINT,
   fk_StoreCode NVARCHAR,
-  StockQty DECIMAL                   -- stock at specific store
+  Stock DECIMAL,                     -- qty at store
+  MinimumStock DECIMAL,
+  RequiredStock DECIMAL,
+  fk_Bin NVARCHAR,
+  fk_Shelf NVARCHAR
 )
 
 -- IMPORTANT RELATIONSHIPS:

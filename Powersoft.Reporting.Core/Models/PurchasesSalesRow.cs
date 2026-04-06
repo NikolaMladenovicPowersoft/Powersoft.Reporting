@@ -25,9 +25,9 @@ public class PurchasesSalesRow
 
     public decimal QtyPercent => QuantityPurchased != 0
         ? Math.Round(QuantitySold / QuantityPurchased * 100, 2)
-        : (QuantitySold != 0 ? 100 : 0);
+        : 100;
 
     public decimal ValPercent => NetPurchasedValue != 0
         ? Math.Round(NetSoldValue / NetPurchasedValue * 100, 2)
-        : (NetSoldValue != 0 ? 100 : 0);
+        : 100;
 }

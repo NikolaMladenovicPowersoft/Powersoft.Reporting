@@ -350,9 +350,11 @@
                             <th data-col="Invoices" class="text-end @SortClass("Invoices")" onclick="sortBy('Invoices')">
                                 Invoices<i class="bi @SortIcon("Invoices") sort-icon"></i>
                             </th>
+                            <th data-col="SaleValue" class="text-end">Sale Value</th>
                             <th data-col="Returns" class="text-end @SortClass("Returns")" onclick="sortBy('Returns')">
                                 Returns<i class="bi @SortIcon("Returns") sort-icon"></i>
                             </th>
+                            <th data-col="ReturnValue" class="text-end">Ret Value</th>
                             <th data-col="NetTransactions" class="text-end @SortClass("NetTransactions")" onclick="sortBy('NetTransactions')">
                                 Net Trans.<i class="bi @SortIcon("NetTransactions") sort-icon"></i>
                             </th>
@@ -376,6 +378,7 @@
                             </th>
                             @if (Model.CompareLastYear)
                             {
+                                <th class="text-end">LY Invoices</th>
                                 <th class="text-end">LY Sales</th>
                                 <th class="text-end">LY Avg</th>
                                 <th class="text-end">YoY %</th>
@@ -432,7 +435,7 @@
                     </thead>
                     <tbody>
                         @{
-                            var baseColumnCount = 10 + (Model.CompareLastYear ? 3 : 0);
+                            var baseColumnCount = 12 + (Model.CompareLastYear ? 4 : 0);
                             var totalColumns = baseColumnCount + (Model.HasGrouping ? 1 : 0) + (Model.HasSecondaryGrouping ? 1 : 0);
                         }
                         @if (Model.HasGrouping)
@@ -452,6 +455,8 @@
                                 {
                                     var avgBasket = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
                                     var totalSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
+                                    var saleValue = Model.IncludeVat ? row.CYGrossSales : row.CYNetSales;
+                                    var returnValue = Model.IncludeVat ? row.CYGrossReturns : row.CYNetReturns;
                                     <tr>
                                         @if (Model.HasGrouping)
                                         {
@@ -463,7 +468,9 @@
                                         }
                                         <td class="fw-semibold">@row.Period</td>
                                         <td class="text-end">@row.CYInvoiceCount.ToString("N0")</td>
+                                        <td class="text-end">@saleValue.ToString("N2")</td>
                                         <td class="text-end text-danger">@row.CYCreditCount.ToString("N0")</td>
+                                        <td class="text-end text-danger">@returnValue.ToString("N2")</td>
                                         <td class="text-end fw-semibold">@row.CYTotalTransactions.ToString("N0")</td>
                                         <td class="text-end">@row.CYQtySold.ToString("N0")</td>
                                         <td class="text-end text-danger">@row.CYQtyReturned.ToString("N0")</td>
@@ -473,10 +480,12 @@
                                         <td class="text-end">@row.CYAverageQty.ToString("N2")</td>
                                         @if (Model.CompareLastYear)
                                         {
+                                            var lyTrans = row.LYTotalTransactions;
                                             var lySales = Model.IncludeVat ? row.LYTotalGross : row.LYTotalNet;
                                             var lyAvg = Model.IncludeVat ? row.LYAverageGross : row.LYAverageNet;
                                             var yoyRowClass = row.YoYChangePercent >= 0 ? "text-success" : "text-danger";
                                             var yoyRowIcon = row.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                            <td class="text-end text-muted">@lyTrans.ToString("N0")</td>
                                             <td class="text-end text-muted">@lySales.ToString("N2")</td>
                                             <td class="text-end text-muted">@lyAvg.ToString("N2")</td>
                                             <td class="text-end @yoyRowClass"><i class="bi @yoyRowIcon"></i> @row.YoYChangePercent.ToString("N1")%</td>
@@ -485,20 +494,22 @@
                                 }
 
                                 var gInvoices = groupRows.Sum(r => r.CYInvoiceCount);
+                                var gSaleValue = groupRows.Sum(r => Model.IncludeVat ? r.CYGrossSales : r.CYNetSales);
                                 var gCredits = groupRows.Sum(r => r.CYCreditCount);
+                                var gReturnValue = groupRows.Sum(r => Model.IncludeVat ? r.CYGrossReturns : r.CYNetReturns);
                                 var gNetTransactions = groupRows.Sum(r => r.CYTotalTransactions);
                                 var gQtySold = groupRows.Sum(r => r.CYQtySold);
                                 var gQtyReturned = groupRows.Sum(r => r.CYQtyReturned);
                                 var gNetQty = groupRows.Sum(r => r.CYTotalQty);
                                 var gSales = groupRows.Sum(r => Model.IncludeVat ? r.CYTotalGross : r.CYTotalNet);
                                 var gAvgBasket = gNetTransactions > 0 ? gSales / gNetTransactions : 0;
-                                var gAvgQty = gNetTransactions > 0 ? gNetQty / gNetTransactions : 0;
-                                decimal gLySales = 0, gLyAvg = 0, gYoY = 0;
+                                var gAvgQty = gNetTransactions > 0 ? (decimal)gNetQty / gNetTransactions : 0;
+                                decimal gLyTrans = 0, gLySales = 0, gLyAvg = 0, gYoY = 0;
                                 if (Model.CompareLastYear)
                                 {
-                                    var gLyTransactions = groupRows.Sum(r => r.LYTotalTransactions);
+                                    gLyTrans = groupRows.Sum(r => r.LYTotalTransactions);
                                     gLySales = groupRows.Sum(r => Model.IncludeVat ? r.LYTotalGross : r.LYTotalNet);
-                                    gLyAvg = gLyTransactions > 0 ? gLySales / gLyTransactions : 0;
+                                    gLyAvg = gLyTrans > 0 ? gLySales / gLyTrans : 0;
                                     gYoY = gLySales != 0 ? Math.Round((gSales - gLySales) / Math.Abs(gLySales) * 100, 2) : (gSales > 0 ? 100 : 0);
                                 }
 
@@ -513,7 +524,9 @@
                                     }
                                     <td class="fw-semibold text-uppercase text-muted">Subtotal</td>
                                     <td class="text-end fw-semibold">@gInvoices.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">@gSaleValue.ToString("N2")</td>
                                     <td class="text-end text-danger fw-semibold">@gCredits.ToString("N0")</td>
+                                    <td class="text-end text-danger fw-semibold">@gReturnValue.ToString("N2")</td>
                                     <td class="text-end fw-semibold">@gNetTransactions.ToString("N0")</td>
                                     <td class="text-end fw-semibold">@gQtySold.ToString("N0")</td>
                                     <td class="text-end text-danger fw-semibold">@gQtyReturned.ToString("N0")</td>
@@ -525,6 +538,7 @@
                                     {
                                         var yoyClass = gYoY >= 0 ? "text-success" : "text-danger";
                                         var yoyIcon = gYoY >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                        <td class="text-end text-muted fw-semibold">@gLyTrans.ToString("N0")</td>
                                         <td class="text-end text-muted fw-semibold">@gLySales.ToString("N2")</td>
                                         <td class="text-end text-muted fw-semibold">@gLyAvg.ToString("N2")</td>
                                         <td class="text-end fw-semibold @yoyClass"><i class="bi @yoyIcon"></i> @gYoY.ToString("N1")%</td>
@@ -538,6 +552,8 @@
                             {
                                 var avgBasket = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
                                 var totalSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
+                                var saleValue = Model.IncludeVat ? row.CYGrossSales : row.CYNetSales;
+                                var returnValue = Model.IncludeVat ? row.CYGrossReturns : row.CYNetReturns;
                                 <tr>
                                     @if (Model.HasGrouping)
                                     {
@@ -549,7 +565,9 @@
                                     }
                                     <td class="fw-semibold">@row.Period</td>
                                     <td class="text-end">@row.CYInvoiceCount.ToString("N0")</td>
+                                    <td class="text-end">@saleValue.ToString("N2")</td>
                                     <td class="text-end text-danger">@row.CYCreditCount.ToString("N0")</td>
+                                    <td class="text-end text-danger">@returnValue.ToString("N2")</td>
                                     <td class="text-end fw-semibold">@row.CYTotalTransactions.ToString("N0")</td>
                                     <td class="text-end">@row.CYQtySold.ToString("N0")</td>
                                     <td class="text-end text-danger">@row.CYQtyReturned.ToString("N0")</td>
@@ -559,10 +577,12 @@
                                     <td class="text-end">@row.CYAverageQty.ToString("N2")</td>
                                     @if (Model.CompareLastYear)
                                     {
+                                        var lyTrans = row.LYTotalTransactions;
                                         var lySales = Model.IncludeVat ? row.LYTotalGross : row.LYTotalNet;
                                         var lyAvg = Model.IncludeVat ? row.LYAverageGross : row.LYAverageNet;
                                         var yoyRowClass = row.YoYChangePercent >= 0 ? "text-success" : "text-danger";
                                         var yoyRowIcon = row.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                        <td class="text-end text-muted">@lyTrans.ToString("N0")</td>
                                         <td class="text-end text-muted">@lySales.ToString("N2")</td>
                                         <td class="text-end text-muted">@lyAvg.ToString("N2")</td>
                                         <td class="text-end @yoyRowClass"><i class="bi @yoyRowIcon"></i> @row.YoYChangePercent.ToString("N1")%</td>
@@ -600,6 +620,8 @@
                         @if (Model.GrandTotals != null)
                         {
                             var gt = Model.GrandTotals;
+                            var gtSaleValue = Model.IncludeVat ? (gt.TotalNetSales + gt.TotalVatSales) : gt.TotalNetSales;
+                            var gtReturnValue = Model.IncludeVat ? (gt.TotalNetReturns + gt.TotalVatReturns) : gt.TotalNetReturns;
                             var gtSales = Model.IncludeVat ? gt.GrossSales : gt.NetSales;
                             var gtAvg = Model.IncludeVat ? gt.AverageBasketGross : gt.AverageBasketNet;
                             <tr class="grand-total-row">
@@ -607,7 +629,9 @@
                                 @if (Model.HasSecondaryGrouping) { <td></td> }
                                 <td><i class="bi bi-calculator me-1"></i>GRAND TOTAL</td>
                                 <td class="text-end">@gt.TotalInvoices.ToString("N0")</td>
+                                <td class="text-end">@gtSaleValue.ToString("N2")</td>
                                 <td class="text-end text-danger">@gt.TotalCredits.ToString("N0")</td>
+                                <td class="text-end text-danger">@gtReturnValue.ToString("N2")</td>
                                 <td class="text-end">@gt.NetTransactions.ToString("N0")</td>
                                 <td class="text-end">@gt.TotalQtySold.ToString("N0")</td>
                                 <td class="text-end text-danger">@gt.TotalQtyReturned.ToString("N0")</td>
@@ -617,10 +641,12 @@
                                 <td class="text-end">@gt.AverageQty.ToString("N2")</td>
                                 @if (Model.CompareLastYear)
                                 {
+                                    var gtLyTrans = gt.LYNetTransactions;
                                     var gtLySales = Model.IncludeVat ? gt.LYTotalGross : gt.LYTotalNet;
                                     var gtLyAvg = Model.IncludeVat ? gt.LYAverageBasketGross : gt.LYAverageBasketNet;
                                     var gtYoyClass = gt.YoYChangePercent >= 0 ? "text-success" : "text-danger";
                                     var gtYoyIcon = gt.YoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
+                                    <td class="text-end">@gtLyTrans.ToString("N0")</td>
                                     <td class="text-end">@gtLySales.ToString("N2")</td>
                                     <td class="text-end">@gtLyAvg.ToString("N2")</td>
                                     <td class="text-end @gtYoyClass"><i class="bi @gtYoyIcon"></i> @gt.YoYChangePercent.ToString("N1")%</td>
@@ -865,6 +891,11 @@ else
                         <h6 class="text-muted mb-2"><i class="bi bi-stars me-1"></i>AI Analysis</h6>
                     </div>
                     <div class="col-12">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="schedSkipIfEmpty">
+                            <label class="form-check-label fw-semibold" for="schedSkipIfEmpty">Don't send if empty</label>
+                        </div>
+                        <small class="text-muted d-block mb-3">When enabled, the email will not be sent if the report returns 0 records.</small>
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="schedIncludeAi" onchange="onSchedAiToggle()">
                             <label class="form-check-label fw-semibold" for="schedIncludeAi">Include AI Analysis in email</label>
@@ -1119,7 +1150,7 @@ else
                     </div>
                     <div class="px-4 py-2 d-flex justify-content-between align-items-center" style="background:#f8fafc;border-top:1px solid #e2e8f0;">
                         <span class="text-muted small"><i class="bi bi-cpu me-1"></i><span id="aiModel"></span></span>
-                        <span class="text-muted small"><i class="bi bi-hash me-1"></i><span id="aiTokens"></span> tokens</span>
+                        <span class="text-muted small"><i class="bi bi-currency-dollar me-1"></i><span id="aiTokens"></span></span>
                         <span class="text-muted small"><i class="bi bi-clock me-1"></i><span id="aiTime"></span></span>
                     </div>
 
@@ -1579,6 +1610,7 @@ function saveSchedule() {
     formData.append('emailSubject', document.getElementById('schedSubject').value);
     formData.append('includeAiAnalysis', document.getElementById('schedIncludeAi').checked);
     formData.append('aiLocale', document.getElementById('schedAiLocale').value);
+    formData.append('skipIfEmpty', document.getElementById('schedSkipIfEmpty').checked);
 
     var dateRangeSel = document.getElementById('schedDateRangeType');
     var dateRangeOpt = dateRangeSel.options[dateRangeSel.selectedIndex];
@@ -2159,7 +2191,7 @@ function renderAiAnalysis(a) {
     });
     document.getElementById('aiAlertsSection').innerHTML = alertsHtml;
     document.getElementById('aiModel').textContent = a.modelUsed || '';
-    document.getElementById('aiTokens').textContent = (a.inputTokens || 0) + ' + ' + (a.outputTokens || 0);
+    document.getElementById('aiTokens').textContent = estimateAiCost(a.inputTokens || 0, a.outputTokens || 0);
     document.getElementById('aiTime').textContent = ((a.durationMs || 0) / 1000).toFixed(1) + 's';
     document.getElementById('aiChatMessages').innerHTML = '';
     document.getElementById('aiChatInput').value = '';
@@ -2169,6 +2201,11 @@ function renderAiAnalysis(a) {
 
 var _aiConversation = [];
 var _aiTotalChatTokens = { input: 0, output: 0 };
+
+function estimateAiCost(inputTok, outputTok) {
+    var cost = (inputTok * 2.5 + outputTok * 10) / 1e6;
+    return cost < 0.005 ? '< $0.01' : '$' + cost.toFixed(2);
+}
 
 function initAiConversation(analysisJson) {
     _aiConversation = [
@@ -2221,7 +2258,7 @@ function sendAiChat() {
         _aiTotalChatTokens.output += (data.outputTokens || 0);
         var info = document.getElementById('aiChatTokenInfo');
         info.style.display = '';
-        info.innerHTML = '<i class="bi bi-hash me-1"></i>Chat tokens: ' + _aiTotalChatTokens.input + ' + ' + _aiTotalChatTokens.output +
+        info.innerHTML = '<i class="bi bi-currency-dollar me-1"></i>Chat: ' + estimateAiCost(_aiTotalChatTokens.input, _aiTotalChatTokens.output) +
             ' | <i class="bi bi-clock me-1"></i>' + ((data.durationMs || 0) / 1000).toFixed(1) + 's';
     })
     .catch(function(err) {

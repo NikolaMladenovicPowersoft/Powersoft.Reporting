@@ -137,6 +137,36 @@ public class AverageBasketRepository : IAverageBasketRepository
                 $"CAST(ISNULL({itemAlias}.fk_BrandID, 0) AS NVARCHAR(20)), ISNULL(br{suffix}.BrandDesc, N'N/A')",
                 $"CAST(ISNULL({itemAlias}.fk_BrandID, 0) AS NVARCHAR(20))"),
 
+            GroupByType.Season => new GroupingFragment(
+                $"CAST(ISNULL({itemAlias}.fk_SeasonID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(sea{suffix}.SeasonDesc, N'N/A') AS {nameAlias},",
+                $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Season sea{suffix} ON {itemAlias}.fk_SeasonID = sea{suffix}.pk_SeasonID",
+                $"CAST(ISNULL({itemAlias}.fk_SeasonID, 0) AS NVARCHAR(20)), ISNULL(sea{suffix}.SeasonDesc, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_SeasonID, 0) AS NVARCHAR(20))"),
+
+            GroupByType.Supplier => new GroupingFragment(
+                $"ISNULL(sup{suffix}.pk_SupplierNo, N'') AS {codeAlias}, ISNULL(sup{suffix}.SupplierName, N'N/A') AS {nameAlias},",
+                $"LEFT JOIN tbl_RelItemSuppliers ris{suffix} ON t2.fk_ItemID = ris{suffix}.fk_ItemID AND ISNULL(ris{suffix}.PrimarySupplier,0) = 1 LEFT JOIN tbl_Supplier sup{suffix} ON ris{suffix}.fk_SupplierNo = sup{suffix}.pk_SupplierNo",
+                $"ISNULL(sup{suffix}.pk_SupplierNo, N''), ISNULL(sup{suffix}.SupplierName, N'N/A')",
+                $"ISNULL(sup{suffix}.pk_SupplierNo, N'')"),
+
+            GroupByType.Model => new GroupingFragment(
+                $"CAST(ISNULL({itemAlias}.fk_ModelID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(mod{suffix}.ModelDesc, N'N/A') AS {nameAlias},",
+                $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Model mod{suffix} ON {itemAlias}.fk_ModelID = mod{suffix}.pk_ModelID",
+                $"CAST(ISNULL({itemAlias}.fk_ModelID, 0) AS NVARCHAR(20)), ISNULL(mod{suffix}.ModelDesc, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_ModelID, 0) AS NVARCHAR(20))"),
+
+            GroupByType.Colour => new GroupingFragment(
+                $"CAST(ISNULL({itemAlias}.fk_ColourID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(col{suffix}.ColourDesc, N'N/A') AS {nameAlias},",
+                $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Colour col{suffix} ON {itemAlias}.fk_ColourID = col{suffix}.pk_ColourID",
+                $"CAST(ISNULL({itemAlias}.fk_ColourID, 0) AS NVARCHAR(20)), ISNULL(col{suffix}.ColourDesc, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_ColourID, 0) AS NVARCHAR(20))"),
+
+            GroupByType.Size => new GroupingFragment(
+                $"CAST(ISNULL({itemAlias}.fk_SizeID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(sz{suffix}.SizeDesc, N'N/A') AS {nameAlias},",
+                $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Size sz{suffix} ON {itemAlias}.fk_SizeID = sz{suffix}.pk_SizeID",
+                $"CAST(ISNULL({itemAlias}.fk_SizeID, 0) AS NVARCHAR(20)), ISNULL(sz{suffix}.SizeDesc, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_SizeID, 0) AS NVARCHAR(20))"),
+
             _ => null
         };
     }
@@ -224,7 +254,12 @@ public class AverageBasketRepository : IAverageBasketRepository
         var col = filter.SortColumn ?? "Period";
         var dir = string.Equals(filter.SortDirection, "DESC", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC";
 
-        if (!ColumnSqlMap.TryGetValue(col, out var sqlExpr))
+        string sqlExpr;
+        if (col == "Sales" && filter.IncludeVat)
+            sqlExpr = "(d.NetSales + d.VatSales - d.NetReturns - d.VatReturns)";
+        else if (col == "AvgBasket" && filter.IncludeVat)
+            sqlExpr = "CASE WHEN (d.InvoiceCount - d.CreditCount) > 0 THEN (d.NetSales + d.VatSales - d.NetReturns - d.VatReturns) * 1.0 / (d.InvoiceCount - d.CreditCount) ELSE 0 END";
+        else if (!ColumnSqlMap.TryGetValue(col, out sqlExpr!))
             sqlExpr = "d.Period";
 
         if (col == "GroupName" && !hasGrouping)
@@ -315,6 +350,17 @@ public class AverageBasketRepository : IAverageBasketRepository
         };
     }
 
+    private string GetLYPeriodFieldShifted(BreakdownType breakdown)
+    {
+        return breakdown switch
+        {
+            BreakdownType.Daily => "CONVERT(VARCHAR(10), DATEADD(YEAR, 1, t1.DateTrans), 120)",
+            BreakdownType.Weekly => "CONVERT(VARCHAR(4), DATEPART(YEAR, t1.DateTrans) + 1) + '-W' + RIGHT('00' + CONVERT(VARCHAR(2), DATEPART(WEEK, t1.DateTrans)), 2)",
+            BreakdownType.Monthly => "CONVERT(VARCHAR(7), DATEADD(YEAR, 1, t1.DateTrans), 120)",
+            _ => "CONVERT(VARCHAR(7), DATEADD(YEAR, 1, t1.DateTrans), 120)"
+        };
+    }
+
     private (string whereClause, List<SqlParameter> parameters) BuildStoreFilter(List<string>? storeCodes)
     {
         if (storeCodes == null || !storeCodes.Any())
@@ -377,7 +423,7 @@ public class AverageBasketRepository : IAverageBasketRepository
         var cyJoin = "s.Period = r.Period AND s.GroupCode = r.GroupCode";
         if (hasL2) cyJoin += " AND s.Group2Code = r.Group2Code";
 
-        var lyJoinBase = "ly.Period = CAST(CAST(SUBSTRING(cy.Period, 1, 4) AS INT) - 1 AS VARCHAR(4)) + SUBSTRING(cy.Period, 5, 20) AND ly.GroupCode = cy.GroupCode";
+        var lyJoinBase = "ly.Period = cy.Period AND ly.GroupCode = cy.GroupCode";
         if (hasL2) lyJoinBase += " AND ly.Group2Code = cy.Group2Code";
 
         var g2CySelect = hasL2
@@ -447,31 +493,35 @@ public class AverageBasketRepository : IAverageBasketRepository
             var lyMergeJoin = "lys.Period = lyr.Period AND lys.GroupCode = lyr.GroupCode";
             if (hasL2) lyMergeJoin += " AND lys.Group2Code = lyr.Group2Code";
 
+            var lyPeriodField = GetLYPeriodFieldShifted(filter.Breakdown);
+
             var lySalesCte = $@"
             SELECT 
-                {periodField} AS Period,
+                {lyPeriodField} AS Period,
                 {groupSelectClause}
                 COUNT(DISTINCT t1.pk_InvoiceID) AS InvoiceCount,
+                SUM(t2.Quantity) AS QtySold,
                 SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetSales,
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatSales
             FROM tbl_InvoiceHeader t1
             INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice
             {groupJoinClause}{dimJoin}
             WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
-            GROUP BY {periodField}{groupByClause}";
+            GROUP BY {lyPeriodField}{groupByClause}";
 
             var lyReturnsCte = $@"
             SELECT 
-                {periodField} AS Period,
+                {lyPeriodField} AS Period,
                 {groupSelectClause}
                 COUNT(DISTINCT t1.pk_CreditID) AS CreditCount,
+                SUM(t2.Quantity) AS QtyReturned,
                 SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetReturns,
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatReturns
             FROM tbl_CreditHeader t1
             INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit
             {creditJoin}{dimJoin}
             WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
-            GROUP BY {periodField}{groupByClause}";
+            GROUP BY {lyPeriodField}{groupByClause}";
 
             var lyMergeCte = $@"
             SELECT 
@@ -481,6 +531,8 @@ public class AverageBasketRepository : IAverageBasketRepository
                 {g2LyCySelect}
                 ISNULL(lys.InvoiceCount, 0) AS InvoiceCount,
                 ISNULL(lyr.CreditCount, 0) AS CreditCount,
+                ISNULL(lys.QtySold, 0) AS QtySold,
+                ISNULL(lyr.QtyReturned, 0) AS QtyReturned,
                 ISNULL(lys.NetSales, 0) AS NetSales,
                 ISNULL(lyr.NetReturns, 0) AS NetReturns,
                 ISNULL(lys.VatSales, 0) AS VatSales,
@@ -498,6 +550,8 @@ public class AverageBasketRepository : IAverageBasketRepository
             lySelectColumns = @",
                     ISNULL(ly.InvoiceCount, 0) AS LYInvoiceCount,
                     ISNULL(ly.CreditCount, 0) AS LYCreditCount,
+                    ISNULL(ly.QtySold, 0) AS LYQtySold,
+                    ISNULL(ly.QtyReturned, 0) AS LYQtyReturned,
                     ISNULL(ly.NetSales, 0) AS LYNetSales,
                     ISNULL(ly.NetReturns, 0) AS LYNetReturns,
                     ISNULL(ly.VatSales, 0) AS LYVatSales,
@@ -582,32 +636,36 @@ public class AverageBasketRepository : IAverageBasketRepository
 
         if (includeLastYear)
         {
-            var lyJoinCondition = "ly.Period = CAST(CAST(SUBSTRING(cy.Period, 1, 4) AS INT) - 1 AS VARCHAR(4)) + SUBSTRING(cy.Period, 5, 20)";
+            var lyPeriodField = GetLYPeriodFieldShifted(filter.Breakdown);
             lyCtes = $@",
                 LYSales AS (
-            SELECT {periodField} AS Period,
+            SELECT {lyPeriodField} AS Period,
                 COUNT(DISTINCT t1.pk_InvoiceID) AS InvoiceCount,
+                SUM(t2.Quantity) AS QtySold,
                 SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetSales,
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatSales
             FROM tbl_InvoiceHeader t1
             INNER JOIN tbl_InvoiceDetails t2 ON t1.pk_InvoiceID = t2.fk_Invoice{dimJoin}
             WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
-            GROUP BY {periodField}
+            GROUP BY {lyPeriodField}
                 ),
                 LYReturns AS (
-            SELECT {periodField} AS Period,
+            SELECT {lyPeriodField} AS Period,
                 COUNT(DISTINCT t1.pk_CreditID) AS CreditCount,
+                SUM(t2.Quantity) AS QtyReturned,
                 SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS NetReturns,
                 SUM(ISNULL(t2.VatAmount, 0)) AS VatReturns
             FROM tbl_CreditHeader t1
             INNER JOIN tbl_CreditDetails t2 ON t1.pk_CreditID = t2.fk_Credit{dimJoin}
             WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
-            GROUP BY {periodField}
+            GROUP BY {lyPeriodField}
                 ),
                 LY AS (
             SELECT COALESCE(lys.Period, lyr.Period) AS Period,
                 ISNULL(lys.InvoiceCount, 0) AS InvoiceCount,
                 ISNULL(lyr.CreditCount, 0) AS CreditCount,
+                ISNULL(lys.QtySold, 0) AS QtySold,
+                ISNULL(lyr.QtyReturned, 0) AS QtyReturned,
                 ISNULL(lys.NetSales, 0) AS NetSales,
                 ISNULL(lyr.NetReturns, 0) AS NetReturns,
                 ISNULL(lys.VatSales, 0) AS VatSales,
@@ -615,11 +673,13 @@ public class AverageBasketRepository : IAverageBasketRepository
             FROM LYSales lys
             FULL OUTER JOIN LYReturns lyr ON lys.Period = lyr.Period
                 )";
-            lyJoin = $@"
-                LEFT JOIN LY ly ON {lyJoinCondition}";
+            lyJoin = @"
+                LEFT JOIN LY ly ON ly.Period = cy.Period";
             lySelectColumns = @",
                     ISNULL(ly.InvoiceCount, 0) AS LYInvoiceCount,
                     ISNULL(ly.CreditCount, 0) AS LYCreditCount,
+                    ISNULL(ly.QtySold, 0) AS LYQtySold,
+                    ISNULL(ly.QtyReturned, 0) AS LYQtyReturned,
                     ISNULL(ly.NetSales, 0) AS LYNetSales,
                     ISNULL(ly.NetReturns, 0) AS LYNetReturns,
                     ISNULL(ly.VatSales, 0) AS LYVatSales,
@@ -668,6 +728,8 @@ public class AverageBasketRepository : IAverageBasketRepository
             lyColumns = @",
                 ISNULL(LYI.LYInvoiceCount, 0) AS LYInvoiceCount,
                 ISNULL(LYC.LYCreditCount, 0) AS LYCreditCount,
+                ISNULL(LYI.LYQtySold, 0) AS LYQtySold,
+                ISNULL(LYC.LYQtyReturned, 0) AS LYQtyReturned,
                 ISNULL(LYI.LYNetSales, 0) AS LYNetSales,
                 ISNULL(LYC.LYNetReturns, 0) AS LYNetReturns,
                 ISNULL(LYI.LYVatSales, 0) AS LYVatSales,
@@ -676,6 +738,7 @@ public class AverageBasketRepository : IAverageBasketRepository
             lySubQueries = $@"
             LEFT JOIN (
                 SELECT COUNT(DISTINCT t1.pk_InvoiceID) AS LYInvoiceCount,
+                       SUM(t2.Quantity) AS LYQtySold,
                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS LYNetSales,
                        SUM(ISNULL(t2.VatAmount, 0)) AS LYVatSales
                 FROM tbl_InvoiceHeader t1
@@ -684,6 +747,7 @@ public class AverageBasketRepository : IAverageBasketRepository
             ) LYI ON 1=1
             LEFT JOIN (
                 SELECT COUNT(DISTINCT t1.pk_CreditID) AS LYCreditCount,
+                       SUM(t2.Quantity) AS LYQtyReturned,
                        SUM(t2.Amount - ISNULL(t2.Discount, 0) - ISNULL(t2.ExtraDiscount, 0)) AS LYNetReturns,
                        SUM(ISNULL(t2.VatAmount, 0)) AS LYVatReturns
                 FROM tbl_CreditHeader t1
@@ -763,7 +827,8 @@ public class AverageBasketRepository : IAverageBasketRepository
         // Column layout: Period(0), GroupCode(1), GroupName(2), Group2Code(3), Group2Name(4),
         // InvoiceCount(5), CreditCount(6), QtySold(7), QtyReturned(8),
         // NetSales(9), NetReturns(10), VatSales(11), VatReturns(12)
-        // [LY columns start at 13 if present]
+        // [LY: LYInvoiceCount(13), LYCreditCount(14), LYQtySold(15), LYQtyReturned(16),
+        //  LYNetSales(17), LYNetReturns(18), LYVatSales(19), LYVatReturns(20)]
         
         while (await reader.ReadAsync())
         {
@@ -789,12 +854,14 @@ public class AverageBasketRepository : IAverageBasketRepository
             
             if (hasLy)
             {
-                row.LYInvoiceCount = reader.GetInt32(13);
-                row.LYCreditCount = reader.GetInt32(14);
-                row.LYNetSales = reader.IsDBNull(15) ? 0 : reader.GetDecimal(15);
-                row.LYNetReturns = reader.IsDBNull(16) ? 0 : reader.GetDecimal(16);
-                row.LYVatSales = reader.IsDBNull(17) ? 0 : reader.GetDecimal(17);
-                row.LYVatReturns = reader.IsDBNull(18) ? 0 : reader.GetDecimal(18);
+                row.LYInvoiceCount = reader.IsDBNull(13) ? 0 : reader.GetInt32(13);
+                row.LYCreditCount = reader.IsDBNull(14) ? 0 : reader.GetInt32(14);
+                row.LYQtySold = reader.IsDBNull(15) ? 0 : reader.GetDecimal(15);
+                row.LYQtyReturned = reader.IsDBNull(16) ? 0 : reader.GetDecimal(16);
+                row.LYNetSales = reader.IsDBNull(17) ? 0 : reader.GetDecimal(17);
+                row.LYNetReturns = reader.IsDBNull(18) ? 0 : reader.GetDecimal(18);
+                row.LYVatSales = reader.IsDBNull(19) ? 0 : reader.GetDecimal(19);
+                row.LYVatReturns = reader.IsDBNull(20) ? 0 : reader.GetDecimal(20);
                 row.LYTotalNet = row.LYNetSales - row.LYNetReturns;
                 row.LYTotalGross = row.LYTotalNet + (row.LYVatSales - row.LYVatReturns);
             }
@@ -830,10 +897,12 @@ public class AverageBasketRepository : IAverageBasketRepository
             {
                 totals.LYTotalInvoices = reader.IsDBNull(8) ? 0 : reader.GetInt32(8);
                 totals.LYTotalCredits = reader.IsDBNull(9) ? 0 : reader.GetInt32(9);
-                totals.LYNetSales = reader.IsDBNull(10) ? 0 : reader.GetDecimal(10);
-                totals.LYNetReturns = reader.IsDBNull(11) ? 0 : reader.GetDecimal(11);
-                totals.LYVatSales = reader.IsDBNull(12) ? 0 : reader.GetDecimal(12);
-                totals.LYVatReturns = reader.IsDBNull(13) ? 0 : reader.GetDecimal(13);
+                totals.LYQtySold = reader.IsDBNull(10) ? 0 : reader.GetDecimal(10);
+                totals.LYQtyReturned = reader.IsDBNull(11) ? 0 : reader.GetDecimal(11);
+                totals.LYNetSales = reader.IsDBNull(12) ? 0 : reader.GetDecimal(12);
+                totals.LYNetReturns = reader.IsDBNull(13) ? 0 : reader.GetDecimal(13);
+                totals.LYVatSales = reader.IsDBNull(14) ? 0 : reader.GetDecimal(14);
+                totals.LYVatReturns = reader.IsDBNull(15) ? 0 : reader.GetDecimal(15);
             }
         }
         

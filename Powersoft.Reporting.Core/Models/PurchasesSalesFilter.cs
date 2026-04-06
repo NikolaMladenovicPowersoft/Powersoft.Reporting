@@ -68,6 +68,16 @@ public class PurchasesSalesFilter : IValidatableObject
             && PrimaryGroup == SecondaryGroup)
             yield return new ValidationResult("Primary and Secondary group must be different",
                 new[] { nameof(SecondaryGroup) });
+
+        if (ThirdGroup != PsGroupBy.None)
+        {
+            if (PrimaryGroup != PsGroupBy.None && ThirdGroup == PrimaryGroup)
+                yield return new ValidationResult("Third group must be different from Primary group",
+                    new[] { nameof(ThirdGroup) });
+            if (SecondaryGroup != PsGroupBy.None && ThirdGroup == SecondaryGroup)
+                yield return new ValidationResult("Third group must be different from Secondary group",
+                    new[] { nameof(ThirdGroup) });
+        }
     }
 
     public bool IsValid(out List<string> errors)

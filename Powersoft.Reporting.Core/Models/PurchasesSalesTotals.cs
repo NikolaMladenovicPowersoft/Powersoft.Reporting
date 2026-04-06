@@ -14,7 +14,7 @@ public class PurchasesSalesTotals
     public decimal TotalStockQty { get; set; }
 
     public decimal QtyPercent => TotalQtyPurchased != 0
-        ? Math.Round(TotalQtySold / TotalQtyPurchased * 100, 2) : 0;
+        ? Math.Round(TotalQtySold / TotalQtyPurchased * 100, 2) : 100;
     public decimal ValPercent => TotalNetPurchased != 0
-        ? Math.Round(TotalNetSold / TotalNetPurchased * 100, 2) : 0;
+        ? Math.Round(TotalNetSold / TotalNetPurchased * 100, 2) : 100;
 }

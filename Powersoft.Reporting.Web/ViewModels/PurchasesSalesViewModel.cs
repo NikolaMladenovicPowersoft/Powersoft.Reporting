@@ -69,6 +69,7 @@ public class PurchasesSalesViewModel
     public bool HasNextPage => PageNumber < TotalPages;
 
     public List<PurchasesSalesRow> Results { get; set; } = new();
+    public List<PurchasesSalesMonthlyRow> MonthlyResults { get; set; } = new();
     public PurchasesSalesTotals? Totals { get; set; }
 
     public string? ConnectedDatabase { get; set; }
@@ -90,6 +91,9 @@ public class PurchasesSalesViewModel
     public decimal TotalSoldNet => Totals?.TotalNetSold ?? Results.Sum(r => r.NetSoldValue);
     public decimal TotalSoldGross => Totals?.TotalGrossSold ?? Results.Sum(r => r.GrossSoldValue);
     public decimal TotalProfit => Totals != null ? Totals.TotalProfit : Results.Sum(r => r.Profit);
+
+    public decimal MonthlyTotalPurchased => MonthlyResults.Sum(r => r.TotalPurchased);
+    public decimal MonthlyTotalSold => MonthlyResults.Sum(r => r.TotalSold);
 
     public decimal TotalPurchasedValue => IncludeVat ? TotalPurchasedGross : TotalPurchasedNet;
     public decimal TotalSoldValue => IncludeVat ? TotalSoldGross : TotalSoldNet;

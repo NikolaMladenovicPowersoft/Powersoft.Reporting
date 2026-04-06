@@ -96,20 +96,63 @@ internal static class DimensionFilterBuilder
         }
     }
 
+    private const string NaMarker = "__NA__";
+
     private static void AppendFilter(
         StringBuilder sb, List<SqlParameter> parms,
         DimensionFilter filter, string column, string prefix, ref int idx)
     {
         if (!filter.HasFilter) return;
 
-        var op = filter.Mode == FilterMode.Exclude ? "NOT IN" : "IN";
+        bool hasNa = filter.Ids.Contains(NaMarker);
+        var realIds = filter.Ids.Where(id => id != NaMarker).ToList();
+
+        if (filter.Mode == FilterMode.Include)
+        {
+            if (realIds.Count > 0 && hasNa)
+            {
+                var names = AddParams(parms, realIds, prefix, ref idx);
+                sb.Append($" AND ({column} IN ({string.Join(",", names)}) OR {column} IS NULL)");
+            }
+            else if (realIds.Count > 0)
+            {
+                var names = AddParams(parms, realIds, prefix, ref idx);
+                sb.Append($" AND {column} IN ({string.Join(",", names)})");
+            }
+            else if (hasNa)
+            {
+                sb.Append($" AND {column} IS NULL");
+            }
+        }
+        else // Exclude
+        {
+            if (realIds.Count > 0 && hasNa)
+            {
+                var names = AddParams(parms, realIds, prefix, ref idx);
+                sb.Append($" AND ({column} NOT IN ({string.Join(",", names)}) AND {column} IS NOT NULL)");
+            }
+            else if (realIds.Count > 0)
+            {
+                var names = AddParams(parms, realIds, prefix, ref idx);
+                sb.Append($" AND {column} NOT IN ({string.Join(",", names)})");
+            }
+            else if (hasNa)
+            {
+                sb.Append($" AND {column} IS NOT NULL");
+            }
+        }
+    }
+
+    private static List<string> AddParams(
+        List<SqlParameter> parms, List<string> ids, string prefix, ref int idx)
+    {
         var names = new List<string>();
-        foreach (var id in filter.Ids)
+        foreach (var id in ids)
         {
             var p = $"@{prefix}{idx++}";
             names.Add(p);
             parms.Add(new SqlParameter(p, id));
         }
-        sb.Append($" AND {column} {op} ({string.Join(",", names)})");
+        return names;
     }
 }

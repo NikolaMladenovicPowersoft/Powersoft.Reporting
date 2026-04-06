@@ -11,4 +11,5 @@ public interface ITenantRepositoryFactory
     IChartRepository CreateChartRepository(string connectionString);
     IParetoRepository CreateParetoRepository(string connectionString);
     IDimensionRepository CreateDimensionRepository(string connectionString);
+    IBelowMinStockRepository CreateBelowMinStockRepository(string connectionString);
 }

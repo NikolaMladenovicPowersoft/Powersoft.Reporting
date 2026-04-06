@@ -417,7 +417,8 @@ public class ReportsController : Controller
         string scheduleName, string recurrenceType, int? recurrenceDay,
         string scheduleTime, string exportFormat, string recipients,
         string? emailSubject, string? parametersJson, string? recurrenceJson,
-        bool includeAiAnalysis = false, string? aiLocale = "el")
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false)
     {
         if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleAvgBasket))
             return Json(new { success = false, message = "You don't have permission to create schedules." });
@@ -481,7 +482,8 @@ public class ReportsController : Controller
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
-                AiLocale = aiLocale ?? "el"
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty
             };
 
             var id = await repo.CreateScheduleAsync(schedule);
@@ -1199,13 +1201,23 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreatePurchasesSalesRepository(tenantConnString);
-            var result = await repo.GetPurchasesSalesDataAsync(filter);
 
-            model.Results = result.Items;
-            model.TotalCount = result.TotalCount;
-            model.PageNumber = result.PageNumber;
-            model.PageSize = result.PageSize;
-            model.Totals = result.PsTotals;
+            if (filter.IsMonthly)
+            {
+                filter.ThirdGroup = PsGroupBy.None;
+                var monthlyRows = await repo.GetPurchasesSalesMonthlyAsync(filter);
+                model.MonthlyResults = monthlyRows;
+                model.TotalCount = monthlyRows.Count;
+            }
+            else
+            {
+                var result = await repo.GetPurchasesSalesDataAsync(filter);
+                model.Results = result.Items;
+                model.TotalCount = result.TotalCount;
+                model.PageNumber = result.PageNumber;
+                model.PageSize = result.PageSize;
+                model.Totals = result.PsTotals;
+            }
         }
         catch (Exception ex)
         {
@@ -1617,7 +1629,8 @@ public class ReportsController : Controller
         string scheduleName, string recurrenceType, int? recurrenceDay,
         string scheduleTime, string exportFormat, string recipients,
         string? emailSubject, string? parametersJson, string? recurrenceJson,
-        bool includeAiAnalysis = false, string? aiLocale = "el")
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false)
     {
         if (!await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePurchasesSales))
             return Json(new { success = false, message = "You don't have permission to create schedules." });
@@ -1681,7 +1694,8 @@ public class ReportsController : Controller
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
-                AiLocale = aiLocale ?? "el"
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty
             };
 
             var id = await repo.CreateScheduleAsync(schedule);
@@ -2560,6 +2574,128 @@ public class ReportsController : Controller
             _logger.LogError(ex, "Error getting chart data");
             return Json(new { success = false, message = ex.Message });
         }
+    }
+
+    // ==================== Below Minimum Stock ====================
+
+    public async Task<IActionResult> BelowMinStock()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+        var stores = await storeRepo.GetActiveStoresAsync();
+        ViewBag.StoresJson = System.Text.Json.JsonSerializer.Serialize(
+            stores.Select(s => new { code = s.StoreCode, name = s.StoreName }));
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetBelowMinStockData(
+        string? storeCodes = null, string? itemsSelection = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        try
+        {
+            var filter = new BelowMinStockFilter
+            {
+                StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
+                    : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                ItemsSelection = ParseItemsSelection(itemsSelection),
+                SortColumn = sortColumn,
+                SortDirection = sortDirection
+            };
+
+            var repo = _repositoryFactory.CreateBelowMinStockRepository(tenantConnString);
+            var data = await repo.GetBelowMinStockAsync(filter);
+
+            return Json(new { success = true, data, totalRows = data.Count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading below-minimum stock data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveBmsSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.BelowMinStock,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "Unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = parametersJson,
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty
+            };
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving BelowMinStock schedule");
+            return Json(new { success = false, message = "Failed to save schedule." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetBmsSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(Array.Empty<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.BelowMinStock);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                s.SkipIfEmpty
+            }));
+        }
+        catch { return Json(Array.Empty<object>()); }
     }
 
 }

@@ -147,7 +147,8 @@ BEGIN
            ModifiedBy    = 'SYSTEM'
     WHERE  TemplateName = 'Default Report Template'
       AND  IsDefault = 1
-      AND  EmailBodyHtml LIKE '%[[]ReportName]%';
+      AND  (EmailBodyHtml LIKE '%[[]ReportName]%'
+        OR  EmailBodyHtml LIKE '%&#171;ReportName&#187;%');
 
     PRINT 'Updated default template to new branded version';
 END

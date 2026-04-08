@@ -11,7 +11,7 @@ public class SchemaMigrationService
 
     private const string DefaultSubject = "\u00ABReportName\u00BB \u2014 \u00ABDatabaseName\u00BB (\u00ABPeriod\u00BB)";
 
-    private const string DefaultBody = @"<div style=""font-family:'Segoe UI',Arial,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;"">
+    private const string DefaultBody = @"<div style=""font-family:''Segoe UI'',Arial,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;"">
   <div style=""background:linear-gradient(135deg,#1e40af,#3b82f6);padding:24px 32px;border-radius:8px 8px 0 0;"">
     <h1 style=""margin:0;color:#ffffff;font-size:20px;font-weight:600;"">Powersoft Reports</h1>
   </div>
@@ -99,6 +99,17 @@ BEGIN
             N'{DefaultSubject}',
             N'{DefaultBody}',
             1, 'SYSTEM');
+END
+ELSE
+BEGIN
+    UPDATE {SchemaName}.tbl_ReportEmailTemplate
+    SET    EmailSubject  = N'{DefaultSubject}',
+           EmailBodyHtml = N'{DefaultBody}',
+           ModifiedDate  = GETDATE(),
+           ModifiedBy    = 'SYSTEM'
+    WHERE  TemplateName = 'Default Report Template'
+      AND  IsDefault = 1
+      AND  EmailBodyHtml LIKE '%[[]ReportName]%';
 END
 
 -- 4. tbl_ReportScheduleLog

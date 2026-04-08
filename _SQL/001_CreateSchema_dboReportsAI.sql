@@ -104,6 +104,53 @@ BEGIN
 
     PRINT 'Created dboReportsAI.tbl_ReportEmailTemplate with default template';
 END
+ELSE
+BEGIN
+    UPDATE dboReportsAI.tbl_ReportEmailTemplate
+    SET    EmailSubject  = N'«ReportName» — «DatabaseName» («Period»)',
+           EmailBodyHtml = N'<div style="font-family:''Segoe UI'',Arial,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;">
+  <div style="background:linear-gradient(135deg,#1e40af,#3b82f6);padding:24px 32px;border-radius:8px 8px 0 0;">
+    <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">Powersoft Reports</h1>
+  </div>
+  <div style="background:#ffffff;padding:28px 32px;border:1px solid #e5e7eb;border-top:none;">
+    <h2 style="margin:0 0 8px;color:#1e40af;font-size:18px;">«ReportName»</h2>
+    <p style="margin:0 0 20px;color:#6b7280;font-size:13px;">«DatabaseName»</p>
+    <p style="margin:0 0 16px;font-size:14px;line-height:1.6;">
+      Please find the attached <strong>«ReportName»</strong> report.
+    </p>
+    <table style="border-collapse:collapse;width:100%;margin:0 0 20px;font-size:13px;">
+      <tr>
+        <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;width:120px;">Period</td>
+        <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;font-weight:600;">«Period»</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;">Rows</td>
+        <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;">«RowCount»</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;">Format</td>
+        <td style="padding:8px 14px;border-bottom:1px solid #f3f4f6;">«ExportFormat»</td>
+      </tr>
+      <tr>
+        <td style="padding:8px 14px;color:#6b7280;">Generated</td>
+        <td style="padding:8px 14px;">«GeneratedDate»</td>
+      </tr>
+    </table>
+  </div>
+  <div style="background:#f9fafb;padding:16px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+    <p style="margin:0;color:#9ca3af;font-size:11px;">
+      Automated report by Powersoft Report Engine &bull; «CompanyName»
+    </p>
+  </div>
+</div>',
+           ModifiedDate  = GETDATE(),
+           ModifiedBy    = 'SYSTEM'
+    WHERE  TemplateName = 'Default Report Template'
+      AND  IsDefault = 1
+      AND  EmailBodyHtml LIKE '%[[]ReportName]%';
+
+    PRINT 'Updated default template to new branded version';
+END
 GO
 
 -- 4. tbl_ReportScheduleLog

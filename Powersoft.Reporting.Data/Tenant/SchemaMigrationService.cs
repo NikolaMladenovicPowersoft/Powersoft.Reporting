@@ -12,26 +12,30 @@ public class SchemaMigrationService
     private const string DefaultSubject = "\u00ABReportName\u00BB \u2014 \u00ABDatabaseName\u00BB (\u00ABPeriod\u00BB)";
 
     private const string DefaultBody =
-        "<div style=\"font-family:''Segoe UI'',Arial,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;\">" +
-        "<div style=\"background:linear-gradient(135deg,#1e40af,#3b82f6);padding:24px 32px;border-radius:8px 8px 0 0;\">" +
-        "<h1 style=\"margin:0;color:#ffffff;font-size:20px;font-weight:600;\">Powersoft Reports</h1></div>" +
-        "<div style=\"background:#ffffff;padding:28px 32px;border:1px solid #e5e7eb;border-top:none;\">" +
-        "<h2 style=\"margin:0 0 8px;color:#1e40af;font-size:18px;\">\u00ABReportName\u00BB</h2>" +
-        "<p style=\"margin:0 0 20px;color:#6b7280;font-size:13px;\">\u00ABDatabaseName\u00BB</p>" +
-        "<p style=\"margin:0 0 16px;font-size:14px;line-height:1.6;\">" +
+        "<div style=\"font-family:''Segoe UI'',Arial,sans-serif;max-width:640px;margin:0 auto;\">" +
+        "<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
+        "<td style=\"background-color:#1e40af;padding:24px 32px;\">" +
+        "<h1 style=\"margin:0;color:#ffffff;font-size:20px;font-weight:600;\">Powersoft Reports</h1>" +
+        "</td></tr></table>" +
+        "<div style=\"background-color:#ffffff;padding:28px 32px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;\">" +
+        "<h2 style=\"margin:0 0 8px;color:#1e40af;font-size:18px;font-weight:700;\">\u00ABReportName\u00BB</h2>" +
+        "<p style=\"margin:0 0 20px;color:#374151;font-size:14px;\">\u00ABDatabaseName\u00BB</p>" +
+        "<p style=\"margin:0 0 16px;font-size:14px;line-height:1.6;color:#111827;\">" +
         "Please find the attached <strong>\u00ABReportName\u00BB</strong> report.</p>" +
-        "<table style=\"border-collapse:collapse;width:100%;margin:0 0 20px;font-size:13px;\">" +
-        "<tr><td style=\"padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;width:120px;\">Period</td>" +
-        "<td style=\"padding:8px 14px;border-bottom:1px solid #f3f4f6;font-weight:600;\">\u00ABPeriod\u00BB</td></tr>" +
-        "<tr><td style=\"padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;\">Rows</td>" +
-        "<td style=\"padding:8px 14px;border-bottom:1px solid #f3f4f6;\">\u00ABRowCount\u00BB</td></tr>" +
-        "<tr><td style=\"padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;\">Format</td>" +
-        "<td style=\"padding:8px 14px;border-bottom:1px solid #f3f4f6;\">\u00ABExportFormat\u00BB</td></tr>" +
-        "<tr><td style=\"padding:8px 14px;color:#6b7280;\">Generated</td>" +
-        "<td style=\"padding:8px 14px;\">\u00ABGeneratedDate\u00BB</td></tr></table></div>" +
-        "<div style=\"background:#f9fafb;padding:16px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;\">" +
-        "<p style=\"margin:0;color:#9ca3af;font-size:11px;\">" +
-        "Automated report by Powersoft Report Engine &bull; \u00ABCompanyName\u00BB</p></div></div>";
+        "<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 20px;font-size:14px;\">" +
+        "<tr><td style=\"padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;width:120px;\">Period</td>" +
+        "<td style=\"padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;font-weight:600;\">\u00ABPeriod\u00BB</td></tr>" +
+        "<tr><td style=\"padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;\">Rows</td>" +
+        "<td style=\"padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;\">\u00ABRowCount\u00BB</td></tr>" +
+        "<tr><td style=\"padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;\">Format</td>" +
+        "<td style=\"padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;\">\u00ABExportFormat\u00BB</td></tr>" +
+        "<tr><td style=\"padding:10px 14px;color:#6b7280;\">Generated</td>" +
+        "<td style=\"padding:10px 14px;color:#111827;\">\u00ABGeneratedDate\u00BB</td></tr></table></div>" +
+        "<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>" +
+        "<td style=\"background-color:#f3f4f6;padding:16px 32px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;\">" +
+        "<p style=\"margin:0;color:#6b7280;font-size:11px;\">" +
+        "Automated report by Powersoft Report Engine &bull; \u00ABCompanyName\u00BB</p>" +
+        "</td></tr></table></div>";
 
     private static readonly string MigrationSql = $@"
 -- 1. Schema
@@ -96,7 +100,8 @@ BEGIN
     WHERE  TemplateName = 'Default Report Template'
       AND  IsDefault = 1
       AND  (EmailBodyHtml LIKE '%[[]ReportName]%'
-        OR  EmailBodyHtml LIKE '%&#171;ReportName&#187;%');
+        OR  EmailBodyHtml LIKE '%&#171;ReportName&#187;%'
+        OR  EmailBodyHtml LIKE '%linear-gradient%');
 END
 
 -- 4. tbl_ReportScheduleLog

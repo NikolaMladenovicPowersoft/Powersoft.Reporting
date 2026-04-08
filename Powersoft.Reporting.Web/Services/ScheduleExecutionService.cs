@@ -888,42 +888,46 @@ Time: {(analysis.DurationMs / 1000.0):F1}s</p>");
     </p>";
 
         return $@"
-<div style='font-family:""Segoe UI"",Arial,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;'>
-  <div style='background:linear-gradient(135deg,#1e40af,#3b82f6);padding:24px 32px;border-radius:8px 8px 0 0;'>
-    <h1 style='margin:0;color:#ffffff;font-size:20px;font-weight:600;'>Powersoft Reports</h1>
-  </div>
-  <div style='background:#ffffff;padding:28px 32px;border:1px solid #e5e7eb;border-top:none;'>
-    <h2 style='margin:0 0 8px;color:#1e40af;font-size:18px;'>{schedule.ScheduleName}</h2>
-    <p style='margin:0 0 20px;color:#6b7280;font-size:13px;'>{db.DBFriendlyName}</p>
-    <table style='border-collapse:collapse;width:100%;margin:0 0 20px;font-size:13px;'>
+<div style='font-family:Segoe UI,Arial,sans-serif;max-width:640px;margin:0 auto;'>
+  <table width='100%' cellpadding='0' cellspacing='0' border='0'><tr>
+    <td style='background-color:#1e40af;padding:24px 32px;'>
+      <h1 style='margin:0;color:#ffffff;font-size:20px;font-weight:600;'>Powersoft Reports</h1>
+    </td>
+  </tr></table>
+  <div style='background-color:#ffffff;padding:28px 32px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;'>
+    <h2 style='margin:0 0 8px;color:#1e40af;font-size:18px;font-weight:700;'>{schedule.ScheduleName}</h2>
+    <p style='margin:0 0 20px;color:#374151;font-size:14px;'>{db.DBFriendlyName}</p>
+    <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin:0 0 20px;font-size:14px;'>
       <tr>
-        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;width:120px;'>Report Type</td>
-        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;font-weight:600;'>{schedule.ReportType}</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;width:120px;'>Report Type</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;font-weight:600;'>{schedule.ReportType}</td>
       </tr>
       <tr>
-        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;'>Period</td>
-        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;'>{period}</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Period</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;'>{period}</td>
       </tr>
       <tr>
-        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;'>Rows</td>
-        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;'>{rowCount:N0}</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Rows</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;'>{rowCount:N0}</td>
       </tr>
       <tr>
-        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;'>Format</td>
-        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;'>{schedule.ExportFormat}</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;'>{schedule.ExportFormat}</td>
       </tr>
       <tr>
-        <td style='padding:8px 14px;color:#6b7280;'>Generated</td>
-        <td style='padding:8px 14px;'>{DateTime.Now:yyyy-MM-dd HH:mm}</td>
+        <td style='padding:10px 14px;color:#6b7280;'>Generated</td>
+        <td style='padding:10px 14px;color:#111827;'>{DateTime.Now:yyyy-MM-dd HH:mm}</td>
       </tr>
     </table>{downloadBlock}
   </div>
-  <div style='background:#f9fafb;padding:16px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;'>
-    <p style='margin:0;color:#9ca3af;font-size:11px;'>
-      Automated report by Powersoft Report Engine &bull; {db.DBFriendlyName}<br/>
-      To modify or stop this schedule, log in to the Reporting dashboard.
-    </p>
-  </div>
+  <table width='100%' cellpadding='0' cellspacing='0' border='0'><tr>
+    <td style='background-color:#f3f4f6;padding:16px 32px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;'>
+      <p style='margin:0;color:#6b7280;font-size:11px;'>
+        Automated report by Powersoft Report Engine &bull; {db.DBFriendlyName}<br/>
+        To modify or stop this schedule, log in to the Reporting dashboard.
+      </p>
+    </td>
+  </tr></table>
 </div>";
     }
 

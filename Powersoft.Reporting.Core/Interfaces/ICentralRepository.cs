@@ -30,6 +30,12 @@ public interface ICentralRepository
     Task<bool> IsActionAuthorizedAsync(int roleId, int actionId);
 
     /// <summary>
+    /// Returns only databases linked to the RENGINEAI module (via tbl_RelModuleDb).
+    /// Used by the scheduler to avoid scanning unrelated databases.
+    /// </summary>
+    Task<List<Database>> GetDatabasesLinkedToModuleAsync();
+
+    /// <summary>
     /// Reads system settings from tbl_SystemSettings where ParameterCode starts with the given prefix.
     /// </summary>
     Task<Dictionary<string, string>> GetSystemSettingsAsync(string parameterPrefix);

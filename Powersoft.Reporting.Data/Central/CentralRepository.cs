@@ -70,6 +70,34 @@ public class CentralRepository : ICentralRepository
         return databases;
     }
 
+    public async Task<List<Database>> GetDatabasesLinkedToModuleAsync()
+    {
+        var databases = new List<Database>();
+
+        const string sql = @"
+            SELECT DISTINCT d.pk_DBCode, d.DBFriendlyName, d.DBName,
+                   d.DBServerID, d.DBProviderInstanceName,
+                   d.DBUserName, d.DBPassword, d.DBActive,
+                   c.pk_CompanyCode, c.CompanyName
+            FROM tbl_DB d
+            INNER JOIN tbl_Company c ON d.fk_CompanyCode = c.pk_CompanyCode
+            INNER JOIN tbl_RelModuleDb rmd ON d.pk_DBCode = rmd.fk_DbCode
+            WHERE d.DBActive = 1
+              AND c.CompanyActive = 1
+              AND rmd.fk_ModuleCode = @ModuleCode
+            ORDER BY c.CompanyName, d.DBFriendlyName";
+
+        using var conn = new SqlConnection(_connectionString);
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ModuleCode", ModuleConstants.ModuleCode);
+        await conn.OpenAsync();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            databases.Add(MapDatabase(reader));
+
+        return databases;
+    }
+
     /// <summary>
     /// Returns all databases the user can access, respecting ranking, module linkage, and user-DB mapping.
     /// This is the core login query per Christina's spec (MASTER_CONTEXT Section 5.3).

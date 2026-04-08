@@ -79,34 +79,41 @@ public class ScheduleExecutionService
         List<Database> databases;
         try
         {
-            databases = await GetAllActiveDatabasesAsync();
+            databases = await _centralRepository.GetDatabasesLinkedToModuleAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load databases from psCentral");
+            _logger.LogError(ex, "Failed to load module-linked databases from psCentral");
             summary.Errors.Add($"Failed to load databases: {ex.Message}");
             return summary;
         }
 
-        _logger.LogInformation("Found {Count} active databases to check", databases.Count);
+        _logger.LogInformation("Found {Count} module-linked databases to check", databases.Count);
 
-        foreach (var db in databases)
+        var semaphore = new SemaphoreSlim(4);
+        var tasks = databases.Select(async db =>
         {
-            if (ct.IsCancellationRequested) break;
-
+            await semaphore.WaitAsync(ct);
             try
             {
                 var connString = !string.IsNullOrEmpty(_psCentralConnString)
                     ? ConnectionStringBuilder.BuildFromReference(db, _psCentralConnString)
                     : ConnectionStringBuilder.Build(db);
+                connString = ShortenTimeout(connString, 8);
                 await ProcessDatabaseSchedulesAsync(db, connString, now, summary, ct);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to process schedules for database {DB}", db.DBFriendlyName);
-                summary.Errors.Add($"DB {db.DBFriendlyName}: {ex.Message}");
+                lock (summary) { summary.Errors.Add($"DB {db.DBFriendlyName}: {ex.Message}"); }
             }
-        }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
 
         _logger.LogInformation(
             "Schedule runner completed. Processed: {Processed}, Succeeded: {Succeeded}, Failed: {Failed}",
@@ -115,18 +122,13 @@ public class ScheduleExecutionService
         return summary;
     }
 
-    private async Task<List<Database>> GetAllActiveDatabasesAsync()
+    private static string ShortenTimeout(string connString, int seconds)
     {
-        var allDatabases = new List<Database>();
-        var companies = await _centralRepository.GetActiveCompaniesAsync();
-
-        foreach (var company in companies)
+        var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connString)
         {
-            var dbs = await _centralRepository.GetActiveDatabasesForCompanyAsync(company.CompanyCode);
-            allDatabases.AddRange(dbs);
-        }
-
-        return allDatabases;
+            ConnectTimeout = seconds
+        };
+        return builder.ConnectionString;
     }
 
     private async Task ProcessDatabaseSchedulesAsync(
@@ -254,7 +256,7 @@ public class ScheduleExecutionService
             sw.Stop();
             log.DurationMs = (int)sw.ElapsedMilliseconds;
 
-            summary.Succeeded++;
+            summary.IncrementSucceeded();
             _logger.LogInformation(
                 "Schedule {Id} completed in {Ms}ms — {Rows} rows, {Size} bytes",
                 schedule.ScheduleId, log.DurationMs, log.RowsGenerated, log.FileSizeBytes);
@@ -266,14 +268,14 @@ public class ScheduleExecutionService
             log.DurationMs = (int)sw.ElapsedMilliseconds;
             log.ErrorMessage = ex.Message;
 
-            summary.Failed++;
+            summary.IncrementFailed();
             _logger.LogError(ex,
                 "Schedule {Id} '{Name}' failed after {Ms}ms",
                 schedule.ScheduleId, schedule.ScheduleName, log.DurationMs);
         }
         finally
         {
-            summary.Processed++;
+            summary.IncrementProcessed();
             try
             {
                 await scheduleRepo.InsertScheduleLogAsync(log);
@@ -953,8 +955,17 @@ Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
 
 public class ScheduleRunSummary
 {
-    public int Processed { get; set; }
-    public int Succeeded { get; set; }
-    public int Failed { get; set; }
-    public List<string> Errors { get; set; } = new();
+    private int _processed;
+    private int _succeeded;
+    private int _failed;
+
+    public int Processed => _processed;
+    public int Succeeded => _succeeded;
+    public int Failed => _failed;
+
+    public void IncrementProcessed() => Interlocked.Increment(ref _processed);
+    public void IncrementSucceeded() => Interlocked.Increment(ref _succeeded);
+    public void IncrementFailed() => Interlocked.Increment(ref _failed);
+
+    public List<string> Errors { get; } = new();
 }

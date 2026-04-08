@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Powersoft.Reporting.Core.Constants;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Data.Helpers;
+using Powersoft.Reporting.Data.Tenant;
 using Powersoft.Reporting.Web.ViewModels;
 
 namespace Powersoft.Reporting.Web.Controllers;
@@ -212,6 +213,8 @@ public class HomeController : Controller
 
         using var conn = new Microsoft.Data.SqlClient.SqlConnection(tenantConnString);
         await conn.OpenAsync();
+
+        await SchemaMigrationService.EnsureSchemaAsync(tenantConnString);
 
         HttpContext.Session.SetString(SessionKeys.TenantConnectionString, tenantConnString);
         HttpContext.Session.SetString(SessionKeys.ConnectedDatabase, database.DBFriendlyName);

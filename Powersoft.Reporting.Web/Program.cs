@@ -89,6 +89,10 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+var migLogger = app.Services.GetRequiredService<ILogger<Powersoft.Reporting.Data.Tenant.SchemaMigrationService>>();
+Powersoft.Reporting.Data.Tenant.SchemaMigrationService.LogInfo = msg => migLogger.LogInformation(msg);
+Powersoft.Reporting.Data.Tenant.SchemaMigrationService.LogWarning = (msg, ex) => migLogger.LogWarning(ex, msg);
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");

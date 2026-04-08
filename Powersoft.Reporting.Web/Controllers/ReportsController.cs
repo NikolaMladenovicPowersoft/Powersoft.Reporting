@@ -1192,6 +1192,22 @@ public class ReportsController : Controller
         {
             filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
         }
+
+        // Cascade: groups must be filled in order (Primary→Secondary→Third)
+        if (filter.PrimaryGroup == PsGroupBy.None)
+        {
+            filter.SecondaryGroup = PsGroupBy.None;
+            filter.ThirdGroup = PsGroupBy.None;
+        }
+        if (filter.SecondaryGroup == PsGroupBy.None)
+        {
+            filter.ThirdGroup = PsGroupBy.None;
+        }
+        // Sync back to model so the view reflects the normalization
+        model.PrimaryGroup = filter.PrimaryGroup;
+        model.SecondaryGroup = filter.SecondaryGroup;
+        model.ThirdGroup = filter.ThirdGroup;
+
         if (!filter.IsValid(out var errors))
         {
             model.ErrorMessage = string.Join(" ", errors);

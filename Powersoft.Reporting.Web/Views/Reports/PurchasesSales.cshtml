@@ -1179,9 +1179,21 @@ var previewOpen = false;
     var genBtn = document.getElementById('generateBtn');
     if (!pg || !sg || !tg) return;
 
-    function validateGroups() {
+    var none = '0';
+
+    function cascade() {
+        if (pg.value === none) {
+            sg.value = none; sg.disabled = true;
+            tg.value = none; tg.disabled = true;
+        } else {
+            sg.disabled = false;
+            if (sg.value === none) { tg.value = none; tg.disabled = true; }
+            else { tg.disabled = false; }
+        }
+    }
+
+    function checkDuplicates() {
         var pv = pg.value, sv = sg.value, tv = tg.value;
-        var none = '0';
         var ok = true;
 
         sg.classList.remove('is-invalid');
@@ -1211,23 +1223,23 @@ var previewOpen = false;
             if (!ok) genBtn.title = 'Fix duplicate group selections first';
             else genBtn.title = '';
         }
-        return ok;
     }
+
+    pg.addEventListener('change', function() { cascade(); checkDuplicates(); });
+    sg.addEventListener('change', function() { cascade(); checkDuplicates(); });
+    tg.addEventListener('change', checkDuplicates);
 
     var rm = document.getElementById('ReportMode');
     function toggleMonthlyControls() {
         var isM = rm && rm.value === '2';
         if (document.getElementById('showProfitCheck')) document.getElementById('showProfitCheck').disabled = isM;
         if (document.getElementById('showStockCheck')) document.getElementById('showStockCheck').disabled = isM;
-        if (tg) tg.disabled = isM;
-        if (isM && tg) { tg.value = '0'; }
+        if (isM) { tg.value = none; tg.disabled = true; }
     }
 
-    pg.addEventListener('change', validateGroups);
-    sg.addEventListener('change', validateGroups);
-    tg.addEventListener('change', validateGroups);
-    if (rm) rm.addEventListener('change', function() { toggleMonthlyControls(); validateGroups(); });
-    validateGroups();
+    if (rm) rm.addEventListener('change', function() { toggleMonthlyControls(); cascade(); checkDuplicates(); });
+    cascade();
+    checkDuplicates();
     toggleMonthlyControls();
 })();
 

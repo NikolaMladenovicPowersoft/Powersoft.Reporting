@@ -16,7 +16,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<int> CreateScheduleAsync(ReportSchedule schedule)
     {
         const string sql = @"
-            INSERT INTO tbl_ReportSchedule 
+            INSERT INTO dboReportsAI.tbl_ReportSchedule 
                 (ReportType, ScheduleName, CreatedBy, RecurrenceType, RecurrenceDay,
                  ScheduleTime, NextRunDate, ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
                  IncludeAiAnalysis, AiLocale, SkipIfEmpty)
@@ -58,7 +58,7 @@ public class ScheduleRepository : IScheduleRepository
                    ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
                    ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale,
                    ISNULL(SkipIfEmpty, 0) AS SkipIfEmpty
-            FROM tbl_ReportSchedule
+            FROM dboReportsAI.tbl_ReportSchedule
             WHERE ReportType = @ReportType AND IsActive = 1
             ORDER BY CreatedDate DESC";
 
@@ -86,7 +86,7 @@ public class ScheduleRepository : IScheduleRepository
                    ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
                    ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale,
                    ISNULL(SkipIfEmpty, 0) AS SkipIfEmpty
-            FROM tbl_ReportSchedule
+            FROM dboReportsAI.tbl_ReportSchedule
             WHERE pk_ScheduleID = @Id";
 
         using var conn = new SqlConnection(_connectionString);
@@ -101,7 +101,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<bool> UpdateScheduleAsync(ReportSchedule schedule)
     {
         const string sql = @"
-            UPDATE tbl_ReportSchedule 
+            UPDATE dboReportsAI.tbl_ReportSchedule 
             SET ScheduleName = @ScheduleName, RecurrenceType = @RecurrenceType,
                 RecurrenceDay = @RecurrenceDay, ScheduleTime = @ScheduleTime,
                 NextRunDate = @NextRunDate, ParametersJson = @ParametersJson,
@@ -139,7 +139,7 @@ public class ScheduleRepository : IScheduleRepository
 
     public async Task<bool> DeleteScheduleAsync(int scheduleId)
     {
-        const string sql = "UPDATE tbl_ReportSchedule SET IsActive = 0 WHERE pk_ScheduleID = @Id";
+        const string sql = "UPDATE dboReportsAI.tbl_ReportSchedule SET IsActive = 0 WHERE pk_ScheduleID = @Id";
 
         using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
@@ -151,7 +151,7 @@ public class ScheduleRepository : IScheduleRepository
 
     public async Task<int> CountActiveSchedulesForReportAsync(string reportType)
     {
-        const string sql = "SELECT COUNT(*) FROM tbl_ReportSchedule WHERE ReportType = @ReportType AND IsActive = 1";
+        const string sql = "SELECT COUNT(*) FROM dboReportsAI.tbl_ReportSchedule WHERE ReportType = @ReportType AND IsActive = 1";
 
         using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
@@ -187,7 +187,7 @@ public class ScheduleRepository : IScheduleRepository
                        ParametersJson, RecurrenceJson, ExportFormat, Recipients, EmailSubject,
                        ISNULL(IncludeAiAnalysis, 0) AS IncludeAiAnalysis, ISNULL(AiLocale, 'el') AS AiLocale,
                        ISNULL(SkipIfEmpty, 0) AS SkipIfEmpty
-                FROM tbl_ReportSchedule
+                FROM dboReportsAI.tbl_ReportSchedule
                 WHERE IsActive = 1
                   AND NextRunDate IS NOT NULL
                   AND NextRunDate <= @AsOf
@@ -207,7 +207,7 @@ public class ScheduleRepository : IScheduleRepository
             {
                 var ids = string.Join(",", schedules.Select(s => s.ScheduleId));
                 using var claimCmd = new SqlCommand(
-                    $"UPDATE tbl_ReportSchedule SET NextRunDate = NULL WHERE pk_ScheduleID IN ({ids})", conn, tran);
+                    $"UPDATE dboReportsAI.tbl_ReportSchedule SET NextRunDate = NULL WHERE pk_ScheduleID IN ({ids})", conn, tran);
                 await claimCmd.ExecuteNonQueryAsync();
             }
 
@@ -225,7 +225,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task UpdateAfterExecutionAsync(int scheduleId, DateTime lastRunDate, DateTime? nextRunDate, bool deactivate)
     {
         const string sql = @"
-            UPDATE tbl_ReportSchedule
+            UPDATE dboReportsAI.tbl_ReportSchedule
             SET LastRunDate = @LastRunDate,
                 NextRunDate = @NextRunDate,
                 IsActive = CASE WHEN @Deactivate = 1 THEN 0 ELSE IsActive END,
@@ -246,7 +246,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<int> InsertScheduleLogAsync(ScheduleLog log)
     {
         const string sql = @"
-            INSERT INTO tbl_ReportScheduleLog
+            INSERT INTO dboReportsAI.tbl_ReportScheduleLog
                 (fk_ScheduleID, RunDate, Status, RowsGenerated, FileSizeBytes, ErrorMessage, DurationMs)
             VALUES
                 (@ScheduleId, @RunDate, @Status, @RowsGenerated, @FileSizeBytes, @ErrorMessage, @DurationMs);
@@ -273,8 +273,8 @@ public class ScheduleRepository : IScheduleRepository
             SELECT TOP (@Top)
                    l.pk_LogID, l.fk_ScheduleID, s.ScheduleName, s.ReportType,
                    l.RunDate, l.Status, l.RowsGenerated, l.FileSizeBytes, l.ErrorMessage, l.DurationMs
-            FROM tbl_ReportScheduleLog l
-            INNER JOIN tbl_ReportSchedule s ON s.pk_ScheduleID = l.fk_ScheduleID"
+            FROM dboReportsAI.tbl_ReportScheduleLog l
+            INNER JOIN dboReportsAI.tbl_ReportSchedule s ON s.pk_ScheduleID = l.fk_ScheduleID"
             + (scheduleId.HasValue ? " WHERE l.fk_ScheduleID = @ScheduleId" : "")
             + " ORDER BY l.RunDate DESC";
 
@@ -313,7 +313,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<List<EmailTemplate>> GetEmailTemplatesAsync(string? reportType = null)
     {
         var sql = @"SELECT pk_TemplateID, TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, IsActive, CreatedBy, CreatedDate
-                    FROM tbl_ReportEmailTemplate
+                    FROM dboReportsAI.tbl_ReportEmailTemplate
                     WHERE IsActive = 1"
             + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL OR ReportType = '')" : "")
             + " ORDER BY IsDefault DESC, TemplateName";
@@ -335,7 +335,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<EmailTemplate?> GetEmailTemplateByIdAsync(int templateId)
     {
         const string sql = @"SELECT pk_TemplateID, TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, IsActive, CreatedBy, CreatedDate
-                             FROM tbl_ReportEmailTemplate WHERE pk_TemplateID = @Id";
+                             FROM dboReportsAI.tbl_ReportEmailTemplate WHERE pk_TemplateID = @Id";
 
         using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
@@ -349,7 +349,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<EmailTemplate?> GetDefaultEmailTemplateAsync(string? reportType = null)
     {
         var sql = @"SELECT TOP 1 pk_TemplateID, TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, IsActive, CreatedBy, CreatedDate
-                    FROM tbl_ReportEmailTemplate
+                    FROM dboReportsAI.tbl_ReportEmailTemplate
                     WHERE IsActive = 1 AND IsDefault = 1"
             + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL OR ReportType = '')" : "")
             + " ORDER BY ReportType DESC";
@@ -372,7 +372,7 @@ public class ScheduleRepository : IScheduleRepository
         if (template.IsDefault)
             await ClearDefaultFlagAsync(conn, null, template.ReportType);
 
-        const string sql = @"INSERT INTO tbl_ReportEmailTemplate
+        const string sql = @"INSERT INTO dboReportsAI.tbl_ReportEmailTemplate
             (TemplateName, ReportType, EmailSubject, EmailBodyHtml, IsDefault, CreatedBy)
             VALUES (@Name, @ReportType, @Subject, @Body, @IsDefault, @CreatedBy);
             SELECT SCOPE_IDENTITY();";
@@ -397,7 +397,7 @@ public class ScheduleRepository : IScheduleRepository
         if (template.IsDefault)
             await ClearDefaultFlagAsync(conn, template.TemplateId, template.ReportType);
 
-        const string sql = @"UPDATE tbl_ReportEmailTemplate
+        const string sql = @"UPDATE dboReportsAI.tbl_ReportEmailTemplate
             SET TemplateName = @Name, ReportType = @ReportType, EmailSubject = @Subject,
                 EmailBodyHtml = @Body, IsDefault = @IsDefault, ModifiedDate = GETDATE(), ModifiedBy = @ModifiedBy
             WHERE pk_TemplateID = @Id";
@@ -416,7 +416,7 @@ public class ScheduleRepository : IScheduleRepository
 
     private static async Task ClearDefaultFlagAsync(SqlConnection conn, int? excludeId, string? reportType)
     {
-        var sql = "UPDATE tbl_ReportEmailTemplate SET IsDefault = 0 WHERE IsDefault = 1 AND IsActive = 1";
+        var sql = "UPDATE dboReportsAI.tbl_ReportEmailTemplate SET IsDefault = 0 WHERE IsDefault = 1 AND IsActive = 1";
 
         if (reportType != null)
             sql += " AND ReportType = @ReportType";
@@ -436,7 +436,7 @@ public class ScheduleRepository : IScheduleRepository
 
     public async Task<bool> DeleteEmailTemplateAsync(int templateId)
     {
-        const string sql = @"UPDATE tbl_ReportEmailTemplate SET IsActive = 0, ModifiedDate = GETDATE() WHERE pk_TemplateID = @Id";
+        const string sql = @"UPDATE dboReportsAI.tbl_ReportEmailTemplate SET IsActive = 0, ModifiedDate = GETDATE() WHERE pk_TemplateID = @Id";
 
         using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
@@ -501,7 +501,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<List<AiPromptTemplate>> GetAiPromptTemplatesAsync(string? reportType = null)
     {
         var sql = @"SELECT pk_TemplateID, TemplateName, ReportType, SystemPrompt, IsDefault, IsActive, CreatedBy, CreatedDate, ModifiedDate, ModifiedBy
-                    FROM tbl_AiPromptTemplate WHERE IsActive = 1"
+                    FROM dboReportsAI.tbl_AiPromptTemplate WHERE IsActive = 1"
             + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL OR ReportType = '')" : "")
             + " ORDER BY IsDefault DESC, TemplateName";
 
@@ -521,7 +521,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<AiPromptTemplate?> GetAiPromptTemplateByIdAsync(int templateId)
     {
         const string sql = @"SELECT pk_TemplateID, TemplateName, ReportType, SystemPrompt, IsDefault, IsActive, CreatedBy, CreatedDate, ModifiedDate, ModifiedBy
-                             FROM tbl_AiPromptTemplate WHERE pk_TemplateID = @Id";
+                             FROM dboReportsAI.tbl_AiPromptTemplate WHERE pk_TemplateID = @Id";
 
         using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
@@ -535,7 +535,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<AiPromptTemplate?> GetDefaultAiPromptTemplateAsync(string? reportType = null)
     {
         var sql = @"SELECT TOP 1 pk_TemplateID, TemplateName, ReportType, SystemPrompt, IsDefault, IsActive, CreatedBy, CreatedDate, ModifiedDate, ModifiedBy
-                    FROM tbl_AiPromptTemplate WHERE IsActive = 1 AND IsDefault = 1"
+                    FROM dboReportsAI.tbl_AiPromptTemplate WHERE IsActive = 1 AND IsDefault = 1"
             + (reportType != null ? " AND (ReportType = @ReportType OR ReportType IS NULL OR ReportType = '')" : "")
             + " ORDER BY ReportType DESC";
 
@@ -557,7 +557,7 @@ public class ScheduleRepository : IScheduleRepository
         if (template.IsDefault)
             await ClearAiPromptDefaultFlagAsync(conn, null, template.ReportType);
 
-        const string sql = @"INSERT INTO tbl_AiPromptTemplate
+        const string sql = @"INSERT INTO dboReportsAI.tbl_AiPromptTemplate
             (TemplateName, ReportType, SystemPrompt, IsDefault, CreatedBy)
             VALUES (@Name, @ReportType, @SystemPrompt, @IsDefault, @CreatedBy);
             SELECT SCOPE_IDENTITY();";
@@ -581,7 +581,7 @@ public class ScheduleRepository : IScheduleRepository
         if (template.IsDefault)
             await ClearAiPromptDefaultFlagAsync(conn, template.TemplateId, template.ReportType);
 
-        const string sql = @"UPDATE tbl_AiPromptTemplate
+        const string sql = @"UPDATE dboReportsAI.tbl_AiPromptTemplate
             SET TemplateName = @Name, ReportType = @ReportType, SystemPrompt = @SystemPrompt,
                 IsDefault = @IsDefault, ModifiedDate = GETDATE(), ModifiedBy = @ModifiedBy
             WHERE pk_TemplateID = @Id";
@@ -599,7 +599,7 @@ public class ScheduleRepository : IScheduleRepository
 
     public async Task<bool> DeleteAiPromptTemplateAsync(int templateId)
     {
-        const string sql = "UPDATE tbl_AiPromptTemplate SET IsActive = 0, ModifiedDate = GETDATE() WHERE pk_TemplateID = @Id";
+        const string sql = "UPDATE dboReportsAI.tbl_AiPromptTemplate SET IsActive = 0, ModifiedDate = GETDATE() WHERE pk_TemplateID = @Id";
 
         using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
@@ -610,7 +610,7 @@ public class ScheduleRepository : IScheduleRepository
 
     private static async Task ClearAiPromptDefaultFlagAsync(SqlConnection conn, int? excludeId, string? reportType)
     {
-        var sql = "UPDATE tbl_AiPromptTemplate SET IsDefault = 0 WHERE IsDefault = 1 AND IsActive = 1";
+        var sql = "UPDATE dboReportsAI.tbl_AiPromptTemplate SET IsDefault = 0 WHERE IsDefault = 1 AND IsActive = 1";
         if (reportType != null)
             sql += " AND ReportType = @ReportType";
         else

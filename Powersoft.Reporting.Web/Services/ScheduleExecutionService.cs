@@ -7,6 +7,7 @@ using Powersoft.Reporting.Core.Helpers;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
 using Powersoft.Reporting.Data.Helpers;
+using Powersoft.Reporting.Data.Tenant;
 using Powersoft.Reporting.Web.Services.AI;
 using Powersoft.Reporting.Web.Services.Storage;
 
@@ -149,6 +150,8 @@ public class ScheduleExecutionService
         {
             // Settings table may not exist yet — continue with defaults (scheduler enabled)
         }
+
+        await SchemaMigrationService.EnsureSchemaAsync(connString);
 
         var scheduleRepo = _repositoryFactory.CreateScheduleRepository(connString);
 
@@ -876,35 +879,51 @@ Time: {(analysis.DurationMs / 1000.0):F1}s</p>");
         ReportSchedule schedule, Database db,
         int rowCount, string period, string fileName, string? downloadUrl = null)
     {
+        var downloadBlock = string.IsNullOrEmpty(downloadUrl) ? "" : $@"
+    <p style='margin-top:16px;'>
+      <a href='{downloadUrl}' style='display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600;'>
+        Download Report
+      </a>
+      <br/><span style='color:#9ca3af;font-size:11px;margin-top:4px;display:inline-block;'>Link valid for 7 days</span>
+    </p>";
+
         return $@"
-<div style='font-family: Arial, sans-serif; max-width: 600px;'>
-    <h2 style='color: #2563eb;'>Scheduled Report: {schedule.ScheduleName}</h2>
-    <table style='border-collapse: collapse; width: 100%; margin: 16px 0;'>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Database</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'><strong>{db.DBFriendlyName}</strong></td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Report Type</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{schedule.ReportType}</td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Period</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{period}</td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Rows</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{rowCount}</td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Format</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{schedule.ExportFormat}</td></tr>
-    </table>
-    <p style='color: #6b7280; font-size: 13px;'>
-        File: {fileName}<br/>
-        Generated: {DateTime.Now:yyyy-MM-dd HH:mm}
-    </p>{(string.IsNullOrEmpty(downloadUrl) ? "" : $@"
-    <p style='margin-top: 12px;'>
-        <a href='{downloadUrl}' style='display:inline-block;padding:8px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:4px;font-size:13px;'>
-            Download Report
-        </a>
-        <br/><span style='color:#9ca3af;font-size:11px;'>Link valid for 7 days</span>
-    </p>")}
-    <p style='color: #9ca3af; font-size: 11px; margin-top: 24px;'>
-        This is an automated report from Powersoft Reporting Engine.<br/>
-        To modify or stop this schedule, log in to the Reporting dashboard.
+<div style='font-family:""Segoe UI"",Arial,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;'>
+  <div style='background:linear-gradient(135deg,#1e40af,#3b82f6);padding:24px 32px;border-radius:8px 8px 0 0;'>
+    <h1 style='margin:0;color:#ffffff;font-size:20px;font-weight:600;'>Powersoft Reports</h1>
+  </div>
+  <div style='background:#ffffff;padding:28px 32px;border:1px solid #e5e7eb;border-top:none;'>
+    <h2 style='margin:0 0 8px;color:#1e40af;font-size:18px;'>{schedule.ScheduleName}</h2>
+    <p style='margin:0 0 20px;color:#6b7280;font-size:13px;'>{db.DBFriendlyName}</p>
+    <table style='border-collapse:collapse;width:100%;margin:0 0 20px;font-size:13px;'>
+      <tr>
+        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;width:120px;'>Report Type</td>
+        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;font-weight:600;'>{schedule.ReportType}</td>
+      </tr>
+      <tr>
+        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;'>Period</td>
+        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;'>{period}</td>
+      </tr>
+      <tr>
+        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;'>Rows</td>
+        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;'>{rowCount:N0}</td>
+      </tr>
+      <tr>
+        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;color:#6b7280;'>Format</td>
+        <td style='padding:8px 14px;border-bottom:1px solid #f3f4f6;'>{schedule.ExportFormat}</td>
+      </tr>
+      <tr>
+        <td style='padding:8px 14px;color:#6b7280;'>Generated</td>
+        <td style='padding:8px 14px;'>{DateTime.Now:yyyy-MM-dd HH:mm}</td>
+      </tr>
+    </table>{downloadBlock}
+  </div>
+  <div style='background:#f9fafb;padding:16px 32px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;'>
+    <p style='margin:0;color:#9ca3af;font-size:11px;'>
+      Automated report by Powersoft Report Engine &bull; {db.DBFriendlyName}<br/>
+      To modify or stop this schedule, log in to the Reporting dashboard.
     </p>
+  </div>
 </div>";
     }
 

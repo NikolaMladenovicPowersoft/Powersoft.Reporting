@@ -33,6 +33,8 @@ public static class ModuleConstants
     public const int ActionScheduleAvgBasket = 6026;
     public const int ActionViewPurchasesSales = 6027;
     public const int ActionSchedulePurchasesSales = 6028;
+    public const int ActionViewCatalogue = 6029;
+    public const int ActionScheduleCatalogue = 6030;
 
     /// <summary>
     /// Ranking threshold for DB filtering. Users with Ranking below this value (1, 5, 10)
@@ -51,6 +53,8 @@ public static class ModuleConstants
     public const string IniDescriptionAvgBasket = "Average Basket Report Layout";
     public const string IniHeaderPurchasesSales = "PURCHSALES";
     public const string IniDescriptionPurchasesSales = "Purchases vs Sales Report Layout";
+    public const string IniHeaderCatalogue = "CATALOGUE";
+    public const string IniDescriptionCatalogue = "Power Reports Catalogue Layout";
 
     // INI settings constants (DB-level settings, userCode = "ALL")
     public const string IniHeaderDbSettings = "DBSETTINGS";

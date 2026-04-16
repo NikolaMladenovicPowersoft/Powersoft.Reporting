@@ -2592,6 +2592,120 @@ public class ReportsController : Controller
         }
     }
 
+    // ==================== Power Reports Catalogue ====================
+
+    public async Task<IActionResult> Catalogue()
+    {
+        var connectedDb = GetConnectedDatabaseName();
+        var tenantConnString = GetTenantConnectionString();
+
+        if (string.IsNullOrEmpty(tenantConnString))
+        {
+            TempData["Warning"] = "Please select and connect to a database first.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewCatalogue))
+        {
+            _logger.LogWarning("User {User} denied access to Catalogue (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewCatalogue);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
+        var viewModel = new CatalogueViewModel
+        {
+            ConnectedDatabase = connectedDb,
+            IsConnected = true,
+            DateFrom = new DateTime(DateTime.Today.Year, 1, 1),
+            DateTo = DateTime.Today,
+            CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCatalogue)
+        };
+
+        await LoadCatalogueStoresAsync(viewModel, tenantConnString);
+        return View(viewModel);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Catalogue(CatalogueViewModel model)
+    {
+        var connectedDb = GetConnectedDatabaseName();
+        var tenantConnString = GetTenantConnectionString();
+
+        if (string.IsNullOrEmpty(tenantConnString))
+        {
+            TempData["Warning"] = "Please select and connect to a database first.";
+            return RedirectToAction("Index", "Home");
+        }
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewCatalogue))
+            return RedirectToAction("AccessDenied", "Account");
+
+        model.ConnectedDatabase = connectedDb;
+        model.IsConnected = true;
+        model.CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCatalogue);
+        await LoadCatalogueStoresAsync(model, tenantConnString);
+
+        var filter = model.ToCatalogueFilter();
+        filter.ItemsSelection = ParseItemsSelection(model.ItemsSelectionJson);
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
+        {
+            filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+        }
+
+        if (filter.PrimaryGroup == CatalogueGroupBy.None)
+        {
+            filter.SecondaryGroup = CatalogueGroupBy.None;
+            filter.ThirdGroup = CatalogueGroupBy.None;
+        }
+        if (filter.SecondaryGroup == CatalogueGroupBy.None)
+        {
+            filter.ThirdGroup = CatalogueGroupBy.None;
+        }
+        model.PrimaryGroup = filter.PrimaryGroup;
+        model.SecondaryGroup = filter.SecondaryGroup;
+        model.ThirdGroup = filter.ThirdGroup;
+
+        if (!filter.IsValid(out var errors))
+        {
+            model.ErrorMessage = string.Join(" ", errors);
+            return View(model);
+        }
+
+        try
+        {
+            var repo = _repositoryFactory.CreateCatalogueRepository(tenantConnString);
+            var result = await repo.GetCatalogueDataAsync(filter);
+            model.Results = result.Items;
+            model.TotalCount = result.TotalCount;
+            model.PageNumber = result.PageNumber;
+            model.PageSize = result.PageSize;
+
+            var totals = await repo.GetCatalogueTotalsAsync(filter);
+            model.Totals = totals;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating Catalogue report");
+            model.ErrorMessage = "An error occurred while generating the report. Please try again.";
+        }
+
+        return View(model);
+    }
+
+    private async Task LoadCatalogueStoresAsync(CatalogueViewModel model, string tenantConnString)
+    {
+        try
+        {
+            var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+            model.AvailableStores = await storeRepo.GetActiveStoresAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load stores for Catalogue report");
+            model.AvailableStores = new();
+        }
+    }
+
     // ==================== Below Minimum Stock ====================
 
     public async Task<IActionResult> BelowMinStock()

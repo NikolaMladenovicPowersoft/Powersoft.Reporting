@@ -1,0 +1,651 @@
+@model Powersoft.Reporting.Web.ViewModels.CatalogueViewModel
+@using Powersoft.Reporting.Core.Enums
+@using Powersoft.Reporting.Core.Models
+@{
+    ViewData["Title"] = "Power Reports Catalogue";
+    var filterCols = new[] { "ItemCode", "ItemDescription", "Level1Description", "Level2Description", "Level3Description",
+        "Quantity", "NetValue", "GrossAmount", "ProfitValue", "TransactionCost", "TotalStockQty",
+        "EntityName", "StoreCode", "BrandName", "ItemCategoryDescr" };
+    bool hasResults = Model.Results.Any();
+    bool hasL1 = Model.HasPrimaryGroup;
+    bool hasL2 = Model.HasSecondaryGroup;
+    bool hasL3 = Model.HasThirdGroup;
+    bool showItem = !Model.IsSummary || (!hasL1 && !hasL2 && !hasL3);
+    bool useGross = Model.IncludeVat;
+
+    var displayCols = Model.GetDisplayColumns();
+    bool dc(string c) => displayCols.Contains(c, StringComparer.OrdinalIgnoreCase);
+}
+
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-start">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
+                    <li class="breadcrumb-item active">Power Reports Catalogue</li>
+                </ol>
+            </nav>
+            <h2 class="mb-0">
+                <i class="bi bi-journal-text me-2 text-primary"></i>Power Reports Catalogue
+            </h2>
+            <p class="text-muted mb-0">Comprehensive transaction catalogue with flexible grouping and filtering</p>
+        </div>
+        <div class="mt-3">
+            @await Html.PartialAsync("_TutorialButton", ("Power Reports Catalogue", ""))
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-funnel me-2"></i>Report Parameters</div>
+    <div class="card-body">
+        <form asp-action="Catalogue" method="post" id="reportForm">
+            <input type="hidden" asp-for="SelectedStoreCodesString" id="selectedStoreCodesHidden" />
+            <input type="hidden" asp-for="ItemsSelectionJson" id="itemsSelectionJsonHidden" />
+            <input type="hidden" asp-for="PageNumber" id="pageNumberHidden" />
+            <input type="hidden" asp-for="SortColumn" id="sortColumnHidden" />
+            <input type="hidden" asp-for="SortDirection" id="sortDirectionHidden" />
+            <input type="hidden" asp-for="HiddenColumns" id="hiddenColumnsInput" />
+            <input type="hidden" asp-for="DisplayColumnsString" id="displayColumnsHidden" />
+            @foreach (var col in filterCols)
+            {
+                <input type="hidden" name="FilterValues[@col]" id="fv_@col" value="@(Model.FilterValues.GetValueOrDefault(col, ""))" />
+                <input type="hidden" name="FilterOperators[@col]" id="fo_@col" value="@(Model.FilterOperators.GetValueOrDefault(col, ""))" />
+            }
+
+            @* ===== ROW 1: Date Selection ===== *@
+            <div class="row mb-3">
+                <div class="col-12">
+                    <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                    <div class="date-presets btn-group flex-wrap" role="group">
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetYesterday" value="yesterday" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetYesterday">Yesterday</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLast7" value="last7" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLast7">Last 7 Days</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                        <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
+                        <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="my-3">
+
+            <div class="row g-3 mb-3 align-items-end">
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Date From</label>
+                    <input type="date" asp-for="DateFrom" class="form-control" onchange="clearPreset()" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Date To</label>
+                    <input type="date" asp-for="DateTo" class="form-control" onchange="clearPreset()" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Report Mode</label>
+                    <select asp-for="ReportMode" class="form-select" asp-items="Html.GetEnumSelectList<CatalogueReportMode>()"></select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Report On</label>
+                    <select asp-for="ReportOn" class="form-select" asp-items="Html.GetEnumSelectList<CatalogueReportOn>()"></select>
+                </div>
+            </div>
+
+            @* ===== ROW 2: Dimension Checkboxes ===== *@
+            <div class="card bg-light mb-3">
+                <div class="card-body py-2">
+                    <label class="form-label fw-semibold small text-muted mb-2">Show Extra Columns</label>
+                    <div class="row g-2">
+                        <div class="col-6 col-md-2">
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" asp-for="ShowCustomer" class="form-check-input" />
+                                <label asp-for="ShowCustomer" class="form-check-label small">Customer</label>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" asp-for="ShowSupplierDim" class="form-check-input" />
+                                <label asp-for="ShowSupplierDim" class="form-check-label small">Supplier</label>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" asp-for="ShowStore" class="form-check-input" />
+                                <label asp-for="ShowStore" class="form-check-label small">Store</label>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" asp-for="ShowPaymentType" class="form-check-input" />
+                                <label asp-for="ShowPaymentType" class="form-check-label small">Payment Type</label>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" asp-for="ShowUser" class="form-check-input" />
+                                <label asp-for="ShowUser" class="form-check-label small">User</label>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" asp-for="ShowAgent" class="form-check-input" />
+                                <label asp-for="ShowAgent" class="form-check-label small">Agent</label>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" asp-for="ShowStation" class="form-check-input" />
+                                <label asp-for="ShowStation" class="form-check-label small">Station</label>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" asp-for="ShowZReport" class="form-check-input" />
+                                <label asp-for="ShowZReport" class="form-check-label small">Z Report</label>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" asp-for="ShowRecommendedBy" class="form-check-input" />
+                                <label asp-for="ShowRecommendedBy" class="form-check-label small">Recommended By</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* ===== ROW 3: Grouping ===== *@
+            <div class="row g-3 mb-3 align-items-end">
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Primary Group</label>
+                    <select asp-for="PrimaryGroup" id="PrimaryGroup" class="form-select group-select" asp-items="Html.GetEnumSelectList<CatalogueGroupBy>()"></select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Secondary Group</label>
+                    <select asp-for="SecondaryGroup" id="SecondaryGroup" class="form-select group-select" asp-items="Html.GetEnumSelectList<CatalogueGroupBy>()"></select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Third Group</label>
+                    <select asp-for="ThirdGroup" id="ThirdGroup" class="form-select group-select" asp-items="Html.GetEnumSelectList<CatalogueGroupBy>()"></select>
+                </div>
+            </div>
+
+            @* ===== ROW 4: Display Columns (tag selector) ===== *@
+            <div class="card bg-light mb-3">
+                <div class="card-body py-2">
+                    <div class="d-flex align-items-center mb-2">
+                        <label class="form-label fw-semibold small text-muted mb-0 me-3">Display Columns</label>
+                        <a href="#" class="small text-decoration-none" onclick="clearAllDisplayCols(); return false;">Clear</a>
+                        <span class="mx-2 text-muted">|</span>
+                        <a href="#" class="small text-decoration-none" onclick="resetDefaultDisplayCols(); return false;">Default</a>
+                    </div>
+                    <div class="d-flex flex-wrap gap-1" id="displayColsContainer">
+                        @{
+                            var allDisplayCols = new (string Id, string Label)[] {
+                                ("ItemCode", "Item Code"), ("MainBarcode", "Barcode"),
+                                ("ItemName", "Item Name"), ("Quantity", "Quantity"),
+                                ("Value", "Value"), ("Discount", "Discount"),
+                                ("NetValue", "Net Value"), ("VatAmount", "VAT Amount"),
+                                ("GrossAmount", "Gross Amt"), ("Profit", "Profit"),
+                                ("Markup", "Markup"), ("Margin", "Margin"),
+                                ("TotalStockQty", "Stock Qty"), ("TotalStockValue", "Stock Value"),
+                                ("Cost", "Cost"), ("TotalCost", "Total Cost"),
+                                ("EntityCode", "Entity Code"), ("EntityName", "Entity Name"),
+                                ("InvoiceNumber", "Invoice No"), ("InvoiceType", "Invoice Type"),
+                                ("StoreCode", "Store Code"), ("StoreName", "Store Name"),
+                                ("StationCode", "Station"), ("AgentName", "Agent"),
+                                ("DateTrans", "Date"), ("UserCode", "User"),
+                                ("ZReportNumber", "Z Report"), ("PaymentType", "Payment Type"),
+                                ("ItemCategory", "Category"), ("ItemDepartment", "Department"),
+                                ("Brand", "Brand"), ("Season", "Season"),
+                                ("Model", "Model"), ("Colour", "Colour"), ("Size", "Size"),
+                                ("Franchise", "Franchise"), ("ItemSupplier", "Supplier"),
+                                ("Price1Excl", "Price 1 Excl"), ("Price1Incl", "Price 1 Incl"),
+                                ("Price2Excl", "Price 2 Excl"), ("Price2Incl", "Price 2 Incl"),
+                                ("Price3Excl", "Price 3 Excl"), ("Price3Incl", "Price 3 Incl"),
+                                ("ItemAttr1", "Attribute 1"), ("ItemAttr2", "Attribute 2"),
+                                ("ItemAttr3", "Attribute 3"), ("ItemAttr4", "Attribute 4"),
+                                ("ItemAttr5", "Attribute 5"), ("ItemAttr6", "Attribute 6")
+                            };
+                        }
+                        @foreach (var col in allDisplayCols)
+                        {
+                            var isSelected = dc(col.Id);
+                            <button type="button"
+                                    class="btn btn-sm @(isSelected ? "btn-primary" : "btn-outline-secondary") display-col-btn"
+                                    data-col="@col.Id" onclick="toggleDisplayCol(this)">
+                                @col.Label
+                                @if (isSelected) { <i class="bi bi-x-lg ms-1 small"></i> }
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* ===== ROW 5: Profit / Stock Value / Cost Type ===== *@
+            <div class="row g-3 mb-3 align-items-end">
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Profit Based On</label>
+                    <select asp-for="ProfitBasedOn" class="form-select form-select-sm" asp-items="Html.GetEnumSelectList<CatalogueCostBasis>()"></select>
+                    <div class="form-check mt-1">
+                        <input type="checkbox" asp-for="ProfitIncludesVat" class="form-check-input" />
+                        <label asp-for="ProfitIncludesVat" class="form-check-label small">Includes VAT</label>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Stock Value Based On</label>
+                    <select asp-for="StockValueBasedOn" class="form-select form-select-sm" asp-items="Html.GetEnumSelectList<CatalogueCostBasis>()"></select>
+                    <div class="form-check mt-1">
+                        <input type="checkbox" asp-for="StockValueIncludesVat" class="form-check-input" />
+                        <label asp-for="StockValueIncludesVat" class="form-check-label small">Includes VAT</label>
+                    </div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Cost Type</label>
+                    <select asp-for="CostType" class="form-select form-select-sm" asp-items="Html.GetEnumSelectList<CatalogueCostBasis>()"></select>
+                </div>
+            </div>
+
+            @* ===== ROW 6: Options ===== *@
+            <div class="row g-3 mb-4 align-items-end">
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="IncludeVat" class="form-check-input" />
+                        <label asp-for="IncludeVat" class="form-check-label">Show Gross (incl. VAT)</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="ShowProfit" class="form-check-input" />
+                        <label asp-for="ShowProfit" class="form-check-label">Show Profit</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="ShowStock" class="form-check-input" />
+                        <label asp-for="ShowStock" class="form-check-label">Show Stock</label>
+                    </div>
+                </div>
+                <div class="col-auto ms-md-auto">
+                    <label class="form-label fw-semibold small text-muted mb-1">Rows per page</label>
+                    <select asp-for="PageSize" class="form-select form-select-sm w-auto">
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="250">250</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
+                <button type="submit" class="btn btn-primary btn-lg btn-generate" id="generateBtn">
+                    <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
+                    <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                </button>
+                <a asp-action="Catalogue" class="btn btn-outline-secondary btn-reset" title="Clear all filters">
+                    <i class="bi bi-funnel me-1"></i>Clear Filters
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@{
+    var storesJson = System.Text.Json.JsonSerializer.Serialize(Model.AvailableStores.Select(s => new { code = s.StoreCode, name = s.StoreName }));
+}
+@await Html.PartialAsync("_ItemsSelection", new ItemsSelectionConfig
+{
+    ShowCategories = true,
+    ShowDepartments = true,
+    ShowBrands = true,
+    ShowSeasons = true,
+    ShowSuppliers = true,
+    ShowStores = true,
+    ShowItems = false,
+    StoresJson = storesJson,
+    SavedFilterJson = Model.ItemsSelectionJson ?? ""
+})
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>@Model.ErrorMessage</div>
+}
+
+@if (hasResults)
+{
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>
+                <i class="bi bi-table me-2"></i>
+                Results <span class="badge bg-primary ms-2">@Model.TotalCount.ToString("N0") rows</span>
+                @if (Model.Totals != null)
+                {
+                    <span class="badge bg-secondary ms-1">@Model.DateFrom.ToString("dd/MM/yyyy") - @Model.DateTo.ToString("dd/MM/yyyy")</span>
+                }
+            </span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover table-striped mb-0" id="reportTable">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            @if (hasL1) { <th class="sortable" data-col="Level1Description">Group 1</th> }
+                            @if (hasL2) { <th class="sortable" data-col="Level2Description">Group 2</th> }
+                            @if (hasL3) { <th class="sortable" data-col="Level3Description">Group 3</th> }
+                            @if (showItem && dc("ItemCode")) { <th class="sortable" data-col="ItemCode">Code</th> }
+                            @if (showItem && dc("ItemName")) { <th class="sortable" data-col="ItemDescription">Description</th> }
+                            @if (dc("Quantity")) { <th class="sortable text-end" data-col="Quantity">Qty</th> }
+                            @if (dc("Value")) { <th class="sortable text-end" data-col="ValueBeforeDiscount">Value</th> }
+                            @if (dc("Discount")) { <th class="sortable text-end" data-col="Discount">Discount</th> }
+                            @if (dc("NetValue")) { <th class="sortable text-end" data-col="NetValue">Net Value</th> }
+                            @if (dc("VatAmount")) { <th class="sortable text-end" data-col="VatAmount">VAT</th> }
+                            @if (dc("GrossAmount")) { <th class="sortable text-end" data-col="GrossAmount">Gross Amt</th> }
+                            @if (dc("Profit")) { <th class="sortable text-end" data-col="ProfitValue">Profit</th> }
+                            @if (dc("Markup")) { <th class="text-end">Markup %</th> }
+                            @if (dc("Margin")) { <th class="text-end">Margin %</th> }
+                            @if (dc("Cost")) { <th class="sortable text-end" data-col="Cost">Cost</th> }
+                            @if (dc("TotalCost")) { <th class="sortable text-end" data-col="TotalCost">Total Cost</th> }
+                            @if (dc("TotalStockQty")) { <th class="sortable text-end" data-col="TotalStockQty">Stock Qty</th> }
+                            @if (dc("TotalStockValue")) { <th class="text-end">Stock Value</th> }
+                            @if (dc("EntityCode")) { <th>Entity Code</th> }
+                            @if (dc("EntityName")) { <th>Entity Name</th> }
+                            @if (dc("InvoiceNumber")) { <th>Invoice No</th> }
+                            @if (dc("InvoiceType")) { <th>Inv. Type</th> }
+                            @if (dc("StoreCode")) { <th>Store Code</th> }
+                            @if (dc("StoreName")) { <th>Store</th> }
+                            @if (dc("StationCode")) { <th>Station</th> }
+                            @if (dc("DateTrans")) { <th class="sortable" data-col="DateTrans">Date</th> }
+                            @if (dc("UserCode")) { <th>User</th> }
+                            @if (dc("AgentName")) { <th>Agent</th> }
+                            @if (dc("ZReportNumber")) { <th>Z Report</th> }
+                            @if (dc("PaymentType")) { <th>Payment Type</th> }
+                            @if (dc("ItemCategory")) { <th>Category</th> }
+                            @if (dc("ItemDepartment")) { <th>Department</th> }
+                            @if (dc("Brand")) { <th>Brand</th> }
+                            @if (dc("Season")) { <th>Season</th> }
+                            @if (dc("Model")) { <th>Model</th> }
+                            @if (dc("Colour")) { <th>Colour</th> }
+                            @if (dc("Size")) { <th>Size</th> }
+                            @if (dc("Franchise")) { <th>Franchise</th> }
+                            @if (dc("ItemSupplier")) { <th>Supplier</th> }
+                            @if (dc("Price1Excl")) { <th class="text-end">Price 1 Ex</th> }
+                            @if (dc("Price1Incl")) { <th class="text-end">Price 1 In</th> }
+                            @if (dc("Price2Excl")) { <th class="text-end">Price 2 Ex</th> }
+                            @if (dc("Price2Incl")) { <th class="text-end">Price 2 In</th> }
+                            @if (dc("Price3Excl")) { <th class="text-end">Price 3 Ex</th> }
+                            @if (dc("Price3Incl")) { <th class="text-end">Price 3 In</th> }
+                            @if (dc("ItemAttr1")) { <th>Attr 1</th> }
+                            @if (dc("ItemAttr2")) { <th>Attr 2</th> }
+                            @if (dc("ItemAttr3")) { <th>Attr 3</th> }
+                            @if (dc("ItemAttr4")) { <th>Attr 4</th> }
+                            @if (dc("ItemAttr5")) { <th>Attr 5</th> }
+                            @if (dc("ItemAttr6")) { <th>Attr 6</th> }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ string lastL1 = null, lastL2 = null, lastL3 = null; }
+                        @foreach (var row in Model.Results)
+                        {
+                            bool newL1 = hasL1 && row.Level1Value != lastL1;
+                            bool newL2 = hasL2 && (row.Level2Value != lastL2 || newL1);
+                            bool newL3 = hasL3 && (row.Level3Value != lastL3 || newL2);
+
+                            if (newL1) { lastL1 = row.Level1Value; }
+                            if (newL2) { lastL2 = row.Level2Value; }
+                            if (newL3) { lastL3 = row.Level3Value; }
+
+                            <tr>
+                                @if (hasL1) { <td class="@(newL1 ? "fw-bold text-primary" : "")">@(newL1 ? row.Level1Value : "")</td> }
+                                @if (hasL2) { <td class="@(newL2 ? "fw-semibold" : "")">@(newL2 ? row.Level2Value : "")</td> }
+                                @if (hasL3) { <td>@(newL3 ? row.Level3Value : "")</td> }
+                                @if (showItem && dc("ItemCode")) { <td class="text-nowrap">@row.ItemCode</td> }
+                                @if (showItem && dc("ItemName")) { <td>@row.ItemDescription</td> }
+                                @if (dc("Quantity")) { <td class="text-end">@row.Quantity.ToString("N2")</td> }
+                                @if (dc("Value")) { <td class="text-end">@row.ValueBeforeDiscount.ToString("N2")</td> }
+                                @if (dc("Discount")) { <td class="text-end">@row.Discount.ToString("N2")</td> }
+                                @if (dc("NetValue")) { <td class="text-end">@row.NetValue.ToString("N2")</td> }
+                                @if (dc("VatAmount")) { <td class="text-end">@row.VatAmount.ToString("N2")</td> }
+                                @if (dc("GrossAmount")) { <td class="text-end">@row.GrossAmount.ToString("N2")</td> }
+                                @if (dc("Profit")) { <td class="text-end @(row.ProfitValue < 0 ? "text-danger" : "text-success")">@row.ProfitValue.ToString("N2")</td> }
+                                @if (dc("Markup")) { <td class="text-end">@row.Markup.ToString("N1")%</td> }
+                                @if (dc("Margin")) { <td class="text-end">@row.Margin.ToString("N1")%</td> }
+                                @if (dc("Cost")) { <td class="text-end">@row.Cost.ToString("N2")</td> }
+                                @if (dc("TotalCost")) { <td class="text-end">@row.TotalCost.ToString("N2")</td> }
+                                @if (dc("TotalStockQty")) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
+                                @if (dc("TotalStockValue")) { <td class="text-end">@row.TotalStockValue.ToString("N2")</td> }
+                                @if (dc("EntityCode")) { <td class="small">@row.EntityCode</td> }
+                                @if (dc("EntityName")) { <td class="small">@row.EntityName</td> }
+                                @if (dc("InvoiceNumber")) { <td class="small">@row.InvoiceNumber</td> }
+                                @if (dc("InvoiceType")) { <td class="small">@row.InvoiceType</td> }
+                                @if (dc("StoreCode")) { <td class="small">@row.StoreCode</td> }
+                                @if (dc("StoreName")) { <td class="small">@row.StoreName</td> }
+                                @if (dc("StationCode")) { <td class="small">@row.StationCode</td> }
+                                @if (dc("DateTrans")) { <td class="small text-nowrap">@(row.DateTrans?.ToString("dd/MM/yyyy") ?? "")</td> }
+                                @if (dc("UserCode")) { <td class="small">@row.UserCode</td> }
+                                @if (dc("AgentName")) { <td class="small">@row.AgentName</td> }
+                                @if (dc("ZReportNumber")) { <td class="small">@row.ZReportNumber</td> }
+                                @if (dc("PaymentType")) { <td class="small">@row.PaymentType</td> }
+                                @if (dc("ItemCategory")) { <td class="small">@row.ItemCategoryDescr</td> }
+                                @if (dc("ItemDepartment")) { <td class="small">@row.ItemDepartmentDescr</td> }
+                                @if (dc("Brand")) { <td class="small">@row.BrandName</td> }
+                                @if (dc("Season")) { <td class="small">@row.SeasonName</td> }
+                                @if (dc("Model")) { <td class="small">@row.ModelCode</td> }
+                                @if (dc("Colour")) { <td class="small">@row.Colour</td> }
+                                @if (dc("Size")) { <td class="small">@row.Size</td> }
+                                @if (dc("Franchise")) { <td class="small">@row.FranchiseName</td> }
+                                @if (dc("ItemSupplier")) { <td class="small">@row.ItemSupplierName</td> }
+                                @if (dc("Price1Excl")) { <td class="text-end">@row.Price1Excl.ToString("N2")</td> }
+                                @if (dc("Price1Incl")) { <td class="text-end">@row.Price1Incl.ToString("N2")</td> }
+                                @if (dc("Price2Excl")) { <td class="text-end">@row.Price2Excl.ToString("N2")</td> }
+                                @if (dc("Price2Incl")) { <td class="text-end">@row.Price2Incl.ToString("N2")</td> }
+                                @if (dc("Price3Excl")) { <td class="text-end">@row.Price3Excl.ToString("N2")</td> }
+                                @if (dc("Price3Incl")) { <td class="text-end">@row.Price3Incl.ToString("N2")</td> }
+                                @if (dc("ItemAttr1")) { <td class="small">@row.ItemAttr1Descr</td> }
+                                @if (dc("ItemAttr2")) { <td class="small">@row.ItemAttr2Descr</td> }
+                                @if (dc("ItemAttr3")) { <td class="small">@row.ItemAttr3Descr</td> }
+                                @if (dc("ItemAttr4")) { <td class="small">@row.ItemAttr4Descr</td> }
+                                @if (dc("ItemAttr5")) { <td class="small">@row.ItemAttr5Descr</td> }
+                                @if (dc("ItemAttr6")) { <td class="small">@row.ItemAttr6Descr</td> }
+                            </tr>
+                        }
+                    </tbody>
+                    @if (Model.Totals != null)
+                    {
+                        int countGroupCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+                        int countItemCols = (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
+                        int spanCols = countGroupCols + countItemCols;
+
+                        <tfoot class="table-dark">
+                            <tr class="fw-bold">
+                                @if (spanCols > 0) { <td colspan="@spanCols">Grand Total</td> }
+                                @if (dc("Quantity")) { <td class="text-end">@Model.Totals.TotalQuantity.ToString("N2")</td> }
+                                @if (dc("Value")) { <td class="text-end">@Model.Totals.TotalValueBeforeDiscount.ToString("N2")</td> }
+                                @if (dc("Discount")) { <td class="text-end">@Model.Totals.TotalDiscount.ToString("N2")</td> }
+                                @if (dc("NetValue")) { <td class="text-end">@Model.Totals.TotalNetValue.ToString("N2")</td> }
+                                @if (dc("VatAmount")) { <td class="text-end">@Model.Totals.TotalVatAmount.ToString("N2")</td> }
+                                @if (dc("GrossAmount")) { <td class="text-end">@Model.Totals.TotalGrossAmount.ToString("N2")</td> }
+                                @if (dc("Profit")) { <td class="text-end">@Model.Totals.TotalProfitValue.ToString("N2")</td> }
+                                @if (dc("Markup")) { <td class="text-end">@Model.Totals.TotalMarkup.ToString("N1")%</td> }
+                                @if (dc("Margin")) { <td class="text-end">@Model.Totals.TotalMargin.ToString("N1")%</td> }
+                                @if (dc("Cost")) { <td></td> }
+                                @if (dc("TotalCost")) { <td class="text-end">@Model.Totals.TotalTotalCost.ToString("N2")</td> }
+                                @if (dc("TotalStockQty")) { <td class="text-end">@Model.Totals.TotalStockQty.ToString("N0")</td> }
+                                @if (dc("TotalStockValue")) { <td></td> }
+                                @{
+                                    var dimCols = new[] {"EntityCode","EntityName","InvoiceNumber","InvoiceType",
+                                        "StoreCode","StoreName","StationCode","DateTrans","UserCode","AgentName",
+                                        "ZReportNumber","PaymentType","ItemCategory","ItemDepartment","Brand",
+                                        "Season","Model","Colour","Size","Franchise","ItemSupplier",
+                                        "Price1Excl","Price1Incl","Price2Excl","Price2Incl","Price3Excl","Price3Incl",
+                                        "ItemAttr1","ItemAttr2","ItemAttr3","ItemAttr4","ItemAttr5","ItemAttr6"};
+                                }
+                                @foreach (var c in dimCols) { if (dc(c)) { <td></td> } }
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.TotalPages > 1)
+    {
+        <nav class="d-flex justify-content-between align-items-center mb-4">
+            <span class="text-muted small">Page @Model.PageNumber of @Model.TotalPages (@Model.TotalCount.ToString("N0") total rows)</span>
+            <ul class="pagination mb-0">
+                <li class="page-item @(Model.HasPreviousPage ? "" : "disabled")">
+                    <a class="page-link" href="#" onclick="goToPage(@(Model.PageNumber - 1)); return false;">Previous</a>
+                </li>
+                @for (int p = Math.Max(1, Model.PageNumber - 3); p <= Math.Min(Model.TotalPages, Model.PageNumber + 3); p++)
+                {
+                    <li class="page-item @(p == Model.PageNumber ? "active" : "")">
+                        <a class="page-link" href="#" onclick="goToPage(@p); return false;">@p</a>
+                    </li>
+                }
+                <li class="page-item @(Model.HasNextPage ? "" : "disabled")">
+                    <a class="page-link" href="#" onclick="goToPage(@(Model.PageNumber + 1)); return false;">Next</a>
+                </li>
+            </ul>
+        </nav>
+    }
+}
+else if (ViewContext.HttpContext.Request.Method == "POST")
+{
+    <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No data found for the selected parameters.</div>
+}
+
+@section Scripts {
+<script>
+    const defaultDisplayCols = ['ItemCode','ItemName','Quantity','Value','Discount','NetValue','VatAmount','GrossAmount'];
+
+    function getSelectedDisplayCols() {
+        return document.getElementById('displayColumnsHidden').value
+            .split(',').filter(c => c.length > 0);
+    }
+
+    function setSelectedDisplayCols(cols) {
+        document.getElementById('displayColumnsHidden').value = cols.join(',');
+    }
+
+    function toggleDisplayCol(btn) {
+        const col = btn.dataset.col;
+        let cols = getSelectedDisplayCols();
+        const idx = cols.findIndex(c => c.toLowerCase() === col.toLowerCase());
+        if (idx >= 0) {
+            cols.splice(idx, 1);
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-outline-secondary');
+            const icon = btn.querySelector('i');
+            if (icon) icon.remove();
+        } else {
+            cols.push(col);
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('btn-primary');
+            const icon = document.createElement('i');
+            icon.className = 'bi bi-x-lg ms-1 small';
+            btn.appendChild(icon);
+        }
+        setSelectedDisplayCols(cols);
+    }
+
+    function clearAllDisplayCols() {
+        setSelectedDisplayCols([]);
+        document.querySelectorAll('.display-col-btn').forEach(btn => {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-outline-secondary');
+            const icon = btn.querySelector('i');
+            if (icon) icon.remove();
+        });
+    }
+
+    function resetDefaultDisplayCols() {
+        clearAllDisplayCols();
+        setSelectedDisplayCols([...defaultDisplayCols]);
+        document.querySelectorAll('.display-col-btn').forEach(btn => {
+            if (defaultDisplayCols.includes(btn.dataset.col)) {
+                btn.classList.remove('btn-outline-secondary');
+                btn.classList.add('btn-primary');
+                const icon = document.createElement('i');
+                icon.className = 'bi bi-x-lg ms-1 small';
+                btn.appendChild(icon);
+            }
+        });
+    }
+
+    function clearPreset() {
+        document.querySelectorAll('input[name="DatePreset"]').forEach(r => r.checked = false);
+    }
+
+    document.querySelectorAll('.date-presets input[type="radio"]').forEach(radio => {
+        radio.addEventListener('change', function () {
+            const today = new Date();
+            let from, to;
+            switch (this.value) {
+                case 'today': from = to = today; break;
+                case 'yesterday': from = to = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1); break;
+                case 'last7': from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6); to = today; break;
+                case 'last30': from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29); to = today; break;
+                case 'thisMonth': from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; break;
+                case 'lastMonth': from = new Date(today.getFullYear(), today.getMonth() - 1, 1); to = new Date(today.getFullYear(), today.getMonth(), 0); break;
+                case 'ytd': from = new Date(today.getFullYear(), 0, 1); to = today; break;
+                case 'lastYear': from = new Date(today.getFullYear() - 1, 0, 1); to = new Date(today.getFullYear() - 1, 11, 31); break;
+            }
+            if (from && to) {
+                document.getElementById('DateFrom').value = from.toISOString().split('T')[0];
+                document.getElementById('DateTo').value = to.toISOString().split('T')[0];
+            }
+        });
+    });
+
+    // Cascading group selects
+    const pg = document.getElementById('PrimaryGroup');
+    const sg = document.getElementById('SecondaryGroup');
+    const tg = document.getElementById('ThirdGroup');
+
+    function cascade() {
+        if (pg.value === '0') { sg.value = '0'; sg.disabled = true; tg.value = '0'; tg.disabled = true; }
+        else { sg.disabled = false; }
+        if (sg.value === '0') { tg.value = '0'; tg.disabled = true; }
+        else { tg.disabled = false; }
+    }
+
+    pg.addEventListener('change', cascade);
+    sg.addEventListener('change', cascade);
+    cascade();
+
+    function goToPage(p) {
+        document.getElementById('pageNumberHidden').value = p;
+        document.getElementById('reportForm').submit();
+    }
+
+    document.querySelectorAll('th.sortable').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', function () {
+            const col = this.dataset.col;
+            const curCol = document.getElementById('sortColumnHidden').value;
+            const curDir = document.getElementById('sortDirectionHidden').value;
+            document.getElementById('sortColumnHidden').value = col;
+            document.getElementById('sortDirectionHidden').value = (col === curCol && curDir === 'ASC') ? 'DESC' : 'ASC';
+            document.getElementById('pageNumberHidden').value = '1';
+            document.getElementById('reportForm').submit();
+        });
+    });
+
+    document.getElementById('reportForm').addEventListener('submit', function () {
+        const btn = document.getElementById('generateBtn');
+        btn.querySelector('.btn-text').classList.add('d-none');
+        btn.querySelector('.spinner-border').classList.remove('d-none');
+        btn.disabled = true;
+    });
+</script>
+}

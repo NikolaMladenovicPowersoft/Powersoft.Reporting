@@ -84,4 +84,12 @@ public class TenantRepositoryFactory : ITenantRepositoryFactory
 
         return new BelowMinStockRepository(connectionString);
     }
+
+    public ICatalogueRepository CreateCatalogueRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+
+        return new CatalogueRepository(connectionString);
+    }
 }

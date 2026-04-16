@@ -78,6 +78,9 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
             totals.TotalGrossAmount = GetDecimalSafe(reader, "TotalGrossAmount");
             totals.TotalTransactionCost = GetDecimalSafe(reader, "TotalTransactionCost");
             totals.TotalTotalCost = GetDecimalSafe(reader, "TotalTotalCost");
+            totals.TotalProfitValue = GetDecimalSafe(reader, "TotalProfitValue");
+            totals.TotalStockQty = GetDecimalSafe(reader, "TotalStockQty");
+            totals.TotalStockValue = GetDecimalSafe(reader, "TotalStockValue");
         }
         return totals;
     }
@@ -178,6 +181,40 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
         _ => "ISNULL(it.Cost,0)"
     };
 
+    /// <summary>
+    /// Builds the dynamic CASE expression used for Profit and Stock value calculations.
+    /// Matches the original Powersoft365 logic 1:1 (PriceID 1..10, 99=Cost, 98=ItemCost,
+    /// 88=AverageCost, 87=WeightedAverageCost). Falls back through @iDefaultPrice when the
+    /// selected basis is unrecognised.
+    /// </summary>
+    private static string BuildPriceCaseExpr(string sParamName, string vatParamName)
+    {
+        var sb = new StringBuilder();
+        sb.Append("(CASE ").Append(sParamName).AppendLine();
+        for (int i = 1; i <= 10; i++)
+        {
+            sb.Append("    WHEN '").Append(i).Append("' THEN CASE WHEN ")
+              .Append(vatParamName).Append(" = 0 THEN ISNULL(it.Price").Append(i).Append("Excl,0) ELSE ISNULL(it.Price")
+              .Append(i).AppendLine("Incl,0) END");
+        }
+        sb.AppendLine("    WHEN '99' THEN ISNULL(it.Cost,0)");
+        sb.AppendLine("    WHEN '98' THEN ISNULL(d.ItemCost,0)");
+        sb.AppendLine("    WHEN '88' THEN ISNULL(it.AverageCost,0)");
+        sb.AppendLine("    WHEN '87' THEN ISNULL(it.WeightedAverageCost,0)");
+        sb.AppendLine("    ELSE CASE @iDefaultPrice");
+        for (int i = 1; i <= 10; i++)
+        {
+            sb.Append("        WHEN '").Append(i).Append("' THEN CASE WHEN ")
+              .Append(vatParamName).Append(" = 0 THEN ISNULL(it.Price").Append(i).Append("Excl,0) ELSE ISNULL(it.Price")
+              .Append(i).AppendLine("Incl,0) END");
+        }
+        sb.Append("        ELSE CASE WHEN ").Append(vatParamName)
+          .AppendLine(" = 0 THEN ISNULL(it.Price1Excl,0) ELSE ISNULL(it.Price1Incl,0) END");
+        sb.AppendLine("    END");
+        sb.Append("  END)");
+        return sb.ToString();
+    }
+
     private void AppendTransactionLeg(
         StringBuilder sb, GroupingInfo grouping,
         string dateWhere, string filterCond, bool isSummary,
@@ -216,10 +253,15 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
         sb.AppendLine($"  {sign}ISNULL(d.VatAmount, 0) AS VatAmount,");
         sb.AppendLine($"  {sign}(ISNULL(d.Amount,0) - (ISNULL(d.Discount,0) + ISNULL(d.ExtraDiscount,0)) + ISNULL(d.VatAmount,0)) AS GrossAmount,");
         var costExpr = ResolveCostExpr(filter.CostType);
+        var profitPriceExpr = BuildPriceCaseExpr("@sProfitBasedOn", "@bProfitBasedOnIncludeVAT");
+        var stockValuePriceExpr = BuildPriceCaseExpr("@sStockValueBasedOn", "@bStockValueBasedOnIncludeVAT");
+
         sb.AppendLine($"  {sign}ISNULL(d.ItemCost, 0) AS TransactionCost,");
         sb.AppendLine($"  {costExpr} AS Cost,");
         sb.AppendLine($"  {sign}({costExpr} * ISNULL(d.Quantity, 0)) AS TotalCost,");
+        sb.AppendLine($"  {sign}({profitPriceExpr} * ISNULL(d.Quantity, 0)) AS ProfitValue,");
         sb.AppendLine($"  ISNULL(it.TotalStockQty, 0) AS TotalStockQty,");
+        sb.AppendLine($"  ({stockValuePriceExpr} * ISNULL(it.TotalStockQty, 0)) AS TotalStockValue,");
 
         if (!isSummary)
         {
@@ -340,15 +382,21 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
         sb.AppendLine("  SUM(r.NetValue) AS NetValue,");
         sb.AppendLine("  SUM(r.VatAmount) AS VatAmount,");
         sb.AppendLine("  SUM(r.GrossAmount) AS GrossAmount,");
-        sb.AppendLine("  SUM(r.NetValue) - SUM(r.TransactionCost) AS ProfitValue,");
+        sb.AppendLine("  SUM(r.ProfitValue) AS ProfitValue,");
         sb.AppendLine("  SUM(r.TransactionCost) AS TransactionCost,");
         sb.AppendLine("  MAX(r.Cost) AS Cost,");
         sb.AppendLine("  SUM(r.TotalCost) AS TotalCost,");
 
         if (isSummary && !allNone)
+        {
             sb.AppendLine("  SUM(r.TotalStockQty) AS TotalStockQty,");
+            sb.AppendLine("  SUM(r.TotalStockValue) AS TotalStockValue,");
+        }
         else
+        {
             sb.AppendLine("  MAX(r.TotalStockQty) AS TotalStockQty,");
+            sb.AppendLine("  MAX(r.TotalStockValue) AS TotalStockValue,");
+        }
 
         if (!isSummary || allNone)
         {
@@ -429,6 +477,8 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
         var sb = new StringBuilder();
 
         var costExpr = ResolveCostExpr(filter.CostType);
+        var profitPriceExpr = BuildPriceCaseExpr("@sProfitBasedOn", "@bProfitBasedOnIncludeVAT");
+        var stockValuePriceExpr = BuildPriceCaseExpr("@sStockValueBasedOn", "@bStockValueBasedOnIncludeVAT");
 
         void AppendTotalsLeg(string detailTbl, string headerTbl, string hdrJoin, int sign)
         {
@@ -440,7 +490,11 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
             sb.AppendLine($"  {s}ISNULL(d.VatAmount,0) AS VA,");
             sb.AppendLine($"  {s}(ISNULL(d.Amount,0)-(ISNULL(d.Discount,0)+ISNULL(d.ExtraDiscount,0))+ISNULL(d.VatAmount,0)) AS GA,");
             sb.AppendLine($"  {s}ISNULL(d.ItemCost,0) AS TC,");
-            sb.AppendLine($"  {s}({costExpr}*ISNULL(d.Quantity,0)) AS TCost");
+            sb.AppendLine($"  {s}({costExpr}*ISNULL(d.Quantity,0)) AS TCost,");
+            sb.AppendLine($"  {s}({profitPriceExpr}*ISNULL(d.Quantity,0)) AS PV,");
+            sb.AppendLine($"  ISNULL(it.TotalStockQty,0) AS SQ,");
+            sb.AppendLine($"  ({stockValuePriceExpr}*ISNULL(it.TotalStockQty,0)) AS SV,");
+            sb.AppendLine($"  it.pk_ItemID AS ItemID");
             sb.AppendLine($"FROM {detailTbl} d");
             sb.AppendLine($"INNER JOIN {headerTbl} h ON {hdrJoin}");
             sb.AppendLine("INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID");
@@ -448,19 +502,9 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
             sb.AppendLine($"{dateWhere}{filterCond}");
         }
 
-        sb.AppendLine("SELECT");
-        sb.AppendLine("  SUM(sub.Qty) AS TotalQuantity,");
-        sb.AppendLine("  SUM(sub.ValBD) AS TotalValueBeforeDiscount,");
-        sb.AppendLine("  SUM(sub.Disc) AS TotalDiscount,");
-        sb.AppendLine("  SUM(sub.NV) AS TotalNetValue,");
-        sb.AppendLine("  SUM(sub.VA) AS TotalVatAmount,");
-        sb.AppendLine("  SUM(sub.GA) AS TotalGrossAmount,");
-        sb.AppendLine("  SUM(sub.TC) AS TotalTransactionCost,");
-        sb.AppendLine("  SUM(sub.TCost) AS TotalTotalCost");
-        sb.AppendLine("FROM (");
+        sb.AppendLine(";WITH AllLegs AS (");
 
         bool needsUnion = false;
-
         if (filter.ReportOn == CatalogueReportOn.Sale || filter.ReportOn == CatalogueReportOn.Both)
         {
             AppendTotalsLeg("tbl_InvoiceDetails", "tbl_InvoiceHeader", "d.fk_Invoice = h.pk_InvoiceID", 1);
@@ -468,7 +512,6 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
             AppendTotalsLeg("tbl_CreditDetails", "tbl_CreditHeader", "d.fk_Credit = h.pk_CreditID", -1);
             needsUnion = true;
         }
-
         if (filter.ReportOn == CatalogueReportOn.Purchase || filter.ReportOn == CatalogueReportOn.Both)
         {
             if (needsUnion) sb.AppendLine("UNION ALL");
@@ -477,7 +520,24 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
             AppendTotalsLeg("tbl_PurchReturnDetails", "tbl_PurchReturnHeader", "d.fk_PurchReturnID = h.pk_PurchReturnID", -1);
         }
 
-        sb.AppendLine(") sub");
+        sb.AppendLine("), StockPerItem AS (");
+        // Per-item snapshot: collapse multiple transaction rows for the same item to one max value
+        sb.AppendLine("  SELECT ItemID, MAX(SQ) AS MaxSQ, MAX(SV) AS MaxSV FROM AllLegs GROUP BY ItemID");
+        sb.AppendLine(")");
+        sb.AppendLine("SELECT");
+        sb.AppendLine("  ISNULL(SUM(Qty),0) AS TotalQuantity,");
+        sb.AppendLine("  ISNULL(SUM(ValBD),0) AS TotalValueBeforeDiscount,");
+        sb.AppendLine("  ISNULL(SUM(Disc),0) AS TotalDiscount,");
+        sb.AppendLine("  ISNULL(SUM(NV),0) AS TotalNetValue,");
+        sb.AppendLine("  ISNULL(SUM(VA),0) AS TotalVatAmount,");
+        sb.AppendLine("  ISNULL(SUM(GA),0) AS TotalGrossAmount,");
+        sb.AppendLine("  ISNULL(SUM(TC),0) AS TotalTransactionCost,");
+        sb.AppendLine("  ISNULL(SUM(TCost),0) AS TotalTotalCost,");
+        sb.AppendLine("  ISNULL(SUM(PV),0) AS TotalProfitValue,");
+        sb.AppendLine("  ISNULL((SELECT SUM(MaxSQ) FROM StockPerItem),0) AS TotalStockQty,");
+        sb.AppendLine("  ISNULL((SELECT SUM(MaxSV) FROM StockPerItem),0) AS TotalStockValue");
+        sb.AppendLine("FROM AllLegs");
+
         return sb.ToString();
     }
 
@@ -593,12 +653,12 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
                 null),
 
             CatalogueGroupBy.PaymentType => new(
-                $"ISNULL({alias}.ptdesc,'CREDIT') AS {lc}, ISNULL({alias}.ptdesc,'CREDIT') AS {ld}",
-                $"LEFT JOIN tbl_PaymentType {alias} ON h.fk_PaymentType = {alias}.pk_ID"),
+                $"ISNULL({alias}.pk_ptcode,'CREDIT') AS {lc}, ISNULL({alias}.ptdesc,'CREDIT') AS {ld}",
+                $"LEFT JOIN tbl_paymtype {alias} ON ISNULL(h.fk_PayTypeCode,'CREDIT') = {alias}.pk_ptcode"),
 
             CatalogueGroupBy.Station => new(
                 $"ISNULL(h.fk_StationCode,'N/A') AS {lc}, ISNULL({alias}.StationName,'N/A') AS {ld}",
-                $"LEFT JOIN tbl_Station {alias} ON h.fk_StationCode = {alias}.pk_StationCode"),
+                $"LEFT JOIN tbl_Station {alias} ON h.fk_StoreCode = {alias}.fk_StoreCode AND ISNULL(h.fk_StationCode,'0001') = {alias}.fk_StationCode"),
 
             CatalogueGroupBy.Franchise => new(
                 $"ISNULL(s.fk_FranchiseCode,'N/A') AS {lc}, ISNULL({alias}.FranchiseName,'N/A') AS {ld}",
@@ -613,8 +673,8 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
                 null),
 
             CatalogueGroupBy.Agent => new(
-                $"ISNULL({alias}.AgentCode,'N/A') AS {lc}, ISNULL({alias}.FirstName + ' ' + {alias}.LastName,'N/A') AS {ld}",
-                $"LEFT JOIN tbl_Agent {alias} ON h.fk_AgentCode = {alias}.pk_AgentCode"),
+                $"CAST(ISNULL(h.fk_AgentID,0) AS NVARCHAR(20)) AS {lc}, CASE WHEN h.fk_AgentID IS NULL THEN 'N/A' ELSE ISNULL({alias}.FirstName,'') + ' ' + ISNULL({alias}.LastName,'') END AS {ld}",
+                $"LEFT JOIN tbl_Agent {alias} ON h.fk_AgentID = {alias}.pk_SystemNo"),
 
             CatalogueGroupBy.ItemAttr1 => new(
                 $"ISNULL({alias}.FieldDetailCode,'N/A') AS {lc}, ISNULL({alias}.FieldDetailDescr,'N/A') AS {ld}",
@@ -862,7 +922,12 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
         var parms = new List<SqlParameter>
         {
             new("@DateFrom", filter.DateFrom.Date),
-            new("@DateTo", filter.DateTo.Date)
+            new("@DateTo", filter.DateTo.Date),
+            new("@sProfitBasedOn", ((int)filter.ProfitBasedOn).ToString(CultureInfo.InvariantCulture)),
+            new("@bProfitBasedOnIncludeVAT", filter.ProfitIncludesVat ? (byte)1 : (byte)0),
+            new("@sStockValueBasedOn", ((int)filter.StockValueBasedOn).ToString(CultureInfo.InvariantCulture)),
+            new("@bStockValueBasedOnIncludeVAT", filter.StockValueIncludesVat ? (byte)1 : (byte)0),
+            new("@iDefaultPrice", "1")
         };
         parms.AddRange(itemFilters.Parameters);
         return parms;
@@ -919,6 +984,7 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
                     case "Cost": row.Cost = reader.GetDecimal(i); break;
                     case "TotalCost": row.TotalCost = reader.GetDecimal(i); break;
                     case "TotalStockQty": row.TotalStockQty = reader.GetDecimal(i); break;
+                    case "TotalStockValue": row.TotalStockValue = reader.GetDecimal(i); break;
                     case "EntityCode": row.EntityCode = reader.GetString(i); break;
                     case "EntityName": row.EntityName = reader.GetString(i); break;
                     case "InvoiceNumber": row.InvoiceNumber = reader.GetString(i); break;

@@ -24,16 +24,20 @@ public class CatalogueRow
     public decimal GrossAmount { get; set; }
 
     // Profitability
+    /// <summary>
+    /// Reference value: Quantity * configured profit-base price (e.g. Price1Excl).
+    /// This is NOT net profit; it matches the original Powersoft365 column semantics.
+    /// </summary>
     public decimal ProfitValue { get; set; }
     public decimal Cost { get; set; }
     public decimal TotalCost { get; set; }
     public decimal TransactionCost { get; set; }
 
     public decimal Margin => NetValue != 0
-        ? Math.Round(ProfitValue / NetValue * 100, 2) : 0;
+        ? Math.Round((ProfitValue - TransactionCost) / NetValue * 100, 2) : 0;
 
     public decimal Markup => TransactionCost != 0
-        ? Math.Round(ProfitValue / TransactionCost * 100, 2) : 100;
+        ? Math.Round((ProfitValue - TransactionCost) / TransactionCost * 100, 2) : 100;
 
     // Stock
     public decimal TotalStockQty { get; set; }

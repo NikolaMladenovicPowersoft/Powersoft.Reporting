@@ -13,11 +13,16 @@ public class CatalogueTotals
     public decimal TotalStockQty { get; set; }
     public decimal TotalStockValue { get; set; }
 
-    public decimal TotalProfitValue => TotalNetValue - TotalTransactionCost;
+    /// <summary>
+    /// Sum of (Quantity * configured profit-base price) across all transaction legs.
+    /// Matches the original Powersoft365 semantics: this is a reference value, not net profit.
+    /// Read directly from SQL — set by the repository.
+    /// </summary>
+    public decimal TotalProfitValue { get; set; }
 
     public decimal TotalMargin => TotalNetValue != 0
-        ? Math.Round(TotalProfitValue / TotalNetValue * 100, 2) : 0;
+        ? Math.Round((TotalProfitValue - TotalTransactionCost) / TotalNetValue * 100, 2) : 0;
 
     public decimal TotalMarkup => TotalTransactionCost != 0
-        ? Math.Round(TotalProfitValue / TotalTransactionCost * 100, 2) : 100;
+        ? Math.Round((TotalProfitValue - TotalTransactionCost) / TotalTransactionCost * 100, 2) : 100;
 }

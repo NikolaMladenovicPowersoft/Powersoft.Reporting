@@ -281,6 +281,171 @@ public class ExcelExportService
         return stream.ToArray();
     }
 
+    public byte[] GenerateCatalogueExcel(
+        List<CatalogueRow> rows,
+        CatalogueTotals? totals,
+        CatalogueFilter filter)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Catalogue");
+
+        ws.Cell(1, 1).Value = "Power Reports Catalogue";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(selRow++, 1).Value = $"Report Mode: {filter.ReportMode}";
+        ws.Cell(selRow++, 1).Value = $"Report On: {filter.ReportOn}";
+        if (filter.PrimaryGroup != Core.Enums.CatalogueGroupBy.None)
+            ws.Cell(selRow++, 1).Value = $"Primary Group: {filter.PrimaryGroup}";
+        if (filter.SecondaryGroup != Core.Enums.CatalogueGroupBy.None)
+            ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.SecondaryGroup}";
+        if (filter.ThirdGroup != Core.Enums.CatalogueGroupBy.None)
+            ws.Cell(selRow++, 1).Value = $"Third Group: {filter.ThirdGroup}";
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            ws.Cell(selRow++, 1).Value = $"Stores: {string.Join(", ", filter.StoreCodes)}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        int headerRow = selRow + 1;
+        bool hasL1 = filter.PrimaryGroup != Core.Enums.CatalogueGroupBy.None;
+        bool hasL2 = filter.SecondaryGroup != Core.Enums.CatalogueGroupBy.None;
+        bool hasL3 = filter.ThirdGroup != Core.Enums.CatalogueGroupBy.None;
+        bool isSummary = filter.IsSummary;
+        bool showItem = !isSummary || (!hasL1 && !hasL2 && !hasL3);
+        bool dc(string c) => filter.DisplayColumns.Contains(c, StringComparer.OrdinalIgnoreCase);
+
+        var cols = new List<(string Key, string Label, bool IsNumeric, Func<CatalogueRow, object?> Value)>();
+        if (hasL1) cols.Add(("_L1", "Group 1", false, r => r.Level1Value));
+        if (hasL2) cols.Add(("_L2", "Group 2", false, r => r.Level2Value));
+        if (hasL3) cols.Add(("_L3", "Group 3", false, r => r.Level3Value));
+        if (showItem && dc("ItemCode")) cols.Add(("ItemCode", "Code", false, r => r.ItemCode));
+        if (showItem && dc("MainBarcode")) cols.Add(("MainBarcode", "Barcode", false, r => r.MainBarcode));
+        if (showItem && dc("ItemName")) cols.Add(("ItemName", "Description", false, r => r.ItemDescription));
+        if (dc("Quantity")) cols.Add(("Quantity", "Qty", true, r => r.Quantity));
+        if (dc("Value")) cols.Add(("Value", "Value", true, r => r.ValueBeforeDiscount));
+        if (dc("Discount")) cols.Add(("Discount", "Discount", true, r => r.Discount));
+        if (dc("NetValue")) cols.Add(("NetValue", "Net Value", true, r => r.NetValue));
+        if (dc("VatAmount")) cols.Add(("VatAmount", "VAT", true, r => r.VatAmount));
+        if (dc("GrossAmount")) cols.Add(("GrossAmount", "Gross Amt", true, r => r.GrossAmount));
+        if (dc("Profit")) cols.Add(("Profit", "Profit", true, r => r.ProfitValue));
+        if (dc("Markup")) cols.Add(("Markup", "Markup %", true, r => r.Markup));
+        if (dc("Margin")) cols.Add(("Margin", "Margin %", true, r => r.Margin));
+        if (dc("Cost")) cols.Add(("Cost", "Cost", true, r => r.Cost));
+        if (dc("TotalCost")) cols.Add(("TotalCost", "Total Cost", true, r => r.TotalCost));
+        if (dc("TotalStockQty")) cols.Add(("TotalStockQty", "Stock Qty", true, r => r.TotalStockQty));
+        if (dc("TotalStockValue")) cols.Add(("TotalStockValue", "Stock Value", true, r => r.TotalStockValue));
+        if (dc("EntityCode")) cols.Add(("EntityCode", "Entity Code", false, r => r.EntityCode));
+        if (dc("EntityName")) cols.Add(("EntityName", "Entity Name", false, r => r.EntityName));
+        if (dc("InvoiceNumber")) cols.Add(("InvoiceNumber", "Invoice No", false, r => r.InvoiceNumber));
+        if (dc("InvoiceType")) cols.Add(("InvoiceType", "Inv. Type", false, r => r.InvoiceType));
+        if (dc("StoreCode")) cols.Add(("StoreCode", "Store Code", false, r => r.StoreCode));
+        if (dc("StoreName")) cols.Add(("StoreName", "Store", false, r => r.StoreName));
+        if (dc("StationCode")) cols.Add(("StationCode", "Station", false, r => r.StationCode));
+        if (dc("DateTrans")) cols.Add(("DateTrans", "Date", false, r => r.DateTrans?.ToString("yyyy-MM-dd") ?? ""));
+        if (dc("UserCode")) cols.Add(("UserCode", "User", false, r => r.UserCode));
+        if (dc("AgentName")) cols.Add(("AgentName", "Agent", false, r => r.AgentName));
+        if (dc("ZReportNumber")) cols.Add(("ZReportNumber", "Z Report", false, r => r.ZReportNumber));
+        if (dc("PaymentType")) cols.Add(("PaymentType", "Payment Type", false, r => r.PaymentType));
+        if (dc("ItemCategory")) cols.Add(("ItemCategory", "Category", false, r => r.ItemCategoryDescr));
+        if (dc("ItemDepartment")) cols.Add(("ItemDepartment", "Department", false, r => r.ItemDepartmentDescr));
+        if (dc("Brand")) cols.Add(("Brand", "Brand", false, r => r.BrandName));
+        if (dc("Season")) cols.Add(("Season", "Season", false, r => r.SeasonName));
+        if (dc("Model")) cols.Add(("Model", "Model", false, r => r.ModelCode));
+        if (dc("Colour")) cols.Add(("Colour", "Colour", false, r => r.Colour));
+        if (dc("Size")) cols.Add(("Size", "Size", false, r => r.Size));
+        if (dc("Franchise")) cols.Add(("Franchise", "Franchise", false, r => r.FranchiseName));
+        if (dc("ItemSupplier")) cols.Add(("ItemSupplier", "Supplier", false, r => r.ItemSupplierName));
+        if (dc("Price1Excl")) cols.Add(("Price1Excl", "Price 1 Ex", true, r => r.Price1Excl));
+        if (dc("Price1Incl")) cols.Add(("Price1Incl", "Price 1 In", true, r => r.Price1Incl));
+        if (dc("Price2Excl")) cols.Add(("Price2Excl", "Price 2 Ex", true, r => r.Price2Excl));
+        if (dc("Price2Incl")) cols.Add(("Price2Incl", "Price 2 In", true, r => r.Price2Incl));
+        if (dc("Price3Excl")) cols.Add(("Price3Excl", "Price 3 Ex", true, r => r.Price3Excl));
+        if (dc("Price3Incl")) cols.Add(("Price3Incl", "Price 3 In", true, r => r.Price3Incl));
+        if (dc("ItemAttr1")) cols.Add(("ItemAttr1", "Attr 1", false, r => r.ItemAttr1Descr));
+        if (dc("ItemAttr2")) cols.Add(("ItemAttr2", "Attr 2", false, r => r.ItemAttr2Descr));
+        if (dc("ItemAttr3")) cols.Add(("ItemAttr3", "Attr 3", false, r => r.ItemAttr3Descr));
+        if (dc("ItemAttr4")) cols.Add(("ItemAttr4", "Attr 4", false, r => r.ItemAttr4Descr));
+        if (dc("ItemAttr5")) cols.Add(("ItemAttr5", "Attr 5", false, r => r.ItemAttr5Descr));
+        if (dc("ItemAttr6")) cols.Add(("ItemAttr6", "Attr 6", false, r => r.ItemAttr6Descr));
+
+        for (int i = 0; i < cols.Count; i++)
+            ws.Cell(headerRow, i + 1).Value = cols[i].Label;
+
+        if (cols.Count > 0)
+        {
+            var headerRange = ws.Range(headerRow, 1, headerRow, cols.Count);
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+            headerRange.Style.Font.FontColor = XLColor.White;
+            headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        }
+
+        int dataRow = headerRow + 1;
+        foreach (var row in rows)
+        {
+            for (int i = 0; i < cols.Count; i++)
+            {
+                var val = cols[i].Value(row);
+                if (val is decimal dec) ws.Cell(dataRow, i + 1).Value = dec;
+                else if (val is int iv) ws.Cell(dataRow, i + 1).Value = iv;
+                else if (val is DateTime dt) ws.Cell(dataRow, i + 1).Value = dt;
+                else ws.Cell(dataRow, i + 1).Value = val?.ToString() ?? "";
+                if (cols[i].IsNumeric)
+                    ws.Cell(dataRow, i + 1).Style.NumberFormat.Format = "#,##0.00";
+            }
+            dataRow++;
+        }
+
+        if (totals != null && cols.Count > 0)
+        {
+            var totalMap = new Dictionary<string, decimal?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Quantity"] = totals.TotalQuantity,
+                ["Value"] = totals.TotalValueBeforeDiscount,
+                ["Discount"] = totals.TotalDiscount,
+                ["NetValue"] = totals.TotalNetValue,
+                ["VatAmount"] = totals.TotalVatAmount,
+                ["GrossAmount"] = totals.TotalGrossAmount,
+                ["Profit"] = totals.TotalProfitValue,
+                ["Markup"] = totals.TotalMarkup,
+                ["Margin"] = totals.TotalMargin,
+                ["TotalCost"] = totals.TotalTotalCost,
+                ["TotalStockQty"] = totals.TotalStockQty,
+                ["TotalStockValue"] = totals.TotalStockValue
+            };
+
+            bool labelPlaced = false;
+            for (int i = 0; i < cols.Count; i++)
+            {
+                if (totalMap.TryGetValue(cols[i].Key, out var v) && v.HasValue)
+                {
+                    ws.Cell(dataRow, i + 1).Value = v.Value;
+                    ws.Cell(dataRow, i + 1).Style.NumberFormat.Format = "#,##0.00";
+                }
+                else if (!labelPlaced && !cols[i].IsNumeric)
+                {
+                    ws.Cell(dataRow, i + 1).Value = i == 0 ? "GRAND TOTAL" : "";
+                    if (i == 0) labelPlaced = true;
+                }
+            }
+            if (!labelPlaced) ws.Cell(dataRow, 1).Value = "GRAND TOTAL";
+
+            var totalRange = ws.Range(dataRow, 1, dataRow, cols.Count);
+            totalRange.Style.Font.Bold = true;
+            totalRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
+            totalRange.Style.Border.TopBorder = XLBorderStyleValues.Medium;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
     public byte[] GenerateChartExcel(List<ChartDataPoint> data, ChartFilter filter)
     {
         using var workbook = new XLWorkbook();

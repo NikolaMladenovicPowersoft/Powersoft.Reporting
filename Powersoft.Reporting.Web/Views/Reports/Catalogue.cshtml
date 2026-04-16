@@ -292,6 +292,17 @@
                     <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
                     <span class="spinner-border spinner-border-sm d-none" role="status"></span>
                 </button>
+                @if (Model.CanSchedule)
+                {
+                    <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                        <i class="bi bi-clock-history me-2"></i>Schedule
+                    </button>
+                }
+                <div class="btn-group ms-auto">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#columnSettingsModal" title="Choose which columns to show/hide">
+                        <i class="bi bi-layout-three-columns me-1"></i>Columns
+                    </button>
+                </div>
                 <a asp-action="Catalogue" class="btn btn-outline-secondary btn-reset" title="Clear all filters">
                     <i class="bi bi-funnel me-1"></i>Clear Filters
                 </a>
@@ -323,8 +334,8 @@
 
 @if (hasResults)
 {
-    <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card mb-4" id="results">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span>
                 <i class="bi bi-table me-2"></i>
                 Results <span class="badge bg-primary ms-2">@Model.TotalCount.ToString("N0") rows</span>
@@ -333,63 +344,111 @@
                     <span class="badge bg-secondary ms-1">@Model.DateFrom.ToString("dd/MM/yyyy") - @Model.DateTo.ToString("dd/MM/yyyy")</span>
                 }
             </span>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <div class="btn-group btn-group-sm">
+                    <a class="btn btn-outline-success"
+                       asp-action="ExportCatalogueCsv"
+                       asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")"
+                       asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")"
+                       asp-route-reportMode="@Model.ReportMode"
+                       asp-route-reportOn="@Model.ReportOn"
+                       asp-route-primaryGroup="@Model.PrimaryGroup"
+                       asp-route-secondaryGroup="@Model.SecondaryGroup"
+                       asp-route-thirdGroup="@Model.ThirdGroup"
+                       asp-route-displayColumns="@Model.DisplayColumnsString"
+                       asp-route-includeVat="@Model.IncludeVat"
+                       asp-route-showProfit="@Model.ShowProfit"
+                       asp-route-showStock="@Model.ShowStock"
+                       asp-route-storeCodes="@Model.SelectedStoreCodesString"
+                       asp-route-itemsSelection="@(Model.ItemsSelectionJson ?? "")"
+                       asp-route-sortColumn="@Model.SortColumn"
+                       asp-route-sortDirection="@Model.SortDirection">
+                        <i class="bi bi-filetype-csv me-1"></i>CSV
+                    </a>
+                    <a class="btn btn-outline-success"
+                       asp-action="ExportCatalogueExcel"
+                       asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")"
+                       asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")"
+                       asp-route-reportMode="@Model.ReportMode"
+                       asp-route-reportOn="@Model.ReportOn"
+                       asp-route-primaryGroup="@Model.PrimaryGroup"
+                       asp-route-secondaryGroup="@Model.SecondaryGroup"
+                       asp-route-thirdGroup="@Model.ThirdGroup"
+                       asp-route-displayColumns="@Model.DisplayColumnsString"
+                       asp-route-includeVat="@Model.IncludeVat"
+                       asp-route-showProfit="@Model.ShowProfit"
+                       asp-route-showStock="@Model.ShowStock"
+                       asp-route-storeCodes="@Model.SelectedStoreCodesString"
+                       asp-route-itemsSelection="@(Model.ItemsSelectionJson ?? "")"
+                       asp-route-sortColumn="@Model.SortColumn"
+                       asp-route-sortDirection="@Model.SortDirection">
+                        <i class="bi bi-filetype-xlsx me-1"></i>Excel
+                    </a>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
+                    <i class="bi bi-envelope me-1"></i>Send to Email
+                </button>
+                <button class="btn btn-sm btn-outline-info" onclick="analyzeReport()" title="AI-powered report analysis" id="btnAnalyze">
+                    <i class="bi bi-stars me-1"></i>AI Analyze
+                </button>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-sm table-hover table-striped mb-0" id="reportTable">
+                <table class="table table-sm table-hover table-striped mb-0" id="resultsTable">
                     <thead class="table-light sticky-top">
                         <tr>
-                            @if (hasL1) { <th class="sortable" data-col="Level1Description">Group 1</th> }
-                            @if (hasL2) { <th class="sortable" data-col="Level2Description">Group 2</th> }
-                            @if (hasL3) { <th class="sortable" data-col="Level3Description">Group 3</th> }
-                            @if (showItem && dc("ItemCode")) { <th class="sortable" data-col="ItemCode">Code</th> }
-                            @if (showItem && dc("ItemName")) { <th class="sortable" data-col="ItemDescription">Description</th> }
-                            @if (dc("Quantity")) { <th class="sortable text-end" data-col="Quantity">Qty</th> }
-                            @if (dc("Value")) { <th class="sortable text-end" data-col="ValueBeforeDiscount">Value</th> }
-                            @if (dc("Discount")) { <th class="sortable text-end" data-col="Discount">Discount</th> }
-                            @if (dc("NetValue")) { <th class="sortable text-end" data-col="NetValue">Net Value</th> }
-                            @if (dc("VatAmount")) { <th class="sortable text-end" data-col="VatAmount">VAT</th> }
-                            @if (dc("GrossAmount")) { <th class="sortable text-end" data-col="GrossAmount">Gross Amt</th> }
-                            @if (dc("Profit")) { <th class="sortable text-end" data-col="ProfitValue">Profit</th> }
-                            @if (dc("Markup")) { <th class="text-end">Markup %</th> }
-                            @if (dc("Margin")) { <th class="text-end">Margin %</th> }
-                            @if (dc("Cost")) { <th class="sortable text-end" data-col="Cost">Cost</th> }
-                            @if (dc("TotalCost")) { <th class="sortable text-end" data-col="TotalCost">Total Cost</th> }
-                            @if (dc("TotalStockQty")) { <th class="sortable text-end" data-col="TotalStockQty">Stock Qty</th> }
-                            @if (dc("TotalStockValue")) { <th class="text-end">Stock Value</th> }
-                            @if (dc("EntityCode")) { <th>Entity Code</th> }
-                            @if (dc("EntityName")) { <th>Entity Name</th> }
-                            @if (dc("InvoiceNumber")) { <th>Invoice No</th> }
-                            @if (dc("InvoiceType")) { <th>Inv. Type</th> }
-                            @if (dc("StoreCode")) { <th>Store Code</th> }
-                            @if (dc("StoreName")) { <th>Store</th> }
-                            @if (dc("StationCode")) { <th>Station</th> }
-                            @if (dc("DateTrans")) { <th class="sortable" data-col="DateTrans">Date</th> }
-                            @if (dc("UserCode")) { <th>User</th> }
-                            @if (dc("AgentName")) { <th>Agent</th> }
-                            @if (dc("ZReportNumber")) { <th>Z Report</th> }
-                            @if (dc("PaymentType")) { <th>Payment Type</th> }
-                            @if (dc("ItemCategory")) { <th>Category</th> }
-                            @if (dc("ItemDepartment")) { <th>Department</th> }
-                            @if (dc("Brand")) { <th>Brand</th> }
-                            @if (dc("Season")) { <th>Season</th> }
-                            @if (dc("Model")) { <th>Model</th> }
-                            @if (dc("Colour")) { <th>Colour</th> }
-                            @if (dc("Size")) { <th>Size</th> }
-                            @if (dc("Franchise")) { <th>Franchise</th> }
-                            @if (dc("ItemSupplier")) { <th>Supplier</th> }
-                            @if (dc("Price1Excl")) { <th class="text-end">Price 1 Ex</th> }
-                            @if (dc("Price1Incl")) { <th class="text-end">Price 1 In</th> }
-                            @if (dc("Price2Excl")) { <th class="text-end">Price 2 Ex</th> }
-                            @if (dc("Price2Incl")) { <th class="text-end">Price 2 In</th> }
-                            @if (dc("Price3Excl")) { <th class="text-end">Price 3 Ex</th> }
-                            @if (dc("Price3Incl")) { <th class="text-end">Price 3 In</th> }
-                            @if (dc("ItemAttr1")) { <th>Attr 1</th> }
-                            @if (dc("ItemAttr2")) { <th>Attr 2</th> }
-                            @if (dc("ItemAttr3")) { <th>Attr 3</th> }
-                            @if (dc("ItemAttr4")) { <th>Attr 4</th> }
-                            @if (dc("ItemAttr5")) { <th>Attr 5</th> }
-                            @if (dc("ItemAttr6")) { <th>Attr 6</th> }
+                            @if (hasL1) { <th class="sortable th-group" data-col="Level1Description">Group 1</th> }
+                            @if (hasL2) { <th class="sortable th-group" data-col="Level2Description">Group 2</th> }
+                            @if (hasL3) { <th class="sortable th-group" data-col="Level3Description">Group 3</th> }
+                            @if (showItem && dc("ItemCode")) { <th class="sortable th-item" data-col="ItemCode">Code</th> }
+                            @if (showItem && dc("ItemName")) { <th class="sortable th-item" data-col="ItemDescription">Description</th> }
+                            @if (dc("Quantity")) { <th class="sortable text-end th-qty" data-col="Quantity">Qty</th> }
+                            @if (dc("Value")) { <th class="sortable text-end th-amount" data-col="ValueBeforeDiscount">Value</th> }
+                            @if (dc("Discount")) { <th class="sortable text-end th-discount" data-col="Discount">Discount</th> }
+                            @if (dc("NetValue")) { <th class="sortable text-end th-amount" data-col="NetValue">Net Value</th> }
+                            @if (dc("VatAmount")) { <th class="sortable text-end th-vat" data-col="VatAmount">VAT</th> }
+                            @if (dc("GrossAmount")) { <th class="sortable text-end th-amount" data-col="GrossAmount">Gross Amt</th> }
+                            @if (dc("Profit")) { <th class="sortable text-end th-profit" data-col="ProfitValue">Profit</th> }
+                            @if (dc("Markup")) { <th class="text-end th-profit" data-col="Markup">Markup %</th> }
+                            @if (dc("Margin")) { <th class="text-end th-profit" data-col="Margin">Margin %</th> }
+                            @if (dc("Cost")) { <th class="sortable text-end th-cost" data-col="Cost">Cost</th> }
+                            @if (dc("TotalCost")) { <th class="sortable text-end th-cost" data-col="TotalCost">Total Cost</th> }
+                            @if (dc("TotalStockQty")) { <th class="sortable text-end th-stock" data-col="TotalStockQty">Stock Qty</th> }
+                            @if (dc("TotalStockValue")) { <th class="text-end th-stock" data-col="TotalStockValue">Stock Value</th> }
+                            @if (dc("EntityCode")) { <th class="th-entity" data-col="EntityCode">Entity Code</th> }
+                            @if (dc("EntityName")) { <th class="th-entity" data-col="EntityName">Entity Name</th> }
+                            @if (dc("InvoiceNumber")) { <th class="th-doc" data-col="InvoiceNumber">Invoice No</th> }
+                            @if (dc("InvoiceType")) { <th class="th-doc" data-col="InvoiceType">Inv. Type</th> }
+                            @if (dc("StoreCode")) { <th class="th-loc" data-col="StoreCode">Store Code</th> }
+                            @if (dc("StoreName")) { <th class="th-loc" data-col="StoreName">Store</th> }
+                            @if (dc("StationCode")) { <th class="th-loc" data-col="StationCode">Station</th> }
+                            @if (dc("DateTrans")) { <th class="sortable th-date" data-col="DateTrans">Date</th> }
+                            @if (dc("UserCode")) { <th class="th-meta" data-col="UserCode">User</th> }
+                            @if (dc("AgentName")) { <th class="th-meta" data-col="AgentName">Agent</th> }
+                            @if (dc("ZReportNumber")) { <th class="th-meta" data-col="ZReportNumber">Z Report</th> }
+                            @if (dc("PaymentType")) { <th class="th-meta" data-col="PaymentType">Payment Type</th> }
+                            @if (dc("ItemCategory")) { <th class="th-class" data-col="ItemCategory">Category</th> }
+                            @if (dc("ItemDepartment")) { <th class="th-class" data-col="ItemDepartment">Department</th> }
+                            @if (dc("Brand")) { <th class="th-class" data-col="Brand">Brand</th> }
+                            @if (dc("Season")) { <th class="th-class" data-col="Season">Season</th> }
+                            @if (dc("Model")) { <th class="th-class" data-col="Model">Model</th> }
+                            @if (dc("Colour")) { <th class="th-class" data-col="Colour">Colour</th> }
+                            @if (dc("Size")) { <th class="th-class" data-col="Size">Size</th> }
+                            @if (dc("Franchise")) { <th class="th-class" data-col="Franchise">Franchise</th> }
+                            @if (dc("ItemSupplier")) { <th class="th-class" data-col="ItemSupplier">Supplier</th> }
+                            @if (dc("Price1Excl")) { <th class="text-end th-price" data-col="Price1Excl">Price 1 Ex</th> }
+                            @if (dc("Price1Incl")) { <th class="text-end th-price" data-col="Price1Incl">Price 1 In</th> }
+                            @if (dc("Price2Excl")) { <th class="text-end th-price" data-col="Price2Excl">Price 2 Ex</th> }
+                            @if (dc("Price2Incl")) { <th class="text-end th-price" data-col="Price2Incl">Price 2 In</th> }
+                            @if (dc("Price3Excl")) { <th class="text-end th-price" data-col="Price3Excl">Price 3 Ex</th> }
+                            @if (dc("Price3Incl")) { <th class="text-end th-price" data-col="Price3Incl">Price 3 In</th> }
+                            @if (dc("ItemAttr1")) { <th class="th-attr" data-col="ItemAttr1">Attr 1</th> }
+                            @if (dc("ItemAttr2")) { <th class="th-attr" data-col="ItemAttr2">Attr 2</th> }
+                            @if (dc("ItemAttr3")) { <th class="th-attr" data-col="ItemAttr3">Attr 3</th> }
+                            @if (dc("ItemAttr4")) { <th class="th-attr" data-col="ItemAttr4">Attr 4</th> }
+                            @if (dc("ItemAttr5")) { <th class="th-attr" data-col="ItemAttr5">Attr 5</th> }
+                            @if (dc("ItemAttr6")) { <th class="th-attr" data-col="ItemAttr6">Attr 6</th> }
                         </tr>
                     </thead>
                     <tbody>
@@ -524,6 +583,525 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     <div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>No data found for the selected parameters.</div>
 }
 
+<style>
+    /* Toolbar / thead column group coloring */
+    #resultsTable thead th.th-group      { background: #e0e7ff !important; color:#3730a3; }
+    #resultsTable thead th.th-item       { background: #eff6ff !important; color:#1e3a8a; }
+    #resultsTable thead th.th-qty        { background: #ecfccb !important; color:#365314; }
+    #resultsTable thead th.th-amount     { background: #dcfce7 !important; color:#14532d; }
+    #resultsTable thead th.th-discount   { background: #fee2e2 !important; color:#7f1d1d; }
+    #resultsTable thead th.th-vat        { background: #fef9c3 !important; color:#713f12; }
+    #resultsTable thead th.th-profit     { background: #dbeafe !important; color:#1e40af; }
+    #resultsTable thead th.th-cost       { background: #fde68a !important; color:#78350f; }
+    #resultsTable thead th.th-stock      { background: #cffafe !important; color:#155e75; }
+    #resultsTable thead th.th-entity     { background: #f3e8ff !important; color:#6b21a8; }
+    #resultsTable thead th.th-doc        { background: #fce7f3 !important; color:#9d174d; }
+    #resultsTable thead th.th-loc        { background: #e0f2fe !important; color:#075985; }
+    #resultsTable thead th.th-date       { background: #f1f5f9 !important; color:#334155; }
+    #resultsTable thead th.th-meta       { background: #f3f4f6 !important; color:#374151; }
+    #resultsTable thead th.th-class      { background: #fae8ff !important; color:#86198f; }
+    #resultsTable thead th.th-price      { background: #fef3c7 !important; color:#92400e; }
+    #resultsTable thead th.th-attr       { background: #e5e7eb !important; color:#1f2937; }
+
+    #resultsTable thead th.sortable { cursor: pointer; user-select: none; }
+    #resultsTable thead th.sortable:hover { filter: brightness(0.95); }
+</style>
+
+<!-- Schedule Modal -->
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="scheduleModalLabel"><i class="bi bi-clock-history me-2"></i>Schedule Catalogue Report</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-light border mb-3 py-2">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        The report will run automatically and recipients will receive an email with a link to download the exported file.
+                    </small>
+                </div>
+
+                <h6 class="text-muted mb-2"><i class="bi bi-funnel me-1"></i>Parameters (current selection)</h6>
+                <div class="bg-light rounded p-2 mb-3 small">
+                    <span class="me-3"><strong>Mode:</strong> @Model.ReportMode</span>
+                    <span class="me-3"><strong>Report On:</strong> @Model.ReportOn</span>
+                    @if (Model.HasPrimaryGroup)
+                    {
+                        <span class="me-3"><strong>Group:</strong> @Model.PrimaryGroup @(Model.HasSecondaryGroup ? $"→ {Model.SecondaryGroup}" : "") @(Model.HasThirdGroup ? $"→ {Model.ThirdGroup}" : "")</span>
+                    }
+                    @if (Model.SelectedStoreCodes.Any())
+                    {
+                        <span><strong>Stores:</strong> @Model.SelectedStoreCodes.Count selected</span>
+                    }
+                </div>
+
+                <h6 class="text-muted mb-2"><i class="bi bi-calendar-range me-1"></i>Report date range</h6>
+                <p class="small text-muted mb-2">Computed when the schedule runs (e.g. last 7 days from run date).</p>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Period type</label>
+                        <select class="form-select" id="schedDateRangeType" onchange="onSchedDateRangeTypeChange()">
+                            <option value="LastNDays" data-value="7">Last 7 days</option>
+                            <option value="LastNDays" data-value="30">Last 30 days</option>
+                            <option value="ThisMonth">This month (to today)</option>
+                            <option value="LastMonth">Last month</option>
+                            <option value="YearToDate">Year to date</option>
+                            <option value="LastYear">Last year</option>
+                            <option value="Custom">Custom (fixed dates)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3" id="schedCustomDateFromWrap" style="display:none;">
+                        <label class="form-label fw-semibold">From</label>
+                        <input type="date" class="form-control" id="schedDateFrom" value="@Model.DateFrom.ToString("yyyy-MM-dd")">
+                    </div>
+                    <div class="col-md-3" id="schedCustomDateToWrap" style="display:none;">
+                        <label class="form-label fw-semibold">To</label>
+                        <input type="date" class="form-control" id="schedDateTo" value="@Model.DateTo.ToString("yyyy-MM-dd")">
+                    </div>
+                </div>
+
+                <h6 class="text-muted mb-2"><i class="bi bi-gear me-1"></i>Schedule settings</h6>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Schedule Name</label>
+                        <input type="text" class="form-control" id="schedName" placeholder="e.g. Weekly Catalogue Summary" required>
+                        <small class="text-muted">A label to identify this schedule in the list</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Export Format</label>
+                        <select class="form-select" id="schedFormat">
+                            <option value="Excel">Excel (.xlsx)</option>
+                            <option value="CSV">CSV</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Recurrence</label>
+                        <select class="form-select" id="schedRecurrence" onchange="onRecurrenceChange()">
+                            <option value="Once">Run Once</option>
+                            <option value="Daily" selected>Daily</option>
+                            <option value="Weekly">Weekly</option>
+                            <option value="Monthly">Monthly</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="schedDayContainer" style="display:none;">
+                        <label class="form-label fw-semibold" id="schedDayLabel">Day</label>
+                        <select class="form-select" id="schedDay">
+                            <option value="1">Monday</option>
+                            <option value="2">Tuesday</option>
+                            <option value="3">Wednesday</option>
+                            <option value="4">Thursday</option>
+                            <option value="5">Friday</option>
+                            <option value="6">Saturday</option>
+                            <option value="0">Sunday</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="schedWeeklyDaysContainer" style="display:none;">
+                        <label class="form-label fw-semibold">Days of week</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="1"> Mon</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="2"> Tue</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="3"> Wed</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="4"> Thu</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="5"> Fri</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="6"> Sat</label>
+                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="0"> Sun</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4" id="schedMonthDayContainer" style="display:none;">
+                        <label class="form-label fw-semibold">Day of month</label>
+                        <select class="form-select" id="schedMonthDay">
+                            @for (var i = 1; i <= 28; i++) { <option value="@i">@i</option> }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Time</label>
+                        <input type="time" class="form-control" id="schedTime" value="08:00">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Start date (recurrence)</label>
+                        <input type="date" class="form-control" id="schedStartDate" value="@DateTime.Today.ToString("yyyy-MM-dd")" min="@DateTime.Today.ToString("yyyy-MM-dd")" style="max-width:12rem;">
+                    </div>
+
+                    <div class="col-12 mt-2">
+                        <h6 class="text-muted mb-2"><i class="bi bi-envelope me-1"></i>Recipients</h6>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email addresses</label>
+                        <input type="text" class="form-control" id="schedRecipients" placeholder="user@@company.com, manager@@company.com">
+                        <small class="text-muted">Separate multiple addresses with commas</small>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email Subject <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="schedSubject" placeholder="Catalogue Report - {date}">
+                    </div>
+
+                    <div class="col-12 mt-3">
+                        <h6 class="text-muted mb-2"><i class="bi bi-stars me-1"></i>AI Analysis</h6>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="schedSkipIfEmpty">
+                            <label class="form-check-label fw-semibold" for="schedSkipIfEmpty">Don't send if empty</label>
+                        </div>
+                        <small class="text-muted d-block mb-3">When enabled, the email will not be sent if the report returns 0 records.</small>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="schedIncludeAi" onchange="onSchedAiToggle()">
+                            <label class="form-check-label fw-semibold" for="schedIncludeAi">Include AI Analysis in email</label>
+                        </div>
+                        <small class="text-muted d-block mt-1">When enabled, an AI-generated business intelligence summary will be included in the scheduled email body.</small>
+                        <div id="schedAiDetails" class="mt-2 ps-4" style="display:none;">
+                            <div class="row g-2 align-items-center">
+                                <div class="col-auto">
+                                    <label class="form-label small mb-0 fw-semibold" for="schedAiLocale">Language</label>
+                                </div>
+                                <div class="col-auto">
+                                    <select class="form-select form-select-sm" id="schedAiLocale" style="width:auto;min-width:140px;">
+                                        <option value="el">Ελληνικά</option>
+                                        <option value="en">English</option>
+                                        <option value="sr">Srpski</option>
+                                        <option value="de">Deutsch</option>
+                                        <option value="fr">Français</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="scheduleAlert" class="mt-3" style="display:none;"></div>
+
+                <hr class="my-3">
+                <h6 class="text-muted"><i class="bi bi-list-check me-1"></i>Existing Schedules</h6>
+                <div id="existingSchedules" class="small text-muted">Loading...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveSchedule()">
+                    <i class="bi bi-check-lg me-1"></i>Save Schedule
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Column Settings Modal (searchable) -->
+<div class="modal fade" id="columnSettingsModal" tabindex="-1" aria-labelledby="columnSettingsLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="columnSettingsLabel"><i class="bi bi-layout-three-columns me-2"></i>Column Visibility</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">Search and toggle which columns are visible in the results table. Changes apply immediately.</p>
+                <div class="input-group mb-3">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="colSearchInput" placeholder="Search columns..." oninput="filterColumnList()">
+                </div>
+                <div class="border rounded" style="max-height: 320px; overflow-y: auto;">
+                    <div class="list-group list-group-flush" id="colToggleList">
+                        @{
+                            var visCols = new (string Value, string Label, string Search)[] {
+                                ("Level1Description","Group 1","group 1 level1"),
+                                ("Level2Description","Group 2","group 2 level2"),
+                                ("Level3Description","Group 3","group 3 level3"),
+                                ("ItemCode","Code","code itemcode"),
+                                ("ItemDescription","Description","description itemname name"),
+                                ("Quantity","Qty","qty quantity"),
+                                ("ValueBeforeDiscount","Value","value before discount"),
+                                ("Discount","Discount","discount"),
+                                ("NetValue","Net Value","net value"),
+                                ("VatAmount","VAT","vat tax"),
+                                ("GrossAmount","Gross Amt","gross amount"),
+                                ("ProfitValue","Profit","profit"),
+                                ("Markup","Markup %","markup"),
+                                ("Margin","Margin %","margin"),
+                                ("Cost","Cost","cost"),
+                                ("TotalCost","Total Cost","total cost"),
+                                ("TotalStockQty","Stock Qty","stock qty quantity"),
+                                ("TotalStockValue","Stock Value","stock value"),
+                                ("EntityCode","Entity Code","entity code customer supplier"),
+                                ("EntityName","Entity Name","entity name customer supplier"),
+                                ("InvoiceNumber","Invoice No","invoice number no"),
+                                ("InvoiceType","Inv. Type","invoice type"),
+                                ("StoreCode","Store Code","store code"),
+                                ("StoreName","Store","store name"),
+                                ("StationCode","Station","station"),
+                                ("DateTrans","Date","date transaction"),
+                                ("UserCode","User","user code"),
+                                ("AgentName","Agent","agent"),
+                                ("ZReportNumber","Z Report","z report"),
+                                ("PaymentType","Payment Type","payment type"),
+                                ("ItemCategory","Category","category"),
+                                ("ItemDepartment","Department","department"),
+                                ("Brand","Brand","brand"),
+                                ("Season","Season","season"),
+                                ("Model","Model","model"),
+                                ("Colour","Colour","colour color"),
+                                ("Size","Size","size"),
+                                ("Franchise","Franchise","franchise"),
+                                ("ItemSupplier","Supplier","supplier"),
+                                ("Price1Excl","Price 1 Ex","price 1 excl"),
+                                ("Price1Incl","Price 1 In","price 1 incl"),
+                                ("Price2Excl","Price 2 Ex","price 2 excl"),
+                                ("Price2Incl","Price 2 In","price 2 incl"),
+                                ("Price3Excl","Price 3 Ex","price 3 excl"),
+                                ("Price3Incl","Price 3 In","price 3 incl"),
+                                ("ItemAttr1","Attr 1","attribute 1"),
+                                ("ItemAttr2","Attr 2","attribute 2"),
+                                ("ItemAttr3","Attr 3","attribute 3"),
+                                ("ItemAttr4","Attr 4","attribute 4"),
+                                ("ItemAttr5","Attr 5","attribute 5"),
+                                ("ItemAttr6","Attr 6","attribute 6")
+                            };
+                        }
+                        @foreach (var c in visCols)
+                        {
+                            <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="@c.Search">
+                                <input class="form-check-input col-toggle me-2" type="checkbox" value="@c.Value" checked onchange="applyColumnVisibility()">
+                                <span>@c.Label</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+                <div class="mt-2 d-flex justify-content-between small text-muted">
+                    <span><span id="colVisibleCount">0</span> of @visCols.Length columns visible</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllColumns(true)">Select All</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllColumns(false)">Deselect All</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="resetColumnVisibility()">Show All</button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Analysis Modal -->
+<div class="modal fade" id="aiAnalysisModal" tabindex="-1" aria-labelledby="aiAnalysisModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header" style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);color:white;">
+                <h5 class="modal-title" id="aiAnalysisModalLabel"><i class="bi bi-stars me-2"></i>AI Business Intelligence</h5>
+                <div class="ms-auto me-3 d-flex align-items-center gap-2">
+                    <select id="aiPromptTemplateSelect" class="form-select form-select-sm" style="width:auto;min-width:140px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" title="AI Prompt Template" onchange="this.setAttribute('data-user-picked','1')">
+                        <option value="0" style="color:#333;">Default Prompt</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="togglePromptEditor()" title="Manage AI prompt templates" style="border-color:rgba(255,255,255,0.3);">
+                        <i class="bi bi-gear"></i>
+                    </button>
+                    <label class="me-1 mb-0 small opacity-75" for="aiLangSelect"><i class="bi bi-translate"></i></label>
+                    <select id="aiLangSelect" class="form-select form-select-sm" style="width:auto;min-width:120px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" onchange="saveAiLang(this.value)">
+                        <option value="el" style="color:#333;">Ελληνικά</option>
+                        <option value="en" style="color:#333;">English</option>
+                        <option value="sr" style="color:#333;">Srpski</option>
+                        <option value="de" style="color:#333;">Deutsch</option>
+                        <option value="fr" style="color:#333;">Français</option>
+                    </select>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="aiLoading" class="text-center py-5">
+                    <div class="spinner-grow text-primary mb-2" style="width:3rem;height:3rem;"></div>
+                    <h6 class="mt-3 text-muted">AI is analyzing your report...</h6>
+                    <p class="text-muted small">Identifying patterns, trends, and actionable insights</p>
+                    <div class="progress mx-auto" style="width:200px;height:4px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:100%"></div>
+                    </div>
+                </div>
+                <div id="aiError" class="d-none p-4">
+                    <div class="alert alert-danger" id="aiErrorMsg"></div>
+                </div>
+                <div id="aiPromptEditor" class="d-none border-bottom" style="background:#f8fafc;">
+                    <div class="p-4">
+                        <h6 class="mb-3"><i class="bi bi-pencil-square me-1"></i>AI Prompt Templates</h6>
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold">Template Name</label>
+                                <input type="text" class="form-control form-control-sm" id="aiPromptName" placeholder="e.g. Focus on Top Items">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Applies to</label>
+                                <select class="form-select form-select-sm" id="aiPromptReportType">
+                                    <option value="">All Reports</option>
+                                    <option value="Catalogue" selected>Catalogue</option>
+                                    <option value="AverageBasket">Average Basket</option>
+                                    <option value="PurchasesSales">Purchases vs Sales</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="aiPromptIsDefault">
+                                    <label class="form-check-label small" for="aiPromptIsDefault">Set as default</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold">System Prompt</label>
+                                <textarea class="form-control form-control-sm" id="aiPromptText" rows="6" placeholder="You are a senior financial data analyst..."></textarea>
+                                <small class="text-muted">Include language preferences, exclusion rules, focus areas.</small>
+                            </div>
+                            <div class="col-12 d-flex gap-2">
+                                <button class="btn btn-sm btn-primary" onclick="saveAiPromptTemplate()"><i class="bi bi-save me-1"></i>Save Template</button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="clearPromptEditor()">Clear</button>
+                                <div id="aiPromptAlert" class="ms-2 small align-self-center"></div>
+                            </div>
+                        </div>
+                        <hr class="my-3">
+                        <div id="aiPromptTemplatesList" class="small text-muted">Loading templates...</div>
+                    </div>
+                </div>
+                <div id="aiResults" class="d-none">
+                    <div id="aiHealthBanner" class="px-4 py-3 d-flex align-items-center justify-content-between" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+                        <div class="d-flex align-items-center gap-3">
+                            <div id="aiHealthBadge" class="d-flex flex-column align-items-center justify-content-center rounded-circle" style="width:64px;height:64px;font-weight:700;font-size:1.2rem;"></div>
+                            <div>
+                                <div class="fw-bold" id="aiHealthLabel" style="font-size:1.1rem;"></div>
+                                <div class="text-muted small" id="aiTrendDesc"></div>
+                            </div>
+                        </div>
+                        <div id="aiTrendBadge" class="badge fs-6 px-3 py-2"></div>
+                    </div>
+                    <div class="p-4">
+                        <div class="alert border-start border-4 border-primary bg-primary bg-opacity-10 mb-4" id="aiExecSummary" style="font-size:0.95rem;"></div>
+                        <div class="row g-2 mb-4" id="aiKpis"></div>
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm h-100">
+                                    <div class="card-header bg-transparent border-0 pb-0">
+                                        <h6 class="mb-0"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Key Findings</h6>
+                                    </div>
+                                    <div class="card-body pt-2" id="aiKeyFindings"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-0 shadow-sm h-100">
+                                    <div class="card-header bg-transparent border-0 pb-0">
+                                        <h6 class="mb-0"><i class="bi bi-check2-circle text-success me-2"></i>Recommendations</h6>
+                                    </div>
+                                    <div class="card-body pt-2" id="aiRecs"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-4 mt-1">
+                            <div class="col-md-6" id="aiTopSection">
+                                <div class="card border-0 shadow-sm h-100">
+                                    <div class="card-header bg-transparent border-0 pb-0">
+                                        <h6 class="mb-0"><i class="bi bi-trophy-fill text-warning me-2"></i>Top Performers</h6>
+                                    </div>
+                                    <div class="card-body pt-2" id="aiTopPerformers"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="aiBottomSection">
+                                <div class="card border-0 shadow-sm h-100">
+                                    <div class="card-header bg-transparent border-0 pb-0">
+                                        <h6 class="mb-0"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Needs Attention</h6>
+                                    </div>
+                                    <div class="card-body pt-2" id="aiBottomPerformers"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="aiAlertsSection" class="mt-4"></div>
+                    </div>
+                    <div class="px-4 py-2 d-flex justify-content-between align-items-center" style="background:#f8fafc;border-top:1px solid #e2e8f0;">
+                        <span class="text-muted small"><i class="bi bi-cpu me-1"></i><span id="aiModel"></span></span>
+                        <span class="text-muted small"><i class="bi bi-currency-dollar me-1"></i><span id="aiTokens"></span></span>
+                        <span class="text-muted small"><i class="bi bi-clock me-1"></i><span id="aiTime"></span></span>
+                    </div>
+                    <div class="border-top" style="background:#f8fafc;">
+                        <div class="px-4 py-2">
+                            <h6 class="mb-2 text-muted"><i class="bi bi-chat-dots me-1"></i>Follow-up Questions</h6>
+                        </div>
+                        <div id="aiChatMessages" class="px-4" style="max-height:300px;overflow-y:auto;"></div>
+                        <div class="px-4 py-3">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="aiChatInput" placeholder="Ask a follow-up question about this report..."
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault();sendAiChat();}">
+                                <button class="btn btn-primary" type="button" onclick="sendAiChat()" id="btnSendChat">
+                                    <i class="bi bi-send"></i>
+                                </button>
+                            </div>
+                            <div id="aiChatTokenInfo" class="text-muted small mt-1" style="display:none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);display:none;" onclick="analyzeReport()" id="btnReanalyze">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Re-analyze
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Send to Email Modal -->
+<div class="modal fade" id="sendEmailModal" tabindex="-1" aria-labelledby="sendEmailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sendEmailModalLabel"><i class="bi bi-envelope me-2"></i>Send Catalogue Report via Email</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">To <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="sendEmailRecipients" placeholder="user@@company.com, manager@@company.com">
+                        <small class="text-muted">Comma or semicolon separated</small>
+                        <div class="invalid-feedback" id="sendEmailRecipientsError"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Template</label>
+                        <select class="form-select" id="sendEmailTemplate" onchange="onEmailTemplateChange()">
+                            <option value="">-- No template (default) --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">CC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailCC" placeholder="Semicolon list of email addresses">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">BCC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailBCC" placeholder="Semicolon list of email addresses">
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">Subject</label>
+                        <input type="text" class="form-control" id="sendEmailSubject" value="Power Reports Catalogue — @Model.DateFrom.ToString("yyyy-MM-dd") to @Model.DateTo.ToString("yyyy-MM-dd")">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Format</label>
+                        <select class="form-select" id="sendEmailFormat">
+                            <option value="Excel" selected>Excel (.xlsx)</option>
+                            <option value="CSV">CSV</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email Message</label>
+                        <div class="border rounded" style="max-height:250px; overflow-y:auto; padding:12px; font-family:Arial,sans-serif; font-size:13px; background:#fafafa;" id="sendEmailBodyPreview">
+                            <em class="text-muted">Select a template to preview the email body, or the default body will be used.</em>
+                        </div>
+                    </div>
+                </div>
+                <div id="sendEmailAlert" class="mt-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <a asp-controller="Settings" asp-action="EmailTemplates" class="btn btn-outline-secondary me-auto" title="Manage email templates">
+                    <i class="bi bi-gear me-1"></i>Manage Templates
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="sendEmailBtn" onclick="sendReportEmail()">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="sendEmailSpinner"></span>
+                    <i class="bi bi-send me-1" id="sendEmailIcon"></i>Send
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
     const defaultDisplayCols = ['ItemCode','ItemName','Quantity','Value','Discount','NetValue','VatAmount','GrossAmount'];
@@ -624,12 +1202,14 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     cascade();
 
     function goToPage(p) {
+        try { sessionStorage.setItem('catalogue_scroll', String(window.scrollY || 0)); } catch (e) {}
         document.getElementById('pageNumberHidden').value = p;
         document.getElementById('reportForm').submit();
     }
 
+    // Sticky-sort: remember scroll position before submitting so the user
+    // doesn't get bumped to the top when clicking a column header.
     document.querySelectorAll('th.sortable').forEach(th => {
-        th.style.cursor = 'pointer';
         th.addEventListener('click', function () {
             const col = this.dataset.col;
             const curCol = document.getElementById('sortColumnHidden').value;
@@ -637,6 +1217,12 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             document.getElementById('sortColumnHidden').value = col;
             document.getElementById('sortDirectionHidden').value = (col === curCol && curDir === 'ASC') ? 'DESC' : 'ASC';
             document.getElementById('pageNumberHidden').value = '1';
+            try {
+                const tableTop = document.getElementById('results');
+                const y = tableTop ? (tableTop.getBoundingClientRect().top + window.scrollY) : (window.scrollY || 0);
+                sessionStorage.setItem('catalogue_scroll', String(y));
+                sessionStorage.setItem('catalogue_scroll_source', 'sort');
+            } catch (e) {}
             document.getElementById('reportForm').submit();
         });
     });
@@ -647,5 +1233,699 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         btn.querySelector('.spinner-border').classList.remove('d-none');
         btn.disabled = true;
     });
+
+    // Restore scroll after sort/paginate
+    window.addEventListener('DOMContentLoaded', function () {
+        try {
+            const src = sessionStorage.getItem('catalogue_scroll_source');
+            const y = parseInt(sessionStorage.getItem('catalogue_scroll') || '0', 10);
+            if (y > 0) {
+                setTimeout(function () { window.scrollTo({ top: y, left: 0, behavior: 'auto' }); }, 0);
+            }
+            sessionStorage.removeItem('catalogue_scroll');
+            sessionStorage.removeItem('catalogue_scroll_source');
+        } catch (e) {}
+    });
+
+    // ==================== Schedule ====================
+
+    function onSchedAiToggle() {
+        document.getElementById('schedAiDetails').style.display =
+            document.getElementById('schedIncludeAi').checked ? '' : 'none';
+    }
+
+    function autoSelectScheduleDateRange() {
+        var preset = document.querySelector('input[name="DatePreset"]:checked');
+        if (!preset) return;
+        var map = {
+            'ytd': 'YearToDate', 'lastYear': 'LastYear', 'thisMonth': 'ThisMonth',
+            'lastMonth': 'LastMonth', 'last7': 'LastNDays_7', 'last30': 'LastNDays_30'
+        };
+        var mapped = map[preset.value];
+        if (!mapped) return;
+        var sel = document.getElementById('schedDateRangeType');
+        for (var i = 0; i < sel.options.length; i++) {
+            var opt = sel.options[i];
+            if (mapped.startsWith('LastNDays_')) {
+                var days = mapped.split('_')[1];
+                if (opt.value === 'LastNDays' && opt.getAttribute('data-value') === days) { sel.selectedIndex = i; return; }
+            } else if (opt.value === mapped) { sel.selectedIndex = i; return; }
+        }
+    }
+
+    function onSchedDateRangeTypeChange() {
+        var sel = document.getElementById('schedDateRangeType');
+        var isCustom = (sel.options[sel.selectedIndex].value === 'Custom');
+        document.getElementById('schedCustomDateFromWrap').style.display = isCustom ? '' : 'none';
+        document.getElementById('schedCustomDateToWrap').style.display = isCustom ? '' : 'none';
+    }
+
+    function onRecurrenceChange() {
+        var type = document.getElementById('schedRecurrence').value;
+        document.getElementById('schedDayContainer').style.display = 'none';
+        document.getElementById('schedWeeklyDaysContainer').style.display = 'none';
+        document.getElementById('schedMonthDayContainer').style.display = 'none';
+        if (type === 'Weekly') document.getElementById('schedWeeklyDaysContainer').style.display = '';
+        else if (type === 'Monthly') document.getElementById('schedMonthDayContainer').style.display = '';
+    }
+
+    function validateEmailList(input) {
+        if (!input || !input.trim()) return { valid: false, emails: [], errors: ['Please enter at least one email address.'] };
+        var emails = input.split(/[,;]/).map(function(e) { return e.trim(); }).filter(function(e) { return e.length > 0; });
+        var re = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
+        var invalid = emails.filter(function(e) { return !re.test(e); });
+        if (invalid.length > 0) return { valid: false, emails: emails, errors: invalid.map(function(e) { return 'Invalid: ' + e; }) };
+        return { valid: true, emails: emails, errors: [] };
+    }
+
+    function collectCatalogueParams() {
+        return {
+            dateFrom: document.getElementById('DateFrom').value,
+            dateTo: document.getElementById('DateTo').value,
+            reportMode: document.getElementById('ReportMode').value,
+            reportOn: document.getElementById('ReportOn').value,
+            primaryGroup: document.getElementById('PrimaryGroup').value,
+            secondaryGroup: document.getElementById('SecondaryGroup').value,
+            thirdGroup: document.getElementById('ThirdGroup').value,
+            displayColumns: document.getElementById('displayColumnsHidden').value || '',
+            includeVat: document.getElementById('IncludeVat') ? document.getElementById('IncludeVat').checked : false,
+            showProfit: document.getElementById('ShowProfit') ? document.getElementById('ShowProfit').checked : false,
+            showStock: document.getElementById('ShowStock') ? document.getElementById('ShowStock').checked : false,
+            storeCodes: document.getElementById('selectedStoreCodesHidden').value || '',
+            itemsSelection: document.getElementById('itemsSelectionJsonHidden').value || '',
+            sortColumn: document.getElementById('sortColumnHidden').value || 'ItemCode',
+            sortDirection: document.getElementById('sortDirectionHidden').value || 'ASC'
+        };
+    }
+
+    function saveSchedule() {
+        var name = document.getElementById('schedName').value.trim();
+        var recipients = document.getElementById('schedRecipients').value.trim();
+        var alertDiv = document.getElementById('scheduleAlert');
+
+        if (!name || !recipients) {
+            alertDiv.innerHTML = '<div class="alert alert-warning mb-0">Please fill in schedule name and recipients.</div>';
+            alertDiv.style.display = ''; return;
+        }
+        var ev = validateEmailList(recipients);
+        if (!ev.valid) {
+            alertDiv.innerHTML = '<div class="alert alert-warning mb-0">Invalid email address(es): ' + ev.errors.join('; ') + '</div>';
+            alertDiv.style.display = ''; return;
+        }
+
+        var recurrence = document.getElementById('schedRecurrence').value;
+        if (recurrence === 'Once') {
+            var startDate = document.getElementById('schedStartDate').value;
+            var today = new Date().toISOString().slice(0, 10);
+            if (!startDate || startDate < today) {
+                alertDiv.innerHTML = '<div class="alert alert-warning mb-0">For "Run once", start date must be today or in the future.</div>';
+                alertDiv.style.display = ''; return;
+            }
+        }
+
+        var day = (recurrence === 'Monthly') ? parseInt(document.getElementById('schedMonthDay').value, 10) : null;
+
+        var fd = new FormData();
+        fd.append('scheduleName', name);
+        fd.append('recurrenceType', recurrence);
+        if (day !== null && !isNaN(day)) fd.append('recurrenceDay', day);
+        fd.append('scheduleTime', document.getElementById('schedTime').value);
+        fd.append('exportFormat', document.getElementById('schedFormat').value);
+        fd.append('recipients', recipients);
+        fd.append('emailSubject', document.getElementById('schedSubject').value);
+        fd.append('includeAiAnalysis', document.getElementById('schedIncludeAi').checked);
+        fd.append('aiLocale', document.getElementById('schedAiLocale').value);
+        fd.append('skipIfEmpty', document.getElementById('schedSkipIfEmpty').checked);
+
+        var dsel = document.getElementById('schedDateRangeType');
+        var dopt = dsel.options[dsel.selectedIndex];
+        var reportDateRange = { type: dopt.value };
+        if (reportDateRange.type === 'LastNDays') reportDateRange.value = parseInt(dopt.getAttribute('data-value') || '7', 10);
+        else if (reportDateRange.type === 'Custom') {
+            reportDateRange.dateFrom = document.getElementById('schedDateFrom').value;
+            reportDateRange.dateTo = document.getElementById('schedDateTo').value;
+        }
+
+        var params = collectCatalogueParams();
+        params.reportDateRange = reportDateRange;
+        fd.append('parametersJson', JSON.stringify(params));
+
+        var startDateSc = document.getElementById('schedStartDate').value || new Date().toISOString().slice(0, 10);
+        var recurrenceJson = {
+            type: recurrence,
+            time: document.getElementById('schedTime').value,
+            range: { startDate: startDateSc, noEndDate: true }
+        };
+        if (recurrence === 'Weekly') {
+            var days = [];
+            document.querySelectorAll('.sched-dow:checked').forEach(function(cb) { days.push(parseInt(cb.value, 10)); });
+            recurrenceJson.pattern = { interval: 1, daysOfWeek: days.length ? days : [1] };
+        } else if (recurrence === 'Monthly') {
+            recurrenceJson.pattern = { dayOfMonth: day !== null ? day : 1 };
+        }
+        fd.append('recurrenceJson', JSON.stringify(recurrenceJson));
+
+        fetch('@Url.Action("SaveCatalogueSchedule", "Reports")', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    alertDiv.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>' + data.message + '</div>';
+                    alertDiv.style.display = '';
+                    document.getElementById('schedName').value = '';
+                    loadExistingSchedules();
+                } else {
+                    alertDiv.innerHTML = '<div class="alert alert-danger mb-0">' + data.message + '</div>';
+                    alertDiv.style.display = '';
+                }
+            })
+            .catch(function() {
+                alertDiv.innerHTML = '<div class="alert alert-danger mb-0">Network error. Please try again.</div>';
+                alertDiv.style.display = '';
+            });
+    }
+
+    function loadExistingSchedules() {
+        fetch('@Url.Action("GetCatalogueSchedules", "Reports")')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var c = document.getElementById('existingSchedules');
+                if (!data || data.length === 0) { c.innerHTML = '<em>No schedules configured yet.</em>'; return; }
+                var html = '<table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th></tr></thead><tbody>';
+                data.forEach(function(s) {
+                    html += '<tr><td>' + s.scheduleName + '</td><td>' + s.recurrenceType + '</td><td>' + s.exportFormat + '</td><td>' + s.scheduleTime + '</td><td>' + (s.nextRun || '-') + '</td></tr>';
+                });
+                html += '</tbody></table>';
+                c.innerHTML = html;
+            })
+            .catch(function() { document.getElementById('existingSchedules').innerHTML = '<em>Could not load schedules.</em>'; });
+    }
+
+    // Load schedules and init date range visibility when modal opens
+    document.addEventListener('DOMContentLoaded', function() {
+        var scheduleModal = document.getElementById('scheduleModal');
+        if (scheduleModal) {
+            scheduleModal.addEventListener('show.bs.modal', function() {
+                loadExistingSchedules();
+                autoSelectScheduleDateRange();
+                onSchedDateRangeTypeChange();
+            });
+        }
+    });
+
+    // ==================== Send to Email ====================
+
+    var _emailTemplatesCache = [];
+
+    function openSendEmailModal() {
+        document.getElementById('sendEmailRecipients').value = '';
+        document.getElementById('sendEmailAlert').style.display = 'none';
+        document.getElementById('sendEmailRecipients').classList.remove('is-invalid');
+        loadEmailTemplates();
+        var m = new bootstrap.Modal(document.getElementById('sendEmailModal'));
+        m.show();
+    }
+
+    function loadEmailTemplates() {
+        fetch('@Url.Action("GetEmailTemplates", "Reports")?reportType=Catalogue')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                _emailTemplatesCache = data || [];
+                var sel = document.getElementById('sendEmailTemplate');
+                sel.innerHTML = '<option value="">-- No template (default) --</option>';
+                data.forEach(function(t) {
+                    var opt = document.createElement('option');
+                    opt.value = t.templateId;
+                    opt.textContent = t.templateName + (t.isDefault ? ' (default)' : '');
+                    opt.dataset.subject = t.emailSubject || '';
+                    sel.appendChild(opt);
+                    if (t.isDefault) opt.selected = true;
+                });
+                onEmailTemplateChange();
+            })
+            .catch(function() {});
+    }
+
+    function onEmailTemplateChange() {
+        var sel = document.getElementById('sendEmailTemplate');
+        var id = parseInt(sel.value, 10);
+        var preview = document.getElementById('sendEmailBodyPreview');
+        if (isNaN(id) || !id) {
+            preview.innerHTML = '<em class="text-muted">Default email body will be used.</em>';
+            return;
+        }
+        var t = _emailTemplatesCache.find(function(x) { return x.templateId === id; });
+        if (!t) return;
+        if (t.emailSubject) document.getElementById('sendEmailSubject').value = replaceMergeFieldsPreview(t.emailSubject);
+        if (t.emailBodyHtml) preview.innerHTML = replaceMergeFieldsPreview(t.emailBodyHtml);
+    }
+
+    function replaceMergeFieldsPreview(text) {
+        return text
+            .replace(/\u00ABReportName\u00BB/g, 'Catalogue')
+            .replace(/\u00ABDatabaseName\u00BB/g, '@(Model.ConnectedDatabase ?? "Unknown")')
+            .replace(/\u00ABPeriod\u00BB/g, '@Model.DateFrom.ToString("yyyy-MM-dd") to @Model.DateTo.ToString("yyyy-MM-dd")')
+            .replace(/\u00ABRowCount\u00BB/g, '@(Model.Results?.Count ?? 0)')
+            .replace(/\u00ABExportFormat\u00BB/g, document.getElementById('sendEmailFormat').value)
+            .replace(/\u00ABGeneratedDate\u00BB/g, new Date().toLocaleString())
+            .replace(/\u00ABUserName\u00BB/g, '@(User.Identity?.Name ?? "Unknown")')
+            .replace(/\u00ABCompanyName\u00BB/g, '@(Model.ConnectedDatabase ?? "")')
+            .replace(/\u00AB/g, '').replace(/\u00BB/g, '');
+    }
+
+    function sendReportEmail() {
+        var ri = document.getElementById('sendEmailRecipients');
+        var alertDiv = document.getElementById('sendEmailAlert');
+        var v = validateEmailList(ri.value);
+        if (!v.valid) {
+            ri.classList.add('is-invalid');
+            document.getElementById('sendEmailRecipientsError').textContent = v.errors.join('; ');
+            return;
+        }
+        ri.classList.remove('is-invalid');
+
+        var btn = document.getElementById('sendEmailBtn');
+        var spinner = document.getElementById('sendEmailSpinner');
+        var icon = document.getElementById('sendEmailIcon');
+        btn.disabled = true; spinner.classList.remove('d-none'); icon.classList.add('d-none');
+
+        var fd = new FormData();
+        fd.append('recipients', ri.value.trim());
+        fd.append('cc', (document.getElementById('sendEmailCC').value || '').trim());
+        fd.append('bcc', (document.getElementById('sendEmailBCC').value || '').trim());
+        fd.append('emailSubject', document.getElementById('sendEmailSubject').value);
+        fd.append('exportFormat', document.getElementById('sendEmailFormat').value);
+        fd.append('templateId', document.getElementById('sendEmailTemplate').value || '');
+
+        var p = collectCatalogueParams();
+        Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+
+        fetch('@Url.Action("SendCatalogueEmail", "Reports")', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false; spinner.classList.add('d-none'); icon.classList.remove('d-none');
+                if (data.success) alertDiv.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>' + data.message + '</div>';
+                else alertDiv.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>' + data.message + '</div>';
+                alertDiv.style.display = '';
+            })
+            .catch(function() {
+                btn.disabled = false; spinner.classList.add('d-none'); icon.classList.remove('d-none');
+                alertDiv.innerHTML = '<div class="alert alert-danger mb-0">Network error. Please try again.</div>';
+                alertDiv.style.display = '';
+            });
+    }
+
+    // ==================== Column Visibility ====================
+
+    function filterColumnList() {
+        var el = document.getElementById('colSearchInput');
+        if (!el) return;
+        var s = el.value.toLowerCase().trim();
+        document.querySelectorAll('#colToggleList label').forEach(function(label) {
+            if (!s) { label.classList.remove('d-none'); return; }
+            var name = (label.getAttribute('data-col-name') || '').toLowerCase();
+            var sp = label.querySelector('span'); var text = sp ? sp.textContent.toLowerCase() : '';
+            var cv = label.querySelector('input') ? label.querySelector('input').value.toLowerCase() : '';
+            label.classList.toggle('d-none', !(name.indexOf(s) !== -1 || text.indexOf(s) !== -1 || cv.indexOf(s) !== -1));
+        });
+    }
+
+    function toggleAllColumns(checked) {
+        document.querySelectorAll('.col-toggle').forEach(function(cb) { cb.checked = checked; });
+        applyColumnVisibility();
+        updateColVisibleCount();
+    }
+
+    function updateColVisibleCount() {
+        var visible = document.querySelectorAll('.col-toggle:checked').length;
+        var el = document.getElementById('colVisibleCount');
+        if (el) el.textContent = visible;
+    }
+
+    function applyColumnVisibility() {
+        var hidden = [];
+        document.querySelectorAll('.col-toggle').forEach(function(cb) { if (!cb.checked) hidden.push(cb.value); });
+        var hiddenInput = document.getElementById('hiddenColumnsInput');
+        if (hiddenInput) hiddenInput.value = hidden.join(',');
+
+        var styleEl = document.getElementById('colVisibilityStyle');
+        if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = 'colVisibilityStyle';
+            document.head.appendChild(styleEl);
+        }
+        var table = document.getElementById('resultsTable');
+        if (!table) return;
+        var rules = [];
+        document.querySelectorAll('.col-toggle').forEach(function(cb) {
+            var colKey = cb.value;
+            if (!cb.checked) {
+                var headers = table.querySelectorAll('thead tr:first-child th');
+                for (var i = 0; i < headers.length; i++) {
+                    if (headers[i].getAttribute('data-col') === colKey) {
+                        var colIdx = i + 1;
+                        rules.push('#resultsTable th:nth-child(' + colIdx + '), #resultsTable td:nth-child(' + colIdx + ') { display: none; }');
+                        break;
+                    }
+                }
+            }
+        });
+        styleEl.textContent = rules.join('\n');
+        updateColVisibleCount();
+    }
+
+    function resetColumnVisibility() {
+        document.querySelectorAll('.col-toggle').forEach(function(cb) { cb.checked = true; });
+        applyColumnVisibility();
+    }
+
+    function initColumnVisibilityFromServer() {
+        var h = '@(Model.HiddenColumns ?? "")';
+        if (!h) { updateColVisibleCount(); return; }
+        h.split(',').filter(function(s) { return s.trim(); }).forEach(function(col) {
+            var cb = document.querySelector('.col-toggle[value="' + col.trim() + '"]');
+            if (cb) cb.checked = false;
+        });
+        applyColumnVisibility();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initColumnVisibilityFromServer();
+        updateColVisibleCount();
+        var colSearch = document.getElementById('colSearchInput');
+        if (colSearch) {
+            colSearch.addEventListener('input', filterColumnList);
+            colSearch.addEventListener('keyup', filterColumnList);
+        }
+        // Check AI status
+        fetch('/Reports/GetAiStatus')
+            .then(r => r.json())
+            .then(d => {
+                if (!d.configured) {
+                    var btn = document.getElementById('btnAnalyze');
+                    if (btn) { btn.title = 'AI not configured — set API key in Settings'; btn.classList.add('disabled'); }
+                    var sa = document.getElementById('schedIncludeAi');
+                    if (sa) { sa.disabled = true; sa.parentElement.title = 'AI not configured'; }
+                }
+            }).catch(() => {});
+    });
+
+    // ==================== AI Analysis ====================
+
+    function saveAiLang(v) { localStorage.setItem('ps_ai_lang', v); }
+    function getAiLang() { return localStorage.getItem('ps_ai_lang') || 'el'; }
+    (function() { var s = document.getElementById('aiLangSelect'); if (s) s.value = getAiLang(); })();
+
+    var _aiConversation = [];
+    var _aiTotalChatTokens = { input: 0, output: 0 };
+
+    function estimateAiCost(inputTok, outputTok) {
+        var cost = (inputTok * 2.5 + outputTok * 10) / 1e6;
+        return cost < 0.005 ? '< $0.01' : '$' + cost.toFixed(2);
+    }
+
+    function analyzeReport() {
+        var modalEl = document.getElementById('aiAnalysisModal');
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        document.getElementById('aiLoading').classList.remove('d-none');
+        document.getElementById('aiError').classList.add('d-none');
+        document.getElementById('aiResults').classList.add('d-none');
+        document.getElementById('aiPromptEditor').classList.add('d-none');
+        document.getElementById('btnReanalyze').style.display = 'none';
+        modal.show();
+
+        var fd = new FormData();
+        var p = collectCatalogueParams();
+        Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+        fd.append('locale', getAiLang());
+        var tplId = document.getElementById('aiPromptTemplateSelect').value;
+        if (tplId && tplId !== '0') fd.append('promptTemplateId', tplId);
+
+        fetch('/Reports/AnalyzeCatalogueReport', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('aiLoading').classList.add('d-none');
+                if (!data.success) {
+                    document.getElementById('aiError').classList.remove('d-none');
+                    document.getElementById('aiErrorMsg').textContent = data.message;
+                    document.getElementById('btnReanalyze').style.display = 'inline-block';
+                    return;
+                }
+                var a = data.analysis;
+                renderAiAnalysis(a);
+                initAiConversation(a);
+                document.getElementById('aiResults').classList.remove('d-none');
+                document.getElementById('btnReanalyze').style.display = 'inline-block';
+            })
+            .catch(err => {
+                document.getElementById('aiLoading').classList.add('d-none');
+                document.getElementById('aiError').classList.remove('d-none');
+                document.getElementById('aiErrorMsg').textContent = 'Network error: ' + err.message;
+                document.getElementById('btnReanalyze').style.display = 'inline-block';
+            });
+    }
+
+    function renderAiAnalysis(a) {
+        var score = parseInt(a.healthScore) || 0;
+        var scoreColor = score >= 80 ? '#16a34a' : score >= 60 ? '#ca8a04' : score >= 40 ? '#ea580c' : '#dc2626';
+        var badge = document.getElementById('aiHealthBadge');
+        badge.style.background = scoreColor; badge.style.color = 'white'; badge.textContent = score;
+        document.getElementById('aiHealthLabel').textContent = a.healthLabel || '';
+        document.getElementById('aiTrendDesc').textContent = a.trendDescription || '';
+        var trendBadge = document.getElementById('aiTrendBadge');
+        var dir = (a.trendDirection || 'stable').toLowerCase();
+        var trendIcon = dir === 'up' ? 'bi-arrow-up-right' : dir === 'down' ? 'bi-arrow-down-right' : dir === 'mixed' ? 'bi-arrow-left-right' : 'bi-dash';
+        trendBadge.className = 'badge fs-6 px-3 py-2 ' + (dir === 'up' ? 'bg-success' : dir === 'down' ? 'bg-danger' : 'bg-secondary');
+        trendBadge.innerHTML = '<i class="bi ' + trendIcon + ' me-1"></i>' + dir.charAt(0).toUpperCase() + dir.slice(1);
+        document.getElementById('aiExecSummary').innerHTML = '<i class="bi bi-stars me-2 text-primary"></i>' + (a.executiveSummary || a.summary || '');
+        var kpisHtml = '';
+        (a.kpis || []).forEach(function(k) {
+            var ti = k.trend === 'up' ? '<i class="bi bi-caret-up-fill text-success"></i>' : k.trend === 'down' ? '<i class="bi bi-caret-down-fill text-danger"></i>' : '<i class="bi bi-dash text-muted"></i>';
+            kpisHtml += '<div class="col-6 col-md-3 col-lg-2"><div class="border rounded p-2 text-center h-100" style="background:#f8fafc;"><div class="text-muted small text-truncate">' + k.label + '</div><div class="fw-bold" style="font-size:1rem;">' + k.value + '</div><div>' + ti + '</div></div></div>';
+        });
+        document.getElementById('aiKpis').innerHTML = kpisHtml;
+        function renderFindings(items, cId, numbered) {
+            var html = '';
+            (items || []).forEach(function(f, i) {
+                var txt = typeof f === 'string' ? f : f.text;
+                var sev = typeof f === 'string' ? 'info' : (f.severity || 'info');
+                if (numbered) {
+                    html += '<div class="d-flex align-items-start gap-2 mb-2"><span class="badge bg-success rounded-circle" style="width:20px;height:20px;font-size:0.65rem;padding:3px;">' + (i+1) + '</span><span class="small">' + txt + '</span></div>';
+                } else {
+                    var sc = sev === 'high' ? 'border-danger' : sev === 'medium' ? 'border-warning' : 'border-info';
+                    var sd = sev === 'high' ? 'text-danger' : sev === 'medium' ? 'text-warning' : 'text-info';
+                    html += '<div class="d-flex align-items-start gap-2 mb-2 border-start border-3 ps-2 ' + sc + '"><i class="bi bi-circle-fill ' + sd + '" style="font-size:0.4rem;margin-top:7px;"></i><span class="small">' + txt + '</span></div>';
+                }
+            });
+            document.getElementById(cId).innerHTML = html || '<span class="text-muted small">—</span>';
+        }
+        renderFindings(a.keyFindings, 'aiKeyFindings', false);
+        renderFindings(a.recommendations, 'aiRecs', true);
+        function renderPerf(list, cId, secId) {
+            var html = '';
+            (list || []).forEach(function(p) {
+                html += '<div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom"><div><div class="fw-semibold small">' + p.name + '</div><div class="text-muted" style="font-size:0.75rem;">' + (p.detail || '') + '</div></div><div class="fw-bold small text-nowrap ms-2">' + (p.value || '') + '</div></div>';
+            });
+            document.getElementById(cId).innerHTML = html || '<span class="text-muted small">—</span>';
+            document.getElementById(secId).style.display = (list && list.length > 0) ? '' : 'none';
+        }
+        renderPerf(a.topPerformers, 'aiTopPerformers', 'aiTopSection');
+        renderPerf(a.bottomPerformers, 'aiBottomPerformers', 'aiBottomSection');
+        var alertsHtml = '';
+        (a.alerts || []).forEach(function(al) {
+            var txt = typeof al === 'string' ? al : al.text;
+            var sev = typeof al === 'string' ? 'warning' : (al.severity || 'warning');
+            var cls = sev === 'critical' ? 'alert-danger' : sev === 'warning' ? 'alert-warning' : 'alert-info';
+            var ic = sev === 'critical' ? 'bi-exclamation-octagon-fill' : sev === 'warning' ? 'bi-exclamation-triangle-fill' : 'bi-info-circle-fill';
+            alertsHtml += '<div class="alert ' + cls + ' py-2 mb-2 small"><i class="bi ' + ic + ' me-2"></i>' + txt + '</div>';
+        });
+        document.getElementById('aiAlertsSection').innerHTML = alertsHtml;
+        document.getElementById('aiModel').textContent = a.modelUsed || '';
+        document.getElementById('aiTokens').textContent = estimateAiCost(a.inputTokens || 0, a.outputTokens || 0);
+        document.getElementById('aiTime').textContent = ((a.durationMs || 0) / 1000).toFixed(1) + 's';
+        document.getElementById('aiChatMessages').innerHTML = '';
+        document.getElementById('aiChatInput').value = '';
+        document.getElementById('aiChatTokenInfo').style.display = 'none';
+        _aiTotalChatTokens = { input: 0, output: 0 };
+    }
+
+    function initAiConversation(analysisJson) {
+        _aiConversation = [
+            { role: 'system', content: 'You are a senior financial data analyst. The user has already received an AI analysis of their catalogue / sales report. Now they want to ask follow-up questions about the same data. Be concise, specific, and reference the data. Respond in the same language as the analysis.' },
+            { role: 'assistant', content: JSON.stringify(analysisJson) }
+        ];
+    }
+
+    function sendAiChat() {
+        var input = document.getElementById('aiChatInput');
+        var msg = input.value.trim();
+        if (!msg) return;
+        input.value = '';
+        appendChatBubble('user', msg);
+
+        var btn = document.getElementById('btnSendChat');
+        btn.disabled = true; input.disabled = true;
+        var tId = 'thinking_' + Date.now();
+        appendChatBubble('thinking', 'Thinking...', tId);
+
+        fetch('/Reports/AiChatFollowup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ history: _aiConversation, message: msg })
+        })
+        .then(r => r.json())
+        .then(data => {
+            removeChatBubble(tId);
+            btn.disabled = false; input.disabled = false; input.focus();
+            if (!data.success) { appendChatBubble('error', data.message || 'Failed to get response.'); return; }
+            _aiConversation.push({ role: 'user', content: msg });
+            _aiConversation.push({ role: 'assistant', content: data.content });
+            appendChatBubble('assistant', data.content);
+            _aiTotalChatTokens.input += (data.inputTokens || 0);
+            _aiTotalChatTokens.output += (data.outputTokens || 0);
+            var info = document.getElementById('aiChatTokenInfo');
+            info.style.display = '';
+            info.innerHTML = '<i class="bi bi-currency-dollar me-1"></i>Chat: ' + estimateAiCost(_aiTotalChatTokens.input, _aiTotalChatTokens.output) +
+                ' | <i class="bi bi-clock me-1"></i>' + ((data.durationMs || 0) / 1000).toFixed(1) + 's';
+        })
+        .catch(err => {
+            removeChatBubble(tId);
+            btn.disabled = false; input.disabled = false;
+            appendChatBubble('error', 'Network error: ' + err.message);
+        });
+    }
+
+    function appendChatBubble(role, text, id) {
+        var c = document.getElementById('aiChatMessages');
+        var div = document.createElement('div');
+        if (id) div.id = id;
+        div.className = 'mb-2 d-flex ' + (role === 'user' ? 'justify-content-end' : 'justify-content-start');
+        var b = document.createElement('div');
+        b.className = 'px-3 py-2 rounded-3 small';
+        b.style.maxWidth = '85%'; b.style.whiteSpace = 'pre-wrap'; b.style.wordBreak = 'break-word';
+        if (role === 'user') { b.style.background = '#6366f1'; b.style.color = 'white'; b.textContent = text; }
+        else if (role === 'thinking') { b.style.background = '#f1f5f9'; b.style.color = '#94a3b8'; b.innerHTML = '<i class="bi bi-three-dots me-1"></i>' + text; }
+        else if (role === 'error') { b.style.background = '#fee2e2'; b.style.color = '#dc2626'; b.textContent = text; }
+        else { b.style.background = '#f1f5f9'; b.style.color = '#1e293b'; b.textContent = text; }
+        div.appendChild(b); c.appendChild(div); c.scrollTop = c.scrollHeight;
+    }
+
+    function removeChatBubble(id) {
+        var el = document.getElementById(id); if (el) el.remove();
+    }
+
+    // ==================== AI Prompt Templates ====================
+
+    var _editingPromptId = 0;
+    var _currentReportType = 'Catalogue';
+
+    function togglePromptEditor() {
+        var el = document.getElementById('aiPromptEditor');
+        if (el.classList.contains('d-none')) {
+            el.classList.remove('d-none');
+            loadAiPromptTemplates();
+            var sid = parseInt(document.getElementById('aiPromptTemplateSelect').value);
+            if (sid > 0) editAiPromptTemplate(sid); else clearPromptEditor();
+        } else {
+            el.classList.add('d-none');
+        }
+    }
+
+    function loadAiPromptTemplates() {
+        fetch('/Reports/GetAiPromptTemplates?reportType=' + encodeURIComponent(_currentReportType))
+            .then(r => r.json())
+            .then(function(data) {
+                var sel = document.getElementById('aiPromptTemplateSelect');
+                var userPicked = sel.getAttribute('data-user-picked') === '1';
+                var savedVal = userPicked ? sel.value : null;
+                sel.innerHTML = '<option value="0" style="color:#333;">Default Prompt</option>';
+                var listHtml = '';
+                var defId = null;
+                (data || []).forEach(function(t) {
+                    sel.innerHTML += '<option value="' + t.templateId + '" style="color:#333;">' + escapeHtml(t.templateName) + (t.isDefault ? ' ★' : '') + '</option>';
+                    var match = t.isDefault && (!t.reportType || t.reportType === '' || t.reportType === _currentReportType);
+                    if (match) defId = t.templateId;
+                    listHtml += '<div class="d-flex justify-content-between align-items-center border-bottom py-2">' +
+                        '<div><strong>' + escapeHtml(t.templateName) + '</strong>' +
+                        (t.isDefault ? ' <span class="badge bg-primary">Default</span>' : '') +
+                        (t.reportType ? ' <span class="badge bg-secondary">' + t.reportType + '</span>' : ' <span class="badge bg-light text-dark">All</span>') +
+                        '</div><div>' +
+                        '<button class="btn btn-sm btn-outline-primary me-1" onclick="editAiPromptTemplate(' + t.templateId + ')"><i class="bi bi-pencil"></i></button>' +
+                        '<button class="btn btn-sm btn-outline-danger" onclick="deleteAiPromptTemplate(' + t.templateId + ')"><i class="bi bi-trash"></i></button>' +
+                        '</div></div>';
+                });
+                document.getElementById('aiPromptTemplatesList').innerHTML = listHtml || '<em>No custom templates yet.</em>';
+                if (userPicked && savedVal) sel.value = savedVal;
+                else if (defId) sel.value = defId;
+            })
+            .catch(function() {
+                document.getElementById('aiPromptTemplatesList').innerHTML = '<em>Could not load templates.</em>';
+            });
+    }
+
+    function saveAiPromptTemplate() {
+        var name = document.getElementById('aiPromptName').value.trim();
+        var prompt = document.getElementById('aiPromptText').value.trim();
+        var a = document.getElementById('aiPromptAlert');
+        if (!name || !prompt) { a.innerHTML = '<span class="text-danger">Name and prompt are required.</span>'; return; }
+        fetch('/Reports/SaveAiPromptTemplate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                templateId: _editingPromptId, templateName: name,
+                reportType: document.getElementById('aiPromptReportType').value || null,
+                systemPrompt: prompt,
+                isDefault: document.getElementById('aiPromptIsDefault').checked
+            })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.success) {
+                a.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>' + d.message + '</span>';
+                clearPromptEditor(); loadAiPromptTemplates();
+            } else {
+                a.innerHTML = '<span class="text-danger">' + d.message + '</span>';
+            }
+        })
+        .catch(() => { a.innerHTML = '<span class="text-danger">Network error.</span>'; });
+    }
+
+    function editAiPromptTemplate(id) {
+        fetch('/Reports/GetAiPromptTemplates?reportType=' + encodeURIComponent(_currentReportType))
+            .then(r => r.json())
+            .then(function(data) {
+                var t = (data || []).find(function(x) { return x.templateId === id; });
+                if (!t) return;
+                _editingPromptId = t.templateId;
+                document.getElementById('aiPromptName').value = t.templateName;
+                document.getElementById('aiPromptReportType').value = t.reportType || '';
+                document.getElementById('aiPromptText').value = t.systemPrompt;
+                document.getElementById('aiPromptIsDefault').checked = t.isDefault;
+                document.getElementById('aiPromptAlert').innerHTML = '<span class="text-info">Editing: ' + escapeHtml(t.templateName) + '</span>';
+            });
+    }
+
+    function deleteAiPromptTemplate(id) {
+        if (!confirm('Delete this template?')) return;
+        fetch('/Reports/DeleteAiPromptTemplate', {
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'templateId=' + id
+        }).then(r => r.json()).then(() => loadAiPromptTemplates());
+    }
+
+    function clearPromptEditor() {
+        _editingPromptId = 0;
+        document.getElementById('aiPromptName').value = '';
+        document.getElementById('aiPromptText').value = '';
+        document.getElementById('aiPromptReportType').value = 'Catalogue';
+        document.getElementById('aiPromptIsDefault').checked = false;
+        document.getElementById('aiPromptAlert').innerHTML = '';
+    }
+
+    function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // Load prompt templates when AI modal opens
+    (function() {
+        var m = document.getElementById('aiAnalysisModal');
+        if (m) m.addEventListener('show.bs.modal', function() { loadAiPromptTemplates(); });
+    })();
 </script>
 }

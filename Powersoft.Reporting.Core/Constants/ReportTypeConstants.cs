@@ -10,6 +10,7 @@ public static class ReportTypeConstants
     public const string AverageBasket = "AverageBasket";
     public const string PurchasesSales = "PurchasesSales";
     public const string BelowMinStock = "BelowMinStock";
+    public const string Catalogue = "Catalogue";
 
     /// <summary>
     /// The set of report types that can be scheduled.
@@ -19,7 +20,8 @@ public static class ReportTypeConstants
     {
         AverageBasket,
         PurchasesSales,
-        BelowMinStock
+        BelowMinStock,
+        Catalogue
     };
 
     public static bool IsSchedulable(string reportType) =>

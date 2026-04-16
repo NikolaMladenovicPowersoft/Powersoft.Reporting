@@ -2706,6 +2706,454 @@ public class ReportsController : Controller
         }
     }
 
+    // ==================== Catalogue Export ====================
+
+    private async Task<(List<CatalogueRow> rows, CatalogueTotals? totals, CatalogueFilter filter)?>
+        RunCatalogueExportQuery(CatalogueFilter filter)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        try
+        {
+            var repo = _repositoryFactory.CreateCatalogueRepository(tenantConnString);
+            filter.PageNumber = 1;
+            filter.PageSize = int.MaxValue;
+            var result = await repo.GetCatalogueDataAsync(filter);
+            var totals = await repo.GetCatalogueTotalsAsync(filter);
+            return (result.Items, totals, filter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting Catalogue report");
+            return null;
+        }
+    }
+
+    private CatalogueFilter BuildCatalogueFilterFromParams(
+        DateTime dateFrom, DateTime dateTo,
+        CatalogueReportMode reportMode, CatalogueReportOn reportOn,
+        CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
+        string? displayColumns, bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemsSelectionJson,
+        string sortColumn, string sortDirection)
+    {
+        var filter = new CatalogueFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            ReportMode = reportMode,
+            ReportOn = reportOn,
+            PrimaryGroup = primaryGroup,
+            SecondaryGroup = secondaryGroup,
+            ThirdGroup = thirdGroup,
+            IncludeVat = includeVat,
+            ShowProfit = showProfit,
+            ShowStock = showStock,
+            StoreCodes = string.IsNullOrEmpty(storeCodes) ? new() : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+            ItemsSelection = ParseItemsSelection(itemsSelectionJson),
+            SortColumn = sortColumn,
+            SortDirection = sortDirection,
+            PageSize = int.MaxValue
+        };
+        if (!string.IsNullOrWhiteSpace(displayColumns))
+            filter.DisplayColumns = displayColumns.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        if (filter.PrimaryGroup == CatalogueGroupBy.None)
+        {
+            filter.SecondaryGroup = CatalogueGroupBy.None;
+            filter.ThirdGroup = CatalogueGroupBy.None;
+        }
+        if (filter.SecondaryGroup == CatalogueGroupBy.None)
+            filter.ThirdGroup = CatalogueGroupBy.None;
+
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
+            filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+
+        return filter;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportCatalogueExcel(
+        DateTime dateFrom, DateTime dateTo,
+        CatalogueReportMode reportMode, CatalogueReportOn reportOn,
+        CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
+        string? displayColumns,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemsSelection,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            storeCodes, itemsSelection, sortColumn, sortDirection);
+
+        var result = await RunCatalogueExportQuery(filter);
+        if (result == null) return RedirectToAction("Catalogue");
+
+        var bytes = new ExcelExportService().GenerateCatalogueExcel(result.Value.rows, result.Value.totals, result.Value.filter);
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportCatalogueCsv(
+        DateTime dateFrom, DateTime dateTo,
+        CatalogueReportMode reportMode, CatalogueReportOn reportOn,
+        CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
+        string? displayColumns,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemsSelection,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            storeCodes, itemsSelection, sortColumn, sortDirection);
+
+        var result = await RunCatalogueExportQuery(filter);
+        if (result == null) return RedirectToAction("Catalogue");
+
+        var bytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+        return File(bytes, "text/csv", $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
+    }
+
+    // ==================== Catalogue Send Email ====================
+
+    [HttpPost]
+    public async Task<IActionResult> SendCatalogueEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo,
+        CatalogueReportMode reportMode, CatalogueReportOn reportOn,
+        CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
+        string? displayColumns,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemsSelection,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Please enter at least one email address." });
+
+        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        if (invalidEmails.Length > 0)
+            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
+
+        var ccList = ParseAndValidateEmailList(cc);
+        var bccList = ParseAndValidateEmailList(bcc);
+        if (ccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
+        if (bccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
+
+        var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            storeCodes, itemsSelection, sortColumn, sortDirection);
+
+        var result = await RunCatalogueExportQuery(filter);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "csv":
+                fileBytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileName = $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            // TODO: implement PdfExportService.GenerateCataloguePdf — fall back to Excel for now
+            case "pdf":
+            default:
+                fileBytes = new ExcelExportService().GenerateCatalogueExcel(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileName = $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+
+        string? templateBody = null;
+        string? templateSubject = null;
+        if (templateId.HasValue && templateId > 0)
+        {
+            try
+            {
+                var tenantConnString = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConnString))
+                {
+                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
+                    if (tmpl != null)
+                    {
+                        templateBody = tmpl.EmailBodyHtml;
+                        templateSubject = tmpl.EmailSubject;
+                    }
+                }
+            }
+            catch { /* fall back to default */ }
+        }
+
+        string ReplaceMergeFields(string text) => text
+            .Replace("\u00ABReportName\u00BB", "Power Reports Catalogue")
+            .Replace("\u00ABDatabaseName\u00BB", dbName)
+            .Replace("\u00ABPeriod\u00BB", period)
+            .Replace("\u00ABRowCount\u00BB", result.Value.rows.Count.ToString())
+            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
+            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
+            .Replace("\u00ABUserName\u00BB", userName)
+            .Replace("\u00ABCompanyName\u00BB", dbName)
+            .Replace("\u00AB", "").Replace("\u00BB", "");
+
+        var subject = string.IsNullOrWhiteSpace(emailSubject)
+            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Power Reports Catalogue — {period}")
+            : emailSubject;
+
+        var selectionLines = new List<string>
+        {
+            $"Report Mode: {reportMode}",
+            $"Report On: {reportOn}",
+            $"Include VAT: {(includeVat ? "Yes" : "No")}"
+        };
+        if (primaryGroup != CatalogueGroupBy.None) selectionLines.Add($"Primary Group: {primaryGroup}");
+        if (secondaryGroup != CatalogueGroupBy.None) selectionLines.Add($"Secondary Group: {secondaryGroup}");
+        if (thirdGroup != CatalogueGroupBy.None) selectionLines.Add($"Third Group: {thirdGroup}");
+        if (showProfit) selectionLines.Add("Show Profit: Yes");
+        if (showStock) selectionLines.Add("Show Stock: Yes");
+        if (!string.IsNullOrWhiteSpace(storeCodes)) selectionLines.Add($"Stores: {storeCodes}");
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
+        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
+            ? ReplaceMergeFields(templateBody)
+            : $@"
+<div style='font-family:Arial,sans-serif;max-width:600px;'>
+    <h2 style='color:#2563eb;'>Power Reports Catalogue</h2>
+    <table style='border-collapse:collapse;width:100%;margin:16px 0;'>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Database</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Period</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{period}</td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Rows</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{result.Value.rows.Count}</td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{exportFormat}</td></tr>
+    </table>
+    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
+    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
+    <p style='color:#6b7280;font-size:13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
+</div>";
+        var selectionsText = string.Join("\n", selectionLines);
+        var textBody = $"Power Reports Catalogue\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+
+        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
+        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
+        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+
+        var sentCount = 0;
+        var sendErrors = new List<string>();
+        foreach (var email in emails)
+        {
+            try
+            {
+                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
+                sentCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send Catalogue report email to {Email}", email);
+                sendErrors.Add(email);
+            }
+        }
+
+        if (sendErrors.Count > 0 && sentCount == 0)
+            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", sendErrors)}" });
+
+        var msg = sentCount == 1 ? $"Report sent to {emails[0]}" : $"Report sent to {sentCount} recipient(s)";
+        if (sendErrors.Count > 0) msg += $" (failed: {string.Join(", ", sendErrors)})";
+        return Json(new { success = true, message = msg });
+    }
+
+    // ==================== Catalogue Schedules ====================
+
+    [HttpGet]
+    public async Task<IActionResult> GetCatalogueSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new List<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.Catalogue);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                s.Recipients, s.ReportType,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                lastRun = s.LastRunDate?.ToString("yyyy-MM-dd HH:mm")
+            }));
+        }
+        catch
+        {
+            return Json(new List<object>());
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveCatalogueSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false)
+    {
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCatalogue))
+            return Json(new { success = false, message = "You don't have permission to create schedules." });
+
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
+            var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.Catalogue);
+            if (count >= maxSchedules)
+                return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                    {
+                        var onceAt = RecurrenceNextRunCalculator.GetOnceScheduleDateTime(recurrenceJson);
+                        if (onceAt.HasValue && onceAt.Value < DateTime.Now)
+                            return Json(new { success = false, message = "For 'Run once', start date and time must be in the future." });
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                    }
+                }
+                else
+                {
+                    nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+            {
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            }
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.Catalogue,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "Unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = parametersJson,
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty
+            };
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving Catalogue schedule");
+            return Json(new { success = false, message = "Failed to save schedule." });
+        }
+    }
+
+    // ==================== Catalogue AI Analysis ====================
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeCatalogueReport(
+        DateTime dateFrom, DateTime dateTo,
+        CatalogueReportMode reportMode, CatalogueReportOn reportOn,
+        CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
+        string? displayColumns,
+        bool includeVat, bool showProfit, bool showStock,
+        string? storeCodes, string? itemsSelection,
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        string? locale = "el", int? promptTemplateId = null)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            storeCodes, itemsSelection, sortColumn, sortDirection);
+
+        var result = await RunCatalogueExportQuery(filter);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        if (result.Value.rows.Count == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvBytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
+            var analyzer = _analyzerFactory.Create();
+            var analysis = await analyzer.AnalyzeAsync(csvData, "Catalogue", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+
+            return Json(new { success = true, analysis });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Catalogue report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
     // ==================== Below Minimum Stock ====================
 
     public async Task<IActionResult> BelowMinStock()

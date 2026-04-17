@@ -3,6 +3,8 @@
 @using Powersoft.Reporting.Core.Models
 @{
     Layout = null;
+    var db = Model.ConnectedDatabase ?? "Unknown";
+    var now = DateTime.Now;
     bool hasResults = Model.Results.Any();
     bool hasL1 = Model.HasPrimaryGroup;
     bool hasL2 = Model.HasSecondaryGroup;
@@ -11,145 +13,328 @@
 
     var displayCols = Model.GetDisplayColumns();
     bool dc(string c) => displayCols.Contains(c, StringComparer.OrdinalIgnoreCase);
+
+    // Group rows by Level1 for collapsed group headers / subtotals (mirrors PrintPsPreview).
+    var grouped = hasL1
+        ? Model.Results.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A").ToList()
+        : null;
+
+    // Common export route values (re-used across PDF/Excel/CSV anchors).
+    var exportRoute = new {
+        dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"),
+        dateTo = Model.DateTo.ToString("yyyy-MM-dd"),
+        reportMode = Model.ReportMode,
+        reportOn = Model.ReportOn,
+        primaryGroup = Model.PrimaryGroup,
+        secondaryGroup = Model.SecondaryGroup,
+        thirdGroup = Model.ThirdGroup,
+        displayColumns = Model.DisplayColumnsString,
+        showProfit = Model.ShowProfit,
+        showStock = Model.ShowStock,
+        storeCodes = Model.SelectedStoreCodesString,
+        sortColumn = Model.SortColumn,
+        sortDirection = Model.SortDirection
+    };
 }
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Catalogue Preview</title>
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.css" />
+    <title>Power Reports Catalogue - Print Preview</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; padding: 16px; background: #fff; color: #1f2937; }
-        .doc-header { border-bottom: 3px solid #1e40af; padding-bottom: 12px; margin-bottom: 16px; }
-        .doc-title { color: #1e40af; font-size: 1.3rem; font-weight: 700; margin: 0; }
-        .doc-subtitle { color: #64748b; font-size: 0.9rem; margin: 2px 0 0 0; }
-        .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: #f8fafc; padding: 10px; border-radius: 4px; margin-bottom: 16px; font-size: 11px; }
-        .meta-grid div strong { color: #334155; display: block; font-size: 10px; text-transform: uppercase; }
-        table.report { width: 100%; border-collapse: collapse; }
-        table.report thead th { background: #eff6ff; color: #1e40af; border-bottom: 2px solid #93c5fd; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
-        table.report thead th.num { text-align: right; }
-        table.report tbody td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; }
-        table.report tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
-        table.report tfoot td { background: #1e293b; color: #fff; padding: 8px; font-weight: 700; }
-        .grp-1 { background: #dbeafe !important; font-weight: 700; }
-        .grp-2 { background: #e0e7ff !important; }
-        .grp-3 { background: #ede9fe !important; }
-        .no-data { text-align: center; padding: 40px; color: #64748b; font-style: italic; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #525659; color: #1e293b; }
+        .toolbar { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: #2c3e50; color: white; padding: 6px 16px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 13px; }
+        .toolbar .title { font-weight: 600; margin-right: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .toolbar .separator { width: 1px; height: 24px; background: rgba(255,255,255,0.2); }
+        .toolbar button, .toolbar .dropdown-btn { background: none; border: 1px solid rgba(255,255,255,0.25); color: white; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+        .toolbar button:hover, .toolbar .dropdown-btn:hover { background: rgba(255,255,255,0.1); }
+        .zoom-controls { display: flex; align-items: center; gap: 4px; }
+        .zoom-controls button { padding: 5px 8px; }
+        .zoom-level { min-width: 42px; text-align: center; font-size: 12px; color: rgba(255,255,255,0.8); }
+        .export-wrap { position: relative; }
+        .export-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: white; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); min-width: 160px; z-index: 200; overflow: hidden; }
+        .export-menu.show { display: block; }
+        .export-menu a { display: flex; align-items: center; gap: 8px; padding: 8px 14px; color: #1e293b; text-decoration: none; font-size: 13px; }
+        .export-menu a:hover { background: #f1f5f9; }
+        .export-menu a i { width: 18px; text-align: center; color: #64748b; }
+        .paper-container { margin: 56px auto 40px; padding: 20px; }
+        .paper { background: white; margin: 0 auto; padding: 48px 56px; box-shadow: 0 2px 12px rgba(0,0,0,0.3); transform-origin: top center; transition: transform 0.2s ease; max-width: 1400px; }
+        .report-header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #1e293b; }
+        .report-header .company-name { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+        .report-header .report-title { font-size: 15px; font-weight: 600; color: #475569; margin-top: 2px; }
+        .report-meta { display: flex; justify-content: space-between; font-size: 11px; color: #64748b; margin-bottom: 16px; }
+        .report-meta .meta-right { text-align: right; }
+        .report-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .report-table thead th { background: #e2e8f0; padding: 5px 8px; text-align: right; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; color: #334155; border-bottom: 2px solid #94a3b8; white-space: nowrap; }
+        .report-table thead th.text-left { text-align: left; }
+        /* Column color cues — mirror grid (purchases=orange, sales=blue, profit=green, cost=amber, stock=cyan). */
+        .report-table thead th.col-trans   { background: #dbeafe !important; color: #1e40af; }
+        .report-table thead th.col-purch   { background: #fff7ed !important; color: #9a3412; }
+        .report-table thead th.col-profit  { background: #ecfdf5 !important; color: #065f46; }
+        .report-table thead th.col-cost    { background: #fef3c7 !important; color: #92400e; }
+        .report-table thead th.col-stock   { background: #ecfeff !important; color: #155e75; }
+        .report-table .group-header td { background: #f8fafc; padding: 6px 8px 3px; font-weight: 700; font-size: 11px; color: #1e293b; border-top: 1px solid #94a3b8; text-align: left; }
+        .report-table tbody td { padding: 3px 8px; text-align: right; border-bottom: 1px solid #f1f5f9; color: #334155; }
+        .report-table tbody td.text-left { text-align: left; }
+        .report-table tbody td.code { color: #2563eb; }
+        .report-table tbody tr:hover td { background: #fafbfd; }
+        .report-table .group-subtotal td { font-weight: 600; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #94a3b8; padding: 4px 8px; background: #f8fafc; font-style: italic; color: #475569; }
+        .report-table .grand-total td { font-weight: 700; border-top: 3px double #1e293b; padding: 6px 8px; background: #f1f5f9; font-size: 11.5px; color: #0f172a; }
+        .report-footer { text-align: center; margin-top: 24px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8; }
+        .no-data { text-align: center; padding: 60px 20px; color: #64748b; font-style: italic; font-size: 13px; }
         @@media print {
-            body { padding: 0; }
-            .no-print { display: none !important; }
+            body { background: white; }
+            .toolbar { display: none !important; }
+            .paper-container { margin: 0; padding: 0; }
+            .paper { box-shadow: none; padding: 20px; transform: none !important; max-width: none; }
+            .report-table { page-break-inside: auto; }
+            .report-table tr { page-break-inside: avoid; }
+            .report-table .group-header { page-break-after: avoid; }
+            .report-footer { page-break-before: avoid; }
         }
     </style>
 </head>
 <body>
-    <div class="doc-header">
-        <h1 class="doc-title"><i class="bi bi-journal-text"></i> Power Reports Catalogue</h1>
-        <p class="doc-subtitle">@Model.ConnectedDatabase &middot; Generated @DateTime.Now.ToString("dd/MM/yyyy HH:mm")</p>
+    <div class="toolbar">
+        <span class="title"><i class="bi bi-journal-text me-1"></i>Power Reports Catalogue &mdash; @db</span>
+        <div class="zoom-controls">
+            <button onclick="zoomOut()" title="Zoom out"><i class="bi bi-zoom-out"></i></button>
+            <span class="zoom-level" id="zoomLabel">100%</span>
+            <button onclick="zoomIn()" title="Zoom in"><i class="bi bi-zoom-in"></i></button>
+            <button onclick="zoomReset()" style="font-size:11px;">Fit</button>
+        </div>
+        <div class="separator"></div>
+        <button onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+        <div class="export-wrap">
+            <button class="dropdown-btn" onclick="toggleExportMenu(event)"><i class="bi bi-download"></i> Export <i class="bi bi-chevron-down" style="font-size:10px;"></i></button>
+            <div class="export-menu" id="exportMenu">
+                <a href="@Url.Action("ExportCatalogueExcel", exportRoute)">
+                    <i class="bi bi-filetype-xlsx"></i> Excel
+                </a>
+                <a href="@Url.Action("ExportCatalogueCsv", exportRoute)">
+                    <i class="bi bi-filetype-csv"></i> CSV
+                </a>
+            </div>
+        </div>
     </div>
 
-    <div class="meta-grid">
-        <div><strong>Period</strong>@Model.DateFrom.ToString("dd/MM/yyyy") – @Model.DateTo.ToString("dd/MM/yyyy")</div>
-        <div><strong>Mode</strong>@Model.ReportMode</div>
-        <div><strong>Report On</strong>@Model.ReportOn</div>
-        <div><strong>Rows</strong>@Model.TotalCount.ToString("N0")</div>
-        @if (hasL1) { <div><strong>Group 1</strong>@Model.PrimaryGroup</div> }
-        @if (hasL2) { <div><strong>Group 2</strong>@Model.SecondaryGroup</div> }
-        @if (hasL3) { <div><strong>Group 3</strong>@Model.ThirdGroup</div> }
-        <div><strong>VAT</strong>@(Model.IncludeVat ? "Included" : "Excluded")</div>
-    </div>
+    <div class="paper-container">
+        <div class="paper" id="paper">
+            <div class="report-header">
+                <div class="company-name">@db</div>
+                <div class="report-title">Power Reports Catalogue</div>
+            </div>
 
-    @if (!hasResults)
-    {
-        <div class="no-data">No data for selected parameters.</div>
-    }
-    else
-    {
-        <table class="report">
-            <thead>
-                <tr>
-                    @if (hasL1) { <th>Group 1</th> }
-                    @if (hasL2) { <th>Group 2</th> }
-                    @if (hasL3) { <th>Group 3</th> }
-                    @if (showItem && dc("ItemCode")) { <th>Code</th> }
-                    @if (showItem && dc("ItemName")) { <th>Description</th> }
-                    @if (dc("Quantity")) { <th class="num">Qty</th> }
-                    @if (dc("Value")) { <th class="num">Value</th> }
-                    @if (dc("Discount")) { <th class="num">Discount</th> }
-                    @if (dc("NetValue")) { <th class="num">Net</th> }
-                    @if (dc("VatAmount")) { <th class="num">VAT</th> }
-                    @if (dc("GrossAmount")) { <th class="num">Gross</th> }
-                    @if (dc("Profit")) { <th class="num">Profit</th> }
-                    @if (dc("Markup")) { <th class="num">Markup %</th> }
-                    @if (dc("Margin")) { <th class="num">Margin %</th> }
-                    @if (dc("Cost")) { <th class="num">Cost</th> }
-                    @if (dc("TotalCost")) { <th class="num">Total Cost</th> }
-                    @if (dc("TotalStockQty")) { <th class="num">Stock Qty</th> }
-                    @if (dc("TotalStockValue")) { <th class="num">Stock Value</th> }
-                </tr>
-            </thead>
-            <tbody>
-                @{ string lastL1 = null, lastL2 = null, lastL3 = null; }
-                @foreach (var row in Model.Results)
-                {
-                    bool newL1 = hasL1 && row.Level1Value != lastL1;
-                    bool newL2 = hasL2 && (row.Level2Value != lastL2 || newL1);
-                    bool newL3 = hasL3 && (row.Level3Value != lastL3 || newL2);
-                    if (newL1) { lastL1 = row.Level1Value; }
-                    if (newL2) { lastL2 = row.Level2Value; }
-                    if (newL3) { lastL3 = row.Level3Value; }
+            <div class="report-meta">
+                <div>
+                    <strong>Printed:</strong> @now.ToString("dd/MM/yyyy HH:mm:ss")<br />
+                    <strong>Rows:</strong> @Model.TotalCount.ToString("N0")
+                </div>
+                <div class="meta-right">
+                    <strong>From:</strong> @Model.DateFrom.ToString("dd/MM/yyyy") &nbsp;
+                    <strong>To:</strong> @Model.DateTo.ToString("dd/MM/yyyy")<br />
+                    <strong>Mode:</strong> @Model.ReportMode &nbsp;|&nbsp;
+                    <strong>Report On:</strong> @Model.ReportOn
+                    @if (hasL1) { <br /><span><strong>Group:</strong> @Model.PrimaryGroup</span> }
+                    @if (hasL2) { <span> &gt; @Model.SecondaryGroup</span> }
+                    @if (hasL3) { <span> &gt; @Model.ThirdGroup</span> }
+                </div>
+            </div>
 
-                    <tr>
-                        @if (hasL1) { <td class="@(newL1 ? "grp-1" : "")">@(newL1 ? row.Level1Value : "")</td> }
-                        @if (hasL2) { <td class="@(newL2 ? "grp-2" : "")">@(newL2 ? row.Level2Value : "")</td> }
-                        @if (hasL3) { <td class="@(newL3 ? "grp-3" : "")">@(newL3 ? row.Level3Value : "")</td> }
-                        @if (showItem && dc("ItemCode")) { <td>@row.ItemCode</td> }
-                        @if (showItem && dc("ItemName")) { <td>@row.ItemDescription</td> }
-                        @if (dc("Quantity")) { <td class="num">@row.Quantity.ToString("N2")</td> }
-                        @if (dc("Value")) { <td class="num">@row.ValueBeforeDiscount.ToString("N2")</td> }
-                        @if (dc("Discount")) { <td class="num">@row.Discount.ToString("N2")</td> }
-                        @if (dc("NetValue")) { <td class="num">@row.NetValue.ToString("N2")</td> }
-                        @if (dc("VatAmount")) { <td class="num">@row.VatAmount.ToString("N2")</td> }
-                        @if (dc("GrossAmount")) { <td class="num">@row.GrossAmount.ToString("N2")</td> }
-                        @if (dc("Profit")) { <td class="num">@row.ProfitValue.ToString("N2")</td> }
-                        @if (dc("Markup")) { <td class="num">@row.Markup.ToString("N1")%</td> }
-                        @if (dc("Margin")) { <td class="num">@row.Margin.ToString("N1")%</td> }
-                        @if (dc("Cost")) { <td class="num">@row.Cost.ToString("N2")</td> }
-                        @if (dc("TotalCost")) { <td class="num">@row.TotalCost.ToString("N2")</td> }
-                        @if (dc("TotalStockQty")) { <td class="num">@row.TotalStockQty.ToString("N0")</td> }
-                        @if (dc("TotalStockValue")) { <td class="num">@row.TotalStockValue.ToString("N2")</td> }
-                    </tr>
-                }
-            </tbody>
-            @if (Model.Totals != null)
+            @if (!hasResults)
             {
-                int countGroupCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
-                int countItemCols = (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
-                int spanCols = countGroupCols + countItemCols;
-                <tfoot>
-                    <tr>
-                        @if (spanCols > 0) { <td colspan="@spanCols">GRAND TOTAL</td> }
-                        @if (dc("Quantity")) { <td class="num">@Model.Totals.TotalQuantity.ToString("N2")</td> }
-                        @if (dc("Value")) { <td class="num">@Model.Totals.TotalValueBeforeDiscount.ToString("N2")</td> }
-                        @if (dc("Discount")) { <td class="num">@Model.Totals.TotalDiscount.ToString("N2")</td> }
-                        @if (dc("NetValue")) { <td class="num">@Model.Totals.TotalNetValue.ToString("N2")</td> }
-                        @if (dc("VatAmount")) { <td class="num">@Model.Totals.TotalVatAmount.ToString("N2")</td> }
-                        @if (dc("GrossAmount")) { <td class="num">@Model.Totals.TotalGrossAmount.ToString("N2")</td> }
-                        @if (dc("Profit")) { <td class="num">@Model.Totals.TotalProfitValue.ToString("N2")</td> }
-                        @if (dc("Markup")) { <td class="num">@Model.Totals.TotalMarkup.ToString("N1")%</td> }
-                        @if (dc("Margin")) { <td class="num">@Model.Totals.TotalMargin.ToString("N1")%</td> }
-                        @if (dc("Cost")) { <td></td> }
-                        @if (dc("TotalCost")) { <td class="num">@Model.Totals.TotalTotalCost.ToString("N2")</td> }
-                        @if (dc("TotalStockQty")) { <td class="num">@Model.Totals.TotalStockQty.ToString("N0")</td> }
-                        @if (dc("TotalStockValue")) { <td></td> }
-                    </tr>
-                </tfoot>
+                <div class="no-data">No data for selected parameters.</div>
             }
-        </table>
-    }
+            else
+            {
+                <table class="report-table" id="reportTable">
+                    <thead>
+                        <tr>
+                            @if (hasL1) { <th class="text-left">@Model.PrimaryGroup</th> }
+                            @if (hasL2) { <th class="text-left">@Model.SecondaryGroup</th> }
+                            @if (hasL3) { <th class="text-left">@Model.ThirdGroup</th> }
+                            @if (showItem && dc("ItemCode")) { <th class="text-left">Code</th> }
+                            @if (showItem && dc("ItemName")) { <th class="text-left">Description</th> }
+                            @if (dc("Quantity"))       { <th class="col-trans">Qty</th> }
+                            @if (dc("Value"))          { <th class="col-trans">Value</th> }
+                            @if (dc("Discount"))       { <th class="col-trans">Discount</th> }
+                            @if (dc("NetValue"))       { <th class="col-trans">Net</th> }
+                            @if (dc("VatAmount"))      { <th class="col-trans">VAT</th> }
+                            @if (dc("GrossAmount"))    { <th class="col-trans">Gross</th> }
+                            @if (dc("Profit"))         { <th class="col-profit">Profit</th> }
+                            @if (dc("Markup"))         { <th class="col-profit">Markup %</th> }
+                            @if (dc("Margin"))         { <th class="col-profit">Margin %</th> }
+                            @if (dc("Cost"))           { <th class="col-cost">Cost</th> }
+                            @if (dc("TotalCost"))      { <th class="col-cost">Total Cost</th> }
+                            @if (dc("TotalStockQty"))  { <th class="col-stock">Stock Qty</th> }
+                            @if (dc("TotalStockValue")){ <th class="col-stock">Stock Value</th> }
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @{
+                        Func<CatalogueRow, string> renderRow = (CatalogueRow row) => "";
+                    }
+                    @if (hasL1 && grouped != null)
+                    {
+                        foreach (var group in grouped)
+                        {
+                            var groupRows = group.ToList();
+                            int totalCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
+                                + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0)
+                                + (dc("Quantity") ? 1 : 0) + (dc("Value") ? 1 : 0) + (dc("Discount") ? 1 : 0)
+                                + (dc("NetValue") ? 1 : 0) + (dc("VatAmount") ? 1 : 0) + (dc("GrossAmount") ? 1 : 0)
+                                + (dc("Profit") ? 1 : 0) + (dc("Markup") ? 1 : 0) + (dc("Margin") ? 1 : 0)
+                                + (dc("Cost") ? 1 : 0) + (dc("TotalCost") ? 1 : 0)
+                                + (dc("TotalStockQty") ? 1 : 0) + (dc("TotalStockValue") ? 1 : 0);
 
-    <div class="no-print" style="margin-top:20px;text-align:center;">
-        <button type="button" class="btn btn-sm btn-primary" onclick="window.print()"><i class="bi bi-printer me-1"></i>Print</button>
+                            <tr class="group-header"><td colspan="@totalCols">@group.Key</td></tr>
+                            foreach (var row in groupRows)
+                            {
+                                <tr>
+                                    @if (hasL1) { <td class="text-left">@(row.Level1Value ?? "N/A")</td> }
+                                    @if (hasL2) { <td class="text-left">@(row.Level2Value ?? "N/A")</td> }
+                                    @if (hasL3) { <td class="text-left">@(row.Level3Value ?? "N/A")</td> }
+                                    @if (showItem && dc("ItemCode")) { <td class="text-left code">@row.ItemCode</td> }
+                                    @if (showItem && dc("ItemName")) { <td class="text-left">@row.ItemDescription</td> }
+                                    @if (dc("Quantity"))       { <td>@row.Quantity.ToString("N2")</td> }
+                                    @if (dc("Value"))          { <td>@row.ValueBeforeDiscount.ToString("N2")</td> }
+                                    @if (dc("Discount"))       { <td>@row.Discount.ToString("N2")</td> }
+                                    @if (dc("NetValue"))       { <td>@row.NetValue.ToString("N2")</td> }
+                                    @if (dc("VatAmount"))      { <td>@row.VatAmount.ToString("N2")</td> }
+                                    @if (dc("GrossAmount"))    { <td>@row.GrossAmount.ToString("N2")</td> }
+                                    @if (dc("Profit"))         { <td>@row.ProfitValue.ToString("N2")</td> }
+                                    @if (dc("Markup"))         { <td>@row.Markup.ToString("N1")%</td> }
+                                    @if (dc("Margin"))         { <td>@row.Margin.ToString("N1")%</td> }
+                                    @if (dc("Cost"))           { <td>@row.Cost.ToString("N2")</td> }
+                                    @if (dc("TotalCost"))      { <td>@row.TotalCost.ToString("N2")</td> }
+                                    @if (dc("TotalStockQty"))  { <td>@row.TotalStockQty.ToString("N0")</td> }
+                                    @if (dc("TotalStockValue")){ <td>@row.TotalStockValue.ToString("N2")</td> }
+                                </tr>
+                            }
+
+                            // Group subtotal
+                            var sQty = groupRows.Sum(r => r.Quantity);
+                            var sVal = groupRows.Sum(r => r.ValueBeforeDiscount);
+                            var sDsc = groupRows.Sum(r => r.Discount);
+                            var sNet = groupRows.Sum(r => r.NetValue);
+                            var sVat = groupRows.Sum(r => r.VatAmount);
+                            var sGrs = groupRows.Sum(r => r.GrossAmount);
+                            var sPft = groupRows.Sum(r => r.ProfitValue);
+                            var sCst = groupRows.Sum(r => r.TotalCost);
+                            var sStkQ = groupRows.Sum(r => r.TotalStockQty);
+                            var sStkV = groupRows.Sum(r => r.TotalStockValue);
+                            var sTrxCost = groupRows.Sum(r => r.TransactionCost);
+                            var sMargin = sNet != 0 ? Math.Round(sPft / sNet * 100, 1) : 0m;
+                            var sMarkup = sTrxCost != 0 ? Math.Round(sPft / sTrxCost * 100, 1) : 100m;
+
+                            int leadingCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
+                                + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
+
+                            <tr class="group-subtotal">
+                                @if (leadingCols > 0)
+                                {
+                                    <td colspan="@leadingCols" class="text-left">Subtotal: @group.Key</td>
+                                }
+                                @if (dc("Quantity"))       { <td>@sQty.ToString("N2")</td> }
+                                @if (dc("Value"))          { <td>@sVal.ToString("N2")</td> }
+                                @if (dc("Discount"))       { <td>@sDsc.ToString("N2")</td> }
+                                @if (dc("NetValue"))       { <td>@sNet.ToString("N2")</td> }
+                                @if (dc("VatAmount"))      { <td>@sVat.ToString("N2")</td> }
+                                @if (dc("GrossAmount"))    { <td>@sGrs.ToString("N2")</td> }
+                                @if (dc("Profit"))         { <td>@sPft.ToString("N2")</td> }
+                                @if (dc("Markup"))         { <td>@sMarkup.ToString("N1")%</td> }
+                                @if (dc("Margin"))         { <td>@sMargin.ToString("N1")%</td> }
+                                @if (dc("Cost"))           { <td></td> }
+                                @if (dc("TotalCost"))      { <td>@sCst.ToString("N2")</td> }
+                                @if (dc("TotalStockQty"))  { <td>@sStkQ.ToString("N0")</td> }
+                                @if (dc("TotalStockValue")){ <td>@sStkV.ToString("N2")</td> }
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        foreach (var row in Model.Results)
+                        {
+                            <tr>
+                                @if (hasL1) { <td class="text-left">@(row.Level1Value ?? "N/A")</td> }
+                                @if (hasL2) { <td class="text-left">@(row.Level2Value ?? "N/A")</td> }
+                                @if (hasL3) { <td class="text-left">@(row.Level3Value ?? "N/A")</td> }
+                                @if (showItem && dc("ItemCode")) { <td class="text-left code">@row.ItemCode</td> }
+                                @if (showItem && dc("ItemName")) { <td class="text-left">@row.ItemDescription</td> }
+                                @if (dc("Quantity"))       { <td>@row.Quantity.ToString("N2")</td> }
+                                @if (dc("Value"))          { <td>@row.ValueBeforeDiscount.ToString("N2")</td> }
+                                @if (dc("Discount"))       { <td>@row.Discount.ToString("N2")</td> }
+                                @if (dc("NetValue"))       { <td>@row.NetValue.ToString("N2")</td> }
+                                @if (dc("VatAmount"))      { <td>@row.VatAmount.ToString("N2")</td> }
+                                @if (dc("GrossAmount"))    { <td>@row.GrossAmount.ToString("N2")</td> }
+                                @if (dc("Profit"))         { <td>@row.ProfitValue.ToString("N2")</td> }
+                                @if (dc("Markup"))         { <td>@row.Markup.ToString("N1")%</td> }
+                                @if (dc("Margin"))         { <td>@row.Margin.ToString("N1")%</td> }
+                                @if (dc("Cost"))           { <td>@row.Cost.ToString("N2")</td> }
+                                @if (dc("TotalCost"))      { <td>@row.TotalCost.ToString("N2")</td> }
+                                @if (dc("TotalStockQty"))  { <td>@row.TotalStockQty.ToString("N0")</td> }
+                                @if (dc("TotalStockValue")){ <td>@row.TotalStockValue.ToString("N2")</td> }
+                            </tr>
+                        }
+                    }
+
+                    @if (Model.Totals != null)
+                    {
+                        int leading = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
+                            + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
+
+                        <tr class="grand-total">
+                            @if (leading > 0)
+                            {
+                                <td colspan="@leading" class="text-left">GRAND TOTAL</td>
+                            }
+                            @if (dc("Quantity"))       { <td>@Model.Totals.TotalQuantity.ToString("N2")</td> }
+                            @if (dc("Value"))          { <td>@Model.Totals.TotalValueBeforeDiscount.ToString("N2")</td> }
+                            @if (dc("Discount"))       { <td>@Model.Totals.TotalDiscount.ToString("N2")</td> }
+                            @if (dc("NetValue"))       { <td>@Model.Totals.TotalNetValue.ToString("N2")</td> }
+                            @if (dc("VatAmount"))      { <td>@Model.Totals.TotalVatAmount.ToString("N2")</td> }
+                            @if (dc("GrossAmount"))    { <td>@Model.Totals.TotalGrossAmount.ToString("N2")</td> }
+                            @if (dc("Profit"))         { <td>@Model.Totals.TotalProfitValue.ToString("N2")</td> }
+                            @if (dc("Markup"))         { <td>@Model.Totals.TotalMarkup.ToString("N1")%</td> }
+                            @if (dc("Margin"))         { <td>@Model.Totals.TotalMargin.ToString("N1")%</td> }
+                            @if (dc("Cost"))           { <td></td> }
+                            @if (dc("TotalCost"))      { <td>@Model.Totals.TotalTotalCost.ToString("N2")</td> }
+                            @if (dc("TotalStockQty"))  { <td>@Model.Totals.TotalStockQty.ToString("N0")</td> }
+                            @if (dc("TotalStockValue")){ <td>@Model.Totals.TotalStockValue.ToString("N2")</td> }
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+
+            <div class="report-footer">End of Report<br />&copy; @now.Year Power Soft Ltd.</div>
+        </div>
     </div>
+
+    <script>
+        var currentZoom = 100;
+        var paper = document.getElementById('paper');
+        function setZoom(val) { currentZoom = Math.max(50, Math.min(250, val)); paper.style.transform = 'scale(' + (currentZoom / 100) + ')'; document.getElementById('zoomLabel').textContent = currentZoom + '%'; }
+        function zoomIn() { setZoom(currentZoom + 10); }
+        function zoomOut() { setZoom(currentZoom - 10); }
+        function zoomReset() { setZoom(100); }
+        setZoom(100);
+        function toggleExportMenu(e) { e.stopPropagation(); document.getElementById('exportMenu').classList.toggle('show'); }
+        document.addEventListener('click', function() { document.getElementById('exportMenu').classList.remove('show'); });
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && (e.key === 'p' || e.key === 'P')) { e.preventDefault(); window.print(); }
+            if (e.ctrlKey && e.key === '+') { e.preventDefault(); zoomIn(); }
+            if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
+            if (e.key === 'Escape') {
+                if (window.parent && window.parent !== window) {
+                    try { window.parent.postMessage({ type: 'cataloguePreviewClose' }, '*'); } catch (err) { }
+                } else {
+                    window.close();
+                }
+            }
+        });
+    </script>
 </body>
 </html>

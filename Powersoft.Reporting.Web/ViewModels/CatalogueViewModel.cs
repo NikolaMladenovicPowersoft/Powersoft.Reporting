@@ -49,26 +49,12 @@ public class CatalogueViewModel
     [Display(Name = "Cost Type")]
     public CatalogueCostBasis CostType { get; set; } = CatalogueCostBasis.CostOnSale;
 
-    // --- Dimension checkboxes ---
-    public bool ShowCustomer { get; set; }
-    public bool ShowSupplierDim { get; set; }
-    public bool ShowStore { get; set; }
-    public bool ShowPaymentType { get; set; }
-    public bool ShowUser { get; set; }
-    public bool ShowAgent { get; set; }
-    public bool ShowItemAgent { get; set; }
-    public bool ShowCustomerAgent { get; set; }
-    public bool ShowZReport { get; set; }
-    public bool ShowRecommendedBy { get; set; }
-    public bool ShowStation { get; set; }
-
     // --- Display value columns (comma-separated string for form binding) ---
     public string DisplayColumnsString { get; set; } = "ItemCode,ItemName,Quantity,Value,Discount,NetValue,VatAmount,GrossAmount";
 
-    // --- Legacy toggles ---
-    [Display(Name = "Include VAT")]
-    public bool IncludeVat { get; set; }
-
+    // --- Quick toggles (synced bidirectionally with Display Columns chips) ---
+    // ShowProfit  ↔ {Profit, Markup, Margin}
+    // ShowStock   ↔ {TotalStockQty, TotalStockValue}
     [Display(Name = "Show Profit")]
     public bool ShowProfit { get; set; } = true;
 
@@ -141,18 +127,6 @@ public class CatalogueViewModel
             StockValueIncludesVat = StockValueIncludesVat,
             CostType = CostType,
             DisplayColumns = GetDisplayColumns(),
-            ShowCustomer = ShowCustomer,
-            ShowSupplier = ShowSupplierDim,
-            ShowStore = ShowStore,
-            ShowPaymentType = ShowPaymentType,
-            ShowUser = ShowUser,
-            ShowAgent = ShowAgent,
-            ShowItemAgent = ShowItemAgent,
-            ShowCustomerAgent = ShowCustomerAgent,
-            ShowZReport = ShowZReport,
-            ShowRecommendedBy = ShowRecommendedBy,
-            ShowStation = ShowStation,
-            IncludeVat = IncludeVat,
             ShowProfit = ShowProfit,
             ShowStock = ShowStock,
             StoreCodes = SelectedStoreCodes,

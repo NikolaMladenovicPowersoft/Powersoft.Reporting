@@ -33,11 +33,17 @@ public class CatalogueRow
     public decimal TotalCost { get; set; }
     public decimal TransactionCost { get; set; }
 
+    // NOTE: The original Powersoft365 (VB.NET / repPowerReportCatalogue.aspx.vb, lines ~2222-2235) defines:
+    //   Margin% = totalProfit / totalNetValue * 100
+    //   Markup% = totalProfit / totalTransactionCost * 100
+    // where "totalProfit" is the SUM of the per-row Profit column, and the per-row Profit column is
+    // Quantity * ProfitBasePrice (NOT Revenue - Cost). We must mirror that exactly to stay 1:1 with
+    // the legacy app. Do NOT subtract TransactionCost here.
     public decimal Margin => NetValue != 0
-        ? Math.Round((ProfitValue - TransactionCost) / NetValue * 100, 2) : 0;
+        ? Math.Round(ProfitValue / NetValue * 100, 2) : 0;
 
     public decimal Markup => TransactionCost != 0
-        ? Math.Round((ProfitValue - TransactionCost) / TransactionCost * 100, 2) : 100;
+        ? Math.Round(ProfitValue / TransactionCost * 100, 2) : 100;
 
     // Stock
     public decimal TotalStockQty { get; set; }

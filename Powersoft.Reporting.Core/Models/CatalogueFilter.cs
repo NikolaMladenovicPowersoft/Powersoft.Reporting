@@ -38,29 +38,9 @@ public class CatalogueFilter : IValidatableObject
         "NetValue", "VatAmount", "GrossAmount"
     };
 
-    // --- Dimension checkboxes (control extra JOINs and columns in output) ---
-    public bool ShowCustomer { get; set; }
-    public bool ShowSupplier { get; set; }
-    public bool ShowStore { get; set; }
-    public bool ShowPaymentType { get; set; }
-    public bool ShowUser { get; set; }
-    public bool ShowAgent { get; set; }
-    public bool ShowItemAgent { get; set; }
-    public bool ShowCustomerAgent { get; set; }
-    public bool ShowZReport { get; set; }
-    public bool ShowRecommendedBy { get; set; }
-    public bool ShowStation { get; set; }
-    public bool ShowCategory { get; set; }
-    public bool ShowDepartment { get; set; }
-    public bool ShowBrand { get; set; }
-    public bool ShowSeason { get; set; }
-    public bool ShowModel { get; set; }
-    public bool ShowColour { get; set; }
-    public bool ShowSize { get; set; }
-    public bool ShowFranchise { get; set; }
-
-    // --- Legacy toggles kept for compatibility ---
-    public bool IncludeVat { get; set; }
+    // --- Quick-toggle convenience flags (kept in sync with DisplayColumns by the UI/controller) ---
+    // ShowProfit ↔ {Profit, Markup, Margin}; ShowStock ↔ {TotalStockQty, TotalStockValue}.
+    // The actual SQL/grid logic uses DisplayColumns; these flags are passed through for export/email metadata.
     public bool ShowProfit { get; set; }
     public bool ShowStock { get; set; }
 

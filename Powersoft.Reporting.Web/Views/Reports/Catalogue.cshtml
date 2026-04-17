@@ -11,7 +11,7 @@
     bool hasL2 = Model.HasSecondaryGroup;
     bool hasL3 = Model.HasThirdGroup;
     bool showItem = !Model.IsSummary || (!hasL1 && !hasL2 && !hasL3);
-    bool useGross = Model.IncludeVat;
+    bool useGross = Model.HasDisplayColumn("GrossAmount");
 
     var displayCols = Model.GetDisplayColumns();
     bool dc(string c) => displayCols.Contains(c, StringComparer.OrdinalIgnoreCase);
@@ -117,69 +117,6 @@
                 </div>
             </div>
 
-            @* ===== ROW 2: Dimension Checkboxes ===== *@
-            <div class="card bg-light mb-3">
-                <div class="card-body py-2">
-                    <label class="form-label fw-semibold small text-muted mb-2">Show Extra Columns</label>
-                    <div class="row g-2">
-                        <div class="col-6 col-md-2">
-                            <div class="form-check form-check-inline">
-                                <input type="checkbox" asp-for="ShowCustomer" class="form-check-input" />
-                                <label asp-for="ShowCustomer" class="form-check-label small">Customer</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="form-check form-check-inline">
-                                <input type="checkbox" asp-for="ShowSupplierDim" class="form-check-input" />
-                                <label asp-for="ShowSupplierDim" class="form-check-label small">Supplier</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="form-check form-check-inline">
-                                <input type="checkbox" asp-for="ShowStore" class="form-check-input" />
-                                <label asp-for="ShowStore" class="form-check-label small">Store</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="form-check form-check-inline">
-                                <input type="checkbox" asp-for="ShowPaymentType" class="form-check-input" />
-                                <label asp-for="ShowPaymentType" class="form-check-label small">Payment Type</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="form-check form-check-inline">
-                                <input type="checkbox" asp-for="ShowUser" class="form-check-input" />
-                                <label asp-for="ShowUser" class="form-check-label small">User</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="form-check form-check-inline">
-                                <input type="checkbox" asp-for="ShowAgent" class="form-check-input" />
-                                <label asp-for="ShowAgent" class="form-check-label small">Agent</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="form-check form-check-inline">
-                                <input type="checkbox" asp-for="ShowStation" class="form-check-input" />
-                                <label asp-for="ShowStation" class="form-check-label small">Station</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="form-check form-check-inline">
-                                <input type="checkbox" asp-for="ShowZReport" class="form-check-input" />
-                                <label asp-for="ShowZReport" class="form-check-label small">Z Report</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-2">
-                            <div class="form-check form-check-inline">
-                                <input type="checkbox" asp-for="ShowRecommendedBy" class="form-check-input" />
-                                <label asp-for="ShowRecommendedBy" class="form-check-label small">Recommended By</label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             @* ===== ROW 3: Grouping ===== *@
             <div class="row g-3 mb-3 align-items-end">
                 <div class="col-6 col-md-2">
@@ -221,16 +158,12 @@
                 <div class="col-12 col-md-4">
                     <label class="form-label fw-semibold small mb-1">Display Options</label>
                     <div class="d-flex flex-wrap gap-3 pt-1">
-                        <div class="form-check">
-                            <input type="checkbox" asp-for="IncludeVat" class="form-check-input" />
-                            <label asp-for="IncludeVat" class="form-check-label small">Show Gross (incl. VAT)</label>
-                        </div>
-                        <div class="form-check">
-                            <input type="checkbox" asp-for="ShowProfit" class="form-check-input" />
+                        <div class="form-check" title="Quick-toggle for Profit / Markup / Margin columns. Synced with Display Columns selector.">
+                            <input type="checkbox" asp-for="ShowProfit" class="form-check-input" id="showProfitToggle" />
                             <label asp-for="ShowProfit" class="form-check-label small">Show Profit</label>
                         </div>
-                        <div class="form-check">
-                            <input type="checkbox" asp-for="ShowStock" class="form-check-input" />
+                        <div class="form-check" title="Quick-toggle for Stock Qty / Stock Value columns. Synced with Display Columns selector.">
+                            <input type="checkbox" asp-for="ShowStock" class="form-check-input" id="showStockToggle" />
                             <label asp-for="ShowStock" class="form-check-label small">Show Stock</label>
                         </div>
                     </div>
@@ -318,7 +251,6 @@
                        asp-route-secondaryGroup="@Model.SecondaryGroup"
                        asp-route-thirdGroup="@Model.ThirdGroup"
                        asp-route-displayColumns="@Model.DisplayColumnsString"
-                       asp-route-includeVat="@Model.IncludeVat"
                        asp-route-showProfit="@Model.ShowProfit"
                        asp-route-showStock="@Model.ShowStock"
                        asp-route-storeCodes="@Model.SelectedStoreCodesString"
@@ -337,7 +269,6 @@
                        asp-route-secondaryGroup="@Model.SecondaryGroup"
                        asp-route-thirdGroup="@Model.ThirdGroup"
                        asp-route-displayColumns="@Model.DisplayColumnsString"
-                       asp-route-includeVat="@Model.IncludeVat"
                        asp-route-showProfit="@Model.ShowProfit"
                        asp-route-showStock="@Model.ShowStock"
                        asp-route-storeCodes="@Model.SelectedStoreCodesString"
@@ -522,14 +453,17 @@
         </div>
     </div>
 
-    @* Preview panel — hidden by default, toggled via Preview button in results toolbar *@
-    <div class="card mb-4" id="previewPanel" style="display:none;">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-file-earmark-text me-2"></i>Document Preview</span>
-            <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()"><i class="bi bi-table me-1"></i>Back to Grid</button>
-        </div>
-        <div class="card-body p-0">
-            <iframe id="previewFrame" src="about:blank" style="width:100%;min-height:600px;border:0;"></iframe>
+    @* Preview panel — hidden by default, toggled via Preview button in results toolbar.
+       Mirrors PurchasesSales preview pattern (panel with iframe, dark backdrop). *@
+    <div id="previewPanel" style="display:none;" class="mt-3 mb-4">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+                <span><i class="bi bi-file-earmark-text me-2"></i>Document Preview</span>
+                <button class="btn btn-sm btn-outline-light" onclick="togglePreview()"><i class="bi bi-x-lg me-1"></i>Back to Grid</button>
+            </div>
+            <div class="card-body p-0">
+                <iframe id="previewFrame" src="about:blank" style="width:100%;border:none;min-height:700px;background:#525659;"></iframe>
+            </div>
         </div>
     </div>
 
@@ -1467,7 +1401,6 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             secondaryGroup: document.getElementById('SecondaryGroup').value,
             thirdGroup: document.getElementById('ThirdGroup').value,
             displayColumns: document.getElementById('displayColumnsHidden').value || '',
-            includeVat: document.getElementById('IncludeVat') ? document.getElementById('IncludeVat').checked : false,
             showProfit: document.getElementById('ShowProfit') ? document.getElementById('ShowProfit').checked : false,
             showStock: document.getElementById('ShowStock') ? document.getElementById('ShowStock').checked : false,
             storeCodes: document.getElementById('selectedStoreCodesHidden').value || '',
@@ -1767,9 +1700,107 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         applyColumnVisibility();
     }
 
+    // ==================== Show Profit / Show Stock <-> Display Columns sync ====================
+    // Mapping of "quick toggle" -> Display Columns names (server) and col-toggle values (client visibility modal).
+    // Display Columns names ("Profit") differ slightly from col-toggle values ("ProfitValue").
+    var SYNC_GROUPS = {
+        showProfitToggle: { display: ['Profit','Markup','Margin'], colToggle: ['ProfitValue','Markup','Margin'] },
+        showStockToggle:  { display: ['TotalStockQty','TotalStockValue'], colToggle: ['TotalStockQty','TotalStockValue'] }
+    };
+
+    function _getDisplayColsArr() {
+        var hidden = document.getElementById('displayColumnsHidden');
+        if (!hidden) return [];
+        return (hidden.value || '').split(',').map(function(s){ return s.trim(); }).filter(function(s){ return s.length > 0; });
+    }
+    function _setDisplayColsArr(cols) {
+        var hidden = document.getElementById('displayColumnsHidden');
+        if (hidden) hidden.value = cols.join(',');
+    }
+    function _hasAnyCi(arr, names) {
+        var lower = arr.map(function(s){ return s.toLowerCase(); });
+        for (var i = 0; i < names.length; i++) {
+            if (lower.indexOf(names[i].toLowerCase()) >= 0) return true;
+        }
+        return false;
+    }
+    function _addUniqueCi(arr, name) {
+        var exists = arr.some(function(s){ return s.toLowerCase() === name.toLowerCase(); });
+        if (!exists) arr.push(name);
+        return arr;
+    }
+    function _removeCi(arr, name) {
+        return arr.filter(function(s){ return s.toLowerCase() !== name.toLowerCase(); });
+    }
+
+    // When Show Profit / Show Stock toggle is changed by the user.
+    function onQuickToggleChange(toggleId) {
+        var toggle = document.getElementById(toggleId);
+        var grp = SYNC_GROUPS[toggleId];
+        if (!toggle || !grp) return;
+        var checked = toggle.checked;
+
+        // 1) Update server-side DisplayColumns hidden input
+        var cols = _getDisplayColsArr();
+        if (checked) {
+            grp.display.forEach(function(n){ cols = _addUniqueCi(cols, n); });
+        } else {
+            grp.display.forEach(function(n){ cols = _removeCi(cols, n); });
+        }
+        _setDisplayColsArr(cols);
+
+        // 2) Sync client-side col-toggle checkboxes (visibility modal). Only meaningful for already-rendered columns;
+        //    after Generate Report newly-added DisplayColumns will appear with col-toggle checked by default.
+        grp.colToggle.forEach(function(v){
+            var cb = document.querySelector('.col-toggle[value="' + v + '"]');
+            if (cb) cb.checked = checked;
+        });
+        if (typeof applyColumnVisibility === 'function') applyColumnVisibility();
+    }
+
+    // When user toggles a col-toggle checkbox in the visibility modal: refresh quick-toggle states.
+    function syncQuickTogglesFromColToggles() {
+        Object.keys(SYNC_GROUPS).forEach(function(id) {
+            var toggle = document.getElementById(id);
+            if (!toggle) return;
+            var grp = SYNC_GROUPS[id];
+            var anyChecked = grp.colToggle.some(function(v) {
+                var cb = document.querySelector('.col-toggle[value="' + v + '"]');
+                return cb && cb.checked;
+            });
+            // Only flip if a corresponding column actually exists in DOM (i.e. server returned it),
+            // otherwise rely on DisplayColumns-based init below.
+            var anyExists = grp.colToggle.some(function(v) {
+                return !!document.querySelector('.col-toggle[value="' + v + '"]');
+            });
+            if (anyExists) toggle.checked = anyChecked;
+        });
+    }
+
+    // Initial sync on page load: derive quick-toggle state from current DisplayColumns.
+    function initQuickTogglesFromDisplayCols() {
+        var cols = _getDisplayColsArr();
+        Object.keys(SYNC_GROUPS).forEach(function(id) {
+            var toggle = document.getElementById(id);
+            if (!toggle) return;
+            toggle.checked = _hasAnyCi(cols, SYNC_GROUPS[id].display);
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         initColumnVisibilityFromServer();
         updateColVisibleCount();
+
+        // Wire bidirectional sync between quick-toggles and Display Columns / col-toggle modal
+        initQuickTogglesFromDisplayCols();
+        ['showProfitToggle','showStockToggle'].forEach(function(id) {
+            var t = document.getElementById(id);
+            if (t) t.addEventListener('change', function() { onQuickToggleChange(id); });
+        });
+        document.querySelectorAll('.col-toggle').forEach(function(cb) {
+            cb.addEventListener('change', syncQuickTogglesFromColToggles);
+        });
+
         var colSearch = document.getElementById('colSearchInput');
         if (colSearch) {
             colSearch.addEventListener('input', filterColumnList);
@@ -2113,7 +2144,6 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                     + '&primaryGroup=@Model.PrimaryGroup'
                     + '&secondaryGroup=@Model.SecondaryGroup'
                     + '&thirdGroup=@Model.ThirdGroup'
-                    + '&includeVat=@Model.IncludeVat'
                     + '&showProfit=@Model.ShowProfit'
                     + '&showStock=@Model.ShowStock'
                     + '&profitBasedOn=@((int)Model.ProfitBasedOn)'
@@ -2139,6 +2169,13 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             btn.classList.add('btn-outline-primary');
         }
     }
+
+    // Close preview when iframe (Esc inside) requests it.
+    window.addEventListener('message', function (ev) {
+        if (ev && ev.data && ev.data.type === 'cataloguePreviewClose' && previewOpen) {
+            togglePreview();
+        }
+    });
 
     // ==================== Item Detail Modal (Transaction History + Stock Position) ====================
     // Mirrors original Powersoft365 "Item Transactions History" dialog with toggle to "Item Stock Position".

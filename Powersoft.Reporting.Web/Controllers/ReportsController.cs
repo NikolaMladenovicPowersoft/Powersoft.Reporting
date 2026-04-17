@@ -2790,7 +2790,7 @@ public class ReportsController : Controller
         DateTime dateFrom, DateTime dateTo,
         CatalogueReportMode reportMode, CatalogueReportOn reportOn,
         CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
-        string? displayColumns, bool includeVat, bool showProfit, bool showStock,
+        string? displayColumns, bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelectionJson,
         string sortColumn, string sortDirection,
         CatalogueDateBasis dateBasis = CatalogueDateBasis.TransactionDate,
@@ -2807,7 +2807,6 @@ public class ReportsController : Controller
             PrimaryGroup = primaryGroup,
             SecondaryGroup = secondaryGroup,
             ThirdGroup = thirdGroup,
-            IncludeVat = includeVat,
             ShowProfit = showProfit,
             ShowStock = showStock,
             StoreCodes = string.IsNullOrEmpty(storeCodes) ? new() : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
@@ -2839,12 +2838,12 @@ public class ReportsController : Controller
         CatalogueReportMode reportMode, CatalogueReportOn reportOn,
         CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
         string? displayColumns,
-        bool includeVat, bool showProfit, bool showStock,
+        bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelection,
         string sortColumn = "ItemCode", string sortDirection = "ASC")
     {
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
-            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
             storeCodes, itemsSelection, sortColumn, sortDirection);
 
         var result = await RunCatalogueExportQuery(filter);
@@ -2862,12 +2861,12 @@ public class ReportsController : Controller
         CatalogueReportMode reportMode, CatalogueReportOn reportOn,
         CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
         string? displayColumns,
-        bool includeVat, bool showProfit, bool showStock,
+        bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelection,
         string sortColumn = "ItemCode", string sortDirection = "ASC")
     {
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
-            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
             storeCodes, itemsSelection, sortColumn, sortDirection);
 
         var result = await RunCatalogueExportQuery(filter);
@@ -2885,7 +2884,7 @@ public class ReportsController : Controller
         CatalogueReportMode reportMode, CatalogueReportOn reportOn,
         CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
         string? displayColumns,
-        bool includeVat, bool showProfit, bool showStock,
+        bool showProfit, bool showStock,
         int profitBasedOn = 99, bool profitIncludesVat = false,
         int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
         int costType = 99,
@@ -2895,7 +2894,7 @@ public class ReportsController : Controller
         bool useDateTime = false)
     {
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
-            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
             storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
 
         filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
@@ -2918,7 +2917,6 @@ public class ReportsController : Controller
             PrimaryGroup = primaryGroup,
             SecondaryGroup = secondaryGroup,
             ThirdGroup = thirdGroup,
-            IncludeVat = includeVat,
             ShowProfit = showProfit,
             ShowStock = showStock,
             ProfitBasedOn = (CatalogueCostBasis)profitBasedOn,
@@ -2949,7 +2947,7 @@ public class ReportsController : Controller
         CatalogueReportMode reportMode, CatalogueReportOn reportOn,
         CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
         string? displayColumns,
-        bool includeVat, bool showProfit, bool showStock,
+        bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelection,
         string sortColumn = "ItemCode", string sortDirection = "ASC")
     {
@@ -2969,7 +2967,7 @@ public class ReportsController : Controller
             return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
 
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
-            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
             storeCodes, itemsSelection, sortColumn, sortDirection);
 
         var result = await RunCatalogueExportQuery(filter);
@@ -3040,8 +3038,7 @@ public class ReportsController : Controller
         var selectionLines = new List<string>
         {
             $"Report Mode: {reportMode}",
-            $"Report On: {reportOn}",
-            $"Include VAT: {(includeVat ? "Yes" : "No")}"
+            $"Report On: {reportOn}"
         };
         if (primaryGroup != CatalogueGroupBy.None) selectionLines.Add($"Primary Group: {primaryGroup}");
         if (secondaryGroup != CatalogueGroupBy.None) selectionLines.Add($"Secondary Group: {secondaryGroup}");
@@ -3224,7 +3221,7 @@ public class ReportsController : Controller
         CatalogueReportMode reportMode, CatalogueReportOn reportOn,
         CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
         string? displayColumns,
-        bool includeVat, bool showProfit, bool showStock,
+        bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelection,
         string sortColumn = "ItemCode", string sortDirection = "ASC",
         string? locale = "el", int? promptTemplateId = null)
@@ -3233,7 +3230,7 @@ public class ReportsController : Controller
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
 
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
-            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
             storeCodes, itemsSelection, sortColumn, sortDirection);
 
         var result = await RunCatalogueExportQuery(filter);

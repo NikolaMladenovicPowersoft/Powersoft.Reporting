@@ -20,9 +20,13 @@ public class CatalogueTotals
     /// </summary>
     public decimal TotalProfitValue { get; set; }
 
+    // Mirror the legacy Powersoft365 formula (repPowerReportCatalogue.aspx.vb, lines ~2222-2235):
+    //   Margin% = totalProfit / totalNetValue * 100
+    //   Markup% = totalProfit / totalTransactionCost * 100
+    // where totalProfit = SUM of per-row ProfitValue (= Quantity * ProfitBasePrice). Do NOT subtract cost.
     public decimal TotalMargin => TotalNetValue != 0
-        ? Math.Round((TotalProfitValue - TotalTransactionCost) / TotalNetValue * 100, 2) : 0;
+        ? Math.Round(TotalProfitValue / TotalNetValue * 100, 2) : 0;
 
     public decimal TotalMarkup => TotalTransactionCost != 0
-        ? Math.Round((TotalProfitValue - TotalTransactionCost) / TotalTransactionCost * 100, 2) : 100;
+        ? Math.Round(TotalProfitValue / TotalTransactionCost * 100, 2) : 100;
 }

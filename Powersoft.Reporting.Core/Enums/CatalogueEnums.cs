@@ -79,3 +79,16 @@ public enum CatalogueCostBasis
     [Display(Name = "Price 3")]
     Price3 = 3
 }
+
+/// <summary>
+/// Controls which date column (on tbl_*Header rows) drives the period filter.
+/// Mirrors original rbDateSelection radio in repPowerReportCatalogue.aspx.vb.
+/// </summary>
+public enum CatalogueDateBasis
+{
+    [Display(Name = "Transaction Date")]
+    TransactionDate = 0,
+    [Display(Name = "Session Date")]
+    SessionDate = 1
+}
+

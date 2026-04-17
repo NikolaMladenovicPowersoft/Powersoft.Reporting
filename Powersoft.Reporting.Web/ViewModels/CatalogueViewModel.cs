@@ -12,6 +12,12 @@ public class CatalogueViewModel
     [Required] [DataType(DataType.Date)] [Display(Name = "Date To")]
     public DateTime DateTo { get; set; } = DateTime.Today;
 
+    [Display(Name = "Date Basis")]
+    public CatalogueDateBasis DateBasis { get; set; } = CatalogueDateBasis.TransactionDate;
+
+    [Display(Name = "Use Time")]
+    public bool UseDateTime { get; set; } = false;
+
     [Display(Name = "Report Mode")]
     public CatalogueReportMode ReportMode { get; set; } = CatalogueReportMode.Detailed;
 
@@ -122,6 +128,8 @@ public class CatalogueViewModel
         {
             DateFrom = DateFrom,
             DateTo = DateTo,
+            DateBasis = DateBasis,
+            UseDateTime = UseDateTime,
             ReportMode = ReportMode,
             ReportOn = ReportOn,
             PrimaryGroup = PrimaryGroup,

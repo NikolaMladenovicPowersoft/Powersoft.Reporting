@@ -11,6 +11,12 @@ public class CatalogueFilter : IValidatableObject
     [Required] [DataType(DataType.Date)]
     public DateTime DateTo { get; set; } = DateTime.Today;
 
+    /// <summary>Transaction Date (h.DateTrans) vs Session Date (h.SessionDateTime).</summary>
+    public CatalogueDateBasis DateBasis { get; set; } = CatalogueDateBasis.TransactionDate;
+
+    /// <summary>When true, DateFrom/DateTo include time components (CONVERT(DATETIME) in SQL); otherwise date-only.</summary>
+    public bool UseDateTime { get; set; } = false;
+
     public CatalogueReportMode ReportMode { get; set; } = CatalogueReportMode.Detailed;
     public CatalogueReportOn ReportOn { get; set; } = CatalogueReportOn.Sale;
 

@@ -84,12 +84,28 @@
 
             <div class="row g-3 mb-3 align-items-end">
                 <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Date Basis</label>
+                    <select asp-for="DateBasis" class="form-select" asp-items="Html.GetEnumSelectList<CatalogueDateBasis>()"
+                            title="Filter by Transaction Date (h.DateTrans) or Session Date (h.SessionDateTime)"></select>
+                </div>
+                <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Date From</label>
-                    <input type="date" asp-for="DateFrom" class="form-control" onchange="clearPreset()" />
+                    <input type="@(Model.UseDateTime ? "datetime-local" : "date")" asp-for="DateFrom" class="form-control" id="DateFrom"
+                           value="@(Model.UseDateTime ? Model.DateFrom.ToString("yyyy-MM-ddTHH:mm") : Model.DateFrom.ToString("yyyy-MM-dd"))"
+                           onchange="clearPreset()" />
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Date To</label>
-                    <input type="date" asp-for="DateTo" class="form-control" onchange="clearPreset()" />
+                    <input type="@(Model.UseDateTime ? "datetime-local" : "date")" asp-for="DateTo" class="form-control" id="DateTo"
+                           value="@(Model.UseDateTime ? Model.DateTo.ToString("yyyy-MM-ddTHH:mm") : Model.DateTo.ToString("yyyy-MM-dd"))"
+                           onchange="clearPreset()" />
+                </div>
+                <div class="col-6 col-md-1">
+                    <label class="form-label fw-semibold small" title="Include time component in filter">Use Time</label>
+                    <div class="form-check form-switch pt-1">
+                        <input type="checkbox" asp-for="UseDateTime" class="form-check-input" id="UseDateTime"
+                               onchange="onUseDateTimeToggle(this.checked)" />
+                    </div>
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Report Mode</label>
@@ -180,62 +196,10 @@
                 </div>
             </div>
 
-            @* ===== ROW 4: Display Columns (tag selector) ===== *@
-            <div class="card bg-light mb-3">
-                <div class="card-body py-2">
-                    <div class="d-flex align-items-center mb-2">
-                        <label class="form-label fw-semibold small text-muted mb-0 me-3">Display Columns</label>
-                        <a href="#" class="small text-decoration-none" onclick="clearAllDisplayCols(); return false;">Clear</a>
-                        <span class="mx-2 text-muted">|</span>
-                        <a href="#" class="small text-decoration-none" onclick="resetDefaultDisplayCols(); return false;">Default</a>
-                    </div>
-                    <div class="d-flex flex-wrap gap-1" id="displayColsContainer">
-                        @{
-                            var allDisplayCols = new (string Id, string Label)[] {
-                                ("ItemCode", "Item Code"), ("MainBarcode", "Barcode"),
-                                ("ItemName", "Item Name"), ("Quantity", "Quantity"),
-                                ("Value", "Value"), ("Discount", "Discount"),
-                                ("NetValue", "Net Value"), ("VatAmount", "VAT Amount"),
-                                ("GrossAmount", "Gross Amt"), ("Profit", "Profit"),
-                                ("Markup", "Markup"), ("Margin", "Margin"),
-                                ("TotalStockQty", "Stock Qty"), ("TotalStockValue", "Stock Value"),
-                                ("Cost", "Cost"), ("TotalCost", "Total Cost"),
-                                ("EntityCode", "Entity Code"), ("EntityName", "Entity Name"),
-                                ("InvoiceNumber", "Invoice No"), ("InvoiceType", "Invoice Type"),
-                                ("StoreCode", "Store Code"), ("StoreName", "Store Name"),
-                                ("StationCode", "Station"), ("AgentName", "Agent"),
-                                ("DateTrans", "Date"), ("UserCode", "User"),
-                                ("ZReportNumber", "Z Report"), ("PaymentType", "Payment Type"),
-                                ("ItemCategory", "Category"), ("ItemDepartment", "Department"),
-                                ("Brand", "Brand"), ("Season", "Season"),
-                                ("Model", "Model"), ("Colour", "Colour"), ("Size", "Size"),
-                                ("Franchise", "Franchise"), ("ItemSupplier", "Supplier"),
-                                ("Price1Excl", "Price 1 Excl"), ("Price1Incl", "Price 1 Incl"),
-                                ("Price2Excl", "Price 2 Excl"), ("Price2Incl", "Price 2 Incl"),
-                                ("Price3Excl", "Price 3 Excl"), ("Price3Incl", "Price 3 Incl"),
-                                ("ItemAttr1", "Attribute 1"), ("ItemAttr2", "Attribute 2"),
-                                ("ItemAttr3", "Attribute 3"), ("ItemAttr4", "Attribute 4"),
-                                ("ItemAttr5", "Attribute 5"), ("ItemAttr6", "Attribute 6")
-                            };
-                        }
-                        @foreach (var col in allDisplayCols)
-                        {
-                            var isSelected = dc(col.Id);
-                            <button type="button"
-                                    class="btn btn-sm @(isSelected ? "btn-primary" : "btn-outline-secondary") display-col-btn"
-                                    data-col="@col.Id" onclick="toggleDisplayCol(this)">
-                                @col.Label
-                                @if (isSelected) { <i class="bi bi-x-lg ms-1 small"></i> }
-                            </button>
-                        }
-                    </div>
-                </div>
-            </div>
-
-            @* ===== ROW 5: Profit / Stock Value / Cost Type ===== *@
-            <div class="row g-3 mb-3 align-items-end">
+            @* ===== ROW 4: Profit / Stock / Cost (dropdowns + Includes VAT) + Options (Show Gross/Profit/Stock) + Rows per page ===== *@
+            <div class="row g-3 mb-4 align-items-start">
                 <div class="col-6 col-md-2">
-                    <label class="form-label fw-semibold">Profit Based On</label>
+                    <label class="form-label fw-semibold small mb-1">Profit Based On</label>
                     <select asp-for="ProfitBasedOn" class="form-select form-select-sm" asp-items="Html.GetEnumSelectList<CatalogueCostBasis>()"></select>
                     <div class="form-check mt-1">
                         <input type="checkbox" asp-for="ProfitIncludesVat" class="form-check-input" />
@@ -243,7 +207,7 @@
                     </div>
                 </div>
                 <div class="col-6 col-md-2">
-                    <label class="form-label fw-semibold">Stock Value Based On</label>
+                    <label class="form-label fw-semibold small mb-1">Stock Value Based On</label>
                     <select asp-for="StockValueBasedOn" class="form-select form-select-sm" asp-items="Html.GetEnumSelectList<CatalogueCostBasis>()"></select>
                     <div class="form-check mt-1">
                         <input type="checkbox" asp-for="StockValueIncludesVat" class="form-check-input" />
@@ -251,34 +215,29 @@
                     </div>
                 </div>
                 <div class="col-6 col-md-2">
-                    <label class="form-label fw-semibold">Cost Type</label>
+                    <label class="form-label fw-semibold small mb-1">Cost Type</label>
                     <select asp-for="CostType" class="form-select form-select-sm" asp-items="Html.GetEnumSelectList<CatalogueCostBasis>()"></select>
                 </div>
-            </div>
-
-            @* ===== ROW 6: Options ===== *@
-            <div class="row g-3 mb-4 align-items-end">
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="IncludeVat" class="form-check-input" />
-                        <label asp-for="IncludeVat" class="form-check-label">Show Gross (incl. VAT)</label>
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold small mb-1">Display Options</label>
+                    <div class="d-flex flex-wrap gap-3 pt-1">
+                        <div class="form-check">
+                            <input type="checkbox" asp-for="IncludeVat" class="form-check-input" />
+                            <label asp-for="IncludeVat" class="form-check-label small">Show Gross (incl. VAT)</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" asp-for="ShowProfit" class="form-check-input" />
+                            <label asp-for="ShowProfit" class="form-check-label small">Show Profit</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" asp-for="ShowStock" class="form-check-input" />
+                            <label asp-for="ShowStock" class="form-check-label small">Show Stock</label>
+                        </div>
                     </div>
                 </div>
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="ShowProfit" class="form-check-input" />
-                        <label asp-for="ShowProfit" class="form-check-label">Show Profit</label>
-                    </div>
-                </div>
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="ShowStock" class="form-check-input" />
-                        <label asp-for="ShowStock" class="form-check-label">Show Stock</label>
-                    </div>
-                </div>
-                <div class="col-auto ms-md-auto">
-                    <label class="form-label fw-semibold small text-muted mb-1">Rows per page</label>
-                    <select asp-for="PageSize" class="form-select form-select-sm w-auto">
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Rows per page</label>
+                    <select asp-for="PageSize" class="form-select form-select-sm">
                         <option value="50">50</option>
                         <option value="100">100</option>
                         <option value="250">250</option>
@@ -385,6 +344,9 @@
                         <i class="bi bi-filetype-xlsx me-1"></i>Excel
                     </a>
                 </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()" id="previewToggleBtn" title="Toggle document-style preview">
+                    <i class="bi bi-eye me-1"></i>Preview
+                </button>
                 <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
                     <i class="bi bi-envelope me-1"></i>Send to Email
                 </button>
@@ -398,57 +360,57 @@
                 <table class="table table-sm table-hover table-striped mb-0" id="resultsTable">
                     <thead class="table-light sticky-top">
                         <tr>
-                            @if (hasL1) { <th class="sortable th-group" data-col="Level1Description">Group 1</th> }
-                            @if (hasL2) { <th class="sortable th-group" data-col="Level2Description">Group 2</th> }
-                            @if (hasL3) { <th class="sortable th-group" data-col="Level3Description">Group 3</th> }
-                            @if (showItem && dc("ItemCode")) { <th class="sortable th-item" data-col="ItemCode">Code</th> }
-                            @if (showItem && dc("ItemName")) { <th class="sortable th-item" data-col="ItemDescription">Description</th> }
-                            @if (dc("Quantity")) { <th class="sortable text-end th-qty" data-col="Quantity">Qty</th> }
-                            @if (dc("Value")) { <th class="sortable text-end th-amount" data-col="ValueBeforeDiscount">Value</th> }
-                            @if (dc("Discount")) { <th class="sortable text-end th-discount" data-col="Discount">Discount</th> }
-                            @if (dc("NetValue")) { <th class="sortable text-end th-amount" data-col="NetValue">Net Value</th> }
-                            @if (dc("VatAmount")) { <th class="sortable text-end th-vat" data-col="VatAmount">VAT</th> }
-                            @if (dc("GrossAmount")) { <th class="sortable text-end th-amount" data-col="GrossAmount">Gross Amt</th> }
-                            @if (dc("Profit")) { <th class="sortable text-end th-profit" data-col="ProfitValue">Profit</th> }
-                            @if (dc("Markup")) { <th class="text-end th-profit" data-col="Markup">Markup %</th> }
-                            @if (dc("Margin")) { <th class="text-end th-profit" data-col="Margin">Margin %</th> }
-                            @if (dc("Cost")) { <th class="sortable text-end th-cost" data-col="Cost">Cost</th> }
-                            @if (dc("TotalCost")) { <th class="sortable text-end th-cost" data-col="TotalCost">Total Cost</th> }
-                            @if (dc("TotalStockQty")) { <th class="sortable text-end th-stock" data-col="TotalStockQty">Stock Qty</th> }
-                            @if (dc("TotalStockValue")) { <th class="text-end th-stock" data-col="TotalStockValue">Stock Value</th> }
-                            @if (dc("EntityCode")) { <th class="th-entity" data-col="EntityCode">Entity Code</th> }
-                            @if (dc("EntityName")) { <th class="th-entity" data-col="EntityName">Entity Name</th> }
-                            @if (dc("InvoiceNumber")) { <th class="th-doc" data-col="InvoiceNumber">Invoice No</th> }
-                            @if (dc("InvoiceType")) { <th class="th-doc" data-col="InvoiceType">Inv. Type</th> }
-                            @if (dc("StoreCode")) { <th class="th-loc" data-col="StoreCode">Store Code</th> }
-                            @if (dc("StoreName")) { <th class="th-loc" data-col="StoreName">Store</th> }
-                            @if (dc("StationCode")) { <th class="th-loc" data-col="StationCode">Station</th> }
-                            @if (dc("DateTrans")) { <th class="sortable th-date" data-col="DateTrans">Date</th> }
-                            @if (dc("UserCode")) { <th class="th-meta" data-col="UserCode">User</th> }
-                            @if (dc("AgentName")) { <th class="th-meta" data-col="AgentName">Agent</th> }
-                            @if (dc("ZReportNumber")) { <th class="th-meta" data-col="ZReportNumber">Z Report</th> }
-                            @if (dc("PaymentType")) { <th class="th-meta" data-col="PaymentType">Payment Type</th> }
-                            @if (dc("ItemCategory")) { <th class="th-class" data-col="ItemCategory">Category</th> }
-                            @if (dc("ItemDepartment")) { <th class="th-class" data-col="ItemDepartment">Department</th> }
-                            @if (dc("Brand")) { <th class="th-class" data-col="Brand">Brand</th> }
-                            @if (dc("Season")) { <th class="th-class" data-col="Season">Season</th> }
-                            @if (dc("Model")) { <th class="th-class" data-col="Model">Model</th> }
-                            @if (dc("Colour")) { <th class="th-class" data-col="Colour">Colour</th> }
-                            @if (dc("Size")) { <th class="th-class" data-col="Size">Size</th> }
-                            @if (dc("Franchise")) { <th class="th-class" data-col="Franchise">Franchise</th> }
-                            @if (dc("ItemSupplier")) { <th class="th-class" data-col="ItemSupplier">Supplier</th> }
-                            @if (dc("Price1Excl")) { <th class="text-end th-price" data-col="Price1Excl">Price 1 Ex</th> }
-                            @if (dc("Price1Incl")) { <th class="text-end th-price" data-col="Price1Incl">Price 1 In</th> }
-                            @if (dc("Price2Excl")) { <th class="text-end th-price" data-col="Price2Excl">Price 2 Ex</th> }
-                            @if (dc("Price2Incl")) { <th class="text-end th-price" data-col="Price2Incl">Price 2 In</th> }
-                            @if (dc("Price3Excl")) { <th class="text-end th-price" data-col="Price3Excl">Price 3 Ex</th> }
-                            @if (dc("Price3Incl")) { <th class="text-end th-price" data-col="Price3Incl">Price 3 In</th> }
-                            @if (dc("ItemAttr1")) { <th class="th-attr" data-col="ItemAttr1">Attr 1</th> }
-                            @if (dc("ItemAttr2")) { <th class="th-attr" data-col="ItemAttr2">Attr 2</th> }
-                            @if (dc("ItemAttr3")) { <th class="th-attr" data-col="ItemAttr3">Attr 3</th> }
-                            @if (dc("ItemAttr4")) { <th class="th-attr" data-col="ItemAttr4">Attr 4</th> }
-                            @if (dc("ItemAttr5")) { <th class="th-attr" data-col="ItemAttr5">Attr 5</th> }
-                            @if (dc("ItemAttr6")) { <th class="th-attr" data-col="ItemAttr6">Attr 6</th> }
+                            @if (hasL1) { <th class="sortable" data-col="Level1Description">Group 1</th> }
+                            @if (hasL2) { <th class="sortable" data-col="Level2Description">Group 2</th> }
+                            @if (hasL3) { <th class="sortable" data-col="Level3Description">Group 3</th> }
+                            @if (showItem && dc("ItemCode")) { <th class="sortable" data-col="ItemCode">Code</th> }
+                            @if (showItem && dc("ItemName")) { <th class="sortable" data-col="ItemDescription">Description</th> }
+                            @if (dc("Quantity")) { <th class="sortable text-end col-trans" data-col="Quantity">Qty</th> }
+                            @if (dc("Value")) { <th class="sortable text-end col-trans" data-col="ValueBeforeDiscount">Value</th> }
+                            @if (dc("Discount")) { <th class="sortable text-end col-trans" data-col="Discount">Discount</th> }
+                            @if (dc("NetValue")) { <th class="sortable text-end col-trans" data-col="NetValue">Net Value</th> }
+                            @if (dc("VatAmount")) { <th class="sortable text-end col-trans" data-col="VatAmount">VAT</th> }
+                            @if (dc("GrossAmount")) { <th class="sortable text-end col-trans" data-col="GrossAmount">Gross Amt</th> }
+                            @if (dc("Profit")) { <th class="sortable text-end col-profit" data-col="ProfitValue">Profit</th> }
+                            @if (dc("Markup")) { <th class="text-end col-profit" data-col="Markup">Markup %</th> }
+                            @if (dc("Margin")) { <th class="text-end col-profit" data-col="Margin">Margin %</th> }
+                            @if (dc("Cost")) { <th class="sortable text-end col-cost" data-col="Cost">Cost</th> }
+                            @if (dc("TotalCost")) { <th class="sortable text-end col-cost" data-col="TotalCost">Total Cost</th> }
+                            @if (dc("TotalStockQty")) { <th class="sortable text-end col-stock" data-col="TotalStockQty">Stock Qty</th> }
+                            @if (dc("TotalStockValue")) { <th class="text-end col-stock" data-col="TotalStockValue">Stock Value</th> }
+                            @if (dc("EntityCode")) { <th data-col="EntityCode">Entity Code</th> }
+                            @if (dc("EntityName")) { <th data-col="EntityName">Entity Name</th> }
+                            @if (dc("InvoiceNumber")) { <th data-col="InvoiceNumber">Invoice No</th> }
+                            @if (dc("InvoiceType")) { <th data-col="InvoiceType">Inv. Type</th> }
+                            @if (dc("StoreCode")) { <th data-col="StoreCode">Store Code</th> }
+                            @if (dc("StoreName")) { <th data-col="StoreName">Store</th> }
+                            @if (dc("StationCode")) { <th data-col="StationCode">Station</th> }
+                            @if (dc("DateTrans")) { <th class="sortable" data-col="DateTrans">Date</th> }
+                            @if (dc("UserCode")) { <th data-col="UserCode">User</th> }
+                            @if (dc("AgentName")) { <th data-col="AgentName">Agent</th> }
+                            @if (dc("ZReportNumber")) { <th data-col="ZReportNumber">Z Report</th> }
+                            @if (dc("PaymentType")) { <th data-col="PaymentType">Payment Type</th> }
+                            @if (dc("ItemCategory")) { <th data-col="ItemCategory">Category</th> }
+                            @if (dc("ItemDepartment")) { <th data-col="ItemDepartment">Department</th> }
+                            @if (dc("Brand")) { <th data-col="Brand">Brand</th> }
+                            @if (dc("Season")) { <th data-col="Season">Season</th> }
+                            @if (dc("Model")) { <th data-col="Model">Model</th> }
+                            @if (dc("Colour")) { <th data-col="Colour">Colour</th> }
+                            @if (dc("Size")) { <th data-col="Size">Size</th> }
+                            @if (dc("Franchise")) { <th data-col="Franchise">Franchise</th> }
+                            @if (dc("ItemSupplier")) { <th data-col="ItemSupplier">Supplier</th> }
+                            @if (dc("Price1Excl")) { <th class="text-end" data-col="Price1Excl">Price 1 Ex</th> }
+                            @if (dc("Price1Incl")) { <th class="text-end" data-col="Price1Incl">Price 1 In</th> }
+                            @if (dc("Price2Excl")) { <th class="text-end" data-col="Price2Excl">Price 2 Ex</th> }
+                            @if (dc("Price2Incl")) { <th class="text-end" data-col="Price2Incl">Price 2 In</th> }
+                            @if (dc("Price3Excl")) { <th class="text-end" data-col="Price3Excl">Price 3 Ex</th> }
+                            @if (dc("Price3Incl")) { <th class="text-end" data-col="Price3Incl">Price 3 In</th> }
+                            @if (dc("ItemAttr1")) { <th data-col="ItemAttr1">Attr 1</th> }
+                            @if (dc("ItemAttr2")) { <th data-col="ItemAttr2">Attr 2</th> }
+                            @if (dc("ItemAttr3")) { <th data-col="ItemAttr3">Attr 3</th> }
+                            @if (dc("ItemAttr4")) { <th data-col="ItemAttr4">Attr 4</th> }
+                            @if (dc("ItemAttr5")) { <th data-col="ItemAttr5">Attr 5</th> }
+                            @if (dc("ItemAttr6")) { <th data-col="ItemAttr6">Attr 6</th> }
                         </tr>
                     </thead>
                     <tbody>
@@ -467,8 +429,8 @@
                                 @if (hasL1) { <td class="@(newL1 ? "fw-bold text-primary" : "")">@(newL1 ? row.Level1Value : "")</td> }
                                 @if (hasL2) { <td class="@(newL2 ? "fw-semibold" : "")">@(newL2 ? row.Level2Value : "")</td> }
                                 @if (hasL3) { <td>@(newL3 ? row.Level3Value : "")</td> }
-                                @if (showItem && dc("ItemCode")) { <td class="text-nowrap">@row.ItemCode</td> }
-                                @if (showItem && dc("ItemName")) { <td>@row.ItemDescription</td> }
+                                @if (showItem && dc("ItemCode")) { <td class="text-nowrap fw-semibold"><a href="#" class="dd-link-item" data-item-code="@row.ItemCode" data-item-name="@row.ItemDescription" title="View transaction history / stock position">@row.ItemCode</a></td> }
+                                @if (showItem && dc("ItemName")) { <td><a href="#" class="dd-link-item" data-item-code="@row.ItemCode" data-item-name="@row.ItemDescription" title="View transaction history / stock position">@row.ItemDescription</a></td> }
                                 @if (dc("Quantity")) { <td class="text-end">@row.Quantity.ToString("N2")</td> }
                                 @if (dc("Value")) { <td class="text-end">@row.ValueBeforeDiscount.ToString("N2")</td> }
                                 @if (dc("Discount")) { <td class="text-end">@row.Discount.ToString("N2")</td> }
@@ -557,6 +519,17 @@
         </div>
     </div>
 
+    @* Preview panel — hidden by default, toggled via Preview button in results toolbar *@
+    <div class="card mb-4" id="previewPanel" style="display:none;">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-file-earmark-text me-2"></i>Document Preview</span>
+            <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()"><i class="bi bi-table me-1"></i>Back to Grid</button>
+        </div>
+        <div class="card-body p-0">
+            <iframe id="previewFrame" src="about:blank" style="width:100%;min-height:600px;border:0;"></iframe>
+        </div>
+    </div>
+
     @if (Model.TotalPages > 1)
     {
         <nav class="d-flex justify-content-between align-items-center mb-4">
@@ -584,27 +557,19 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
 }
 
 <style>
-    /* Toolbar / thead column group coloring */
-    #resultsTable thead th.th-group      { background: #e0e7ff !important; color:#3730a3; }
-    #resultsTable thead th.th-item       { background: #eff6ff !important; color:#1e3a8a; }
-    #resultsTable thead th.th-qty        { background: #ecfccb !important; color:#365314; }
-    #resultsTable thead th.th-amount     { background: #dcfce7 !important; color:#14532d; }
-    #resultsTable thead th.th-discount   { background: #fee2e2 !important; color:#7f1d1d; }
-    #resultsTable thead th.th-vat        { background: #fef9c3 !important; color:#713f12; }
-    #resultsTable thead th.th-profit     { background: #dbeafe !important; color:#1e40af; }
-    #resultsTable thead th.th-cost       { background: #fde68a !important; color:#78350f; }
-    #resultsTable thead th.th-stock      { background: #cffafe !important; color:#155e75; }
-    #resultsTable thead th.th-entity     { background: #f3e8ff !important; color:#6b21a8; }
-    #resultsTable thead th.th-doc        { background: #fce7f3 !important; color:#9d174d; }
-    #resultsTable thead th.th-loc        { background: #e0f2fe !important; color:#075985; }
-    #resultsTable thead th.th-date       { background: #f1f5f9 !important; color:#334155; }
-    #resultsTable thead th.th-meta       { background: #f3f4f6 !important; color:#374151; }
-    #resultsTable thead th.th-class      { background: #fae8ff !important; color:#86198f; }
-    #resultsTable thead th.th-price      { background: #fef3c7 !important; color:#92400e; }
-    #resultsTable thead th.th-attr       { background: #e5e7eb !important; color:#1f2937; }
+    /* Table theme: match PurchasesSales / AverageBasket — minimal, two semantic colors */
+    #resultsTable thead th { background: #f8fafc; color: #334155; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 2px solid #e2e8f0; }
+    #resultsTable thead th.col-trans  { background: #eff6ff !important; color: #1e40af; }  /* Qty/Value/Net/VAT/Gross */
+    #resultsTable thead th.col-profit { background: #ecfdf5 !important; color: #065f46; }  /* Profit/Markup/Margin */
+    #resultsTable thead th.col-cost   { background: #fff7ed !important; color: #9a3412; }  /* Cost/Total Cost */
+    #resultsTable thead th.col-stock  { background: #f5f3ff !important; color: #5b21b6; }  /* Stock Qty/Value */
 
     #resultsTable thead th.sortable { cursor: pointer; user-select: none; }
-    #resultsTable thead th.sortable:hover { filter: brightness(0.95); }
+    #resultsTable thead th.sortable:hover { filter: brightness(0.96); }
+
+    /* Drill-down link style (same as PurchasesSales) */
+    #resultsTable a.dd-link-item { color: #2563eb; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #2563eb; }
+    #resultsTable a.dd-link-item:hover { color: #1d4ed8; border-bottom-style: solid; }
 </style>
 
 <!-- Schedule Modal -->
@@ -1038,6 +1003,150 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     </div>
 </div>
 
+<!-- Item Detail Modal: Transaction History + Stock Position (mirrors original Powersoft365 dialog) -->
+<div class="modal fade" id="itemDetailModal" tabindex="-1" aria-labelledby="itemDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <div class="flex-grow-1">
+                    <h5 class="modal-title mb-1" id="itemDetailModalLabel">
+                        <i class="bi bi-box-seam me-2"></i>
+                        <span id="itemModalViewTitle">Item Transactions History</span>
+                    </h5>
+                    <div class="small text-muted">
+                        <span class="fw-semibold">Code:</span> <span id="itemModalCode" class="me-3"></span>
+                        <span class="fw-semibold">Name:</span> <span id="itemModalName"></span>
+                    </div>
+                </div>
+                <div class="btn-group btn-group-sm me-2" role="group" aria-label="View toggle">
+                    <button type="button" class="btn btn-primary active" id="itemModalBtnTrans" onclick="setItemModalView('trans')">
+                        <i class="bi bi-list-columns-reverse me-1"></i>Transactions History
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" id="itemModalBtnStock" onclick="setItemModalView('stock'); if(!document.getElementById('itemStockLoaded') &amp;&amp; _itemModalCurrentCode) loadItemStockPosition(_itemModalCurrentCode);">
+                        <i class="bi bi-boxes me-1"></i>Item Stock Position
+                    </button>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                @* ===== View 1: Transactions History ===== *@
+                <div id="itemModalViewTrans">
+                    <div id="itemTransError" class="alert alert-danger m-3 d-none"></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr class="small">
+                                    <th>Date</th>
+                                    <th>Kind</th>
+                                    <th>Doc #</th>
+                                    <th>Entity</th>
+                                    <th>Store</th>
+                                    <th class="text-end">Qty</th>
+                                    <th class="text-end">Price</th>
+                                    <th class="text-end">Discount</th>
+                                    <th class="text-end">Net</th>
+                                    <th class="text-end">VAT</th>
+                                    <th class="text-end">Gross</th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemTransTbody"></tbody>
+                        </table>
+                    </div>
+                    <div class="px-3 py-2 bg-light border-top small text-muted" id="itemTransSummary"></div>
+                </div>
+                @* ===== View 2: Item Stock Position ===== *@
+                <div id="itemModalViewStock" class="d-none">
+                    <div id="itemStockError" class="alert alert-danger m-3 d-none"></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr class="small">
+                                    <th>Store Code</th>
+                                    <th>Store Name</th>
+                                    <th class="text-end">On Stock</th>
+                                    <th class="text-end">On Transfer</th>
+                                    <th class="text-end">Reserved</th>
+                                    <th class="text-end">Ordered</th>
+                                    <th class="text-end">Available</th>
+                                    <th>Shelf</th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemStockTbody"></tbody>
+                            <tfoot id="itemStockTfoot"></tfoot>
+                        </table>
+                    </div>
+                    <div class="px-3 py-2 bg-light border-top small text-muted" id="itemStockSummary"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleItemModalView()">
+                    <i class="bi bi-arrow-left-right me-1"></i>Toggle View
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Document Detail Modal (Compact/Full toggle — reused pattern from PurchasesSales) -->
+<div class="modal fade" id="docDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" id="docDetailHeader">
+                <h5 class="modal-title" id="docDetailTitle">
+                    <i class="bi bi-file-earmark-text me-2"></i>Document Detail
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="docDetailLoading" class="text-center py-4">
+                    <span class="spinner-border spinner-border-sm me-2"></span>Loading document...
+                </div>
+                <div id="docDetailError" class="alert alert-danger d-none"></div>
+                @* Compact view *@
+                <div id="docCompactView" class="d-none">
+                    <div class="row mb-3 small">
+                        <div class="col-md-3"><strong>Date:</strong> <span id="docDate"></span></div>
+                        <div class="col-md-3"><strong>Store:</strong> <span id="docStore"></span></div>
+                        <div class="col-md-6"><strong>Entity:</strong> <span id="docEntity"></span></div>
+                    </div>
+                    <table class="table table-sm table-bordered table-hover mb-3">
+                        <thead class="table-light">
+                            <tr class="small">
+                                <th>Item Code</th><th>Item Name</th>
+                                <th class="text-end">Qty</th><th class="text-end">Unit Price</th>
+                                <th class="text-end">Discount</th><th class="text-end">Net</th>
+                                <th class="text-end">VAT</th><th class="text-end">Gross</th>
+                            </tr>
+                        </thead>
+                        <tbody id="docDetailLines" class="small"></tbody>
+                        <tfoot>
+                            <tr class="fw-bold small table-light">
+                                <td colspan="5" class="text-end">Totals:</td>
+                                <td class="text-end" id="docTotalNet"></td>
+                                <td class="text-end" id="docTotalVat"></td>
+                                <td class="text-end" id="docTotalGross"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <div class="text-muted small" id="docLineCount"></div>
+                </div>
+                @* Full (print-ready) view *@
+                <div id="docFullView" class="d-none"></div>
+            </div>
+            <div class="modal-footer" id="docModalFooter">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btnDocToggleView" onclick="toggleDocView()" title="Toggle document preview">
+                    <i class="bi bi-eye me-1"></i>Preview
+                </button>
+                <button type="button" class="btn btn-outline-success btn-sm" onclick="printDocFromModal()">
+                    <i class="bi bi-printer me-1"></i>Print
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Send to Email Modal -->
 <div class="modal fade" id="sendEmailModal" tabindex="-1" aria-labelledby="sendEmailModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -1164,6 +1273,25 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         document.querySelectorAll('input[name="DatePreset"]').forEach(r => r.checked = false);
     }
 
+    // Toggle between date-only and datetime-local inputs preserving the current value.
+    // Browsers accept value in ISO (yyyy-MM-dd or yyyy-MM-ddTHH:mm) for those input types.
+    function onUseDateTimeToggle(useTime) {
+        var from = document.getElementById('DateFrom');
+        var to = document.getElementById('DateTo');
+        if (!from || !to) return;
+        if (useTime) {
+            var fv = (from.value || '').length >= 10 ? from.value.substring(0, 10) + 'T00:00' : from.value;
+            var tv = (to.value || '').length >= 10 ? to.value.substring(0, 10) + 'T23:59' : to.value;
+            from.type = 'datetime-local'; from.value = fv;
+            to.type = 'datetime-local'; to.value = tv;
+        } else {
+            var fv2 = (from.value || '').substring(0, 10);
+            var tv2 = (to.value || '').substring(0, 10);
+            from.type = 'date'; from.value = fv2;
+            to.type = 'date'; to.value = tv2;
+        }
+    }
+
     document.querySelectorAll('.date-presets input[type="radio"]').forEach(radio => {
         radio.addEventListener('change', function () {
             const today = new Date();
@@ -1245,6 +1373,34 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             sessionStorage.removeItem('catalogue_scroll');
             sessionStorage.removeItem('catalogue_scroll_source');
         } catch (e) {}
+    });
+
+    // ==================== VAT cascade (mirrors original repPowerReportCatalogue.aspx.vb:1913-1914) ====================
+    // "Includes VAT" checkbox is disabled when basis is a cost value (no Excl/Incl variant exists).
+    // Disabled IDs match original Powersoft365 PriceID: 99=LatestCost, 98=CostOnSale, 88=AverageCost, 87=WeightedAverageCost.
+    function updateVatEnabledState(selectId, checkboxId) {
+        var sel = document.getElementById(selectId);
+        var chk = document.getElementById(checkboxId);
+        if (!sel || !chk) return;
+        var v = String(sel.value);
+        var isCostBasis = (v === '99' || v === '98' || v === '88' || v === '87');
+        chk.disabled = isCostBasis;
+        var lbl = document.querySelector('label[for="' + checkboxId + '"]');
+        if (lbl) lbl.style.opacity = isCostBasis ? '0.5' : '1';
+        var wrapper = chk.closest('.form-check');
+        if (wrapper) wrapper.title = isCostBasis ? 'VAT toggle not applicable to cost values' : '';
+    }
+
+    window.addEventListener('DOMContentLoaded', function () {
+        var pairs = [
+            ['ProfitBasedOn', 'ProfitIncludesVat'],
+            ['StockValueBasedOn', 'StockValueIncludesVat']
+        ];
+        pairs.forEach(function (p) {
+            updateVatEnabledState(p[0], p[1]);
+            var sel = document.getElementById(p[0]);
+            if (sel) sel.addEventListener('change', function () { updateVatEnabledState(p[0], p[1]); });
+        });
     });
 
     // ==================== Schedule ====================
@@ -1927,5 +2083,421 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         var m = document.getElementById('aiAnalysisModal');
         if (m) m.addEventListener('show.bs.modal', function() { loadAiPromptTemplates(); });
     })();
+
+    // ==================== Preview (document-style print view) ====================
+    var previewOpen = false;
+    function togglePreview() {
+        var panel = document.getElementById('previewPanel');
+        var grid = document.getElementById('results');
+        var btn = document.getElementById('previewToggleBtn');
+        if (!panel || !grid || !btn) return;
+        previewOpen = !previewOpen;
+        if (previewOpen) {
+            grid.style.display = 'none';
+            panel.style.display = 'block';
+            btn.innerHTML = '<i class="bi bi-table me-1"></i>Grid';
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-outline-warning');
+            var f = document.getElementById('previewFrame');
+            if (!f.src || f.src === 'about:blank' || f.src.endsWith('about:blank')) {
+                var qs = '@Url.Action("PrintCataloguePreview")'
+                    + '?dateFrom=@(Model.UseDateTime ? Model.DateFrom.ToString("yyyy-MM-ddTHH:mm") : Model.DateFrom.ToString("yyyy-MM-dd"))'
+                    + '&dateTo=@(Model.UseDateTime ? Model.DateTo.ToString("yyyy-MM-ddTHH:mm") : Model.DateTo.ToString("yyyy-MM-dd"))'
+                    + '&dateBasis=@Model.DateBasis'
+                    + '&useDateTime=@Model.UseDateTime'
+                    + '&reportMode=@Model.ReportMode'
+                    + '&reportOn=@Model.ReportOn'
+                    + '&primaryGroup=@Model.PrimaryGroup'
+                    + '&secondaryGroup=@Model.SecondaryGroup'
+                    + '&thirdGroup=@Model.ThirdGroup'
+                    + '&includeVat=@Model.IncludeVat'
+                    + '&showProfit=@Model.ShowProfit'
+                    + '&showStock=@Model.ShowStock'
+                    + '&profitBasedOn=@((int)Model.ProfitBasedOn)'
+                    + '&profitIncludesVat=@Model.ProfitIncludesVat'
+                    + '&stockValueBasedOn=@((int)Model.StockValueBasedOn)'
+                    + '&stockValueIncludesVat=@Model.StockValueIncludesVat'
+                    + '&costType=@((int)Model.CostType)'
+                    + '&displayColumns=' + encodeURIComponent('@(Model.DisplayColumnsString ?? "")')
+                    + '&storeCodes=' + encodeURIComponent('@(Model.SelectedStoreCodesString ?? "")')
+                    + '&itemsSelection=' + encodeURIComponent('@(Model.ItemsSelectionJson ?? "")')
+                    + '&sortColumn=@Model.SortColumn'
+                    + '&sortDirection=@Model.SortDirection';
+                f.src = qs;
+            }
+            f.onload = function () {
+                try { f.style.height = Math.max(f.contentDocument.documentElement.scrollHeight + 40, 600) + 'px'; } catch (e) {}
+            };
+        } else {
+            grid.style.display = 'block';
+            panel.style.display = 'none';
+            btn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+            btn.classList.remove('btn-outline-warning');
+            btn.classList.add('btn-outline-primary');
+        }
+    }
+
+    // ==================== Item Detail Modal (Transaction History + Stock Position) ====================
+    // Mirrors original Powersoft365 "Item Transactions History" dialog with toggle to "Item Stock Position".
+    // Source: restricted/StockControl/ItemStockPosition.aspx (original VB.NET).
+
+    var _itemModalCurrentCode = null;
+    var _itemModalCurrentName = '';
+    var _itemModalCurrentView = 'trans'; // 'trans' or 'stock'
+
+    function fmt2(n) { return (n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function fmtQ(n) { return (n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+
+    // Event delegation for item links (handles any re-rendered rows)
+    document.addEventListener('click', function (e) {
+        var link = e.target.closest('a.dd-link-item');
+        if (!link) return;
+        e.preventDefault();
+        var code = link.getAttribute('data-item-code') || '';
+        var name = link.getAttribute('data-item-name') || '';
+        if (code) openItemModal(code, name);
+    });
+
+    function openItemModal(itemCode, itemName) {
+        if (!itemCode) return;
+        _itemModalCurrentCode = itemCode;
+        _itemModalCurrentName = itemName || '';
+        _itemModalCurrentView = 'trans';
+
+        document.getElementById('itemModalCode').textContent = itemCode;
+        document.getElementById('itemModalName').textContent = itemName || '';
+        setItemModalView('trans');
+
+        var modal = new bootstrap.Modal(document.getElementById('itemDetailModal'));
+        modal.show();
+        loadItemTransactions(itemCode);
+    }
+
+    function setItemModalView(view) {
+        _itemModalCurrentView = view;
+        var btnTrans = document.getElementById('itemModalBtnTrans');
+        var btnStock = document.getElementById('itemModalBtnStock');
+        var viewTrans = document.getElementById('itemModalViewTrans');
+        var viewStock = document.getElementById('itemModalViewStock');
+        var title = document.getElementById('itemModalViewTitle');
+        if (view === 'trans') {
+            btnTrans.classList.add('active', 'btn-primary');
+            btnTrans.classList.remove('btn-outline-primary');
+            btnStock.classList.remove('active', 'btn-primary');
+            btnStock.classList.add('btn-outline-primary');
+            viewTrans.classList.remove('d-none');
+            viewStock.classList.add('d-none');
+            if (title) title.textContent = 'Item Transactions History';
+        } else {
+            btnStock.classList.add('active', 'btn-primary');
+            btnStock.classList.remove('btn-outline-primary');
+            btnTrans.classList.remove('active', 'btn-primary');
+            btnTrans.classList.add('btn-outline-primary');
+            viewStock.classList.remove('d-none');
+            viewTrans.classList.add('d-none');
+            if (title) title.textContent = 'Item Stock Position';
+        }
+    }
+
+    function toggleItemModalView() {
+        if (!_itemModalCurrentCode) return;
+        if (_itemModalCurrentView === 'trans') {
+            setItemModalView('stock');
+            if (!document.getElementById('itemStockLoaded')) loadItemStockPosition(_itemModalCurrentCode);
+        } else {
+            setItemModalView('trans');
+        }
+    }
+
+    function loadItemTransactions(itemCode) {
+        var tbody = document.getElementById('itemTransTbody');
+        var summary = document.getElementById('itemTransSummary');
+        var err = document.getElementById('itemTransError');
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-3"><span class="spinner-border spinner-border-sm me-2"></span>Loading transactions...</td></tr>';
+        summary.textContent = '';
+        err.classList.add('d-none');
+
+        var storeCodes = '';
+        if (typeof getItemsSelectionStoreCodes === 'function') storeCodes = getItemsSelectionStoreCodes();
+
+        var url = '/Reports/GetTransactionDetails?itemCode=' + encodeURIComponent(itemCode)
+            + '&type=all'
+            + '&dateFrom=@Model.DateFrom.ToString("yyyy-MM-dd")'
+            + '&dateTo=@Model.DateTo.ToString("yyyy-MM-dd")'
+            + '&storeCodes=' + encodeURIComponent(storeCodes);
+
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) {
+                    tbody.innerHTML = '';
+                    err.textContent = data.message || 'Error loading transactions';
+                    err.classList.remove('d-none');
+                    return;
+                }
+                if (data.count === 0) {
+                    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-3">No transactions found for this item in the selected period.</td></tr>';
+                    summary.textContent = '';
+                    return;
+                }
+                // Kind colour map: P=Purchase, E=PurchReturn, I=Sale, C=Credit
+                var kindColors = { 'P': 'bg-info', 'E': 'bg-warning', 'I': 'bg-success', 'C': 'bg-danger' };
+                tbody.innerHTML = data.rows.map(function (r) {
+                    var bc = kindColors[r.kind] || 'bg-secondary';
+                    var docCell = '';
+                    if (r.doc && r.kind && 'PEIC'.indexOf(r.kind) >= 0) {
+                        var safeDoc = String(r.doc).replace(/'/g, "\\'");
+                        docCell = '<a href="#" class="text-primary text-decoration-underline fw-semibold" '
+                            + 'onclick="openDocument(\'' + r.kind + '\', \'' + safeDoc + '\'); return false;" '
+                            + 'title="View document details">' + r.doc + '</a>';
+                    } else {
+                        docCell = '<span class="fw-semibold">' + (r.doc || '') + '</span>';
+                    }
+                    return '<tr class="small">'
+                        + '<td class="text-nowrap">' + r.date + '</td>'
+                        + '<td><span class="badge ' + bc + '">' + (r.kindDescription || r.kind) + '</span></td>'
+                        + '<td>' + docCell + '</td>'
+                        + '<td>' + (r.entityCode ? r.entityCode + ' — ' : '') + (r.entityName || '') + '</td>'
+                        + '<td>' + (r.store || '') + '</td>'
+                        + '<td class="text-end">' + fmtQ(r.qty) + '</td>'
+                        + '<td class="text-end">' + fmt2(r.price) + '</td>'
+                        + '<td class="text-end">' + fmt2(r.discount) + '</td>'
+                        + '<td class="text-end">' + fmt2(r.net) + '</td>'
+                        + '<td class="text-end">' + fmt2(r.vat) + '</td>'
+                        + '<td class="text-end">' + fmt2(r.gross) + '</td>'
+                        + '</tr>';
+                }).join('');
+                summary.textContent = data.count + ' transactions · Qty: ' + fmtQ(data.totalQty)
+                    + ' · Net: ' + fmt2(data.totalNet) + ' · Gross: ' + fmt2(data.totalGross);
+            })
+            .catch(function (ex) {
+                tbody.innerHTML = '';
+                err.textContent = 'Network error: ' + ex.message;
+                err.classList.remove('d-none');
+            });
+    }
+
+    function loadItemStockPosition(itemCode) {
+        var tbody = document.getElementById('itemStockTbody');
+        var tfoot = document.getElementById('itemStockTfoot');
+        var summary = document.getElementById('itemStockSummary');
+        var err = document.getElementById('itemStockError');
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-3"><span class="spinner-border spinner-border-sm me-2"></span>Loading stock position...</td></tr>';
+        tfoot.innerHTML = '';
+        summary.textContent = '';
+        err.classList.add('d-none');
+
+        fetch('/Reports/GetItemStockPosition?itemCode=' + encodeURIComponent(itemCode))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) {
+                    tbody.innerHTML = '';
+                    err.textContent = data.message || 'Error loading stock position';
+                    err.classList.remove('d-none');
+                    return;
+                }
+                if (!data.rows || data.rows.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">No stores found.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.rows.map(function (r) {
+                    var negClass = (r.onStock < 0) ? 'text-danger fw-semibold' : '';
+                    return '<tr class="small">'
+                        + '<td class="fw-semibold">' + (r.storeCode || '') + '</td>'
+                        + '<td>' + (r.storeName || '') + '</td>'
+                        + '<td class="text-end ' + negClass + '">' + fmtQ(r.onStock) + '</td>'
+                        + '<td class="text-end">' + fmtQ(r.onTransfer) + '</td>'
+                        + '<td class="text-end">' + fmtQ(r.reserved) + '</td>'
+                        + '<td class="text-end">' + fmtQ(r.ordered) + '</td>'
+                        + '<td class="text-end fw-semibold">' + fmtQ(r.available) + '</td>'
+                        + '<td>' + (r.shelf || '') + '</td>'
+                        + '</tr>';
+                }).join('');
+                tfoot.innerHTML = '<tr class="table-light fw-bold small">'
+                    + '<td colspan="2" class="text-end">Totals:</td>'
+                    + '<td class="text-end">' + fmtQ(data.totalOnStock) + '</td>'
+                    + '<td class="text-end">' + fmtQ(data.totalOnTransfer) + '</td>'
+                    + '<td class="text-end">' + fmtQ(data.totalReserved) + '</td>'
+                    + '<td class="text-end">' + fmtQ(data.totalOrdered) + '</td>'
+                    + '<td class="text-end">' + fmtQ(data.totalAvailable) + '</td>'
+                    + '<td></td>'
+                    + '</tr>';
+                summary.textContent = data.count + ' store(s) · Total On Stock: ' + fmtQ(data.totalOnStock)
+                    + ' · Total Available: ' + fmtQ(data.totalAvailable);
+                // Mark as loaded so subsequent toggles don't re-fetch
+                var marker = document.getElementById('itemStockLoaded');
+                if (!marker) {
+                    var m = document.createElement('span');
+                    m.id = 'itemStockLoaded';
+                    m.style.display = 'none';
+                    document.body.appendChild(m);
+                }
+            })
+            .catch(function (ex) {
+                tbody.innerHTML = '';
+                err.textContent = 'Network error: ' + ex.message;
+                err.classList.remove('d-none');
+            });
+    }
+
+    // Reset stock-loaded marker when modal closes so next open re-fetches fresh data
+    document.addEventListener('DOMContentLoaded', function () {
+        var m = document.getElementById('itemDetailModal');
+        if (m) m.addEventListener('hidden.bs.modal', function () {
+            var marker = document.getElementById('itemStockLoaded');
+            if (marker) marker.remove();
+            _itemModalCurrentCode = null;
+        });
+    });
+
+    // ==================== Document Detail Modal (pattern reused from PurchasesSales.cshtml) ====================
+    // Uses /Reports/GetDocumentDetail endpoint (docType: P/E/I/C).
+    var _currentDocData = null;
+    var _currentDocType = '', _currentDocNumber = '';
+    var _docViewMode = 'compact';
+
+    function buildFullViewHtml(d) {
+        var isPurch = (d.docType === 'P' || d.docType === 'E');
+        var accent = isPurch ? '#2563eb' : '#059669';
+        var accentBg = isPurch ? '#eff6ff' : '#ecfdf5';
+        var entityLabel = isPurch ? 'Supplier' : 'Customer';
+        var fmt2 = function (v) { return (v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+        return '<div style="text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid ' + accent + '">'
+            + '<div style="font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:' + accent + '">' + d.docTypeDescription + '</div>'
+            + '<div style="font-size:14px;font-weight:600;color:#475569;margin-top:2px">Document #: ' + d.documentNumber + '</div>'
+            + '</div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;margin-bottom:20px;padding:12px 16px;background:' + accentBg + ';border-radius:6px">'
+            + '<div><div style="color:#64748b;font-size:10px;text-transform:uppercase;font-weight:600">Date</div><div style="font-weight:500;margin-top:1px">' + d.date + '</div></div>'
+            + '<div><div style="color:#64748b;font-size:10px;text-transform:uppercase;font-weight:600">Store</div><div style="font-weight:500;margin-top:1px">' + (d.storeCode || '—') + '</div></div>'
+            + '<div><div style="color:#64748b;font-size:10px;text-transform:uppercase;font-weight:600">' + entityLabel + '</div><div style="font-weight:500;margin-top:1px">' + (d.entityCode ? d.entityCode + ' — ' : '') + d.entityName + '</div></div>'
+            + '<div><div style="color:#64748b;font-size:10px;text-transform:uppercase;font-weight:600">Line Items</div><div style="font-weight:500;margin-top:1px">' + d.lineCount + '</div></div>'
+            + '</div>'
+            + '<table style="width:100%;border-collapse:collapse;font-size:11px">'
+            + '<thead><tr style="background:#e2e8f0">'
+            + '<th style="padding:6px 10px;text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Item Code</th>'
+            + '<th style="padding:6px 10px;text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Description</th>'
+            + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Qty</th>'
+            + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Unit Price</th>'
+            + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Discount</th>'
+            + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Net</th>'
+            + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">VAT</th>'
+            + '<th style="padding:6px 10px;text-align:right;font-weight:700;font-size:10px;text-transform:uppercase;border-bottom:2px solid #94a3b8">Gross</th>'
+            + '</tr></thead><tbody>'
+            + d.lines.map(function (l) {
+                return '<tr>'
+                    + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;font-weight:600">' + l.itemCode + '</td>'
+                    + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9">' + l.itemName + '</td>'
+                    + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">' + l.qty.toLocaleString(undefined, { maximumFractionDigits: 2 }) + '</td>'
+                    + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">' + fmt2(l.price) + '</td>'
+                    + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">' + fmt2(l.discount) + '</td>'
+                    + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">' + fmt2(l.net) + '</td>'
+                    + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">' + fmt2(l.vat) + '</td>'
+                    + '<td style="padding:5px 10px;border-bottom:1px solid #f1f5f9;text-align:right">' + fmt2(l.gross) + '</td>'
+                    + '</tr>';
+            }).join('')
+            + '</tbody><tfoot><tr style="font-weight:700;border-top:3px double #1e293b;background:#f1f5f9">'
+            + '<td colspan="5" style="padding:8px 10px;text-align:right">Totals</td>'
+            + '<td style="padding:8px 10px;text-align:right">' + fmt2(d.totalNet) + '</td>'
+            + '<td style="padding:8px 10px;text-align:right">' + fmt2(d.totalVat) + '</td>'
+            + '<td style="padding:8px 10px;text-align:right">' + fmt2(d.totalGross) + '</td>'
+            + '</tr></tfoot></table>'
+            + '<div style="text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8">Powersoft Reporting</div>';
+    }
+
+    function toggleDocView() {
+        if (!_currentDocData) return;
+        if (_docViewMode === 'compact') {
+            document.getElementById('docCompactView').classList.add('d-none');
+            var fv = document.getElementById('docFullView');
+            fv.innerHTML = buildFullViewHtml(_currentDocData);
+            fv.classList.remove('d-none');
+            document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-eye-slash me-1"></i>Compact';
+            _docViewMode = 'full';
+        } else {
+            document.getElementById('docFullView').classList.add('d-none');
+            document.getElementById('docCompactView').classList.remove('d-none');
+            document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+            _docViewMode = 'compact';
+        }
+    }
+
+    function printDocFromModal() {
+        if (!_currentDocData) return;
+        var printWin = window.open('', '_blank', 'width=900,height=700');
+        printWin.document.write('<html><head><title>' + _currentDocData.docTypeDescription + ' — ' + _currentDocData.documentNumber + '</title>'
+            + '<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Segoe UI,system-ui,sans-serif;padding:24px;color:#1e293b}</style>'
+            + '</head><body>' + buildFullViewHtml(_currentDocData) + '</body></html>');
+        printWin.document.close();
+        printWin.focus();
+        printWin.print();
+    }
+
+    function openDocument(docType, docNumber) {
+        _currentDocType = docType;
+        _currentDocNumber = docNumber;
+        _currentDocData = null;
+        _docViewMode = 'compact';
+        document.getElementById('docFullView').classList.add('d-none');
+        document.getElementById('docFullView').innerHTML = '';
+        document.getElementById('btnDocToggleView').innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+        var modal = new bootstrap.Modal(document.getElementById('docDetailModal'));
+        var hdr = document.getElementById('docDetailHeader');
+        var isPurch = (docType === 'P' || docType === 'E');
+        hdr.className = 'modal-header ' + (isPurch ? 'bg-primary bg-opacity-10' : 'bg-success bg-opacity-10');
+
+        document.getElementById('docDetailLoading').classList.remove('d-none');
+        document.getElementById('docDetailError').classList.add('d-none');
+        document.getElementById('docCompactView').classList.add('d-none');
+
+        var typeNames = { P: 'Purchase Invoice', E: 'Purchase Return', I: 'Sales Invoice', C: 'Credit Note' };
+        document.getElementById('docDetailTitle').innerHTML =
+            '<i class="bi bi-file-earmark-text me-2"></i>' + (typeNames[docType] || 'Document') + ' — ' + docNumber;
+
+        modal.show();
+
+        fetch('/Reports/GetDocumentDetail?docType=' + encodeURIComponent(docType) + '&docNumber=' + encodeURIComponent(docNumber))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                document.getElementById('docDetailLoading').classList.add('d-none');
+                if (!data.success) {
+                    document.getElementById('docDetailError').classList.remove('d-none');
+                    document.getElementById('docDetailError').textContent = data.message;
+                    return;
+                }
+                var d = data.doc;
+                document.getElementById('docDate').textContent = d.date;
+                document.getElementById('docStore').textContent = d.storeCode || '—';
+                document.getElementById('docEntity').textContent = d.entityCode ? (d.entityCode + ' — ' + d.entityName) : (d.entityName || '—');
+
+                var fmt2 = function (v) { return (v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+                var tbody = document.getElementById('docDetailLines');
+                tbody.innerHTML = d.lines.map(function (l) {
+                    return '<tr>'
+                        + '<td class="fw-semibold">' + l.itemCode + '</td>'
+                        + '<td>' + l.itemName + '</td>'
+                        + '<td class="text-end">' + l.qty.toLocaleString(undefined, { maximumFractionDigits: 2 }) + '</td>'
+                        + '<td class="text-end">' + fmt2(l.price) + '</td>'
+                        + '<td class="text-end">' + fmt2(l.discount) + '</td>'
+                        + '<td class="text-end">' + fmt2(l.net) + '</td>'
+                        + '<td class="text-end">' + fmt2(l.vat) + '</td>'
+                        + '<td class="text-end">' + fmt2(l.gross) + '</td>'
+                        + '</tr>';
+                }).join('');
+
+                document.getElementById('docTotalNet').textContent = fmt2(d.totalNet);
+                document.getElementById('docTotalVat').textContent = fmt2(d.totalVat);
+                document.getElementById('docTotalGross').textContent = fmt2(d.totalGross);
+                document.getElementById('docLineCount').textContent = d.lineCount + ' line item(s)';
+
+                _currentDocData = d;
+                document.getElementById('docCompactView').classList.remove('d-none');
+            })
+            .catch(function (err) {
+                document.getElementById('docDetailLoading').classList.add('d-none');
+                document.getElementById('docDetailError').classList.remove('d-none');
+                document.getElementById('docDetailError').textContent = 'Network error: ' + err.message;
+            });
+    }
 </script>
 }

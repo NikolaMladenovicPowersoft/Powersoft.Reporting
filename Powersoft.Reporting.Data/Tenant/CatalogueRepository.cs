@@ -98,12 +98,92 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
         catch { return false; }
     }
 
+    /// <summary>
+    /// Per-store stock breakdown for a single item.
+    /// SQL adapted from original Powersoft365 (CloudQueries WQR.LoadStockPerStoreForItemWithShelf, line 118646)
+    /// joined with tbl_Store to add StoreName.
+    /// </summary>
+    public async Task<ItemStockPositionResult> GetItemStockPositionAsync(string itemCode)
+    {
+        const string sql = @"
+SELECT
+    s.pk_StoreCode                              AS StoreCode,
+    ISNULL(s.StoreName, '')                     AS StoreName,
+    ISNULL(t1.Stock, 0)                         AS OnStock,
+    ISNULL(t1.StockOnTransfer, 0)               AS OnTransfer,
+    ISNULL(t1.StockReserved, 0)                 AS Reserved,
+    ISNULL(t1.StockOrdered, 0)                  AS Ordered,
+    ISNULL(t1.StockOnWB, 0)                     AS OnWaybill,
+    ISNULL(t3.ShelfDescr, '')                   AS Shelf,
+    ISNULL(t1.MinimumStock, 0)                  AS MinimumStock,
+    ISNULL(t1.RequiredStock, 0)                 AS RequiredStock,
+    ISNULL(it.ItemCode, @ItemCode)              AS ItemCode,
+    ISNULL(it.ItemNamePrimary, '')              AS ItemName
+FROM tbl_Store s
+LEFT JOIN tbl_Item it
+    ON it.ItemCode = @ItemCode
+LEFT JOIN tbl_RelItemStore t1
+    ON t1.fk_ItemID = it.pk_ItemID
+   AND t1.fk_StoreCode = s.pk_StoreCode
+LEFT JOIN tbl_Shelf t3
+    ON t1.fk_Shelf = t3.tk_Shelf
+ORDER BY s.pk_StoreCode;";
+
+        var result = new ItemStockPositionResult { ItemCode = itemCode };
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add(new SqlParameter("@ItemCode", System.Data.SqlDbType.NVarChar, 50) { Value = itemCode });
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        bool nameCaptured = false;
+        while (await reader.ReadAsync())
+        {
+            if (!nameCaptured)
+            {
+                result.ItemName = reader["ItemName"] as string ?? string.Empty;
+                nameCaptured = true;
+            }
+            result.Rows.Add(new ItemStockPositionRow
+            {
+                StoreCode = reader["StoreCode"] as string ?? string.Empty,
+                StoreName = reader["StoreName"] as string ?? string.Empty,
+                OnStock = Convert.ToDecimal(reader["OnStock"]),
+                OnTransfer = Convert.ToDecimal(reader["OnTransfer"]),
+                Reserved = Convert.ToDecimal(reader["Reserved"]),
+                Ordered = Convert.ToDecimal(reader["Ordered"]),
+                OnWaybill = Convert.ToDecimal(reader["OnWaybill"]),
+                Shelf = reader["Shelf"] as string ?? string.Empty,
+                MinimumStock = Convert.ToDecimal(reader["MinimumStock"]),
+                RequiredStock = Convert.ToDecimal(reader["RequiredStock"])
+            });
+        }
+
+        return result;
+    }
+
     #region SQL Generation
+
+    /// <summary>
+    /// Builds the WHERE clause for the date range filter.
+    /// Honours filter.DateBasis (TransactionDate → h.DateTrans, SessionDate → h.SessionDateTime)
+    /// and filter.UseDateTime (false → CONVERT(DATE, ...), true → CONVERT(DATETIME, ...)).
+    /// Mirrors original repPowerReportCatalogue.aspx.vb:3642-3654.
+    /// </summary>
+    private static string BuildDateWhere(CatalogueFilter filter)
+    {
+        var column = filter.DateBasis == CatalogueDateBasis.SessionDate
+            ? "h.SessionDateTime"
+            : "h.DateTrans";
+        var conv = filter.UseDateTime ? "DATETIME" : "DATE";
+        return $"WHERE CONVERT({conv}, {column}) BETWEEN CONVERT({conv}, @DateFrom) AND CONVERT({conv}, @DateTo)";
+    }
 
     private string BuildUnionAll(CatalogueFilter filter, GroupingInfo grouping, ItemFilterInfo itemFilters)
     {
         var sb = new StringBuilder();
-        var dateWhere = "WHERE CONVERT(DATE, h.DateTrans) BETWEEN @DateFrom AND @DateTo";
+        var dateWhere = BuildDateWhere(filter);
         var filterCond = itemFilters.WhereClause;
         bool isSummary = filter.IsSummary;
 
@@ -472,7 +552,7 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
 
     private string BuildTotalsQuery(CatalogueFilter filter, ItemFilterInfo itemFilters)
     {
-        var dateWhere = "WHERE CONVERT(DATE, h.DateTrans) BETWEEN @DateFrom AND @DateTo";
+        var dateWhere = BuildDateWhere(filter);
         var filterCond = itemFilters.WhereClause;
         var sb = new StringBuilder();
 
@@ -919,10 +999,15 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
 
     private List<SqlParameter> BuildCommonParameters(CatalogueFilter filter, ItemFilterInfo itemFilters)
     {
+        // When UseDateTime is false, strip time components so date-only comparison matches original VB behaviour.
+        // When UseDateTime is true, pass full DateTime values so BETWEEN can honour hour/minute precision.
+        var dateFromParam = filter.UseDateTime ? filter.DateFrom : filter.DateFrom.Date;
+        var dateToParam = filter.UseDateTime ? filter.DateTo : filter.DateTo.Date;
+
         var parms = new List<SqlParameter>
         {
-            new("@DateFrom", filter.DateFrom.Date),
-            new("@DateTo", filter.DateTo.Date),
+            new("@DateFrom", dateFromParam),
+            new("@DateTo", dateToParam),
             new("@sProfitBasedOn", ((int)filter.ProfitBasedOn).ToString(CultureInfo.InvariantCulture)),
             new("@bProfitBasedOnIncludeVAT", filter.ProfitIncludesVat ? (byte)1 : (byte)0),
             new("@sStockValueBasedOn", ((int)filter.StockValueBasedOn).ToString(CultureInfo.InvariantCulture)),

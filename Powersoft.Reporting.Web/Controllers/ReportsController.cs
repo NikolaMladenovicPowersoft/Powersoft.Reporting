@@ -2052,6 +2052,58 @@ public class ReportsController : Controller
         }
     }
 
+    // ==================== Catalogue: Item Stock Position ====================
+    // Mirrors original Powersoft365 Item Stock Position dialog (toggled from Transaction History modal).
+
+    [HttpGet]
+    public async Task<IActionResult> GetItemStockPosition(string itemCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (string.IsNullOrWhiteSpace(itemCode))
+            return Json(new { success = false, message = "Item code is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateCatalogueRepository(tenantConnString);
+            var result = await repo.GetItemStockPositionAsync(itemCode);
+
+            return Json(new
+            {
+                success = true,
+                itemCode = result.ItemCode,
+                itemName = result.ItemName,
+                count = result.Rows.Count,
+                totalOnStock = result.TotalOnStock,
+                totalOnTransfer = result.TotalOnTransfer,
+                totalReserved = result.TotalReserved,
+                totalOrdered = result.TotalOrdered,
+                totalAvailable = result.TotalAvailable,
+                rows = result.Rows.Select(r => new
+                {
+                    storeCode = r.StoreCode,
+                    storeName = r.StoreName,
+                    onStock = r.OnStock,
+                    onTransfer = r.OnTransfer,
+                    reserved = r.Reserved,
+                    ordered = r.Ordered,
+                    onWaybill = r.OnWaybill,
+                    available = r.Available,
+                    shelf = r.Shelf,
+                    minStock = r.MinimumStock,
+                    reqStock = r.RequiredStock
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching item stock position for {ItemCode}", itemCode);
+            return Json(new { success = false, message = "Failed to load stock position." });
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetDocumentDetail(string docType, string docNumber)
     {
@@ -2736,12 +2788,16 @@ public class ReportsController : Controller
         CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
         string? displayColumns, bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelectionJson,
-        string sortColumn, string sortDirection)
+        string sortColumn, string sortDirection,
+        CatalogueDateBasis dateBasis = CatalogueDateBasis.TransactionDate,
+        bool useDateTime = false)
     {
         var filter = new CatalogueFilter
         {
             DateFrom = dateFrom,
             DateTo = dateTo,
+            DateBasis = dateBasis,
+            UseDateTime = useDateTime,
             ReportMode = reportMode,
             ReportOn = reportOn,
             PrimaryGroup = primaryGroup,
@@ -2815,6 +2871,68 @@ public class ReportsController : Controller
 
         var bytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter);
         return File(bytes, "text/csv", $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
+    }
+
+    // ==================== Catalogue Print Preview ====================
+
+    [HttpGet]
+    public async Task<IActionResult> PrintCataloguePreview(
+        DateTime dateFrom, DateTime dateTo,
+        CatalogueReportMode reportMode, CatalogueReportOn reportOn,
+        CatalogueGroupBy primaryGroup, CatalogueGroupBy secondaryGroup, CatalogueGroupBy thirdGroup,
+        string? displayColumns,
+        bool includeVat, bool showProfit, bool showStock,
+        int profitBasedOn = 99, bool profitIncludesVat = false,
+        int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
+        int costType = 99,
+        string? storeCodes = null, string? itemsSelection = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        CatalogueDateBasis dateBasis = CatalogueDateBasis.TransactionDate,
+        bool useDateTime = false)
+    {
+        var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
+            primaryGroup, secondaryGroup, thirdGroup, displayColumns, includeVat, showProfit, showStock,
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+
+        filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
+        filter.ProfitIncludesVat = profitIncludesVat;
+        filter.StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn;
+        filter.StockValueIncludesVat = stockValueIncludesVat;
+        filter.CostType = (CatalogueCostBasis)costType;
+
+        var result = await RunCatalogueExportQuery(filter);
+        if (result == null) return RedirectToAction("Catalogue");
+
+        var model = new CatalogueViewModel
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            DateBasis = dateBasis,
+            UseDateTime = useDateTime,
+            ReportMode = reportMode,
+            ReportOn = reportOn,
+            PrimaryGroup = primaryGroup,
+            SecondaryGroup = secondaryGroup,
+            ThirdGroup = thirdGroup,
+            IncludeVat = includeVat,
+            ShowProfit = showProfit,
+            ShowStock = showStock,
+            ProfitBasedOn = (CatalogueCostBasis)profitBasedOn,
+            ProfitIncludesVat = profitIncludesVat,
+            StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn,
+            StockValueIncludesVat = stockValueIncludesVat,
+            CostType = (CatalogueCostBasis)costType,
+            ConnectedDatabase = GetConnectedDatabaseName(),
+            Results = result.Value.rows,
+            TotalCount = result.Value.rows.Count,
+            Totals = result.Value.totals,
+            SortColumn = sortColumn,
+            SortDirection = sortDirection
+        };
+        if (!string.IsNullOrWhiteSpace(displayColumns))
+            model.DisplayColumnsString = displayColumns;
+
+        return View(model);
     }
 
     // ==================== Catalogue Send Email ====================

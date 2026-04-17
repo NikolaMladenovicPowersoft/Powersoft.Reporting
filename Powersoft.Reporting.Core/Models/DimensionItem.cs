@@ -35,6 +35,10 @@ public class ItemsSelectionFilter
     public DimensionFilter Stores { get; set; } = new();
     public DimensionFilter Items { get; set; } = new();
 
+    // Sale-leg only (tbl_InvoiceHeader / tbl_CreditNoteHeader): applied only when leg is a sales leg.
+    public DimensionFilter Agents { get; set; } = new();
+    public DimensionFilter PostalCodes { get; set; } = new();
+
     // Item-level property filters (tbl_Item columns)
     public StockFilter Stock { get; set; } = StockFilter.All;
     public bool? ECommerceOnly { get; set; }
@@ -56,6 +60,8 @@ public class ItemsSelectionConfig
     public bool ShowSuppliers { get; set; } = true;
     public bool ShowItems { get; set; }
     public bool ShowCustomers { get; set; }
+    public bool ShowAgents { get; set; }
+    public bool ShowPostalCodes { get; set; }
     public bool ShowStores { get; set; } = true;
     public bool ShowStockFilter { get; set; } = true;
     public bool ShowECommerce { get; set; } = true;

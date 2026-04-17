@@ -185,6 +185,7 @@ ORDER BY s.pk_StoreCode;";
         var sb = new StringBuilder();
         var dateWhere = BuildDateWhere(filter);
         var filterCond = itemFilters.WhereClause;
+        var saleOnlyCond = itemFilters.SaleOnlyWhereClause;
         bool isSummary = filter.IsSummary;
 
         if (filter.ReportOn == CatalogueReportOn.Sale || filter.ReportOn == CatalogueReportOn.Both)
@@ -199,7 +200,8 @@ ORDER BY s.pk_StoreCode;";
                 entityNameExpr: "CASE WHEN ISNULL(e.Company,0) = 1 THEN ISNULL(e.LastCompanyName,'') ELSE ISNULL(e.FirstName,'') + ' ' + ISNULL(e.LastCompanyName,'') END",
                 invoiceIdExpr: "h.pk_InvoiceID",
                 invoiceType: "I",
-                signMultiplier: 1);
+                signMultiplier: 1,
+                saleOnlyCond: saleOnlyCond);
 
             sb.AppendLine("UNION ALL");
 
@@ -213,13 +215,18 @@ ORDER BY s.pk_StoreCode;";
                 entityNameExpr: "CASE WHEN ISNULL(e.Company,0) = 1 THEN ISNULL(e.LastCompanyName,'') ELSE ISNULL(e.FirstName,'') + ' ' + ISNULL(e.LastCompanyName,'') END",
                 invoiceIdExpr: "h.pk_CreditID",
                 invoiceType: "C",
-                signMultiplier: -1);
+                signMultiplier: -1,
+                saleOnlyCond: saleOnlyCond);
         }
 
         if (filter.ReportOn == CatalogueReportOn.Purchase || filter.ReportOn == CatalogueReportOn.Both)
         {
             if (sb.Length > 0) sb.AppendLine("UNION ALL");
 
+            // Note: saleOnlyCond intentionally NOT appended — purchase headers/entities don't
+            // have fk_CustomerCode, fk_AgentID, PostalCode columns. This matches original
+            // repPowerReportCatalogue.aspx.vb behaviour where customer/agent/postalcode
+            // selections simply never applied to purchase legs.
             AppendTransactionLeg(sb, grouping, dateWhere, filterCond, isSummary, filter,
                 detailTable: "tbl_PurchInvoiceDetails",
                 headerTable: "tbl_PurchInvoiceHeader",
@@ -302,7 +309,8 @@ ORDER BY s.pk_StoreCode;";
         string detailTable, string headerTable, string headerJoin,
         string entityTable, string entityJoin,
         string entityCodeExpr, string entityNameExpr,
-        string invoiceIdExpr, string invoiceType, int signMultiplier)
+        string invoiceIdExpr, string invoiceType, int signMultiplier,
+        string saleOnlyCond = "")
     {
         string sign = signMultiplier == -1 ? "(-1) * " : "";
 
@@ -437,7 +445,14 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine(joinLine);
         }
 
-        sb.AppendLine($"{dateWhere}{filterCond}");
+        // Ensure entity alias 'e' is joined in summary mode when sale-only filters reference e.PostalCode.
+        // In detailed mode the entity is already joined above (line ~416).
+        if (isSummary && !string.IsNullOrEmpty(saleOnlyCond) && saleOnlyCond.Contains("e.", StringComparison.Ordinal))
+        {
+            sb.AppendLine($"LEFT JOIN {entityTable} e ON {entityJoin}");
+        }
+
+        sb.AppendLine($"{dateWhere}{filterCond}{saleOnlyCond}");
     }
 
     private string BuildOuterQuery(CatalogueFilter filter, GroupingInfo grouping, string innerUnion, bool isSummary)
@@ -554,13 +569,16 @@ ORDER BY s.pk_StoreCode;";
     {
         var dateWhere = BuildDateWhere(filter);
         var filterCond = itemFilters.WhereClause;
+        var saleOnlyCond = itemFilters.SaleOnlyWhereClause;
         var sb = new StringBuilder();
 
         var costExpr = ResolveCostExpr(filter.CostType);
         var profitPriceExpr = BuildPriceCaseExpr("@sProfitBasedOn", "@bProfitBasedOnIncludeVAT");
         var stockValuePriceExpr = BuildPriceCaseExpr("@sStockValueBasedOn", "@bStockValueBasedOnIncludeVAT");
 
-        void AppendTotalsLeg(string detailTbl, string headerTbl, string hdrJoin, int sign)
+        // For sale legs we additionally LEFT JOIN tbl_Customer (alias e) so that PostalCode / Customer / Agent
+        // filters in saleOnlyCond can be evaluated here too (keeps grid totals consistent with filtered rows).
+        void AppendTotalsLeg(string detailTbl, string headerTbl, string hdrJoin, int sign, bool isSaleLeg)
         {
             string s = sign == -1 ? "(-1)*" : "";
             sb.AppendLine($"SELECT {s}ISNULL(d.Quantity,0) AS Qty,");
@@ -579,7 +597,9 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine($"INNER JOIN {headerTbl} h ON {hdrJoin}");
             sb.AppendLine("INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID");
             sb.AppendLine("LEFT JOIN tbl_RelItemSuppliers t4 ON it.pk_ItemID = t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0) = 1");
-            sb.AppendLine($"{dateWhere}{filterCond}");
+            if (isSaleLeg && !string.IsNullOrEmpty(saleOnlyCond))
+                sb.AppendLine("LEFT JOIN tbl_Customer e ON h.fk_CustomerCode = e.pk_CustomerNo");
+            sb.AppendLine($"{dateWhere}{filterCond}{(isSaleLeg ? saleOnlyCond : "")}");
         }
 
         sb.AppendLine(";WITH AllLegs AS (");
@@ -587,17 +607,17 @@ ORDER BY s.pk_StoreCode;";
         bool needsUnion = false;
         if (filter.ReportOn == CatalogueReportOn.Sale || filter.ReportOn == CatalogueReportOn.Both)
         {
-            AppendTotalsLeg("tbl_InvoiceDetails", "tbl_InvoiceHeader", "d.fk_Invoice = h.pk_InvoiceID", 1);
+            AppendTotalsLeg("tbl_InvoiceDetails", "tbl_InvoiceHeader", "d.fk_Invoice = h.pk_InvoiceID", 1, isSaleLeg: true);
             sb.AppendLine("UNION ALL");
-            AppendTotalsLeg("tbl_CreditDetails", "tbl_CreditHeader", "d.fk_Credit = h.pk_CreditID", -1);
+            AppendTotalsLeg("tbl_CreditDetails", "tbl_CreditHeader", "d.fk_Credit = h.pk_CreditID", -1, isSaleLeg: true);
             needsUnion = true;
         }
         if (filter.ReportOn == CatalogueReportOn.Purchase || filter.ReportOn == CatalogueReportOn.Both)
         {
             if (needsUnion) sb.AppendLine("UNION ALL");
-            AppendTotalsLeg("tbl_PurchInvoiceDetails", "tbl_PurchInvoiceHeader", "d.fk_PurchInvoiceID = h.pk_PurchInvoiceID", 1);
+            AppendTotalsLeg("tbl_PurchInvoiceDetails", "tbl_PurchInvoiceHeader", "d.fk_PurchInvoiceID = h.pk_PurchInvoiceID", 1, isSaleLeg: false);
             sb.AppendLine("UNION ALL");
-            AppendTotalsLeg("tbl_PurchReturnDetails", "tbl_PurchReturnHeader", "d.fk_PurchReturnID = h.pk_PurchReturnID", -1);
+            AppendTotalsLeg("tbl_PurchReturnDetails", "tbl_PurchReturnHeader", "d.fk_PurchReturnID = h.pk_PurchReturnID", -1, isSaleLeg: false);
         }
 
         sb.AppendLine("), StockPerItem AS (");
@@ -788,7 +808,15 @@ ORDER BY s.pk_StoreCode;";
 
     #region Item Filters
 
-    private record ItemFilterInfo(string WhereClause, List<SqlParameter> Parameters);
+    /// <summary>
+    /// Item-level filters.
+    /// - WhereClause: conditions safe for every UNION leg (item, supplier, store etc.).
+    /// - SaleOnlyWhereClause: conditions that reference sale-leg-only columns
+    ///   (h.fk_CustomerCode, h.fk_AgentID, e.PostalCode) and MUST NOT be appended to
+    ///   purchase legs since those headers/entities don't have those columns.
+    ///   Mirrors original repPowerReportCatalogue.aspx.vb:3757/3788/3791 behaviour.
+    /// </summary>
+    private record ItemFilterInfo(string WhereClause, List<SqlParameter> Parameters, string SaleOnlyWhereClause = "");
 
     private ItemFilterInfo BuildItemFilters(CatalogueFilter filter)
     {
@@ -845,6 +873,7 @@ ORDER BY s.pk_StoreCode;";
             sb.Append($" AND it.fk_SeasonID IN ({string.Join(",", names)})");
         }
 
+        var saleOnlyWhere = "";
         if (filter.ItemsSelection != null)
         {
             var cols = new DimensionFilterBuilder.ColumnMap(
@@ -859,9 +888,23 @@ ORDER BY s.pk_StoreCode;";
             var (dimWhere, dimParms) = DimensionFilterBuilder.Build(filter.ItemsSelection, cols, idx);
             sb.Append(dimWhere);
             parms.AddRange(dimParms);
+            idx += dimParms.Count;
+
+            // Sale-only leg columns (mirrors original repPowerReportCatalogue.aspx.vb:3757/3788/3791):
+            //   Customer  -> h.fk_CustomerCode
+            //   Agent     -> h.fk_AgentID
+            //   PostalCode-> e.PostalCode (entity = tbl_Customer on sale legs)
+            var (soWhere, soParms) = DimensionFilterBuilder.BuildSaleOnly(
+                filter.ItemsSelection,
+                customerColumn: "h.fk_CustomerCode",
+                agentColumn: "h.fk_AgentID",
+                postalCodeColumn: "e.PostalCode",
+                startIdx: idx);
+            saleOnlyWhere = soWhere;
+            parms.AddRange(soParms);
         }
 
-        return new ItemFilterInfo(sb.ToString(), parms);
+        return new ItemFilterInfo(sb.ToString(), parms, saleOnlyWhere);
     }
 
     #endregion

@@ -10,4 +10,6 @@ public interface IDimensionRepository
     Task<List<DimensionItem>> GetSeasonsAsync();
     Task<List<DimensionItem>> GetSuppliersAsync(string? search = null, int maxResults = 500);
     Task<List<DimensionItem>> GetCustomersAsync(string? search = null, int maxResults = 500);
+    Task<List<DimensionItem>> GetAgentsAsync(string? search = null, int maxResults = 500);
+    Task<List<DimensionItem>> GetPostalCodesAsync(string? search = null, int maxResults = 500);
 }

@@ -97,6 +97,64 @@ public class DimensionRepository : IDimensionRepository
         return await ReadResultsAsync(cmd);
     }
 
+    public async Task<List<DimensionItem>> GetAgentsAsync(string? search = null, int maxResults = 500)
+    {
+        // Agents are people working for the company (pk_SystemNo in tbl_Agent).
+        // Name format matches original repPowerReportCatalogue: FirstName + ' ' + LastName.
+        var hasSearch = !string.IsNullOrWhiteSpace(search);
+        var sql = $@"
+            SELECT TOP (@MaxResults)
+                   CAST(pk_SystemNo AS NVARCHAR(20)) AS Id,
+                   CAST(pk_SystemNo AS NVARCHAR(20)) AS Code,
+                   LTRIM(RTRIM(ISNULL(FirstName,'') + ' ' + ISNULL(LastName,''))) AS Name
+            FROM tbl_Agent
+            WHERE (@Search IS NULL
+                OR CAST(pk_SystemNo AS NVARCHAR(20)) LIKE @Search
+                OR ISNULL(FirstName,'') LIKE @Search
+                OR ISNULL(LastName,'') LIKE @Search)
+            ORDER BY FirstName, LastName";
+
+        var searchTerm = hasSearch ? $"%{search!.Trim()}%" : null;
+
+        using var conn = new SqlConnection(_connectionString);
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@MaxResults", maxResults);
+        cmd.Parameters.AddWithValue("@Search", (object?)searchTerm ?? DBNull.Value);
+
+        await conn.OpenAsync();
+        return await ReadResultsAsync(cmd);
+    }
+
+    public async Task<List<DimensionItem>> GetPostalCodesAsync(string? search = null, int maxResults = 500)
+    {
+        // Postal codes are DISTINCT values from tbl_Customer.PostalCode.
+        // Mirrors original repPowerReportCatalogue.aspx.vb:3791-3792 (AND e.PostalCode IN (...)).
+        var hasSearch = !string.IsNullOrWhiteSpace(search);
+        var sql = $@"
+            SELECT TOP (@MaxResults)
+                   LTRIM(RTRIM(PostalCode)) AS Id,
+                   LTRIM(RTRIM(PostalCode)) AS Code,
+                   LTRIM(RTRIM(PostalCode)) AS Name
+            FROM (
+                SELECT DISTINCT PostalCode
+                FROM tbl_Customer
+                WHERE PostalCode IS NOT NULL
+                  AND LTRIM(RTRIM(PostalCode)) <> ''
+                  AND (@Search IS NULL OR PostalCode LIKE @Search)
+            ) AS q
+            ORDER BY PostalCode";
+
+        var searchTerm = hasSearch ? $"%{search!.Trim()}%" : null;
+
+        using var conn = new SqlConnection(_connectionString);
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@MaxResults", maxResults);
+        cmd.Parameters.AddWithValue("@Search", (object?)searchTerm ?? DBNull.Value);
+
+        await conn.OpenAsync();
+        return await ReadResultsAsync(cmd);
+    }
+
     private async Task<List<DimensionItem>> ExecuteListQueryAsync(string sql)
     {
         using var conn = new SqlConnection(_connectionString);

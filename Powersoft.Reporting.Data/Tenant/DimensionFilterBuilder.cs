@@ -15,6 +15,8 @@ internal static class DimensionFilterBuilder
         string Store = "t1.fk_StoreCode",
         string Supplier = "",
         string Customer = "",
+        string Agent = "",
+        string PostalCode = "",
         string ItemTableAlias = "t2");
 
     internal static readonly ColumnMap Default = new();
@@ -48,10 +50,46 @@ internal static class DimensionFilterBuilder
             AppendFilter(sb, parms, sel.Suppliers, cols.Supplier, "sup", ref idx);
         if (!string.IsNullOrEmpty(cols.Customer))
             AppendFilter(sb, parms, sel.Customers, cols.Customer, "cus", ref idx);
+        if (!string.IsNullOrEmpty(cols.Agent))
+            AppendFilter(sb, parms, sel.Agents, cols.Agent, "agn", ref idx);
+        if (!string.IsNullOrEmpty(cols.PostalCode))
+            AppendFilter(sb, parms, sel.PostalCodes, cols.PostalCode, "pcd", ref idx);
 
         AppendPropertyFilters(sb, parms, sel, cols.ItemTableAlias, ref idx);
 
         return (sb.ToString(), parms);
+    }
+
+    /// <summary>
+    /// Builds WHERE fragment for SALE-LEG only filters: Customer, Agent, PostalCode.
+    /// Returns empty if no sale-only filter is active. Uses prefix 'so' so params don't clash with general Build().
+    /// Caller is responsible for appending the fragment only to sale-leg SQL (invoice/credit note headers).
+    /// </summary>
+    internal static (string whereSql, List<SqlParameter> parameters) BuildSaleOnly(
+        ItemsSelectionFilter? sel,
+        string customerColumn, string agentColumn, string postalCodeColumn,
+        int startIdx = 0)
+    {
+        if (sel == null) return ("", new List<SqlParameter>());
+
+        var sb = new StringBuilder();
+        var parms = new List<SqlParameter>();
+        int idx = startIdx;
+
+        if (!string.IsNullOrEmpty(customerColumn))
+            AppendFilter(sb, parms, sel.Customers, customerColumn, "socus", ref idx);
+        if (!string.IsNullOrEmpty(agentColumn))
+            AppendFilter(sb, parms, sel.Agents, agentColumn, "soagn", ref idx);
+        if (!string.IsNullOrEmpty(postalCodeColumn))
+            AppendFilter(sb, parms, sel.PostalCodes, postalCodeColumn, "sopcd", ref idx);
+
+        return (sb.ToString(), parms);
+    }
+
+    internal static bool HasSaleOnlyFilters(ItemsSelectionFilter? sel)
+    {
+        if (sel == null) return false;
+        return sel.Customers.HasFilter || sel.Agents.HasFilter || sel.PostalCodes.HasFilter;
     }
 
     internal static bool NeedsItemJoin(ItemsSelectionFilter? sel)

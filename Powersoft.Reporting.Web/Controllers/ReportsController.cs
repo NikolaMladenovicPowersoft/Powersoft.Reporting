@@ -105,6 +105,8 @@ public class ReportsController : Controller
             ParseDimension(root, "seasons", filter.Seasons);
             ParseDimension(root, "suppliers", filter.Suppliers);
             ParseDimension(root, "customers", filter.Customers);
+            ParseDimension(root, "agents", filter.Agents);
+            ParseDimension(root, "postalcodes", filter.PostalCodes);
             ParseDimension(root, "stores", filter.Stores);
             ParseDimension(root, "items", filter.Items);
 
@@ -399,6 +401,8 @@ public class ReportsController : Controller
                 "season" or "seasons" => await repo.GetSeasonsAsync(),
                 "supplier" or "suppliers" => await repo.GetSuppliersAsync(search),
                 "customer" or "customers" => await repo.GetCustomersAsync(search),
+                "agent" or "agents" => await repo.GetAgentsAsync(search),
+                "postalcode" or "postalcodes" => await repo.GetPostalCodesAsync(search),
                 "store" or "stores" => new List<DimensionItem>(),
                 "item" or "items" => new List<DimensionItem>(),
                 _ => new List<DimensionItem>()

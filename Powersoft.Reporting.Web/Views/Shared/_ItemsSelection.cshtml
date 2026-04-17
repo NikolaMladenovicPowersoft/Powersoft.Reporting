@@ -31,6 +31,12 @@
             @if (Model.ShowCustomers) {
                 <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("customer", "Customer", "bi-people"))</div>
             }
+            @if (Model.ShowAgents) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("agent", "Agent", "bi-person-badge"))</div>
+            }
+            @if (Model.ShowPostalCodes) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("postalcode", "Postal Code", "bi-mailbox"))</div>
+            }
             @if (Model.ShowStores) {
                 <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("store", "Store", "bi-shop"))</div>
             }
@@ -154,7 +160,7 @@
         _modes[dim] = 'all';
     }
 
-    ['category','department','brand','season','supplier','customer','store','item'].forEach(initDim);
+    ['category','department','brand','season','supplier','customer','agent','postalcode','store','item'].forEach(initDim);
 
     if (_storesJson && _storesJson.length) {
         _dims['store'] = _storesJson.map(s => ({
@@ -171,6 +177,7 @@
             var keyToDim = {
                 categories: 'category', departments: 'department', brands: 'brand',
                 seasons: 'season', suppliers: 'supplier', customers: 'customer',
+                agents: 'agent', postalcodes: 'postalcode',
                 stores: 'store', items: 'item'
             };
             var hasAny = false;
@@ -436,6 +443,7 @@
         var dimKeyMap = {
             category: 'categories', department: 'departments', brand: 'brands',
             season: 'seasons', supplier: 'suppliers', customer: 'customers',
+            agent: 'agents', postalcode: 'postalcodes',
             store: 'stores', item: 'items'
         };
         Object.keys(_modes).forEach(function (dim) {

@@ -29,7 +29,7 @@ public class AverageBasketViewModel
     public bool IncludeVat { get; set; } = false;
     
     [Display(Name = "Compare with Last Year")]
-    public bool CompareLastYear { get; set; } = false;
+    public bool CompareLastYear { get; set; } = true;
     
     public string? DatePreset { get; set; }
     

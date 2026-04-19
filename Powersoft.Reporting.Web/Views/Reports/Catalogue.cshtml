@@ -1717,23 +1717,64 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         }
         fd.append('recurrenceJson', JSON.stringify(recurrenceJson));
 
+        var saveBtn = document.querySelector('#scheduleModal .btn-primary[onclick="saveSchedule()"]');
+        if (saveBtn) saveBtn.disabled = true;
+
         fetch('@Url.Action("SaveCatalogueSchedule", "Reports")', { method: 'POST', body: fd })
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                if (saveBtn) saveBtn.disabled = false;
                 if (data.success) {
                     alertDiv.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>' + data.message + '</div>';
                     alertDiv.style.display = '';
                     document.getElementById('schedName').value = '';
                     loadExistingSchedules();
+                    setTimeout(function() {
+                        var m = document.getElementById('scheduleModal');
+                        var inst = bootstrap.Modal.getInstance(m) || bootstrap.Modal.getOrCreateInstance(m);
+                        if (inst) inst.hide();
+                        showScheduleToast('Schedule saved successfully', 'success');
+                    }, 700);
                 } else {
                     alertDiv.innerHTML = '<div class="alert alert-danger mb-0">' + data.message + '</div>';
                     alertDiv.style.display = '';
                 }
             })
             .catch(function() {
+                if (saveBtn) saveBtn.disabled = false;
                 alertDiv.innerHTML = '<div class="alert alert-danger mb-0">Network error. Please try again.</div>';
                 alertDiv.style.display = '';
             });
+    }
+
+    function showScheduleToast(message, type) {
+        var existing = document.getElementById('schedToast');
+        if (existing) existing.remove();
+        var div = document.createElement('div');
+        div.id = 'schedToast';
+        div.className = 'alert alert-' + type + ' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';
+        div.style.zIndex = '11000';
+        div.innerHTML = '<i class="bi bi-' + (type === 'success' ? 'check-circle' : 'exclamation-triangle') + ' me-1"></i>' + message +
+            '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+        document.body.appendChild(div);
+        setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
+    }
+
+    function deleteScheduleRow(scheduleId, scheduleName) {
+        if (!confirm('Delete schedule "' + scheduleName + '"?\nThis cannot be undone.')) return;
+        var fd = new FormData();
+        fd.append('scheduleId', scheduleId);
+        fetch('@Url.Action("DeleteSchedule", "Reports")', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    showScheduleToast('Schedule deleted', 'success');
+                    loadExistingSchedules();
+                } else {
+                    showScheduleToast(data.message || 'Failed to delete schedule', 'danger');
+                }
+            })
+            .catch(function() { showScheduleToast('Network error', 'danger'); });
     }
 
     function loadExistingSchedules() {
@@ -1742,9 +1783,17 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             .then(function(data) {
                 var c = document.getElementById('existingSchedules');
                 if (!data || data.length === 0) { c.innerHTML = '<em>No schedules configured yet.</em>'; return; }
-                var html = '<table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th></tr></thead><tbody>';
+                var html = '<table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th class="text-end">Actions</th></tr></thead><tbody>';
                 data.forEach(function(s) {
-                    html += '<tr><td>' + s.scheduleName + '</td><td>' + s.recurrenceType + '</td><td>' + s.exportFormat + '</td><td>' + s.scheduleTime + '</td><td>' + (s.nextRun || '-') + '</td></tr>';
+                    var safeName = (s.scheduleName || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    html += '<tr>'
+                        + '<td>' + s.scheduleName + '</td>'
+                        + '<td>' + s.recurrenceType + '</td>'
+                        + '<td>' + s.exportFormat + '</td>'
+                        + '<td>' + s.scheduleTime + '</td>'
+                        + '<td>' + (s.nextRun || '-') + '</td>'
+                        + '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" title="Delete schedule" onclick="deleteScheduleRow(' + s.scheduleId + ', \'' + safeName + '\')"><i class="bi bi-trash"></i></button></td>'
+                        + '</tr>';
                 });
                 html += '</tbody></table>';
                 c.innerHTML = html;

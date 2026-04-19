@@ -681,6 +681,31 @@ public class ReportsController : Controller
         }
     }
 
+    // Generic delete endpoint — works for ANY report type (AvgBasket, PS, Catalogue, BelowMinStock).
+    // Soft-delete (sets IsActive = 0) via ScheduleRepository.DeleteScheduleAsync.
+    [HttpPost]
+    public async Task<IActionResult> DeleteSchedule(int scheduleId)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (scheduleId <= 0)
+            return Json(new { success = false, message = "Invalid schedule id" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var ok = await repo.DeleteScheduleAsync(scheduleId);
+            return Json(new { success = ok, message = ok ? "Schedule deleted" : "Schedule not found or already deleted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting schedule {ScheduleId}", scheduleId);
+            return Json(new { success = false, message = "Failed to delete schedule" });
+        }
+    }
+
     private DateTime? CalculateNextRun(string recurrenceType, int? day, TimeSpan time)
     {
         var now = DateTime.Now;

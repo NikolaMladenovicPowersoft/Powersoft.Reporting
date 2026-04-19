@@ -2678,7 +2678,121 @@ public class ReportsController : Controller
         };
 
         await LoadCatalogueStoresAsync(viewModel, tenantConnString);
+        await LoadCatalogueSavedLayoutAsync(viewModel, tenantConnString);
         return View(viewModel);
+    }
+
+    private async Task LoadCatalogueSavedLayoutAsync(CatalogueViewModel model, string tenantConnString)
+    {
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var parms = await repo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCatalogue,
+                userCode);
+
+            if (parms.Count == 0) return;
+
+            model.HasSavedLayout = true;
+
+            if (parms.TryGetValue("DateBasis", out var db) && Enum.TryParse<CatalogueDateBasis>(db, out var dbt))
+                model.DateBasis = dbt;
+            if (parms.TryGetValue("UseDateTime", out var udt))
+                model.UseDateTime = udt == "1";
+            if (parms.TryGetValue("ReportMode", out var rm) && Enum.TryParse<CatalogueReportMode>(rm, out var rmt))
+                model.ReportMode = rmt;
+            if (parms.TryGetValue("ReportOn", out var ro) && Enum.TryParse<CatalogueReportOn>(ro, out var rot))
+                model.ReportOn = rot;
+            if (parms.TryGetValue("PrimaryGroup", out var pg) && Enum.TryParse<CatalogueGroupBy>(pg, out var pgt))
+                model.PrimaryGroup = pgt;
+            if (parms.TryGetValue("SecondaryGroup", out var sg) && Enum.TryParse<CatalogueGroupBy>(sg, out var sgt))
+                model.SecondaryGroup = sgt;
+            if (parms.TryGetValue("ThirdGroup", out var tg) && Enum.TryParse<CatalogueGroupBy>(tg, out var tgt))
+                model.ThirdGroup = tgt;
+            if (parms.TryGetValue("ProfitBasedOn", out var pbo) && Enum.TryParse<CatalogueCostBasis>(pbo, out var pbot))
+                model.ProfitBasedOn = pbot;
+            if (parms.TryGetValue("ProfitIncludesVat", out var piv))
+                model.ProfitIncludesVat = piv == "1";
+            if (parms.TryGetValue("StockValueBasedOn", out var svbo) && Enum.TryParse<CatalogueCostBasis>(svbo, out var svbot))
+                model.StockValueBasedOn = svbot;
+            if (parms.TryGetValue("StockValueIncludesVat", out var sviv))
+                model.StockValueIncludesVat = sviv == "1";
+            if (parms.TryGetValue("CostType", out var ct) && Enum.TryParse<CatalogueCostBasis>(ct, out var ctt))
+                model.CostType = ctt;
+            if (parms.TryGetValue("ShowProfit", out var sp))
+                model.ShowProfit = sp == "1";
+            if (parms.TryGetValue("ShowStock", out var ss))
+                model.ShowStock = ss == "1";
+            if (parms.TryGetValue("PageSize", out var ps) && int.TryParse(ps, out var pageSize) && pageSize > 0)
+                model.PageSize = pageSize;
+            if (parms.TryGetValue("DisplayColumns", out var dcs) && !string.IsNullOrEmpty(dcs))
+                model.DisplayColumnsString = dcs;
+            if (parms.TryGetValue("ItemsSelectionJson", out var isj) && !string.IsNullOrEmpty(isj))
+                model.ItemsSelectionJson = isj;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not load Catalogue saved layout — using defaults");
+        }
+    }
+
+    // ==================== Catalogue Layout (per-user saved defaults) ====================
+
+    [HttpPost]
+    public async Task<IActionResult> SaveCatalogueLayout([FromBody] Dictionary<string, string> parameters)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (parameters == null || parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            await repo.SaveLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCatalogue,
+                ModuleConstants.IniDescriptionCatalogue,
+                userCode,
+                parameters);
+
+            return Json(new { success = true, message = "Layout saved" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving Catalogue layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ResetCatalogueLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var deleted = await repo.DeleteLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCatalogue,
+                userCode);
+
+            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting Catalogue layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to reset layout" });
+        }
     }
 
     [HttpPost]
@@ -2840,11 +2954,21 @@ public class ReportsController : Controller
         string? displayColumns,
         bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelection,
-        string sortColumn = "ItemCode", string sortDirection = "ASC")
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        CatalogueDateBasis dateBasis = CatalogueDateBasis.TransactionDate,
+        bool useDateTime = false,
+        int profitBasedOn = 99, bool profitIncludesVat = false,
+        int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
+        int costType = 99)
     {
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
-            storeCodes, itemsSelection, sortColumn, sortDirection);
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+        filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
+        filter.ProfitIncludesVat = profitIncludesVat;
+        filter.StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn;
+        filter.StockValueIncludesVat = stockValueIncludesVat;
+        filter.CostType = (CatalogueCostBasis)costType;
 
         var result = await RunCatalogueExportQuery(filter);
         if (result == null) return RedirectToAction("Catalogue");
@@ -2863,11 +2987,21 @@ public class ReportsController : Controller
         string? displayColumns,
         bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelection,
-        string sortColumn = "ItemCode", string sortDirection = "ASC")
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        CatalogueDateBasis dateBasis = CatalogueDateBasis.TransactionDate,
+        bool useDateTime = false,
+        int profitBasedOn = 99, bool profitIncludesVat = false,
+        int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
+        int costType = 99)
     {
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
-            storeCodes, itemsSelection, sortColumn, sortDirection);
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+        filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
+        filter.ProfitIncludesVat = profitIncludesVat;
+        filter.StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn;
+        filter.StockValueIncludesVat = stockValueIncludesVat;
+        filter.CostType = (CatalogueCostBasis)costType;
 
         var result = await RunCatalogueExportQuery(filter);
         if (result == null) return RedirectToAction("Catalogue");
@@ -2949,7 +3083,12 @@ public class ReportsController : Controller
         string? displayColumns,
         bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelection,
-        string sortColumn = "ItemCode", string sortDirection = "ASC")
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        CatalogueDateBasis dateBasis = CatalogueDateBasis.TransactionDate,
+        bool useDateTime = false,
+        int profitBasedOn = 99, bool profitIncludesVat = false,
+        int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
+        int costType = 99)
     {
         if (string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Please enter at least one email address." });
@@ -2968,7 +3107,12 @@ public class ReportsController : Controller
 
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
-            storeCodes, itemsSelection, sortColumn, sortDirection);
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+        filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
+        filter.ProfitIncludesVat = profitIncludesVat;
+        filter.StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn;
+        filter.StockValueIncludesVat = stockValueIncludesVat;
+        filter.CostType = (CatalogueCostBasis)costType;
 
         var result = await RunCatalogueExportQuery(filter);
         if (result == null)
@@ -3224,14 +3368,24 @@ public class ReportsController : Controller
         bool showProfit, bool showStock,
         string? storeCodes, string? itemsSelection,
         string sortColumn = "ItemCode", string sortDirection = "ASC",
-        string? locale = "el", int? promptTemplateId = null)
+        string? locale = "el", int? promptTemplateId = null,
+        CatalogueDateBasis dateBasis = CatalogueDateBasis.TransactionDate,
+        bool useDateTime = false,
+        int profitBasedOn = 99, bool profitIncludesVat = false,
+        int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
+        int costType = 99)
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
 
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
-            storeCodes, itemsSelection, sortColumn, sortDirection);
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+        filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
+        filter.ProfitIncludesVat = profitIncludesVat;
+        filter.StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn;
+        filter.StockValueIncludesVat = stockValueIncludesVat;
+        filter.CostType = (CatalogueCostBasis)costType;
 
         var result = await RunCatalogueExportQuery(filter);
         if (result == null)

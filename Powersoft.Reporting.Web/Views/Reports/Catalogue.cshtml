@@ -47,7 +47,6 @@
             <input type="hidden" asp-for="PageNumber" id="pageNumberHidden" />
             <input type="hidden" asp-for="SortColumn" id="sortColumnHidden" />
             <input type="hidden" asp-for="SortDirection" id="sortDirectionHidden" />
-            <input type="hidden" asp-for="HiddenColumns" id="hiddenColumnsInput" />
             <input type="hidden" asp-for="DisplayColumnsString" id="displayColumnsHidden" />
             @foreach (var col in filterCols)
             {
@@ -191,6 +190,15 @@
                     </button>
                 }
                 <div class="btn-group ms-auto">
+                    <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Save current parameters as your default layout">
+                        <i class="bi bi-save me-1"></i>Save Layout
+                    </button>
+                    @if (Model.HasSavedLayout)
+                    {
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetSavedLayout()" title="Discard your saved layout and restore factory defaults">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Layout
+                        </button>
+                    }
                     <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#columnSettingsModal" title="Choose which columns to show/hide">
                         <i class="bi bi-layout-three-columns me-1"></i>Columns
                     </button>
@@ -199,6 +207,10 @@
                     <i class="bi bi-funnel me-1"></i>Clear Filters
                 </a>
             </div>
+            @if (Model.HasSavedLayout)
+            {
+                <div class="mt-2"><small class="text-info"><i class="bi bi-check-circle me-1"></i>Saved layout loaded</small></div>
+            }
         </form>
     </div>
 </div>
@@ -227,6 +239,38 @@
     <div class="alert alert-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>@Model.ErrorMessage</div>
 }
 
+@if (hasResults && Model.Totals != null)
+{
+    <div class="row mb-4 g-3">
+        <div class="col-6 col-md-3">
+            <div class="stat-card text-center">
+                <div class="stat-value">@Model.Totals.TotalQuantity.ToString("N2")</div>
+                <div class="stat-label">Total Quantity</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card text-center">
+                <div class="stat-value">@((useGross ? Model.Totals.TotalGrossAmount : Model.Totals.TotalNetValue).ToString("N2"))</div>
+                <div class="stat-label">@(useGross ? "Total Gross" : "Total Net Value")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card text-center">
+                @{ var catProfitColor = Model.Totals.TotalProfitValue >= 0 ? "text-success" : "text-danger"; }
+                <div class="stat-value @catProfitColor">@Model.Totals.TotalProfitValue.ToString("N2")</div>
+                <div class="stat-label">Total Profit</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card text-center">
+                @{ var catMarginColor = Model.Totals.TotalMargin >= 0 ? "text-success" : "text-danger"; }
+                <div class="stat-value @catMarginColor">@Model.Totals.TotalMargin.ToString("N2")%</div>
+                <div class="stat-label">Avg Margin</div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (hasResults)
 {
     <div class="card mb-4" id="results">
@@ -243,8 +287,10 @@
                 <div class="btn-group btn-group-sm">
                     <a class="btn btn-outline-success"
                        asp-action="ExportCatalogueCsv"
-                       asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")"
-                       asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")"
+                       asp-route-dateFrom="@(Model.UseDateTime ? Model.DateFrom.ToString("yyyy-MM-ddTHH:mm") : Model.DateFrom.ToString("yyyy-MM-dd"))"
+                       asp-route-dateTo="@(Model.UseDateTime ? Model.DateTo.ToString("yyyy-MM-ddTHH:mm") : Model.DateTo.ToString("yyyy-MM-dd"))"
+                       asp-route-dateBasis="@Model.DateBasis"
+                       asp-route-useDateTime="@Model.UseDateTime"
                        asp-route-reportMode="@Model.ReportMode"
                        asp-route-reportOn="@Model.ReportOn"
                        asp-route-primaryGroup="@Model.PrimaryGroup"
@@ -253,6 +299,11 @@
                        asp-route-displayColumns="@Model.DisplayColumnsString"
                        asp-route-showProfit="@Model.ShowProfit"
                        asp-route-showStock="@Model.ShowStock"
+                       asp-route-profitBasedOn="@((int)Model.ProfitBasedOn)"
+                       asp-route-profitIncludesVat="@Model.ProfitIncludesVat"
+                       asp-route-stockValueBasedOn="@((int)Model.StockValueBasedOn)"
+                       asp-route-stockValueIncludesVat="@Model.StockValueIncludesVat"
+                       asp-route-costType="@((int)Model.CostType)"
                        asp-route-storeCodes="@Model.SelectedStoreCodesString"
                        asp-route-itemsSelection="@(Model.ItemsSelectionJson ?? "")"
                        asp-route-sortColumn="@Model.SortColumn"
@@ -261,8 +312,10 @@
                     </a>
                     <a class="btn btn-outline-success"
                        asp-action="ExportCatalogueExcel"
-                       asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")"
-                       asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")"
+                       asp-route-dateFrom="@(Model.UseDateTime ? Model.DateFrom.ToString("yyyy-MM-ddTHH:mm") : Model.DateFrom.ToString("yyyy-MM-dd"))"
+                       asp-route-dateTo="@(Model.UseDateTime ? Model.DateTo.ToString("yyyy-MM-ddTHH:mm") : Model.DateTo.ToString("yyyy-MM-dd"))"
+                       asp-route-dateBasis="@Model.DateBasis"
+                       asp-route-useDateTime="@Model.UseDateTime"
                        asp-route-reportMode="@Model.ReportMode"
                        asp-route-reportOn="@Model.ReportOn"
                        asp-route-primaryGroup="@Model.PrimaryGroup"
@@ -271,6 +324,11 @@
                        asp-route-displayColumns="@Model.DisplayColumnsString"
                        asp-route-showProfit="@Model.ShowProfit"
                        asp-route-showStock="@Model.ShowStock"
+                       asp-route-profitBasedOn="@((int)Model.ProfitBasedOn)"
+                       asp-route-profitIncludesVat="@Model.ProfitIncludesVat"
+                       asp-route-stockValueBasedOn="@((int)Model.StockValueBasedOn)"
+                       asp-route-stockValueIncludesVat="@Model.StockValueIncludesVat"
+                       asp-route-costType="@((int)Model.CostType)"
                        asp-route-storeCodes="@Model.SelectedStoreCodesString"
                        asp-route-itemsSelection="@(Model.ItemsSelectionJson ?? "")"
                        asp-route-sortColumn="@Model.SortColumn"
@@ -347,71 +405,172 @@
                             @if (dc("ItemAttr6")) { <th data-col="ItemAttr6">Attr 6</th> }
                         </tr>
                     </thead>
+                    @{
+                        int totalColumns = (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0)
+                            + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0)
+                            + (dc("Quantity")?1:0)+(dc("Value")?1:0)+(dc("Discount")?1:0)+(dc("NetValue")?1:0)
+                            + (dc("VatAmount")?1:0)+(dc("GrossAmount")?1:0)+(dc("Profit")?1:0)
+                            + (dc("Markup")?1:0)+(dc("Margin")?1:0)+(dc("Cost")?1:0)+(dc("TotalCost")?1:0)
+                            + (dc("TotalStockQty")?1:0)+(dc("TotalStockValue")?1:0);
+                        var dimColsForCount = new[] {"EntityCode","EntityName","InvoiceNumber","InvoiceType",
+                            "StoreCode","StoreName","StationCode","DateTrans","UserCode","AgentName",
+                            "ZReportNumber","PaymentType","ItemCategory","ItemDepartment","Brand",
+                            "Season","Model","Colour","Size","Franchise","ItemSupplier",
+                            "Price1Excl","Price1Incl","Price2Excl","Price2Incl","Price3Excl","Price3Incl",
+                            "ItemAttr1","ItemAttr2","ItemAttr3","ItemAttr4","ItemAttr5","ItemAttr6"};
+                        foreach (var c in dimColsForCount) { if (dc(c)) totalColumns++; }
+
+                        Func<CatalogueRow, object> renderDataRow = @<tr>
+                            @if (hasL1) { <td>@(@item.Level1Value)</td> }
+                            @if (hasL2) { <td>@(@item.Level2Value)</td> }
+                            @if (hasL3) { <td>@(@item.Level3Value)</td> }
+                            @if (showItem && dc("ItemCode")) { <td class="text-nowrap fw-semibold"><a href="#" class="dd-link-item" data-item-code="@item.ItemCode" data-item-name="@item.ItemDescription" title="View transaction history / stock position">@item.ItemCode</a></td> }
+                            @if (showItem && dc("ItemName")) { <td><a href="#" class="dd-link-item" data-item-code="@item.ItemCode" data-item-name="@item.ItemDescription" title="View transaction history / stock position">@item.ItemDescription</a></td> }
+                            @if (dc("Quantity")) { <td class="text-end">@item.Quantity.ToString("N2")</td> }
+                            @if (dc("Value")) { <td class="text-end">@item.ValueBeforeDiscount.ToString("N2")</td> }
+                            @if (dc("Discount")) { <td class="text-end">@item.Discount.ToString("N2")</td> }
+                            @if (dc("NetValue")) { <td class="text-end">@item.NetValue.ToString("N2")</td> }
+                            @if (dc("VatAmount")) { <td class="text-end">@item.VatAmount.ToString("N2")</td> }
+                            @if (dc("GrossAmount")) { <td class="text-end">@item.GrossAmount.ToString("N2")</td> }
+                            @if (dc("Profit")) { <td class="text-end @(item.ProfitValue < 0 ? "text-danger" : "text-success")">@item.ProfitValue.ToString("N2")</td> }
+                            @if (dc("Markup")) { <td class="text-end">@item.Markup.ToString("N1")%</td> }
+                            @if (dc("Margin")) { <td class="text-end">@item.Margin.ToString("N1")%</td> }
+                            @if (dc("Cost")) { <td class="text-end">@item.Cost.ToString("N2")</td> }
+                            @if (dc("TotalCost")) { <td class="text-end">@item.TotalCost.ToString("N2")</td> }
+                            @if (dc("TotalStockQty")) { <td class="text-end">@item.TotalStockQty.ToString("N0")</td> }
+                            @if (dc("TotalStockValue")) { <td class="text-end">@item.TotalStockValue.ToString("N2")</td> }
+                            @if (dc("EntityCode")) { <td class="small">@item.EntityCode</td> }
+                            @if (dc("EntityName")) { <td class="small">@item.EntityName</td> }
+                            @if (dc("InvoiceNumber")) { <td class="small">@item.InvoiceNumber</td> }
+                            @if (dc("InvoiceType")) { <td class="small">@item.InvoiceType</td> }
+                            @if (dc("StoreCode")) { <td class="small">@item.StoreCode</td> }
+                            @if (dc("StoreName")) { <td class="small">@item.StoreName</td> }
+                            @if (dc("StationCode")) { <td class="small">@item.StationCode</td> }
+                            @if (dc("DateTrans")) { <td class="small text-nowrap">@(item.DateTrans?.ToString("dd/MM/yyyy") ?? "")</td> }
+                            @if (dc("UserCode")) { <td class="small">@item.UserCode</td> }
+                            @if (dc("AgentName")) { <td class="small">@item.AgentName</td> }
+                            @if (dc("ZReportNumber")) { <td class="small">@item.ZReportNumber</td> }
+                            @if (dc("PaymentType")) { <td class="small">@item.PaymentType</td> }
+                            @if (dc("ItemCategory")) { <td class="small">@item.ItemCategoryDescr</td> }
+                            @if (dc("ItemDepartment")) { <td class="small">@item.ItemDepartmentDescr</td> }
+                            @if (dc("Brand")) { <td class="small">@item.BrandName</td> }
+                            @if (dc("Season")) { <td class="small">@item.SeasonName</td> }
+                            @if (dc("Model")) { <td class="small">@item.ModelCode</td> }
+                            @if (dc("Colour")) { <td class="small">@item.Colour</td> }
+                            @if (dc("Size")) { <td class="small">@item.Size</td> }
+                            @if (dc("Franchise")) { <td class="small">@item.FranchiseName</td> }
+                            @if (dc("ItemSupplier")) { <td class="small">@item.ItemSupplierName</td> }
+                            @if (dc("Price1Excl")) { <td class="text-end">@item.Price1Excl.ToString("N2")</td> }
+                            @if (dc("Price1Incl")) { <td class="text-end">@item.Price1Incl.ToString("N2")</td> }
+                            @if (dc("Price2Excl")) { <td class="text-end">@item.Price2Excl.ToString("N2")</td> }
+                            @if (dc("Price2Incl")) { <td class="text-end">@item.Price2Incl.ToString("N2")</td> }
+                            @if (dc("Price3Excl")) { <td class="text-end">@item.Price3Excl.ToString("N2")</td> }
+                            @if (dc("Price3Incl")) { <td class="text-end">@item.Price3Incl.ToString("N2")</td> }
+                            @if (dc("ItemAttr1")) { <td class="small">@item.ItemAttr1Descr</td> }
+                            @if (dc("ItemAttr2")) { <td class="small">@item.ItemAttr2Descr</td> }
+                            @if (dc("ItemAttr3")) { <td class="small">@item.ItemAttr3Descr</td> }
+                            @if (dc("ItemAttr4")) { <td class="small">@item.ItemAttr4Descr</td> }
+                            @if (dc("ItemAttr5")) { <td class="small">@item.ItemAttr5Descr</td> }
+                            @if (dc("ItemAttr6")) { <td class="small">@item.ItemAttr6Descr</td> }
+                        </tr>;
+
+                        // Renders a subtotal row (numeric sums + Markup/Margin recomputed from sums).
+                        // item = Tuple(rows, label, bgColor, indent). Indent = empty group cells before the label.
+                        Func<Tuple<List<CatalogueRow>, string, string, int>, object> renderSubtotal =
+                            @<tr class="group-subtotal-row" style="background:@item.Item3;">
+                                @{
+                                    var subRows = ((List<CatalogueRow>)item.Item1);
+                                    var subLabel = (string)item.Item2;
+                                    var subIndent = (int)item.Item4;
+                                    var subQty = subRows.Sum(r => r.Quantity);
+                                    var subVal = subRows.Sum(r => r.ValueBeforeDiscount);
+                                    var subDisc = subRows.Sum(r => r.Discount);
+                                    var subNet = subRows.Sum(r => r.NetValue);
+                                    var subVat = subRows.Sum(r => r.VatAmount);
+                                    var subGross = subRows.Sum(r => r.GrossAmount);
+                                    var subProfit = subRows.Sum(r => r.ProfitValue);
+                                    var subTransCost = subRows.Sum(r => r.TransactionCost);
+                                    var subTotalCost = subRows.Sum(r => r.TotalCost);
+                                    var subStockQty = subRows.Sum(r => r.TotalStockQty);
+                                    var subMargin = subNet != 0 ? Math.Round(subProfit / subNet * 100m, 2) : 0;
+                                    var subMarkup = subTransCost != 0 ? Math.Round(subProfit / subTransCost * 100m, 2) : 0;
+
+                                    int groupCols = (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0);
+                                    int itemCols = (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
+                                    int labelSpan = (groupCols - subIndent) + itemCols;
+                                    if (labelSpan < 1) labelSpan = 1;
+                                }
+                                @for (int i = 0; i < subIndent; i++) { <td></td> }
+                                <td colspan="@labelSpan" class="fw-semibold text-uppercase text-muted">@subLabel</td>
+                                @if (dc("Quantity")) { <td class="text-end fw-semibold">@subQty.ToString("N2")</td> }
+                                @if (dc("Value")) { <td class="text-end fw-semibold">@subVal.ToString("N2")</td> }
+                                @if (dc("Discount")) { <td class="text-end fw-semibold">@subDisc.ToString("N2")</td> }
+                                @if (dc("NetValue")) { <td class="text-end fw-semibold">@subNet.ToString("N2")</td> }
+                                @if (dc("VatAmount")) { <td class="text-end fw-semibold">@subVat.ToString("N2")</td> }
+                                @if (dc("GrossAmount")) { <td class="text-end fw-semibold">@subGross.ToString("N2")</td> }
+                                @if (dc("Profit")) { <td class="text-end fw-semibold @(subProfit < 0 ? "text-danger" : "text-success")">@subProfit.ToString("N2")</td> }
+                                @if (dc("Markup")) { <td class="text-end fw-semibold">@subMarkup.ToString("N1")%</td> }
+                                @if (dc("Margin")) { <td class="text-end fw-semibold">@subMargin.ToString("N1")%</td> }
+                                @if (dc("Cost")) { <td></td> }
+                                @if (dc("TotalCost")) { <td class="text-end fw-semibold">@subTotalCost.ToString("N2")</td> }
+                                @if (dc("TotalStockQty")) { <td class="text-end fw-semibold">@subStockQty.ToString("N0")</td> }
+                                @if (dc("TotalStockValue")) { <td></td> }
+                                @foreach (var c in dimColsForCount) { if (dc(c)) { <td></td> } }
+                            </tr>;
+                    }
                     <tbody>
-                        @{ string lastL1 = null, lastL2 = null, lastL3 = null; }
-                        @foreach (var row in Model.Results)
+                        @if (hasL1)
                         {
-                            bool newL1 = hasL1 && row.Level1Value != lastL1;
-                            bool newL2 = hasL2 && (row.Level2Value != lastL2 || newL1);
-                            bool newL3 = hasL3 && (row.Level3Value != lastL3 || newL2);
+                            var l1Groups = Model.Results.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A").ToList();
+                            foreach (var l1Group in l1Groups)
+                            {
+                                var l1Rows = l1Group.ToList();
+                                <tr class="group-header-row" style="background:#dbeafe;">
+                                    <td colspan="@totalColumns"><i class="bi bi-diagram-3 me-2"></i><strong>@Model.PrimaryGroup:</strong> @l1Group.Key</td>
+                                </tr>
 
-                            if (newL1) { lastL1 = row.Level1Value; }
-                            if (newL2) { lastL2 = row.Level2Value; }
-                            if (newL3) { lastL3 = row.Level3Value; }
+                                @if (hasL2)
+                                {
+                                    var l2Groups = l1Rows.GroupBy(r => r.Level2Value ?? "N/A").ToList();
+                                    foreach (var l2Group in l2Groups)
+                                    {
+                                        var l2Rows = l2Group.ToList();
+                                        <tr class="group-header-row" style="background:#e8f0fe;">
+                                            <td colspan="@totalColumns" class="ps-4"><i class="bi bi-chevron-right me-1"></i><strong>@Model.SecondaryGroup:</strong> @l2Group.Key</td>
+                                        </tr>
 
-                            <tr>
-                                @if (hasL1) { <td class="@(newL1 ? "fw-bold text-primary" : "")">@(newL1 ? row.Level1Value : "")</td> }
-                                @if (hasL2) { <td class="@(newL2 ? "fw-semibold" : "")">@(newL2 ? row.Level2Value : "")</td> }
-                                @if (hasL3) { <td>@(newL3 ? row.Level3Value : "")</td> }
-                                @if (showItem && dc("ItemCode")) { <td class="text-nowrap fw-semibold"><a href="#" class="dd-link-item" data-item-code="@row.ItemCode" data-item-name="@row.ItemDescription" title="View transaction history / stock position">@row.ItemCode</a></td> }
-                                @if (showItem && dc("ItemName")) { <td><a href="#" class="dd-link-item" data-item-code="@row.ItemCode" data-item-name="@row.ItemDescription" title="View transaction history / stock position">@row.ItemDescription</a></td> }
-                                @if (dc("Quantity")) { <td class="text-end">@row.Quantity.ToString("N2")</td> }
-                                @if (dc("Value")) { <td class="text-end">@row.ValueBeforeDiscount.ToString("N2")</td> }
-                                @if (dc("Discount")) { <td class="text-end">@row.Discount.ToString("N2")</td> }
-                                @if (dc("NetValue")) { <td class="text-end">@row.NetValue.ToString("N2")</td> }
-                                @if (dc("VatAmount")) { <td class="text-end">@row.VatAmount.ToString("N2")</td> }
-                                @if (dc("GrossAmount")) { <td class="text-end">@row.GrossAmount.ToString("N2")</td> }
-                                @if (dc("Profit")) { <td class="text-end @(row.ProfitValue < 0 ? "text-danger" : "text-success")">@row.ProfitValue.ToString("N2")</td> }
-                                @if (dc("Markup")) { <td class="text-end">@row.Markup.ToString("N1")%</td> }
-                                @if (dc("Margin")) { <td class="text-end">@row.Margin.ToString("N1")%</td> }
-                                @if (dc("Cost")) { <td class="text-end">@row.Cost.ToString("N2")</td> }
-                                @if (dc("TotalCost")) { <td class="text-end">@row.TotalCost.ToString("N2")</td> }
-                                @if (dc("TotalStockQty")) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
-                                @if (dc("TotalStockValue")) { <td class="text-end">@row.TotalStockValue.ToString("N2")</td> }
-                                @if (dc("EntityCode")) { <td class="small">@row.EntityCode</td> }
-                                @if (dc("EntityName")) { <td class="small">@row.EntityName</td> }
-                                @if (dc("InvoiceNumber")) { <td class="small">@row.InvoiceNumber</td> }
-                                @if (dc("InvoiceType")) { <td class="small">@row.InvoiceType</td> }
-                                @if (dc("StoreCode")) { <td class="small">@row.StoreCode</td> }
-                                @if (dc("StoreName")) { <td class="small">@row.StoreName</td> }
-                                @if (dc("StationCode")) { <td class="small">@row.StationCode</td> }
-                                @if (dc("DateTrans")) { <td class="small text-nowrap">@(row.DateTrans?.ToString("dd/MM/yyyy") ?? "")</td> }
-                                @if (dc("UserCode")) { <td class="small">@row.UserCode</td> }
-                                @if (dc("AgentName")) { <td class="small">@row.AgentName</td> }
-                                @if (dc("ZReportNumber")) { <td class="small">@row.ZReportNumber</td> }
-                                @if (dc("PaymentType")) { <td class="small">@row.PaymentType</td> }
-                                @if (dc("ItemCategory")) { <td class="small">@row.ItemCategoryDescr</td> }
-                                @if (dc("ItemDepartment")) { <td class="small">@row.ItemDepartmentDescr</td> }
-                                @if (dc("Brand")) { <td class="small">@row.BrandName</td> }
-                                @if (dc("Season")) { <td class="small">@row.SeasonName</td> }
-                                @if (dc("Model")) { <td class="small">@row.ModelCode</td> }
-                                @if (dc("Colour")) { <td class="small">@row.Colour</td> }
-                                @if (dc("Size")) { <td class="small">@row.Size</td> }
-                                @if (dc("Franchise")) { <td class="small">@row.FranchiseName</td> }
-                                @if (dc("ItemSupplier")) { <td class="small">@row.ItemSupplierName</td> }
-                                @if (dc("Price1Excl")) { <td class="text-end">@row.Price1Excl.ToString("N2")</td> }
-                                @if (dc("Price1Incl")) { <td class="text-end">@row.Price1Incl.ToString("N2")</td> }
-                                @if (dc("Price2Excl")) { <td class="text-end">@row.Price2Excl.ToString("N2")</td> }
-                                @if (dc("Price2Incl")) { <td class="text-end">@row.Price2Incl.ToString("N2")</td> }
-                                @if (dc("Price3Excl")) { <td class="text-end">@row.Price3Excl.ToString("N2")</td> }
-                                @if (dc("Price3Incl")) { <td class="text-end">@row.Price3Incl.ToString("N2")</td> }
-                                @if (dc("ItemAttr1")) { <td class="small">@row.ItemAttr1Descr</td> }
-                                @if (dc("ItemAttr2")) { <td class="small">@row.ItemAttr2Descr</td> }
-                                @if (dc("ItemAttr3")) { <td class="small">@row.ItemAttr3Descr</td> }
-                                @if (dc("ItemAttr4")) { <td class="small">@row.ItemAttr4Descr</td> }
-                                @if (dc("ItemAttr5")) { <td class="small">@row.ItemAttr5Descr</td> }
-                                @if (dc("ItemAttr6")) { <td class="small">@row.ItemAttr6Descr</td> }
-                            </tr>
+                                        @if (hasL3)
+                                        {
+                                            var l3Groups = l2Rows.GroupBy(r => r.Level3Value ?? "N/A").ToList();
+                                            foreach (var l3Group in l3Groups)
+                                            {
+                                                var l3Rows = l3Group.ToList();
+                                                <tr class="group-header-row" style="background:#f0f4f8;">
+                                                    <td colspan="@totalColumns" class="ps-5"><i class="bi bi-dash me-1"></i><strong>@Model.ThirdGroup:</strong> @l3Group.Key</td>
+                                                </tr>
+                                                @foreach (var r in l3Rows) { @renderDataRow(r) }
+                                                @renderSubtotal(Tuple.Create(l3Rows, l3Group.Key + " subtotal", "#f0f4f8", 3))
+                                            }
+                                        }
+                                        else
+                                        {
+                                            @foreach (var r in l2Rows) { @renderDataRow(r) }
+                                        }
+
+                                        @renderSubtotal(Tuple.Create(l2Rows, l2Group.Key + " subtotal", "#e8f0fe", 2))
+                                    }
+                                }
+                                else
+                                {
+                                    @foreach (var r in l1Rows) { @renderDataRow(r) }
+                                }
+
+                                @renderSubtotal(Tuple.Create(l1Rows, l1Group.Key + " total", "#dbeafe", 1))
+                            }
+                        }
+                        else
+                        {
+                            @foreach (var r in Model.Results) { @renderDataRow(r) }
                         }
                     </tbody>
                     @if (Model.Totals != null)
@@ -420,9 +579,9 @@
                         int countItemCols = (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
                         int spanCols = countGroupCols + countItemCols;
 
-                        <tfoot class="table-dark">
-                            <tr class="fw-bold">
-                                @if (spanCols > 0) { <td colspan="@spanCols">Grand Total</td> }
+                        <tfoot>
+                            <tr class="grand-total-row">
+                                @if (spanCols > 0) { <td colspan="@spanCols"><i class="bi bi-calculator me-1"></i>GRAND TOTAL</td> }
                                 @if (dc("Quantity")) { <td class="text-end">@Model.Totals.TotalQuantity.ToString("N2")</td> }
                                 @if (dc("Value")) { <td class="text-end">@Model.Totals.TotalValueBeforeDiscount.ToString("N2")</td> }
                                 @if (dc("Discount")) { <td class="text-end">@Model.Totals.TotalDiscount.ToString("N2")</td> }
@@ -503,6 +662,8 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
 
     #resultsTable thead th.sortable { cursor: pointer; user-select: none; }
     #resultsTable thead th.sortable:hover { filter: brightness(0.96); }
+
+    #results { scroll-margin-top: 16px; }
 
     /* Drill-down link style (same as PurchasesSales) */
     #resultsTable a.dd-link-item { color: #2563eb; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #2563eb; }
@@ -696,86 +857,115 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted small mb-2">Search and toggle which columns are visible in the results table. Changes apply immediately.</p>
+                <p class="text-muted small mb-2">
+                    Choose which columns appear in the table. Changes to column selection require re-running the report
+                    (press <strong>Apply &amp; Refresh</strong>).
+                </p>
                 <div class="input-group mb-3">
                     <span class="input-group-text"><i class="bi bi-search"></i></span>
                     <input type="text" class="form-control" id="colSearchInput" placeholder="Search columns..." oninput="filterColumnList()">
                 </div>
-                <div class="border rounded" style="max-height: 320px; overflow-y: auto;">
+                <div class="border rounded" style="max-height: 360px; overflow-y: auto;">
                     <div class="list-group list-group-flush" id="colToggleList">
                         @{
-                            var visCols = new (string Value, string Label, string Search)[] {
-                                ("Level1Description","Group 1","group 1 level1"),
-                                ("Level2Description","Group 2","group 2 level2"),
-                                ("Level3Description","Group 3","group 3 level3"),
-                                ("ItemCode","Code","code itemcode"),
-                                ("ItemDescription","Description","description itemname name"),
-                                ("Quantity","Qty","qty quantity"),
-                                ("ValueBeforeDiscount","Value","value before discount"),
-                                ("Discount","Discount","discount"),
-                                ("NetValue","Net Value","net value"),
-                                ("VatAmount","VAT","vat tax"),
-                                ("GrossAmount","Gross Amt","gross amount"),
-                                ("ProfitValue","Profit","profit"),
-                                ("Markup","Markup %","markup"),
-                                ("Margin","Margin %","margin"),
-                                ("Cost","Cost","cost"),
-                                ("TotalCost","Total Cost","total cost"),
-                                ("TotalStockQty","Stock Qty","stock qty quantity"),
-                                ("TotalStockValue","Stock Value","stock value"),
-                                ("EntityCode","Entity Code","entity code customer supplier"),
-                                ("EntityName","Entity Name","entity name customer supplier"),
-                                ("InvoiceNumber","Invoice No","invoice number no"),
-                                ("InvoiceType","Inv. Type","invoice type"),
-                                ("StoreCode","Store Code","store code"),
-                                ("StoreName","Store","store name"),
-                                ("StationCode","Station","station"),
-                                ("DateTrans","Date","date transaction"),
-                                ("UserCode","User","user code"),
-                                ("AgentName","Agent","agent"),
-                                ("ZReportNumber","Z Report","z report"),
-                                ("PaymentType","Payment Type","payment type"),
-                                ("ItemCategory","Category","category"),
-                                ("ItemDepartment","Department","department"),
-                                ("Brand","Brand","brand"),
-                                ("Season","Season","season"),
-                                ("Model","Model","model"),
-                                ("Colour","Colour","colour color"),
-                                ("Size","Size","size"),
-                                ("Franchise","Franchise","franchise"),
-                                ("ItemSupplier","Supplier","supplier"),
-                                ("Price1Excl","Price 1 Ex","price 1 excl"),
-                                ("Price1Incl","Price 1 In","price 1 incl"),
-                                ("Price2Excl","Price 2 Ex","price 2 excl"),
-                                ("Price2Incl","Price 2 In","price 2 incl"),
-                                ("Price3Excl","Price 3 Ex","price 3 excl"),
-                                ("Price3Incl","Price 3 In","price 3 incl"),
-                                ("ItemAttr1","Attr 1","attribute 1"),
-                                ("ItemAttr2","Attr 2","attribute 2"),
-                                ("ItemAttr3","Attr 3","attribute 3"),
-                                ("ItemAttr4","Attr 4","attribute 4"),
-                                ("ItemAttr5","Attr 5","attribute 5"),
-                                ("ItemAttr6","Attr 6","attribute 6")
+                            // Tuple: (SqlColName used on <th> data-col, UI label, search keywords, DisplayColumnsString key, IsGroupingLevel, IsDisplayColCandidate)
+                            // When IsGroupingLevel = true, the column is controlled solely by Primary/Secondary/Third Group selects (not by DisplayColumns).
+                            var visCols = new (string SqlCol, string Label, string Search, string DispKey, bool IsGrouping, bool IsActive, bool CanToggle)[] {
+                                ("Level1Description","Group 1","group 1 level1","", true, hasL1, false),
+                                ("Level2Description","Group 2","group 2 level2","", true, hasL2, false),
+                                ("Level3Description","Group 3","group 3 level3","", true, hasL3, false),
+                                ("ItemCode","Code","code itemcode","ItemCode", false, dc("ItemCode"), showItem),
+                                ("ItemDescription","Description","description itemname name","ItemName", false, dc("ItemName"), showItem),
+                                ("Quantity","Qty","qty quantity","Quantity", false, dc("Quantity"), true),
+                                ("ValueBeforeDiscount","Value","value before discount","Value", false, dc("Value"), true),
+                                ("Discount","Discount","discount","Discount", false, dc("Discount"), true),
+                                ("NetValue","Net Value","net value","NetValue", false, dc("NetValue"), true),
+                                ("VatAmount","VAT","vat tax","VatAmount", false, dc("VatAmount"), true),
+                                ("GrossAmount","Gross Amt","gross amount","GrossAmount", false, dc("GrossAmount"), true),
+                                ("ProfitValue","Profit","profit","Profit", false, dc("Profit"), true),
+                                ("Markup","Markup %","markup","Markup", false, dc("Markup"), true),
+                                ("Margin","Margin %","margin","Margin", false, dc("Margin"), true),
+                                ("Cost","Cost","cost","Cost", false, dc("Cost"), true),
+                                ("TotalCost","Total Cost","total cost","TotalCost", false, dc("TotalCost"), true),
+                                ("TotalStockQty","Stock Qty","stock qty quantity","TotalStockQty", false, dc("TotalStockQty"), true),
+                                ("TotalStockValue","Stock Value","stock value","TotalStockValue", false, dc("TotalStockValue"), true),
+                                ("EntityCode","Entity Code","entity code customer supplier","EntityCode", false, dc("EntityCode"), true),
+                                ("EntityName","Entity Name","entity name customer supplier","EntityName", false, dc("EntityName"), true),
+                                ("InvoiceNumber","Invoice No","invoice number no","InvoiceNumber", false, dc("InvoiceNumber"), true),
+                                ("InvoiceType","Inv. Type","invoice type","InvoiceType", false, dc("InvoiceType"), true),
+                                ("StoreCode","Store Code","store code","StoreCode", false, dc("StoreCode"), true),
+                                ("StoreName","Store","store name","StoreName", false, dc("StoreName"), true),
+                                ("StationCode","Station","station","StationCode", false, dc("StationCode"), true),
+                                ("DateTrans","Date","date transaction","DateTrans", false, dc("DateTrans"), true),
+                                ("UserCode","User","user code","UserCode", false, dc("UserCode"), true),
+                                ("AgentName","Agent","agent","AgentName", false, dc("AgentName"), true),
+                                ("ZReportNumber","Z Report","z report","ZReportNumber", false, dc("ZReportNumber"), true),
+                                ("PaymentType","Payment Type","payment type","PaymentType", false, dc("PaymentType"), true),
+                                ("ItemCategory","Category","category","ItemCategory", false, dc("ItemCategory"), true),
+                                ("ItemDepartment","Department","department","ItemDepartment", false, dc("ItemDepartment"), true),
+                                ("Brand","Brand","brand","Brand", false, dc("Brand"), true),
+                                ("Season","Season","season","Season", false, dc("Season"), true),
+                                ("Model","Model","model","Model", false, dc("Model"), true),
+                                ("Colour","Colour","colour color","Colour", false, dc("Colour"), true),
+                                ("Size","Size","size","Size", false, dc("Size"), true),
+                                ("Franchise","Franchise","franchise","Franchise", false, dc("Franchise"), true),
+                                ("ItemSupplier","Supplier","supplier","ItemSupplier", false, dc("ItemSupplier"), true),
+                                ("Price1Excl","Price 1 Ex","price 1 excl","Price1Excl", false, dc("Price1Excl"), true),
+                                ("Price1Incl","Price 1 In","price 1 incl","Price1Incl", false, dc("Price1Incl"), true),
+                                ("Price2Excl","Price 2 Ex","price 2 excl","Price2Excl", false, dc("Price2Excl"), true),
+                                ("Price2Incl","Price 2 In","price 2 incl","Price2Incl", false, dc("Price2Incl"), true),
+                                ("Price3Excl","Price 3 Ex","price 3 excl","Price3Excl", false, dc("Price3Excl"), true),
+                                ("Price3Incl","Price 3 In","price 3 incl","Price3Incl", false, dc("Price3Incl"), true),
+                                ("ItemAttr1","Attr 1","attribute 1","ItemAttr1", false, dc("ItemAttr1"), true),
+                                ("ItemAttr2","Attr 2","attribute 2","ItemAttr2", false, dc("ItemAttr2"), true),
+                                ("ItemAttr3","Attr 3","attribute 3","ItemAttr3", false, dc("ItemAttr3"), true),
+                                ("ItemAttr4","Attr 4","attribute 4","ItemAttr4", false, dc("ItemAttr4"), true),
+                                ("ItemAttr5","Attr 5","attribute 5","ItemAttr5", false, dc("ItemAttr5"), true),
+                                ("ItemAttr6","Attr 6","attribute 6","ItemAttr6", false, dc("ItemAttr6"), true)
                             };
+                            var togglableCount = visCols.Count(c => c.CanToggle && !c.IsGrouping);
                         }
                         @foreach (var c in visCols)
                         {
-                            <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="@c.Search">
-                                <input class="form-check-input col-toggle me-2" type="checkbox" value="@c.Value" checked onchange="applyColumnVisibility()">
+                            var disabled = c.IsGrouping || !c.CanToggle;
+                            var titleAttr = c.IsGrouping
+                                ? "Controlled by the Primary/Secondary/Third Group selector"
+                                : (!c.CanToggle ? "Item columns are available in detailed/ungrouped mode only" : "");
+                            <label class="list-group-item list-group-item-action d-flex align-items-center @(disabled ? "disabled text-muted" : "")"
+                                   data-col-name="@c.Search"
+                                   title="@titleAttr">
+                                <input class="form-check-input col-toggle me-2"
+                                       type="checkbox"
+                                       value="@c.SqlCol"
+                                       data-disp-key="@c.DispKey"
+                                       data-is-grouping="@(c.IsGrouping ? "1" : "0")"
+                                       @(c.IsActive ? "checked" : "")
+                                       @(disabled ? "disabled" : "")
+                                       onchange="onColToggleChange(this)">
                                 <span>@c.Label</span>
+                                @if (c.IsGrouping)
+                                {
+                                    <span class="badge bg-info ms-auto small">Grouping</span>
+                                }
                             </label>
                         }
                     </div>
                 </div>
                 <div class="mt-2 d-flex justify-content-between small text-muted">
-                    <span><span id="colVisibleCount">0</span> of @visCols.Length columns visible</span>
+                    <span><span id="colVisibleCount">0</span> of @togglableCount columns selected</span>
+                    <span id="colDirtyIndicator" class="text-warning" style="display:none;">
+                        <i class="bi bi-exclamation-circle me-1"></i>Press <strong>Apply &amp; Refresh</strong> to see changes
+                    </span>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllColumns(true)">Select All</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllColumns(false)">Deselect All</button>
-                <button type="button" class="btn btn-outline-secondary" onclick="resetColumnVisibility()">Show All</button>
-                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetDefaultColumns()">Reset to Default</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="applyAndRefreshColumns()">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Apply &amp; Refresh
+                </button>
             </div>
         </div>
     </div>
@@ -1150,8 +1340,6 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
 
 @section Scripts {
 <script>
-    const defaultDisplayCols = ['ItemCode','ItemName','Quantity','Value','Discount','NetValue','VatAmount','GrossAmount'];
-
     function getSelectedDisplayCols() {
         return document.getElementById('displayColumnsHidden').value
             .split(',').filter(c => c.length > 0);
@@ -1159,51 +1347,6 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
 
     function setSelectedDisplayCols(cols) {
         document.getElementById('displayColumnsHidden').value = cols.join(',');
-    }
-
-    function toggleDisplayCol(btn) {
-        const col = btn.dataset.col;
-        let cols = getSelectedDisplayCols();
-        const idx = cols.findIndex(c => c.toLowerCase() === col.toLowerCase());
-        if (idx >= 0) {
-            cols.splice(idx, 1);
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-outline-secondary');
-            const icon = btn.querySelector('i');
-            if (icon) icon.remove();
-        } else {
-            cols.push(col);
-            btn.classList.remove('btn-outline-secondary');
-            btn.classList.add('btn-primary');
-            const icon = document.createElement('i');
-            icon.className = 'bi bi-x-lg ms-1 small';
-            btn.appendChild(icon);
-        }
-        setSelectedDisplayCols(cols);
-    }
-
-    function clearAllDisplayCols() {
-        setSelectedDisplayCols([]);
-        document.querySelectorAll('.display-col-btn').forEach(btn => {
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-outline-secondary');
-            const icon = btn.querySelector('i');
-            if (icon) icon.remove();
-        });
-    }
-
-    function resetDefaultDisplayCols() {
-        clearAllDisplayCols();
-        setSelectedDisplayCols([...defaultDisplayCols]);
-        document.querySelectorAll('.display-col-btn').forEach(btn => {
-            if (defaultDisplayCols.includes(btn.dataset.col)) {
-                btn.classList.remove('btn-outline-secondary');
-                btn.classList.add('btn-primary');
-                const icon = document.createElement('i');
-                icon.className = 'bi bi-x-lg ms-1 small';
-                btn.appendChild(icon);
-            }
-        });
     }
 
     function clearPreset() {
@@ -1244,8 +1387,19 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                 case 'lastYear': from = new Date(today.getFullYear() - 1, 0, 1); to = new Date(today.getFullYear() - 1, 11, 31); break;
             }
             if (from && to) {
-                document.getElementById('DateFrom').value = from.toISOString().split('T')[0];
-                document.getElementById('DateTo').value = to.toISOString().split('T')[0];
+                // Local yyyy-MM-dd (avoid UTC shift from toISOString()).
+                function pad(n){return n<10?'0'+n:''+n;}
+                function localDate(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+                var fInp = document.getElementById('DateFrom');
+                var tInp = document.getElementById('DateTo');
+                var useTime = fInp && fInp.type === 'datetime-local';
+                if (useTime) {
+                    fInp.value = localDate(from) + 'T00:00';
+                    tInp.value = localDate(to)   + 'T23:59';
+                } else {
+                    fInp.value = localDate(from);
+                    tInp.value = localDate(to);
+                }
             }
         });
     });
@@ -1267,13 +1421,13 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     cascade();
 
     function goToPage(p) {
-        try { sessionStorage.setItem('catalogue_scroll', String(window.scrollY || 0)); } catch (e) {}
         document.getElementById('pageNumberHidden').value = p;
+        try { sessionStorage.setItem('catalogue_scroll_to_results', '1'); } catch (e) {}
         document.getElementById('reportForm').submit();
     }
 
-    // Sticky-sort: remember scroll position before submitting so the user
-    // doesn't get bumped to the top when clicking a column header.
+    // Sticky-sort: mark that a sort click happened so we can anchor the
+    // results table at the top of the viewport after the page reloads.
     document.querySelectorAll('th.sortable').forEach(th => {
         th.addEventListener('click', function () {
             const col = this.dataset.col;
@@ -1282,12 +1436,7 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             document.getElementById('sortColumnHidden').value = col;
             document.getElementById('sortDirectionHidden').value = (col === curCol && curDir === 'ASC') ? 'DESC' : 'ASC';
             document.getElementById('pageNumberHidden').value = '1';
-            try {
-                const tableTop = document.getElementById('results');
-                const y = tableTop ? (tableTop.getBoundingClientRect().top + window.scrollY) : (window.scrollY || 0);
-                sessionStorage.setItem('catalogue_scroll', String(y));
-                sessionStorage.setItem('catalogue_scroll_source', 'sort');
-            } catch (e) {}
+            try { sessionStorage.setItem('catalogue_scroll_to_results', '1'); } catch (e) {}
             document.getElementById('reportForm').submit();
         });
     });
@@ -1299,17 +1448,22 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         btn.disabled = true;
     });
 
-    // Restore scroll after sort/paginate
-    window.addEventListener('DOMContentLoaded', function () {
+    // After a sort-triggered reload, anchor the results table at the top of the viewport
+    // instead of letting the browser jump to the top of the page.
+    // We use window.load (not DOMContentLoaded) so all sizes are settled, and also run
+    // once on DOMContentLoaded to minimise perceived jump.
+    function scrollResultsIntoView() {
         try {
-            const src = sessionStorage.getItem('catalogue_scroll_source');
-            const y = parseInt(sessionStorage.getItem('catalogue_scroll') || '0', 10);
-            if (y > 0) {
-                setTimeout(function () { window.scrollTo({ top: y, left: 0, behavior: 'auto' }); }, 0);
-            }
-            sessionStorage.removeItem('catalogue_scroll');
-            sessionStorage.removeItem('catalogue_scroll_source');
+            if (sessionStorage.getItem('catalogue_scroll_to_results') !== '1') return;
+            var el = document.getElementById('results');
+            if (!el) return;
+            el.scrollIntoView({ behavior: 'auto', block: 'start' });
         } catch (e) {}
+    }
+    document.addEventListener('DOMContentLoaded', scrollResultsIntoView);
+    window.addEventListener('load', function () {
+        scrollResultsIntoView();
+        try { sessionStorage.removeItem('catalogue_scroll_to_results'); } catch (e) {}
     });
 
     // ==================== VAT cascade (mirrors original repPowerReportCatalogue.aspx.vb:1913-1914) ====================
@@ -1391,22 +1545,108 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         return { valid: true, emails: emails, errors: [] };
     }
 
+    // ==================== Save / Reset Layout (per-user defaults) ====================
+
+    function collectCurrentLayout() {
+        function v(id){var el = document.getElementById(id); return el ? el.value : '';}
+        function chk(id){var el = document.getElementById(id); return el ? (el.checked ? '1' : '0') : '0';}
+        var p = {};
+        p['DateBasis'] = v('DateBasis');
+        p['UseDateTime'] = chk('UseDateTime');
+        p['ReportMode'] = v('ReportMode');
+        p['ReportOn'] = v('ReportOn');
+        p['PrimaryGroup'] = v('PrimaryGroup');
+        p['SecondaryGroup'] = v('SecondaryGroup');
+        p['ThirdGroup'] = v('ThirdGroup');
+        p['ProfitBasedOn'] = v('ProfitBasedOn');
+        p['ProfitIncludesVat'] = chk('ProfitIncludesVat');
+        p['StockValueBasedOn'] = v('StockValueBasedOn');
+        p['StockValueIncludesVat'] = chk('StockValueIncludesVat');
+        p['CostType'] = v('CostType');
+        p['ShowProfit'] = chk('ShowProfit');
+        p['ShowStock'] = chk('ShowStock');
+        p['PageSize'] = v('PageSize');
+        p['DisplayColumns'] = v('displayColumnsHidden') || '';
+        var isj = v('itemsSelectionJsonHidden');
+        if (isj) p['ItemsSelectionJson'] = isj;
+        return p;
+    }
+
+    function saveCurrentLayout() {
+        var parms = collectCurrentLayout();
+        fetch('@Url.Action("SaveCatalogueLayout", "Reports")', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(parms)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showLayoutToast('Layout saved successfully', 'success');
+            } else {
+                showLayoutToast(data.message || 'Failed to save layout', 'danger');
+            }
+        })
+        .catch(function() {
+            showLayoutToast('Network error saving layout', 'danger');
+        });
+    }
+
+    function resetSavedLayout() {
+        if (!confirm('Reset your saved layout to factory defaults?')) return;
+        fetch('@Url.Action("ResetCatalogueLayout", "Reports")', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showLayoutToast('Layout reset — reloading...', 'success');
+                setTimeout(function() { window.location.href = '@Url.Action("Catalogue", new { layoutReset = true })'; }, 800);
+            } else {
+                showLayoutToast(data.message || 'Failed to reset layout', 'danger');
+            }
+        })
+        .catch(function() {
+            showLayoutToast('Network error', 'danger');
+        });
+    }
+
+    function showLayoutToast(message, type) {
+        var existing = document.getElementById('layoutToast');
+        if (existing) existing.remove();
+        var div = document.createElement('div');
+        div.id = 'layoutToast';
+        div.className = 'alert alert-' + type + ' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';
+        div.style.zIndex = '9999';
+        div.innerHTML = '<i class="bi bi-' + (type === 'success' ? 'check-circle' : 'exclamation-triangle') + ' me-1"></i>' + message +
+            '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+        document.body.appendChild(div);
+        setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
+    }
+
     function collectCatalogueParams() {
+        function v(id){var el = document.getElementById(id); return el ? el.value : '';}
+        function chk(id){var el = document.getElementById(id); return el ? el.checked : false;}
         return {
-            dateFrom: document.getElementById('DateFrom').value,
-            dateTo: document.getElementById('DateTo').value,
-            reportMode: document.getElementById('ReportMode').value,
-            reportOn: document.getElementById('ReportOn').value,
-            primaryGroup: document.getElementById('PrimaryGroup').value,
-            secondaryGroup: document.getElementById('SecondaryGroup').value,
-            thirdGroup: document.getElementById('ThirdGroup').value,
-            displayColumns: document.getElementById('displayColumnsHidden').value || '',
-            showProfit: document.getElementById('ShowProfit') ? document.getElementById('ShowProfit').checked : false,
-            showStock: document.getElementById('ShowStock') ? document.getElementById('ShowStock').checked : false,
-            storeCodes: document.getElementById('selectedStoreCodesHidden').value || '',
-            itemsSelection: document.getElementById('itemsSelectionJsonHidden').value || '',
-            sortColumn: document.getElementById('sortColumnHidden').value || 'ItemCode',
-            sortDirection: document.getElementById('sortDirectionHidden').value || 'ASC'
+            dateFrom: v('DateFrom'),
+            dateTo: v('DateTo'),
+            dateBasis: v('DateBasis'),
+            useDateTime: chk('UseDateTime'),
+            reportMode: v('ReportMode'),
+            reportOn: v('ReportOn'),
+            primaryGroup: v('PrimaryGroup'),
+            secondaryGroup: v('SecondaryGroup'),
+            thirdGroup: v('ThirdGroup'),
+            profitBasedOn: v('ProfitBasedOn'),
+            profitIncludesVat: chk('ProfitIncludesVat'),
+            stockValueBasedOn: v('StockValueBasedOn'),
+            stockValueIncludesVat: chk('StockValueIncludesVat'),
+            costType: v('CostType'),
+            displayColumns: v('displayColumnsHidden') || '',
+            showProfit: chk('ShowProfit'),
+            showStock: chk('ShowStock'),
+            storeCodes: v('selectedStoreCodesHidden'),
+            itemsSelection: v('itemsSelectionJsonHidden'),
+            sortColumn: v('sortColumnHidden') || 'ItemCode',
+            sortDirection: v('sortDirectionHidden') || 'ASC'
         };
     }
 
@@ -1626,7 +1866,7 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             });
     }
 
-    // ==================== Column Visibility ====================
+    // ==================== Column Selection (drives DisplayColumnsString on server) ====================
 
     function filterColumnList() {
         var el = document.getElementById('colSearchInput');
@@ -1642,62 +1882,90 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     }
 
     function toggleAllColumns(checked) {
-        document.querySelectorAll('.col-toggle').forEach(function(cb) { cb.checked = checked; });
-        applyColumnVisibility();
-        updateColVisibleCount();
+        document.querySelectorAll('.col-toggle:not([disabled])').forEach(function(cb) {
+            if (cb.checked !== checked) { cb.checked = checked; onColToggleChange(cb); }
+        });
+    }
+
+    function resetDefaultColumns() {
+        var defaults = ['ItemCode','ItemName','Quantity','Value','Discount','NetValue','VatAmount','GrossAmount'];
+        document.querySelectorAll('.col-toggle:not([disabled])').forEach(function(cb) {
+            var key = cb.getAttribute('data-disp-key') || '';
+            var shouldCheck = defaults.indexOf(key) >= 0;
+            if (cb.checked !== shouldCheck) { cb.checked = shouldCheck; onColToggleChange(cb); }
+        });
     }
 
     function updateColVisibleCount() {
-        var visible = document.querySelectorAll('.col-toggle:checked').length;
+        var visible = document.querySelectorAll('.col-toggle[data-is-grouping="0"]:not([disabled]):checked').length;
         var el = document.getElementById('colVisibleCount');
         if (el) el.textContent = visible;
     }
 
-    function applyColumnVisibility() {
-        var hidden = [];
-        document.querySelectorAll('.col-toggle').forEach(function(cb) { if (!cb.checked) hidden.push(cb.value); });
-        var hiddenInput = document.getElementById('hiddenColumnsInput');
-        if (hiddenInput) hiddenInput.value = hidden.join(',');
+    // Rebuild DisplayColumnsString hidden input from modal checkboxes.
+    function rebuildDisplayColumnsFromModal() {
+        var keys = [];
+        document.querySelectorAll('.col-toggle[data-is-grouping="0"]:checked').forEach(function(cb) {
+            var k = cb.getAttribute('data-disp-key') || '';
+            if (k && keys.indexOf(k) < 0) keys.push(k);
+        });
+        var hidden = document.getElementById('displayColumnsHidden');
+        if (hidden) hidden.value = keys.join(',');
+    }
 
-        var styleEl = document.getElementById('colVisibilityStyle');
-        if (!styleEl) {
-            styleEl = document.createElement('style');
-            styleEl.id = 'colVisibilityStyle';
-            document.head.appendChild(styleEl);
-        }
-        var table = document.getElementById('resultsTable');
-        if (!table) return;
-        var rules = [];
-        document.querySelectorAll('.col-toggle').forEach(function(cb) {
-            var colKey = cb.value;
-            if (!cb.checked) {
+    // Track whether the user changed the selection since the report was generated.
+    var _colsInitialSig = '';
+    function currentColsSignature() {
+        var keys = [];
+        document.querySelectorAll('.col-toggle[data-is-grouping="0"]').forEach(function(cb) {
+            keys.push(cb.getAttribute('data-disp-key') + ':' + (cb.checked ? '1' : '0'));
+        });
+        return keys.join('|');
+    }
+    function updateDirtyIndicator() {
+        var el = document.getElementById('colDirtyIndicator');
+        if (!el) return;
+        el.style.display = (currentColsSignature() !== _colsInitialSig) ? '' : 'none';
+    }
+
+    function onColToggleChange(cb) {
+        // Immediate visual feedback: hide the corresponding <th>/<td> if it is currently rendered.
+        try {
+            var table = document.getElementById('resultsTable');
+            if (table) {
                 var headers = table.querySelectorAll('thead tr:first-child th');
                 for (var i = 0; i < headers.length; i++) {
-                    if (headers[i].getAttribute('data-col') === colKey) {
+                    if (headers[i].getAttribute('data-col') === cb.value) {
                         var colIdx = i + 1;
-                        rules.push('#resultsTable th:nth-child(' + colIdx + '), #resultsTable td:nth-child(' + colIdx + ') { display: none; }');
+                        var styleId = 'colHide_' + cb.value;
+                        var existing = document.getElementById(styleId);
+                        if (!cb.checked) {
+                            if (!existing) {
+                                var s = document.createElement('style');
+                                s.id = styleId;
+                                s.textContent = '#resultsTable th:nth-child(' + colIdx + '), #resultsTable td:nth-child(' + colIdx + '){display:none;}';
+                                document.head.appendChild(s);
+                            }
+                        } else if (existing) {
+                            existing.remove();
+                        }
                         break;
                     }
                 }
             }
-        });
-        styleEl.textContent = rules.join('\n');
+        } catch (e) {}
+
+        rebuildDisplayColumnsFromModal();
+        syncQuickTogglesFromColToggles();
         updateColVisibleCount();
+        updateDirtyIndicator();
     }
 
-    function resetColumnVisibility() {
-        document.querySelectorAll('.col-toggle').forEach(function(cb) { cb.checked = true; });
-        applyColumnVisibility();
-    }
-
-    function initColumnVisibilityFromServer() {
-        var h = '@(Model.HiddenColumns ?? "")';
-        if (!h) { updateColVisibleCount(); return; }
-        h.split(',').filter(function(s) { return s.trim(); }).forEach(function(col) {
-            var cb = document.querySelector('.col-toggle[value="' + col.trim() + '"]');
-            if (cb) cb.checked = false;
-        });
-        applyColumnVisibility();
+    function applyAndRefreshColumns() {
+        rebuildDisplayColumnsFromModal();
+        try { sessionStorage.setItem('catalogue_scroll_to_results', '1'); } catch (e) {}
+        document.getElementById('pageNumberHidden').value = '1';
+        document.getElementById('reportForm').submit();
     }
 
     // ==================== Show Profit / Show Stock <-> Display Columns sync ====================
@@ -1749,13 +2017,15 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         }
         _setDisplayColsArr(cols);
 
-        // 2) Sync client-side col-toggle checkboxes (visibility modal). Only meaningful for already-rendered columns;
-        //    after Generate Report newly-added DisplayColumns will appear with col-toggle checked by default.
+        // 2) Sync modal col-toggle checkboxes so the two UIs stay consistent.
         grp.colToggle.forEach(function(v){
             var cb = document.querySelector('.col-toggle[value="' + v + '"]');
-            if (cb) cb.checked = checked;
+            if (cb && cb.checked !== checked) {
+                cb.checked = checked;
+                if (typeof onColToggleChange === 'function') onColToggleChange(cb);
+            }
         });
-        if (typeof applyColumnVisibility === 'function') applyColumnVisibility();
+        if (typeof updateDirtyIndicator === 'function') updateDirtyIndicator();
     }
 
     // When user toggles a col-toggle checkbox in the visibility modal: refresh quick-toggle states.
@@ -1788,17 +2058,14 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        initColumnVisibilityFromServer();
         updateColVisibleCount();
+        _colsInitialSig = currentColsSignature();
 
         // Wire bidirectional sync between quick-toggles and Display Columns / col-toggle modal
         initQuickTogglesFromDisplayCols();
         ['showProfitToggle','showStockToggle'].forEach(function(id) {
             var t = document.getElementById(id);
             if (t) t.addEventListener('change', function() { onQuickToggleChange(id); });
-        });
-        document.querySelectorAll('.col-toggle').forEach(function(cb) {
-            cb.addEventListener('change', syncQuickTogglesFromColToggles);
         });
 
         var colSearch = document.getElementById('colSearchInput');

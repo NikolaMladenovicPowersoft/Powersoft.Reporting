@@ -51,10 +51,13 @@
                 <i class="bi bi-speedometer2 me-2"></i>Reports Dashboard
             </div>
             <div class="card-body">
+                <h6 class="text-muted text-uppercase small fw-bold mb-3">
+                    <i class="bi bi-box-seam me-1"></i>Stock Control &mdash; Power Reports
+                </h6>
                 <div class="row g-4">
-                    <div class="col-md-6">
+                    <div class="col-md-6 col-lg-4">
                         <div class="card h-100 border-primary">
-                            <div class="card-body">
+                            <div class="card-body d-flex flex-column">
                                 <div class="d-flex align-items-center mb-3">
                                     <div class="bg-primary bg-opacity-10 rounded-circle p-3 me-3">
                                         <i class="bi bi-basket text-primary" style="font-size: 1.5rem;"></i>
@@ -64,68 +67,168 @@
                                         <p class="text-muted small mb-0">Sales performance analysis</p>
                                     </div>
                                 </div>
-                                <p class="card-text text-muted">
-                                    Analyze average transaction value, quantity per sale, and compare 
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Analyze average transaction value, quantity per sale, and compare
                                     year-over-year performance with customizable date ranges and groupings.
                                 </p>
-                                <a asp-action="AverageBasket" class="btn btn-primary">
+                                <a asp-action="AverageBasket" class="btn btn-primary mt-auto">
                                     <i class="bi bi-arrow-right me-1"></i>Open Report
                                 </a>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="col-md-6">
+
+                    <div class="col-md-6 col-lg-4">
                         <div class="card h-100 border-success">
-                            <div class="card-body">
+                            <div class="card-body d-flex flex-column">
                                 <div class="d-flex align-items-center mb-3">
                                     <div class="bg-success bg-opacity-10 rounded-circle p-3 me-3">
                                         <i class="bi bi-arrow-left-right text-success" style="font-size: 1.5rem;"></i>
                                     </div>
                                     <div>
                                         <h5 class="card-title mb-1">Purchases vs Sales</h5>
-                                        <p class="text-muted small mb-0">Procurement & sales comparison</p>
+                                        <p class="text-muted small mb-0">Procurement &amp; sales comparison</p>
                                     </div>
                                 </div>
-                                <p class="card-text text-muted">
-                                    Compare purchased and sold quantities and values per item, with 
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Compare purchased and sold quantities and values per item, with
                                     profit analysis, stock levels, and multi-level grouping.
                                 </p>
-                                <a asp-action="PurchasesSales" class="btn btn-success">
+                                <a asp-action="PurchasesSales" class="btn btn-success mt-auto">
                                     <i class="bi bi-arrow-right me-1"></i>Open Report
                                 </a>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+
+                    <div class="col-md-6 col-lg-4">
                         <div class="card h-100 border-info">
-                            <div class="card-body">
+                            <div class="card-body d-flex flex-column">
                                 <div class="d-flex align-items-center mb-3">
                                     <div class="bg-info bg-opacity-10 rounded-circle p-3 me-3">
                                         <i class="bi bi-pie-chart text-info" style="font-size: 1.5rem;"></i>
                                     </div>
                                     <div>
-                                        <h5 class="card-title mb-1">Charts & Dashboards</h5>
+                                        <h5 class="card-title mb-1">Charts &amp; Dashboards</h5>
                                         <p class="text-muted small mb-0">Visual data exploration</p>
                                     </div>
                                 </div>
-                                <p class="card-text text-muted">
-                                    Interactive pie charts, top 10 bar charts, and comparative dashboards 
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Interactive pie charts, top 10 bar charts, and comparative dashboards
                                     by category, brand, store, customer, and more.
                                 </p>
-                                <a asp-action="Charts" class="btn btn-info text-white">
+                                <a asp-action="Charts" class="btn btn-info text-white mt-auto">
                                     <i class="bi bi-arrow-right me-1"></i>Open Charts
                                 </a>
                             </div>
                         </div>
                     </div>
+
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100" style="border-color:#6366f1;">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="rounded-circle p-3 me-3" style="background:rgba(99,102,241,0.10);">
+                                        <i class="bi bi-funnel" style="font-size: 1.5rem; color:#6366f1;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Pareto 80/20</h5>
+                                        <p class="text-muted small mb-0">Top contributors analysis</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Identify the top items, customers, or categories driving 80% of sales
+                                    or profit using the 80/20 Pareto principle with cumulative breakdown.
+                                </p>
+                                <a asp-action="Pareto" class="btn mt-auto text-white" style="background:#6366f1;">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100 border-warning">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-warning bg-opacity-10 rounded-circle p-3 me-3">
+                                        <i class="bi bi-journal-text text-warning" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Power Reports Catalogue</h5>
+                                        <p class="text-muted small mb-0">Item-level transactional report</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Detailed item-level transactional report with profit, margin, cost, stock
+                                    and multi-dimensional filtering (customer, supplier, agent, store).
+                                </p>
+                                <a asp-action="Catalogue" class="btn btn-warning text-dark mt-auto">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100 border-danger">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-danger bg-opacity-10 rounded-circle p-3 me-3">
+                                        <i class="bi bi-exclamation-triangle text-danger" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Below Minimum Stock</h5>
+                                        <p class="text-muted small mb-0">Stock replenishment alert</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted small flex-grow-1">
+                                    List items whose on-hand stock is below the defined minimum level,
+                                    ready for replenishment orders with supplier and store breakdown.
+                                </p>
+                                <a asp-action="BelowMinStock" class="btn btn-danger mt-auto">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                
+
+                <h6 class="text-muted text-uppercase small fw-bold mb-3 mt-4">
+                    <i class="bi bi-calculator me-1"></i>Accounting
+                </h6>
+                <div class="row g-4">
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100 border-secondary" style="opacity:0.7;">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-secondary bg-opacity-10 rounded-circle p-3 me-3">
+                                        <i class="bi bi-receipt text-secondary" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">P&amp;L Report
+                                            <span class="badge bg-secondary ms-1">Soon</span>
+                                        </h5>
+                                        <p class="text-muted small mb-0">Profit &amp; Loss statement</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Period-based Profit &amp; Loss statement with revenue, COGS,
+                                    operating expenses, and net income. Currently in development.
+                                </p>
+                                <button class="btn btn-outline-secondary mt-auto" disabled>
+                                    <i class="bi bi-hourglass-split me-1"></i>Coming Soon
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <hr class="my-4">
-                
+
                 <div class="row">
                     <div class="col-12">
-                        <div class="alert alert-info d-flex align-items-center">
+                        <div class="alert alert-info d-flex align-items-center mb-0">
                             <i class="bi bi-info-circle me-3" style="font-size: 1.5rem;"></i>
                             <div>
                                 <strong>Connected to:</strong> @connectedDb

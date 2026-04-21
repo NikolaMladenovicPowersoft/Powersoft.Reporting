@@ -52,6 +52,12 @@ public class CatalogueViewModel
     // --- Display value columns (comma-separated string for form binding) ---
     public string DisplayColumnsString { get; set; } = "ItemCode,ItemName,Quantity,Value,Discount,NetValue,VatAmount,GrossAmount";
 
+    // --- Column order (comma-separated SqlCol list) ---
+    // Empty = default server-side order. Persisted as part of the layout so a user's custom
+    // column order survives logout and is shared with public/named layouts.
+    // Only affects client-side DOM reorder (see Catalogue.cshtml _initColumnReorder).
+    public string? ColumnOrder { get; set; }
+
     // --- Quick toggles (synced bidirectionally with Display Columns chips) ---
     // ShowProfit  ↔ {Profit, Markup, Margin}
     // ShowStock   ↔ {TotalStockQty, TotalStockValue}

@@ -168,16 +168,28 @@ ORDER BY s.pk_StoreCode;";
     /// <summary>
     /// Builds the WHERE clause for the date range filter.
     /// Honours filter.DateBasis (TransactionDate → h.DateTrans, SessionDate → h.SessionDateTime)
-    /// and filter.UseDateTime (false → CONVERT(DATE, ...), true → CONVERT(DATETIME, ...)).
-    /// Mirrors original repPowerReportCatalogue.aspx.vb:3642-3654.
+    /// and filter.UseDateTime (false → date-only range covering full last day, true → exact datetime range).
+    ///
+    /// SARGABLE form — no CONVERT() on the column side, so SQL Server can seek
+    /// any nonclustered index on (DateTrans) / (SessionDateTime). The legacy used
+    /// CONVERT(DATE, h.DateTrans) which forced a table scan on every query.
+    /// See _DOCS/CATALOGUE_PRODUCTION_AUDIT.md §3.
+    ///
+    /// Date-only mode (UseDateTime=false): @DateFrom and @DateTo are midnight values
+    /// (CatalogueRepository.BuildCommonParameters strips time via .Date). To include the
+    /// entire last day we use [@DateFrom, @DateTo + 1 day) half-open range.
     /// </summary>
     private static string BuildDateWhere(CatalogueFilter filter)
     {
         var column = filter.DateBasis == CatalogueDateBasis.SessionDate
             ? "h.SessionDateTime"
             : "h.DateTrans";
-        var conv = filter.UseDateTime ? "DATETIME" : "DATE";
-        return $"WHERE CONVERT({conv}, {column}) BETWEEN CONVERT({conv}, @DateFrom) AND CONVERT({conv}, @DateTo)";
+
+        if (filter.UseDateTime)
+        {
+            return $"WHERE {column} >= @DateFrom AND {column} <= @DateTo";
+        }
+        return $"WHERE {column} >= @DateFrom AND {column} < DATEADD(DAY, 1, @DateTo)";
     }
 
     private string BuildUnionAll(CatalogueFilter filter, GroupingInfo grouping, ItemFilterInfo itemFilters)
@@ -377,10 +389,47 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine("  ISNULL(season.SeasonDesc,'') AS SeasonName,");
             sb.AppendLine("  ISNULL(rs.fk_SupplierNo,'') AS ItemSupplierCode,");
             sb.AppendLine("  CASE WHEN sup.pk_SupplierNo IS NULL THEN '' ELSE CASE WHEN ISNULL(sup.Company,0) = 1 THEN ISNULL(sup.LastCompanyName,'') ELSE ISNULL(sup.FirstName,'') + ' ' + ISNULL(sup.LastCompanyName,'') END END AS ItemSupplierName,");
-            // Prices
+            // Item master prices 1..10 (Excl + Incl) — from tbl_Item.
+            // Mirrors legacy DisplayColumnE.Price1Excl..Price10Incl.
             sb.AppendLine("  ISNULL(it.Price1Excl,0) AS Price1Excl, ISNULL(it.Price1Incl,0) AS Price1Incl,");
             sb.AppendLine("  ISNULL(it.Price2Excl,0) AS Price2Excl, ISNULL(it.Price2Incl,0) AS Price2Incl,");
             sb.AppendLine("  ISNULL(it.Price3Excl,0) AS Price3Excl, ISNULL(it.Price3Incl,0) AS Price3Incl,");
+            sb.AppendLine("  ISNULL(it.Price4Excl,0) AS Price4Excl, ISNULL(it.Price4Incl,0) AS Price4Incl,");
+            sb.AppendLine("  ISNULL(it.Price5Excl,0) AS Price5Excl, ISNULL(it.Price5Incl,0) AS Price5Incl,");
+            sb.AppendLine("  ISNULL(it.Price6Excl,0) AS Price6Excl, ISNULL(it.Price6Incl,0) AS Price6Incl,");
+            sb.AppendLine("  ISNULL(it.Price7Excl,0) AS Price7Excl, ISNULL(it.Price7Incl,0) AS Price7Incl,");
+            sb.AppendLine("  ISNULL(it.Price8Excl,0) AS Price8Excl, ISNULL(it.Price8Incl,0) AS Price8Incl,");
+            sb.AppendLine("  ISNULL(it.Price9Excl,0) AS Price9Excl, ISNULL(it.Price9Incl,0) AS Price9Incl,");
+            sb.AppendLine("  ISNULL(it.Price10Excl,0) AS Price10Excl, ISNULL(it.Price10Incl,0) AS Price10Incl,");
+            // Per-line invoice price (d.ItemPrice* present on every detail table — sale and purchase).
+            // Mirrors legacy GetInvPriceExclField / GetInvPriceInclField (repPowerReportCatalogue.aspx.vb:4370-4395).
+            sb.AppendLine("  ISNULL(d.ItemPriceExcl,0) AS InvPriceExcl,");
+            sb.AppendLine("  ISNULL(d.ItemPriceIncl,0) AS InvPriceIncl,");
+            // Header-derived display columns (Pass B). Sale-only fields (PaymentType, ZReportNumber,
+            // Agent, Station) are blanked on purchase legs because those FKs do not exist on
+            // tbl_PurchInvoiceHeader / tbl_PurchReturnHeader. Franchise is store-derived and works
+            // on every leg via the store (s) join. Mirrors legacy column-availability rules
+            // documented in DimensionFilterBuilder.BuildSaleOnly.
+            {
+                bool isSaleLeg = invoiceType == "I" || invoiceType == "C";
+                if (isSaleLeg)
+                {
+                    sb.AppendLine("  ISNULL(pt.ptdesc,'') AS PaymentType,");
+                    sb.AppendLine("  CASE WHEN h.fk_AgentID IS NULL THEN '' ELSE ISNULL(ag.FirstName,'') + ' ' + ISNULL(ag.LastName,'') END AS AgentName,");
+                    sb.AppendLine("  ISNULL(h.fk_ZReport,'') AS ZReportNumber,");
+                    sb.AppendLine("  ISNULL(h.fk_StationCode,'') AS StationCode,");
+                    sb.AppendLine("  ISNULL(st.StationName,'') AS StationName,");
+                }
+                else
+                {
+                    sb.AppendLine("  '' AS PaymentType,");
+                    sb.AppendLine("  '' AS AgentName,");
+                    sb.AppendLine("  '' AS ZReportNumber,");
+                    sb.AppendLine("  '' AS StationCode,");
+                    sb.AppendLine("  '' AS StationName,");
+                }
+                sb.AppendLine("  ISNULL(fr.FranchiseName,'') AS FranchiseName,");
+            }
             // Attrs
             sb.AppendLine("  ISNULL(a1.FieldDetailDescr,'') AS ItemAttr1Descr,");
             sb.AppendLine("  ISNULL(a2.FieldDetailDescr,'') AS ItemAttr2Descr,");
@@ -403,6 +452,17 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price1Excl, CAST(0 AS DECIMAL(18,4)) AS Price1Incl,");
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price2Excl, CAST(0 AS DECIMAL(18,4)) AS Price2Incl,");
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price3Excl, CAST(0 AS DECIMAL(18,4)) AS Price3Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price4Excl, CAST(0 AS DECIMAL(18,4)) AS Price4Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price5Excl, CAST(0 AS DECIMAL(18,4)) AS Price5Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price6Excl, CAST(0 AS DECIMAL(18,4)) AS Price6Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price7Excl, CAST(0 AS DECIMAL(18,4)) AS Price7Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price8Excl, CAST(0 AS DECIMAL(18,4)) AS Price8Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price9Excl, CAST(0 AS DECIMAL(18,4)) AS Price9Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price10Excl, CAST(0 AS DECIMAL(18,4)) AS Price10Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS InvPriceExcl, CAST(0 AS DECIMAL(18,4)) AS InvPriceIncl,");
+            // Header-derived display columns are not aggregable in summary mode → placeholders.
+            sb.AppendLine("  '' AS PaymentType, '' AS AgentName, '' AS ZReportNumber,");
+            sb.AppendLine("  '' AS StationCode, '' AS StationName, '' AS FranchiseName,");
             sb.AppendLine("  '' AS ItemAttr1Descr, '' AS ItemAttr2Descr, '' AS ItemAttr3Descr,");
             sb.AppendLine("  '' AS ItemAttr4Descr, '' AS ItemAttr5Descr, '' AS ItemAttr6Descr");
         }
@@ -431,6 +491,19 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine("LEFT JOIN tbl_FieldDetail a4 ON it.fk_AttrID4 = a4.pk_FieldDetailID");
             sb.AppendLine("LEFT JOIN tbl_FieldDetail a5 ON it.fk_AttrID5 = a5.pk_FieldDetailID");
             sb.AppendLine("LEFT JOIN tbl_FieldDetail a6 ON it.fk_AttrID6 = a6.pk_FieldDetailID");
+
+            // Header-derived joins for Pass B display columns. Sale-only joins use SQL columns
+            // (h.fk_PayTypeCode, h.fk_AgentID, h.fk_StationCode) that exist only on
+            // tbl_InvoiceHeader / tbl_CreditHeader — must NOT be emitted on purchase legs.
+            // Franchise is store-derived → safe on every leg via the existing 's' alias.
+            bool isSaleLeg = invoiceType == "I" || invoiceType == "C";
+            if (isSaleLeg)
+            {
+                sb.AppendLine("LEFT JOIN tbl_paymtype pt ON ISNULL(h.fk_PayTypeCode,'CREDIT') = pt.pk_ptcode");
+                sb.AppendLine("LEFT JOIN tbl_Agent ag ON h.fk_AgentID = ag.pk_SystemNo");
+                sb.AppendLine("LEFT JOIN tbl_Station st ON h.fk_StoreCode = st.fk_StoreCode AND ISNULL(h.fk_StationCode,'0001') = st.fk_StationCode");
+            }
+            sb.AppendLine("LEFT JOIN tbl_Franchise fr ON s.fk_FranchiseCode = fr.pk_FranchiseCode");
         }
 
         // Grouping-specific joins (needed in both modes for Level expressions)
@@ -507,6 +580,16 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine("  r.Price1Excl, r.Price1Incl,");
             sb.AppendLine("  r.Price2Excl, r.Price2Incl,");
             sb.AppendLine("  r.Price3Excl, r.Price3Incl,");
+            sb.AppendLine("  r.Price4Excl, r.Price4Incl,");
+            sb.AppendLine("  r.Price5Excl, r.Price5Incl,");
+            sb.AppendLine("  r.Price6Excl, r.Price6Incl,");
+            sb.AppendLine("  r.Price7Excl, r.Price7Incl,");
+            sb.AppendLine("  r.Price8Excl, r.Price8Incl,");
+            sb.AppendLine("  r.Price9Excl, r.Price9Incl,");
+            sb.AppendLine("  r.Price10Excl, r.Price10Incl,");
+            sb.AppendLine("  r.InvPriceExcl, r.InvPriceIncl,");
+            sb.AppendLine("  r.PaymentType, r.AgentName, r.ZReportNumber,");
+            sb.AppendLine("  r.StationCode, r.StationName, r.FranchiseName,");
             sb.AppendLine("  r.ItemAttr1Descr, r.ItemAttr2Descr, r.ItemAttr3Descr,");
             sb.AppendLine("  r.ItemAttr4Descr, r.ItemAttr5Descr, r.ItemAttr6Descr");
         }
@@ -524,6 +607,16 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price1Excl, CAST(0 AS DECIMAL(18,4)) AS Price1Incl,");
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price2Excl, CAST(0 AS DECIMAL(18,4)) AS Price2Incl,");
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price3Excl, CAST(0 AS DECIMAL(18,4)) AS Price3Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price4Excl, CAST(0 AS DECIMAL(18,4)) AS Price4Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price5Excl, CAST(0 AS DECIMAL(18,4)) AS Price5Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price6Excl, CAST(0 AS DECIMAL(18,4)) AS Price6Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price7Excl, CAST(0 AS DECIMAL(18,4)) AS Price7Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price8Excl, CAST(0 AS DECIMAL(18,4)) AS Price8Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price9Excl, CAST(0 AS DECIMAL(18,4)) AS Price9Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price10Excl, CAST(0 AS DECIMAL(18,4)) AS Price10Incl,");
+            sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS InvPriceExcl, CAST(0 AS DECIMAL(18,4)) AS InvPriceIncl,");
+            sb.AppendLine("  '' AS PaymentType, '' AS AgentName, '' AS ZReportNumber,");
+            sb.AppendLine("  '' AS StationCode, '' AS StationName, '' AS FranchiseName,");
             sb.AppendLine("  '' AS ItemAttr1Descr, '' AS ItemAttr2Descr, '' AS ItemAttr3Descr,");
             sb.AppendLine("  '' AS ItemAttr4Descr, '' AS ItemAttr5Descr, '' AS ItemAttr6Descr");
         }
@@ -555,6 +648,16 @@ ORDER BY s.pk_StoreCode;";
                 "r.Price1Excl", "r.Price1Incl",
                 "r.Price2Excl", "r.Price2Incl",
                 "r.Price3Excl", "r.Price3Incl",
+                "r.Price4Excl", "r.Price4Incl",
+                "r.Price5Excl", "r.Price5Incl",
+                "r.Price6Excl", "r.Price6Incl",
+                "r.Price7Excl", "r.Price7Incl",
+                "r.Price8Excl", "r.Price8Incl",
+                "r.Price9Excl", "r.Price9Incl",
+                "r.Price10Excl", "r.Price10Incl",
+                "r.InvPriceExcl", "r.InvPriceIncl",
+                "r.PaymentType", "r.AgentName", "r.ZReportNumber",
+                "r.StationCode", "r.StationName", "r.FranchiseName",
                 "r.ItemAttr1Descr", "r.ItemAttr2Descr", "r.ItemAttr3Descr",
                 "r.ItemAttr4Descr", "r.ItemAttr5Descr", "r.ItemAttr6Descr"
             });
@@ -620,9 +723,6 @@ ORDER BY s.pk_StoreCode;";
             AppendTotalsLeg("tbl_PurchReturnDetails", "tbl_PurchReturnHeader", "d.fk_PurchReturnID = h.pk_PurchReturnID", -1, isSaleLeg: false);
         }
 
-        sb.AppendLine("), StockPerItem AS (");
-        // Per-item snapshot: collapse multiple transaction rows for the same item to one max value
-        sb.AppendLine("  SELECT ItemID, MAX(SQ) AS MaxSQ, MAX(SV) AS MaxSV FROM AllLegs GROUP BY ItemID");
         sb.AppendLine(")");
         sb.AppendLine("SELECT");
         sb.AppendLine("  ISNULL(SUM(Qty),0) AS TotalQuantity,");
@@ -634,8 +734,11 @@ ORDER BY s.pk_StoreCode;";
         sb.AppendLine("  ISNULL(SUM(TC),0) AS TotalTransactionCost,");
         sb.AppendLine("  ISNULL(SUM(TCost),0) AS TotalTotalCost,");
         sb.AppendLine("  ISNULL(SUM(PV),0) AS TotalProfitValue,");
-        sb.AppendLine("  ISNULL((SELECT SUM(MaxSQ) FROM StockPerItem),0) AS TotalStockQty,");
-        sb.AppendLine("  ISNULL((SELECT SUM(MaxSV) FROM StockPerItem),0) AS TotalStockValue");
+        // Legacy parity (Powersoft365): stock is summed per transaction row without per-item dedup.
+        // This double-counts stock when an item has multiple transactions, but matches the legacy
+        // grid totals exactly. Documented in CATALOGUE_PRODUCTION_AUDIT.md (Option A locked-in).
+        sb.AppendLine("  ISNULL(SUM(SQ),0) AS TotalStockQty,");
+        sb.AppendLine("  ISNULL(SUM(SV),0) AS TotalStockValue");
         sb.AppendLine("FROM AllLegs");
 
         return sb.ToString();
@@ -884,21 +987,30 @@ ORDER BY s.pk_StoreCode;";
                 Item: "d.fk_ItemID",
                 Store: "h.fk_StoreCode",
                 Supplier: "rs.fk_SupplierNo",
+                // User filter applies to BOTH legs — every header (invoice/credit/purch invoice/purch return) has fk_UserCode.
+                // Mirrors legacy repPowerReportCatalogue.aspx.vb:3772-3773.
+                User: "h.fk_UserCode",
                 ItemTableAlias: "it");
             var (dimWhere, dimParms) = DimensionFilterBuilder.Build(filter.ItemsSelection, cols, idx);
             sb.Append(dimWhere);
             parms.AddRange(dimParms);
             idx += dimParms.Count;
 
-            // Sale-only leg columns (mirrors original repPowerReportCatalogue.aspx.vb:3757/3788/3791):
-            //   Customer  -> h.fk_CustomerCode
-            //   Agent     -> h.fk_AgentID
-            //   PostalCode-> e.PostalCode (entity = tbl_Customer on sale legs)
+            // Sale-only leg columns (mirrors original repPowerReportCatalogue.aspx.vb:3757/3788/3791/3760-3795):
+            //   Customer    -> h.fk_CustomerCode
+            //   Agent       -> h.fk_AgentID
+            //   PostalCode  -> e.PostalCode (entity = tbl_Customer on sale legs)
+            //   PaymentType -> h.fk_PayTypeCode (sale headers only)
+            //   ZReport     -> h.fk_ZReport    (sale headers only)
+            //   Town        -> e.Town          (entity = tbl_Customer)
             var (soWhere, soParms) = DimensionFilterBuilder.BuildSaleOnly(
                 filter.ItemsSelection,
                 customerColumn: "h.fk_CustomerCode",
                 agentColumn: "h.fk_AgentID",
                 postalCodeColumn: "e.PostalCode",
+                paymentTypeColumn: "h.fk_PayTypeCode",
+                zReportColumn: "h.fk_ZReport",
+                townColumn: "e.Town",
                 startIdx: idx);
             saleOnlyWhere = soWhere;
             parms.AddRange(soParms);
@@ -1140,6 +1252,28 @@ ORDER BY s.pk_StoreCode;";
                     case "Price2Incl": row.Price2Incl = reader.GetDecimal(i); break;
                     case "Price3Excl": row.Price3Excl = reader.GetDecimal(i); break;
                     case "Price3Incl": row.Price3Incl = reader.GetDecimal(i); break;
+                    case "Price4Excl": row.Price4Excl = reader.GetDecimal(i); break;
+                    case "Price4Incl": row.Price4Incl = reader.GetDecimal(i); break;
+                    case "Price5Excl": row.Price5Excl = reader.GetDecimal(i); break;
+                    case "Price5Incl": row.Price5Incl = reader.GetDecimal(i); break;
+                    case "Price6Excl": row.Price6Excl = reader.GetDecimal(i); break;
+                    case "Price6Incl": row.Price6Incl = reader.GetDecimal(i); break;
+                    case "Price7Excl": row.Price7Excl = reader.GetDecimal(i); break;
+                    case "Price7Incl": row.Price7Incl = reader.GetDecimal(i); break;
+                    case "Price8Excl": row.Price8Excl = reader.GetDecimal(i); break;
+                    case "Price8Incl": row.Price8Incl = reader.GetDecimal(i); break;
+                    case "Price9Excl": row.Price9Excl = reader.GetDecimal(i); break;
+                    case "Price9Incl": row.Price9Incl = reader.GetDecimal(i); break;
+                    case "Price10Excl": row.Price10Excl = reader.GetDecimal(i); break;
+                    case "Price10Incl": row.Price10Incl = reader.GetDecimal(i); break;
+                    case "InvPriceExcl": row.InvPriceExcl = reader.GetDecimal(i); break;
+                    case "InvPriceIncl": row.InvPriceIncl = reader.GetDecimal(i); break;
+                    case "PaymentType": row.PaymentType = reader.GetString(i); break;
+                    case "AgentName": row.AgentName = reader.GetString(i); break;
+                    case "ZReportNumber": row.ZReportNumber = reader.GetString(i); break;
+                    case "StationCode": row.StationCode = reader.GetString(i); break;
+                    case "StationName": row.StationName = reader.GetString(i); break;
+                    case "FranchiseName": row.FranchiseName = reader.GetString(i); break;
                     case "ItemAttr1Descr": row.ItemAttr1Descr = reader.GetString(i); break;
                     case "ItemAttr2Descr": row.ItemAttr2Descr = reader.GetString(i); break;
                     case "ItemAttr3Descr": row.ItemAttr3Descr = reader.GetString(i); break;

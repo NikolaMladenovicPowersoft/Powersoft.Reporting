@@ -85,15 +85,36 @@ public class CatalogueRow
     public string? ItemSupplierCode { get; set; }
     public string? ItemSupplierName { get; set; }
 
-    // Prices (excl VAT)
+    // Item master prices (excl VAT) — Price 1..10 from tbl_Item.
+    // Mirrors legacy DisplayColumnE.Price1Excl..Price10Excl (repPowerReportCatalogue.aspx.vb:229-238).
     public decimal Price1Excl { get; set; }
     public decimal Price2Excl { get; set; }
     public decimal Price3Excl { get; set; }
+    public decimal Price4Excl { get; set; }
+    public decimal Price5Excl { get; set; }
+    public decimal Price6Excl { get; set; }
+    public decimal Price7Excl { get; set; }
+    public decimal Price8Excl { get; set; }
+    public decimal Price9Excl { get; set; }
+    public decimal Price10Excl { get; set; }
 
-    // Prices (incl VAT)
+    // Item master prices (incl VAT) — Price 1..10 from tbl_Item.
     public decimal Price1Incl { get; set; }
     public decimal Price2Incl { get; set; }
     public decimal Price3Incl { get; set; }
+    public decimal Price4Incl { get; set; }
+    public decimal Price5Incl { get; set; }
+    public decimal Price6Incl { get; set; }
+    public decimal Price7Incl { get; set; }
+    public decimal Price8Incl { get; set; }
+    public decimal Price9Incl { get; set; }
+    public decimal Price10Incl { get; set; }
+
+    // Per-line invoice price (the actual price on the invoice line, not the item master price).
+    // Comes from d.ItemPriceExcl / d.ItemPriceIncl in legacy repPowerReportCatalogue.aspx.vb:4374-4395.
+    // Detail mode only — meaningless in summary aggregates.
+    public decimal InvPriceExcl { get; set; }
+    public decimal InvPriceIncl { get; set; }
 
     // Custom attributes
     public string? ItemAttr1Descr { get; set; }

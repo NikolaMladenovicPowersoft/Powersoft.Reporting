@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
@@ -107,6 +108,10 @@ public class ReportsController : Controller
             ParseDimension(root, "customers", filter.Customers);
             ParseDimension(root, "agents", filter.Agents);
             ParseDimension(root, "postalcodes", filter.PostalCodes);
+            ParseDimension(root, "paymenttypes", filter.PaymentTypes);
+            ParseDimension(root, "zreports", filter.ZReports);
+            ParseDimension(root, "towns", filter.Towns);
+            ParseDimension(root, "users", filter.Users);
             ParseDimension(root, "stores", filter.Stores);
             ParseDimension(root, "items", filter.Items);
 
@@ -403,6 +408,10 @@ public class ReportsController : Controller
                 "customer" or "customers" => await repo.GetCustomersAsync(search),
                 "agent" or "agents" => await repo.GetAgentsAsync(search),
                 "postalcode" or "postalcodes" => await repo.GetPostalCodesAsync(search),
+                "paymenttype" or "paymenttypes" => await repo.GetPaymentTypesAsync(),
+                "zreport" or "zreports" => await repo.GetZReportsAsync(search),
+                "town" or "towns" => await repo.GetTownsAsync(search),
+                "user" or "users" => await repo.GetUsersAsync(search),
                 "store" or "stores" => new List<DimensionItem>(),
                 "item" or "items" => new List<DimensionItem>(),
                 _ => new List<DimensionItem>()
@@ -422,7 +431,7 @@ public class ReportsController : Controller
         string scheduleTime, string exportFormat, string recipients,
         string? emailSubject, string? parametersJson, string? recurrenceJson,
         bool includeAiAnalysis = false, string? aiLocale = "el",
-        bool skipIfEmpty = false)
+        bool skipIfEmpty = false, int scheduleId = 0)
     {
         if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleAvgBasket))
             return Json(new { success = false, message = "You don't have permission to create schedules." });
@@ -437,10 +446,15 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-            var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
-            var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.AverageBasket);
-            if (count >= maxSchedules)
-                return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+
+            // Quota only applies to new schedules — editing an existing one doesn't consume a new slot.
+            if (scheduleId <= 0)
+            {
+                var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
+                var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.AverageBasket);
+                if (count >= maxSchedules)
+                    return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+            }
 
             var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
             DateTime? nextRun = null;
@@ -490,8 +504,24 @@ public class ReportsController : Controller
                 SkipIfEmpty = skipIfEmpty
             };
 
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.AverageBasket);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
             var id = await repo.CreateScheduleAsync(schedule);
-            return Json(new { success = true, scheduleId = id, message = "Schedule saved successfully" });
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
         }
         catch (Exception ex)
         {
@@ -656,6 +686,29 @@ public class ReportsController : Controller
 
     // ==================== Schedules ====================
 
+    // Schedules are scoped to the user who created them. Only the creator can
+    // load / edit / delete an existing schedule. The create path is still gated by
+    // the per-report action permission (ActionSchedule* in ModuleConstants).
+    // Admin override ("ranking below system-admin can edit any schedule") is
+    // intentionally NOT wired up here yet — needs Christina's go-ahead + BMS action
+    // rows in dboActionsDef. Until then, no cross-user mutation is allowed.
+    private string CurrentScheduleOwnerId() => User.Identity?.Name ?? "Unknown";
+
+    private (bool ok, string message) ValidateScheduleForMutation(
+        ReportSchedule? existing, string? expectedReportType)
+    {
+        if (existing == null)
+            return (false, "Schedule not found.");
+        if (!existing.IsActive)
+            return (false, "This schedule has been deleted. Reload the list and try again.");
+        if (expectedReportType != null &&
+            !string.Equals(existing.ReportType, expectedReportType, StringComparison.OrdinalIgnoreCase))
+            return (false, "Schedule belongs to another report.");
+        if (!string.Equals(existing.CreatedBy, CurrentScheduleOwnerId(), StringComparison.OrdinalIgnoreCase))
+            return (false, "You can only modify schedules you created.");
+        return (true, string.Empty);
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetSchedules()
     {
@@ -681,6 +734,59 @@ public class ReportsController : Controller
         }
     }
 
+    // Generic load endpoint — returns full schedule record (including ParametersJson, RecurrenceJson,
+    // Recipients, Subject, AI flags) so the UI can rehydrate the modal when user clicks an existing row.
+    // Works for ANY report type — client decides how to interpret ParametersJson.
+    [HttpGet]
+    public async Task<IActionResult> GetScheduleById(int scheduleId)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (scheduleId <= 0)
+            return Json(new { success = false, message = "Invalid schedule id" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var s = await repo.GetScheduleByIdAsync(scheduleId);
+            if (s == null)
+                return Json(new { success = false, message = "Schedule not found" });
+            if (!string.Equals(s.CreatedBy, CurrentScheduleOwnerId(), StringComparison.OrdinalIgnoreCase))
+                return Json(new { success = false, message = "You can only view schedules you created." });
+
+            return Json(new
+            {
+                success = true,
+                schedule = new
+                {
+                    s.ScheduleId,
+                    s.ReportType,
+                    s.ScheduleName,
+                    s.RecurrenceType,
+                    s.RecurrenceDay,
+                    scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                    s.ExportFormat,
+                    s.Recipients,
+                    s.EmailSubject,
+                    s.IncludeAiAnalysis,
+                    s.AiLocale,
+                    s.SkipIfEmpty,
+                    s.ParametersJson,
+                    s.RecurrenceJson,
+                    nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                    lastRun = s.LastRunDate?.ToString("yyyy-MM-dd HH:mm")
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading schedule {ScheduleId}", scheduleId);
+            return Json(new { success = false, message = "Failed to load schedule" });
+        }
+    }
+
     // Generic delete endpoint — works for ANY report type (AvgBasket, PS, Catalogue, BelowMinStock).
     // Soft-delete (sets IsActive = 0) via ScheduleRepository.DeleteScheduleAsync.
     [HttpPost]
@@ -696,6 +802,16 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            // Ownership gate: fetch first so we can reject cross-user deletes.
+            // Idempotent for same-user deletes — if already soft-deleted we still
+            // return success = true so the UI can refresh.
+            var existing = await repo.GetScheduleByIdAsync(scheduleId);
+            if (existing == null)
+                return Json(new { success = true, message = "Schedule not found or already deleted" });
+            if (!string.Equals(existing.CreatedBy, CurrentScheduleOwnerId(), StringComparison.OrdinalIgnoreCase))
+                return Json(new { success = false, message = "You can only delete schedules you created." });
+
             var ok = await repo.DeleteScheduleAsync(scheduleId);
             return Json(new { success = ok, message = ok ? "Schedule deleted" : "Schedule not found or already deleted" });
         }
@@ -1675,7 +1791,7 @@ public class ReportsController : Controller
         string scheduleTime, string exportFormat, string recipients,
         string? emailSubject, string? parametersJson, string? recurrenceJson,
         bool includeAiAnalysis = false, string? aiLocale = "el",
-        bool skipIfEmpty = false)
+        bool skipIfEmpty = false, int scheduleId = 0)
     {
         if (!await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePurchasesSales))
             return Json(new { success = false, message = "You don't have permission to create schedules." });
@@ -1690,10 +1806,14 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-            var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
-            var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.PurchasesSales);
-            if (count >= maxSchedules)
-                return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+
+            if (scheduleId <= 0)
+            {
+                var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
+                var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.PurchasesSales);
+                if (count >= maxSchedules)
+                    return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+            }
 
             var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
             DateTime? nextRun = null;
@@ -1743,8 +1863,24 @@ public class ReportsController : Controller
                 SkipIfEmpty = skipIfEmpty
             };
 
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.PurchasesSales);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
             var id = await repo.CreateScheduleAsync(schedule);
-            return Json(new { success = true, scheduleId = id, message = "Schedule saved successfully" });
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
         }
         catch (Exception ex)
         {
@@ -2754,6 +2890,8 @@ public class ReportsController : Controller
                 model.PageSize = pageSize;
             if (parms.TryGetValue("DisplayColumns", out var dcs) && !string.IsNullOrEmpty(dcs))
                 model.DisplayColumnsString = dcs;
+            if (parms.TryGetValue("ColumnOrder", out var co) && !string.IsNullOrEmpty(co))
+                model.ColumnOrder = co;
             if (parms.TryGetValue("ItemsSelectionJson", out var isj) && !string.IsNullOrEmpty(isj))
                 model.ItemsSelectionJson = isj;
         }
@@ -2820,6 +2958,159 @@ public class ReportsController : Controller
         }
     }
 
+    // ==================== Catalogue named/public layouts (multi per user) ====================
+
+    /// <summary>
+    /// Returns metadata for every Catalogue layout visible to the current user
+    /// (own private layouts + all public layouts). Used by the layout picker dropdown.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> ListCatalogueLayouts()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var layouts = await repo.ListLayoutsAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCatalogue,
+                userCode);
+
+            return Json(new
+            {
+                success = true,
+                layouts = layouts.Select(l => new
+                {
+                    headerCode = l.HeaderCode,
+                    name = l.Name,
+                    isPublic = l.IsPublic,
+                    createdBy = l.CreatedBy,
+                    canEdit = l.CanEdit,
+                    lastModified = l.LastModified
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing Catalogue layouts for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
+        }
+    }
+
+    public class SaveCatalogueLayoutAsRequest
+    {
+        public string Name { get; set; } = string.Empty;
+        public bool IsPublic { get; set; }
+        public Dictionary<string, string> Parameters { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Saves the form parameters as a NEW named layout (or overwrites an existing one with the
+    /// same slug owned by the same scope). Public layouts have fk_UserCode = NULL and may only
+    /// be overwritten/deleted by their original creator.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> SaveCatalogueLayoutAs([FromBody] SaveCatalogueLayoutAsRequest req)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (req == null || string.IsNullOrWhiteSpace(req.Name))
+            return Json(new { success = false, message = "Layout name is required" });
+        if (req.Parameters == null || req.Parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var headerCode = await repo.SaveNamedLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCatalogue,
+                ModuleConstants.IniDescriptionCatalogue,
+                userCode,
+                req.Name,
+                req.IsPublic,
+                req.Parameters);
+
+            return Json(new { success = true, headerCode, message = "Layout saved" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Authorisation: trying to overwrite a public layout owned by someone else.
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving named Catalogue layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    /// <summary>
+    /// Loads a named Catalogue layout by its header code.
+    /// Returns the raw parameter dictionary; the client applies it to the form.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> LoadCatalogueLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
+
+            if (parms.Count == 0)
+                return Json(new { success = false, message = "Layout not found or not visible" });
+
+            return Json(new { success = true, parameters = parms });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Catalogue layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to load layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteCatalogueLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
+
+            return Json(new
+            {
+                success = deleted,
+                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting Catalogue layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to delete layout" });
+        }
+    }
+
     [HttpPost]
     public async Task<IActionResult> Catalogue(CatalogueViewModel model)
     {
@@ -2869,14 +3160,38 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreateCatalogueRepository(tenantConnString);
+
+            var dataSw = Stopwatch.StartNew();
             var result = await repo.GetCatalogueDataAsync(filter);
+            dataSw.Stop();
+
             model.Results = result.Items;
             model.TotalCount = result.TotalCount;
             model.PageNumber = result.PageNumber;
             model.PageSize = result.PageSize;
 
+            var totalsSw = Stopwatch.StartNew();
             var totals = await repo.GetCatalogueTotalsAsync(filter);
+            totalsSw.Stop();
             model.Totals = totals;
+
+            // Performance instrumentation — see _DOCS/CATALOGUE_PRODUCTION_AUDIT.md §3.
+            // Surface in app logs to detect slow queries per tenant/parameter combo.
+            _logger.LogInformation(
+                "Catalogue|TIMING db={Db} dateRange={From:yyyy-MM-dd}..{To:yyyy-MM-dd} mode={Mode} reportOn={ReportOn} groups=[{G1},{G2},{G3}] dataMs={DataMs} totalsMs={TotalsMs} rows={Rows}",
+                connectedDb,
+                filter.DateFrom, filter.DateTo,
+                filter.ReportMode, filter.ReportOn,
+                filter.PrimaryGroup, filter.SecondaryGroup, filter.ThirdGroup,
+                dataSw.ElapsedMilliseconds, totalsSw.ElapsedMilliseconds,
+                result.TotalCount);
+
+            if (dataSw.ElapsedMilliseconds + totalsSw.ElapsedMilliseconds > 5000)
+            {
+                _logger.LogWarning(
+                    "Catalogue|SLOW db={Db} totalMs={Total} — investigate index usage (see _SQL/INDEXES_CATALOGUE.sql)",
+                    connectedDb, dataSw.ElapsedMilliseconds + totalsSw.ElapsedMilliseconds);
+            }
         }
         catch (Exception ex)
         {
@@ -3304,7 +3619,7 @@ public class ReportsController : Controller
         string scheduleTime, string exportFormat, string recipients,
         string? emailSubject, string? parametersJson, string? recurrenceJson,
         bool includeAiAnalysis = false, string? aiLocale = "el",
-        bool skipIfEmpty = false)
+        bool skipIfEmpty = false, int scheduleId = 0)
     {
         if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCatalogue))
             return Json(new { success = false, message = "You don't have permission to create schedules." });
@@ -3319,10 +3634,14 @@ public class ReportsController : Controller
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-            var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
-            var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.Catalogue);
-            if (count >= maxSchedules)
-                return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+
+            if (scheduleId <= 0)
+            {
+                var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
+                var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.Catalogue);
+                if (count >= maxSchedules)
+                    return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+            }
 
             var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
             DateTime? nextRun = null;
@@ -3372,8 +3691,24 @@ public class ReportsController : Controller
                 SkipIfEmpty = skipIfEmpty
             };
 
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.Catalogue);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
             var id = await repo.CreateScheduleAsync(schedule);
-            return Json(new { success = true, scheduleId = id, message = "Schedule saved successfully" });
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
         }
         catch (Exception ex)
         {
@@ -3506,7 +3841,7 @@ public class ReportsController : Controller
         string scheduleTime, string exportFormat, string recipients,
         string? emailSubject, string? parametersJson, string? recurrenceJson,
         bool includeAiAnalysis = false, string? aiLocale = "el",
-        bool skipIfEmpty = false)
+        bool skipIfEmpty = false, int scheduleId = 0)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
@@ -3542,8 +3877,24 @@ public class ReportsController : Controller
                 SkipIfEmpty = skipIfEmpty
             };
 
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.BelowMinStock);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
             var id = await repo.CreateScheduleAsync(schedule);
-            return Json(new { success = true, scheduleId = id, message = "Schedule saved successfully" });
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
         }
         catch (Exception ex)
         {

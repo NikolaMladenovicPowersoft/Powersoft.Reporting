@@ -37,6 +37,18 @@
             @if (Model.ShowPostalCodes) {
                 <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("postalcode", "Postal Code", "bi-mailbox"))</div>
             }
+            @if (Model.ShowTowns) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("town", "Town", "bi-geo-alt"))</div>
+            }
+            @if (Model.ShowPaymentTypes) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("paymenttype", "Payment Type", "bi-credit-card"))</div>
+            }
+            @if (Model.ShowZReports) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("zreport", "Z Report", "bi-receipt"))</div>
+            }
+            @if (Model.ShowUsers) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("user", "User", "bi-person-circle"))</div>
+            }
             @if (Model.ShowStores) {
                 <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("store", "Store", "bi-shop"))</div>
             }
@@ -160,7 +172,8 @@
         _modes[dim] = 'all';
     }
 
-    ['category','department','brand','season','supplier','customer','agent','postalcode','store','item'].forEach(initDim);
+    ['category','department','brand','season','supplier','customer','agent','postalcode',
+     'paymenttype','zreport','town','user','store','item'].forEach(initDim);
 
     if (_storesJson && _storesJson.length) {
         _dims['store'] = _storesJson.map(s => ({
@@ -178,6 +191,8 @@
                 categories: 'category', departments: 'department', brands: 'brand',
                 seasons: 'season', suppliers: 'supplier', customers: 'customer',
                 agents: 'agent', postalcodes: 'postalcode',
+                paymenttypes: 'paymenttype', zreports: 'zreport',
+                towns: 'town', users: 'user',
                 stores: 'store', items: 'item'
             };
             var hasAny = false;
@@ -444,6 +459,8 @@
             category: 'categories', department: 'departments', brand: 'brands',
             season: 'seasons', supplier: 'suppliers', customer: 'customers',
             agent: 'agents', postalcode: 'postalcodes',
+            paymenttype: 'paymenttypes', zreport: 'zreports',
+            town: 'towns', user: 'users',
             store: 'stores', item: 'items'
         };
         Object.keys(_modes).forEach(function (dim) {

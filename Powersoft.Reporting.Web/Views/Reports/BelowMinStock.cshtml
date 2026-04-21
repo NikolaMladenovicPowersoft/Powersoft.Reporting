@@ -122,6 +122,7 @@
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Schedule Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="schedName" placeholder="e.g. Daily Stock Alert">
+                        <input type="hidden" id="schedId" value="">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
@@ -164,8 +165,9 @@
                 <div id="existingSchedules"><em class="text-muted">Loading...</em></div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button class="btn btn-primary" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
+                <button type="button" class="btn btn-outline-secondary me-auto" onclick="resetScheduleForm()" title="Clear the form to create a new schedule"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
             </div>
         </div>
     </div>
@@ -316,6 +318,11 @@ function saveSchedule() {
     };
     fd.append('recurrenceJson', JSON.stringify(recurrenceJson));
 
+    // Edit mode: if the form was loaded from an existing schedule, send the id so the server
+    // performs an UPDATE instead of inserting a duplicate record.
+    var sid = document.getElementById('schedId').value;
+    if (sid) fd.append('scheduleId', sid);
+
     var saveBtn = document.querySelector('#scheduleModal .btn-primary[onclick="saveSchedule()"]');
     if (saveBtn) saveBtn.disabled = true;
 
@@ -326,14 +333,17 @@ function saveSchedule() {
             if (d.success) {
                 alertDiv.innerHTML = '<div class="alert alert-success mb-2"><i class="bi bi-check-circle me-1"></i>' + d.message + '</div>';
                 alertDiv.style.display = '';
-                document.getElementById('schedName').value = '';
                 loadExistingSchedules();
-                setTimeout(function() {
-                    var m = document.getElementById('scheduleModal');
-                    var inst = bootstrap.Modal.getInstance(m) || bootstrap.Modal.getOrCreateInstance(m);
-                    if (inst) inst.hide();
-                    showScheduleToast('Schedule saved successfully', 'success');
-                }, 700);
+                if (d.updated) {
+                    // Update: keep the form populated so the user can tweak again without re-loading.
+                    showScheduleToast('Schedule updated', 'success');
+                } else {
+                    // New schedule: clear the form after a beat so the user can queue another one.
+                    setTimeout(function() {
+                        resetScheduleForm();
+                        showScheduleToast('Schedule saved successfully', 'success');
+                    }, 700);
+                }
             } else {
                 alertDiv.innerHTML = '<div class="alert alert-danger mb-2">' + d.message + '</div>';
                 alertDiv.style.display = '';
@@ -369,6 +379,9 @@ function deleteScheduleRow(scheduleId, scheduleName) {
             if (data.success) {
                 showScheduleToast('Schedule deleted', 'success');
                 loadExistingSchedules();
+                // If the form still held the deleted schedule's data (after a prior Load), wipe it so
+                // the user isn't left editing a record that no longer exists.
+                resetScheduleForm();
             } else {
                 showScheduleToast(data.message || 'Failed to delete schedule', 'danger');
             }
@@ -382,22 +395,76 @@ function loadExistingSchedules() {
         .then(function(data) {
             var c = document.getElementById('existingSchedules');
             if (!data || !data.length) { c.innerHTML = '<em class="text-muted">No schedules configured yet.</em>'; return; }
-            var h = '<table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th>Skip Empty</th><th class="text-end">Actions</th></tr></thead><tbody>';
+            var h = '<table class="table table-sm mb-0 align-middle"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th>Skip Empty</th><th class="text-end">Actions</th></tr></thead><tbody>';
             data.forEach(function(s) {
                 var safeName = (s.scheduleName || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                h += '<tr><td>' + s.scheduleName + '</td><td>' + s.recurrenceType + '</td><td>' + s.exportFormat + '</td>' +
+                h += '<tr data-schedule-id="' + s.scheduleId + '" style="cursor:pointer;" title="Click to load this schedule">' +
+                     '<td>' + escapeHtml(s.scheduleName || '') + '</td><td>' + s.recurrenceType + '</td><td>' + s.exportFormat + '</td>' +
                      '<td>' + s.scheduleTime + '</td><td>' + (s.nextRun || '-') + '</td>' +
                      '<td>' + (s.skipIfEmpty ? '<i class="bi bi-check-circle text-success"></i>' : '-') + '</td>' +
-                     '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" title="Delete schedule" onclick="deleteScheduleRow(' + s.scheduleId + ', \'' + safeName + '\')"><i class="bi bi-trash"></i></button></td>' +
-                     '</tr>';
+                     '<td class="text-end">' +
+                        '<button type="button" class="btn btn-sm btn-outline-primary me-1" title="Load into form" onclick="event.stopPropagation(); loadScheduleIntoForm(' + s.scheduleId + ')"><i class="bi bi-pencil"></i></button>' +
+                        '<button type="button" class="btn btn-sm btn-outline-danger" title="Delete schedule" onclick="event.stopPropagation(); deleteScheduleRow(' + s.scheduleId + ', \'' + safeName + '\')"><i class="bi bi-trash"></i></button>' +
+                     '</td></tr>';
             });
             h += '</tbody></table>';
             c.innerHTML = h;
+            c.querySelectorAll('tr[data-schedule-id]').forEach(function(tr) {
+                tr.addEventListener('click', function() {
+                    loadScheduleIntoForm(parseInt(tr.getAttribute('data-schedule-id'), 10));
+                });
+            });
         })
         .catch(function() { document.getElementById('existingSchedules').innerHTML = '<em class="text-muted">Could not load schedules.</em>'; });
 }
 
+// A2: clean-state on open + click-to-load. BMS modal has fewer fields than AvgBasket/PS (no date range,
+// no AI, no weekly/monthly-day pickers), so both helpers only touch fields that actually exist here.
+function resetScheduleForm() {
+    document.getElementById('schedId').value = '';
+    document.getElementById('schedName').value = '';
+    document.getElementById('schedRecipients').value = 'gm@powersoft.com.cy';
+    document.getElementById('schedSubject').value = '';
+    document.getElementById('schedFormat').value = 'Excel';
+    document.getElementById('schedRecurrence').value = 'Daily';
+    document.getElementById('schedTime').value = '08:00';
+    // BMS defaults SkipIfEmpty to true (recommended for this report — less noise when everything is stocked).
+    document.getElementById('schedSkipIfEmpty').checked = true;
+    var a = document.getElementById('scheduleAlert');
+    if (a) { a.style.display = 'none'; a.innerHTML = ''; }
+}
+
+function loadScheduleIntoForm(scheduleId) {
+    fetch('@Url.Action("GetScheduleById", "Reports")?scheduleId=' + scheduleId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data || !data.success || !data.schedule) {
+                showScheduleToast((data && data.message) || 'Could not load schedule', 'danger');
+                return;
+            }
+            var s = data.schedule;
+            // Remember the id so a subsequent Save updates this schedule instead of cloning it.
+            document.getElementById('schedId').value = scheduleId;
+            document.getElementById('schedName').value = s.scheduleName || '';
+            document.getElementById('schedRecipients').value = s.recipients || '';
+            document.getElementById('schedSubject').value = s.emailSubject || '';
+            document.getElementById('schedFormat').value = s.exportFormat || 'Excel';
+            document.getElementById('schedRecurrence').value = s.recurrenceType || 'Daily';
+            document.getElementById('schedTime').value = s.scheduleTime || '08:00';
+            document.getElementById('schedSkipIfEmpty').checked = !!s.skipIfEmpty;
+            var a = document.getElementById('scheduleAlert');
+            if (a) {
+                a.innerHTML = '<div class="alert alert-info mb-0 py-2"><i class="bi bi-pencil-square me-1"></i>Editing <strong>' + escapeHtml(s.scheduleName || '') + '</strong>. Saving will update this schedule in place &mdash; click <em>Reset</em> to start a new one instead.</div>';
+                a.style.display = '';
+            }
+        })
+        .catch(function() { showScheduleToast('Network error loading schedule', 'danger'); });
+}
+
 document.getElementById('scheduleModal').addEventListener('show.bs.modal', function() {
+    resetScheduleForm();
     loadExistingSchedules();
 });
+
+function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 </script>

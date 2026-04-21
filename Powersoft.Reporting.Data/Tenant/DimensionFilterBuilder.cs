@@ -17,6 +17,8 @@ internal static class DimensionFilterBuilder
         string Customer = "",
         string Agent = "",
         string PostalCode = "",
+        // User column applies to BOTH legs (every header has fk_UserCode).
+        string User = "",
         string ItemTableAlias = "t2");
 
     internal static readonly ColumnMap Default = new();
@@ -54,6 +56,8 @@ internal static class DimensionFilterBuilder
             AppendFilter(sb, parms, sel.Agents, cols.Agent, "agn", ref idx);
         if (!string.IsNullOrEmpty(cols.PostalCode))
             AppendFilter(sb, parms, sel.PostalCodes, cols.PostalCode, "pcd", ref idx);
+        if (!string.IsNullOrEmpty(cols.User))
+            AppendFilter(sb, parms, sel.Users, cols.User, "usr", ref idx);
 
         AppendPropertyFilters(sb, parms, sel, cols.ItemTableAlias, ref idx);
 
@@ -61,13 +65,16 @@ internal static class DimensionFilterBuilder
     }
 
     /// <summary>
-    /// Builds WHERE fragment for SALE-LEG only filters: Customer, Agent, PostalCode.
-    /// Returns empty if no sale-only filter is active. Uses prefix 'so' so params don't clash with general Build().
+    /// Builds WHERE fragment for SALE-LEG only filters: Customer, Agent, PostalCode,
+    /// PaymentType, ZReport, Town. Returns empty if no sale-only filter is active.
+    /// Uses prefix 'so' so params don't clash with general Build().
     /// Caller is responsible for appending the fragment only to sale-leg SQL (invoice/credit note headers).
+    /// Mirrors legacy repPowerReportCatalogue.aspx.vb:3760-3795 behaviour.
     /// </summary>
     internal static (string whereSql, List<SqlParameter> parameters) BuildSaleOnly(
         ItemsSelectionFilter? sel,
         string customerColumn, string agentColumn, string postalCodeColumn,
+        string paymentTypeColumn = "", string zReportColumn = "", string townColumn = "",
         int startIdx = 0)
     {
         if (sel == null) return ("", new List<SqlParameter>());
@@ -82,6 +89,12 @@ internal static class DimensionFilterBuilder
             AppendFilter(sb, parms, sel.Agents, agentColumn, "soagn", ref idx);
         if (!string.IsNullOrEmpty(postalCodeColumn))
             AppendFilter(sb, parms, sel.PostalCodes, postalCodeColumn, "sopcd", ref idx);
+        if (!string.IsNullOrEmpty(paymentTypeColumn))
+            AppendFilter(sb, parms, sel.PaymentTypes, paymentTypeColumn, "sopt", ref idx);
+        if (!string.IsNullOrEmpty(zReportColumn))
+            AppendFilter(sb, parms, sel.ZReports, zReportColumn, "sozr", ref idx);
+        if (!string.IsNullOrEmpty(townColumn))
+            AppendFilter(sb, parms, sel.Towns, townColumn, "sotwn", ref idx);
 
         return (sb.ToString(), parms);
     }
@@ -89,7 +102,8 @@ internal static class DimensionFilterBuilder
     internal static bool HasSaleOnlyFilters(ItemsSelectionFilter? sel)
     {
         if (sel == null) return false;
-        return sel.Customers.HasFilter || sel.Agents.HasFilter || sel.PostalCodes.HasFilter;
+        return sel.Customers.HasFilter || sel.Agents.HasFilter || sel.PostalCodes.HasFilter
+            || sel.PaymentTypes.HasFilter || sel.ZReports.HasFilter || sel.Towns.HasFilter;
     }
 
     internal static bool NeedsItemJoin(ItemsSelectionFilter? sel)

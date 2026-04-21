@@ -39,6 +39,15 @@ public class ItemsSelectionFilter
     public DimensionFilter Agents { get; set; } = new();
     public DimensionFilter PostalCodes { get; set; } = new();
 
+    // Sale-leg only (header columns present only on invoice/credit headers).
+    // Mirrors legacy repPowerReportCatalogue chkPaymentType/chkZReport/chkTown filters.
+    public DimensionFilter PaymentTypes { get; set; } = new();
+    public DimensionFilter ZReports { get; set; } = new();
+    public DimensionFilter Towns { get; set; } = new();
+
+    // Both legs — h.fk_UserCode exists on every header table.
+    public DimensionFilter Users { get; set; } = new();
+
     // Item-level property filters (tbl_Item columns)
     public StockFilter Stock { get; set; } = StockFilter.All;
     public bool? ECommerceOnly { get; set; }
@@ -63,6 +72,10 @@ public class ItemsSelectionConfig
     public bool ShowAgents { get; set; }
     public bool ShowPostalCodes { get; set; }
     public bool ShowStores { get; set; } = true;
+    public bool ShowPaymentTypes { get; set; }
+    public bool ShowZReports { get; set; }
+    public bool ShowTowns { get; set; }
+    public bool ShowUsers { get; set; }
     public bool ShowStockFilter { get; set; } = true;
     public bool ShowECommerce { get; set; } = true;
     public bool ShowModifiedDate { get; set; } = true;

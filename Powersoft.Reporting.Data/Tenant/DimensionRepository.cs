@@ -155,6 +155,111 @@ public class DimensionRepository : IDimensionRepository
         return await ReadResultsAsync(cmd);
     }
 
+    /// <summary>
+    /// Payment types from tbl_paymtype. Mirrors legacy CC.AddSelection("pk_ptcode","ptdesc","tbl_paymtype",...).
+    /// Small lookup table — no search needed.
+    /// </summary>
+    public async Task<List<DimensionItem>> GetPaymentTypesAsync()
+    {
+        const string sql = @"
+            SELECT LTRIM(RTRIM(pk_ptcode)) AS Id,
+                   LTRIM(RTRIM(pk_ptcode)) AS Code,
+                   ISNULL(ptdesc, pk_ptcode) AS Name
+            FROM tbl_paymtype
+            ORDER BY pk_ptcode";
+
+        return await ExecuteListQueryAsync(sql);
+    }
+
+    /// <summary>
+    /// Z Reports from tbl_ZReport. Filter by search (Z report number).
+    /// Mirrors legacy CC.AddSelection("pk_ZReport","pk_ZReport","tbl_ZReport",...).
+    /// </summary>
+    public async Task<List<DimensionItem>> GetZReportsAsync(string? search = null, int maxResults = 500)
+    {
+        var hasSearch = !string.IsNullOrWhiteSpace(search);
+        var sql = $@"
+            SELECT TOP (@MaxResults)
+                   LTRIM(RTRIM(CAST(pk_ZReport AS NVARCHAR(50)))) AS Id,
+                   LTRIM(RTRIM(CAST(pk_ZReport AS NVARCHAR(50)))) AS Code,
+                   LTRIM(RTRIM(CAST(pk_ZReport AS NVARCHAR(50)))) AS Name
+            FROM tbl_ZReport
+            WHERE pk_ZReport IS NOT NULL
+              AND (@Search IS NULL OR CAST(pk_ZReport AS NVARCHAR(50)) LIKE @Search)
+            ORDER BY pk_ZReport DESC";
+
+        var searchTerm = hasSearch ? $"%{search!.Trim()}%" : null;
+
+        using var conn = new SqlConnection(_connectionString);
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@MaxResults", maxResults);
+        cmd.Parameters.AddWithValue("@Search", (object?)searchTerm ?? DBNull.Value);
+
+        await conn.OpenAsync();
+        return await ReadResultsAsync(cmd);
+    }
+
+    /// <summary>
+    /// Towns — DISTINCT values from tbl_Customer.Town.
+    /// Mirrors legacy repPowerReportCatalogue.aspx.vb:3795 (AND e.Town IN (...)).
+    /// </summary>
+    public async Task<List<DimensionItem>> GetTownsAsync(string? search = null, int maxResults = 500)
+    {
+        var hasSearch = !string.IsNullOrWhiteSpace(search);
+        var sql = $@"
+            SELECT TOP (@MaxResults)
+                   LTRIM(RTRIM(Town)) AS Id,
+                   LTRIM(RTRIM(Town)) AS Code,
+                   LTRIM(RTRIM(Town)) AS Name
+            FROM (
+                SELECT DISTINCT Town
+                FROM tbl_Customer
+                WHERE Town IS NOT NULL
+                  AND LTRIM(RTRIM(Town)) <> ''
+                  AND (@Search IS NULL OR Town LIKE @Search)
+            ) AS q
+            ORDER BY Town";
+
+        var searchTerm = hasSearch ? $"%{search!.Trim()}%" : null;
+
+        using var conn = new SqlConnection(_connectionString);
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@MaxResults", maxResults);
+        cmd.Parameters.AddWithValue("@Search", (object?)searchTerm ?? DBNull.Value);
+
+        await conn.OpenAsync();
+        return await ReadResultsAsync(cmd);
+    }
+
+    /// <summary>
+    /// Users — pk_UserCode + UserDesc from tenant tbl_User. Filterable by code or description.
+    /// </summary>
+    public async Task<List<DimensionItem>> GetUsersAsync(string? search = null, int maxResults = 500)
+    {
+        var hasSearch = !string.IsNullOrWhiteSpace(search);
+        var sql = $@"
+            SELECT TOP (@MaxResults)
+                   LTRIM(RTRIM(pk_UserCode)) AS Id,
+                   LTRIM(RTRIM(pk_UserCode)) AS Code,
+                   LTRIM(RTRIM(ISNULL(UserDesc, pk_UserCode))) AS Name
+            FROM tbl_User
+            WHERE pk_UserCode IS NOT NULL
+              AND (@Search IS NULL
+                   OR pk_UserCode LIKE @Search
+                   OR ISNULL(UserDesc,'') LIKE @Search)
+            ORDER BY pk_UserCode";
+
+        var searchTerm = hasSearch ? $"%{search!.Trim()}%" : null;
+
+        using var conn = new SqlConnection(_connectionString);
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@MaxResults", maxResults);
+        cmd.Parameters.AddWithValue("@Search", (object?)searchTerm ?? DBNull.Value);
+
+        await conn.OpenAsync();
+        return await ReadResultsAsync(cmd);
+    }
+
     private async Task<List<DimensionItem>> ExecuteListQueryAsync(string sql)
     {
         using var conn = new SqlConnection(_connectionString);

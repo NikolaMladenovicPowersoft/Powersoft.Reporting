@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Data.Auth;
 using Powersoft.Reporting.Data.Central;
@@ -72,6 +73,16 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
+// Persist DataProtection keys to disk so auth cookies survive app pool recycles / restarts.
+// Without this, every restart regenerates the ephemeral key ring, silently invalidating every
+// issued auth cookie — so the next POST from a long-lived browser tab (e.g. clicking a saved
+// layout) gets redirected to /Account/Login instead of running.
+var dpKeysPath = Path.Combine(builder.Environment.ContentRootPath, "dp-keys");
+Directory.CreateDirectory(dpKeysPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dpKeysPath))
+    .SetApplicationName("PowersoftReporting");
+
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -92,6 +103,32 @@ var app = builder.Build();
 var migLogger = app.Services.GetRequiredService<ILogger<Powersoft.Reporting.Data.Tenant.SchemaMigrationService>>();
 Powersoft.Reporting.Data.Tenant.SchemaMigrationService.LogInfo = msg => migLogger.LogInformation(msg);
 Powersoft.Reporting.Data.Tenant.SchemaMigrationService.LogWarning = (msg, ex) => migLogger.LogWarning(ex, msg);
+
+// Startup health check: warn loudly if e-mail delivery is not configured.
+// Without this, scheduled reports run successfully but recipients never get the mail.
+{
+    var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    var emailOpts = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<EmailOptions>>().Value;
+    var missing = new List<string>();
+    if (string.IsNullOrWhiteSpace(emailOpts.SmtpHost)) missing.Add("SmtpHost");
+    if (string.IsNullOrWhiteSpace(emailOpts.SmtpUser) || emailOpts.SmtpUser.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase)) missing.Add("SmtpUser");
+    if (string.IsNullOrWhiteSpace(emailOpts.SmtpPassword) || emailOpts.SmtpPassword.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase)) missing.Add("SmtpPassword");
+    if (string.IsNullOrWhiteSpace(emailOpts.FromEmail)) missing.Add("FromEmail");
+    if (missing.Count > 0)
+    {
+        startupLogger.LogError(
+            "Email configuration is INCOMPLETE (missing/placeholder: {Missing}). " +
+            "Scheduled reports will NOT deliver e-mails. " +
+            "Set the 'Email' section in appsettings.json (SmtpHost, SmtpUser, SmtpPassword, FromEmail).",
+            string.Join(", ", missing));
+    }
+    else
+    {
+        startupLogger.LogInformation(
+            "Email configured: host={Host}:{Port}, from={From}",
+            emailOpts.SmtpHost, emailOpts.SmtpPort, emailOpts.FromEmail);
+    }
+}
 
 if (!app.Environment.IsDevelopment())
 {

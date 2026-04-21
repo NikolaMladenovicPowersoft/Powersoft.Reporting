@@ -49,7 +49,9 @@ public class AverageBasketRow
     public decimal LYAverageQty => LYTotalTransactions > 0 ? LYTotalQty / LYTotalTransactions : 0;
     
     // Year over Year
-    public decimal YoYChangePercent => LYTotalNet != 0 
-        ? Math.Round((CYTotalNet - LYTotalNet) / Math.Abs(LYTotalNet) * 100, 2) 
-        : 100;
+    // When last year had no activity: +100% only if current year actually has net sales,
+    // otherwise 0% (both zero = no change). Mirrors ReportGrandTotals.YoYChangePercent.
+    public decimal YoYChangePercent => LYTotalNet != 0
+        ? Math.Round((CYTotalNet - LYTotalNet) / Math.Abs(LYTotalNet) * 100, 2)
+        : (CYTotalNet > 0 ? 100 : 0);
 }

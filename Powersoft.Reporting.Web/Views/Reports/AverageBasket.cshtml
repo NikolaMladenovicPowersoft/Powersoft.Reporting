@@ -816,6 +816,7 @@ else
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Schedule Name</label>
                         <input type="text" class="form-control" id="schedName" placeholder="e.g. Weekly Sales Summary" required>
+                        <input type="hidden" id="schedId" value="">
                         <small class="text-muted">A label to identify this schedule in the list</small>
                     </div>
                     <div class="col-md-6">
@@ -936,6 +937,9 @@ else
                 <div id="existingSchedules" class="small text-muted">Loading...</div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary me-auto" onclick="resetScheduleForm()" title="Clear the form to create a new schedule">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="saveSchedule()">
                     <i class="bi bi-check-lg me-1"></i>Save Schedule
@@ -1653,6 +1657,11 @@ function saveSchedule() {
     }
     formData.append('recurrenceJson', JSON.stringify(recurrenceJson));
 
+    // Edit mode: if the form was loaded from an existing schedule, send the id so the server
+    // performs an UPDATE instead of inserting a duplicate record.
+    var sid = document.getElementById('schedId').value;
+    if (sid) formData.append('scheduleId', sid);
+
     var saveBtn = document.querySelector('#scheduleModal .btn-primary[onclick="saveSchedule()"]');
     if (saveBtn) saveBtn.disabled = true;
 
@@ -1663,14 +1672,17 @@ function saveSchedule() {
             if (data.success) {
                 alertDiv.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>' + data.message + '</div>';
                 alertDiv.style.display = '';
-                document.getElementById('schedName').value = '';
                 loadExistingSchedules();
-                setTimeout(function() {
-                    var modalEl = document.getElementById('scheduleModal');
-                    var inst = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
-                    if (inst) inst.hide();
-                    showScheduleToast('Schedule saved successfully', 'success');
-                }, 700);
+                if (data.updated) {
+                    // Update: keep the form populated — the user may want to tweak and save again.
+                    showScheduleToast('Schedule updated', 'success');
+                } else {
+                    // New schedule: clear the form after a beat so the user can queue another one.
+                    setTimeout(function() {
+                        resetScheduleForm();
+                        showScheduleToast('Schedule saved successfully', 'success');
+                    }, 700);
+                }
             } else {
                 alertDiv.innerHTML = '<div class="alert alert-danger mb-0">' + data.message + '</div>';
                 alertDiv.style.display = '';
@@ -1706,6 +1718,9 @@ function deleteScheduleRow(scheduleId, scheduleName) {
             if (data.success) {
                 showScheduleToast('Schedule deleted', 'success');
                 loadExistingSchedules();
+                // If the form still held the deleted schedule's data (after a prior Load), wipe it so
+                // the user isn't left editing a record that no longer exists.
+                resetScheduleForm();
             } else {
                 showScheduleToast(data.message || 'Failed to delete schedule', 'danger');
             }
@@ -1722,24 +1737,136 @@ function loadExistingSchedules() {
                 container.innerHTML = '<em>No schedules configured yet.</em>';
                 return;
             }
-            var html = '<table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th class="text-end">Actions</th></tr></thead><tbody>';
+            var html = '<table class="table table-sm mb-0 align-middle"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th class="text-end">Actions</th></tr></thead><tbody>';
             data.forEach(function(s) {
                 var safeName = (s.scheduleName || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                html += '<tr>'
-                    + '<td>' + s.scheduleName + '</td>'
+                html += '<tr data-schedule-id="' + s.scheduleId + '" style="cursor:pointer;" title="Click to load this schedule">'
+                    + '<td>' + escapeHtml(s.scheduleName || '') + '</td>'
                     + '<td>' + s.recurrenceType + '</td>'
                     + '<td>' + s.exportFormat + '</td>'
                     + '<td>' + s.scheduleTime + '</td>'
                     + '<td>' + (s.nextRun || '-') + '</td>'
-                    + '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" title="Delete schedule" onclick="deleteScheduleRow(' + s.scheduleId + ', \'' + safeName + '\')"><i class="bi bi-trash"></i></button></td>'
+                    + '<td class="text-end">'
+                    +   '<button type="button" class="btn btn-sm btn-outline-primary me-1" title="Load into form" onclick="event.stopPropagation(); loadScheduleIntoForm(' + s.scheduleId + ')"><i class="bi bi-pencil"></i></button>'
+                    +   '<button type="button" class="btn btn-sm btn-outline-danger" title="Delete schedule" onclick="event.stopPropagation(); deleteScheduleRow(' + s.scheduleId + ', \'' + safeName + '\')"><i class="bi bi-trash"></i></button>'
+                    + '</td>'
                     + '</tr>';
             });
             html += '</tbody></table>';
             container.innerHTML = html;
+            container.querySelectorAll('tr[data-schedule-id]').forEach(function(tr) {
+                tr.addEventListener('click', function() {
+                    loadScheduleIntoForm(parseInt(tr.getAttribute('data-schedule-id'), 10));
+                });
+            });
         })
         .catch(function() {
             document.getElementById('existingSchedules').innerHTML = '<em>Could not load schedules.</em>';
         });
+}
+
+// ============== A2: Schedule clean-state + click-to-load existing ==============
+// George's feedback (2026-04-17): "But why is not clean. It should be clean here."
+// + "Click on one of the 2 before you delete them, you want to see the options that you selected."
+
+function resetScheduleForm() {
+    document.getElementById('schedId').value = '';
+    document.getElementById('schedName').value = '';
+    document.getElementById('schedRecipients').value = 'gm@powersoft.com.cy';
+    document.getElementById('schedSubject').value = '';
+    document.getElementById('schedFormat').value = 'Excel';
+    document.getElementById('schedRecurrence').value = 'Daily';
+    document.getElementById('schedTime').value = '08:00';
+    document.getElementById('schedStartDate').value = new Date().toISOString().slice(0, 10);
+    document.querySelectorAll('.sched-dow').forEach(function(cb) { cb.checked = false; });
+    var skipEmpty = document.getElementById('schedSkipIfEmpty');
+    if (skipEmpty) skipEmpty.checked = false;
+    var ai = document.getElementById('schedIncludeAi');
+    if (ai) ai.checked = false;
+    onRecurrenceChange();
+    onSchedAiToggle();
+    var alertDiv = document.getElementById('scheduleAlert');
+    if (alertDiv) { alertDiv.style.display = 'none'; alertDiv.innerHTML = ''; }
+}
+
+function loadScheduleIntoForm(scheduleId) {
+    fetch('@Url.Action("GetScheduleById", "Reports")?scheduleId=' + scheduleId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data || !data.success || !data.schedule) {
+                showScheduleToast((data && data.message) || 'Could not load schedule', 'danger');
+                return;
+            }
+            var s = data.schedule;
+            // Remember the id so a subsequent Save updates this schedule instead of cloning it.
+            document.getElementById('schedId').value = scheduleId;
+            document.getElementById('schedName').value = s.scheduleName || '';
+            document.getElementById('schedRecipients').value = s.recipients || '';
+            document.getElementById('schedSubject').value = s.emailSubject || '';
+            document.getElementById('schedFormat').value = s.exportFormat || 'Excel';
+            document.getElementById('schedRecurrence').value = s.recurrenceType || 'Daily';
+            document.getElementById('schedTime').value = (s.scheduleTime || '08:00');
+            onRecurrenceChange();
+
+            // Recurrence-specific fields
+            if (s.recurrenceJson) {
+                try {
+                    var rec = typeof s.recurrenceJson === 'string' ? JSON.parse(s.recurrenceJson) : s.recurrenceJson;
+                    if (rec && rec.range && rec.range.startDate) {
+                        document.getElementById('schedStartDate').value = rec.range.startDate;
+                    }
+                    if (rec && rec.pattern) {
+                        if (rec.type === 'Weekly' && Array.isArray(rec.pattern.daysOfWeek)) {
+                            document.querySelectorAll('.sched-dow').forEach(function(cb) {
+                                cb.checked = rec.pattern.daysOfWeek.indexOf(parseInt(cb.value, 10)) !== -1;
+                            });
+                        } else if (rec.type === 'Monthly' && rec.pattern.dayOfMonth) {
+                            var md = document.getElementById('schedMonthDay');
+                            if (md) md.value = String(rec.pattern.dayOfMonth);
+                        }
+                    }
+                } catch (e) { /* best-effort rehydrate */ }
+            }
+
+            // AI + SkipIfEmpty
+            var skipEmpty = document.getElementById('schedSkipIfEmpty');
+            if (skipEmpty) skipEmpty.checked = !!s.skipIfEmpty;
+            var ai = document.getElementById('schedIncludeAi');
+            if (ai) ai.checked = !!s.includeAiAnalysis;
+            var aiLoc = document.getElementById('schedAiLocale');
+            if (aiLoc && s.aiLocale) aiLoc.value = s.aiLocale;
+            onSchedAiToggle();
+
+            // Parameter block (report-specific): apply only fields that exist in this view.
+            if (s.parametersJson) {
+                try {
+                    var p = typeof s.parametersJson === 'string' ? JSON.parse(s.parametersJson) : s.parametersJson;
+                    var rdrType = document.getElementById('schedDateRangeType');
+                    if (rdrType && p.reportDateRange && p.reportDateRange.type) {
+                        var v = p.reportDateRange.value;
+                        var targetVal = p.reportDateRange.type;
+                        for (var i = 0; i < rdrType.options.length; i++) {
+                            var opt = rdrType.options[i];
+                            if (opt.value === targetVal && (targetVal !== 'LastNDays' || String(opt.getAttribute('data-value')) === String(v))) {
+                                rdrType.selectedIndex = i; break;
+                            }
+                        }
+                        if (p.reportDateRange.type === 'Custom') {
+                            if (p.reportDateRange.dateFrom) document.getElementById('schedDateFrom').value = p.reportDateRange.dateFrom;
+                            if (p.reportDateRange.dateTo) document.getElementById('schedDateTo').value = p.reportDateRange.dateTo;
+                        }
+                    }
+                    onSchedDateRangeTypeChange();
+                } catch (e) { /* best-effort */ }
+            }
+
+            var alertDiv = document.getElementById('scheduleAlert');
+            if (alertDiv) {
+                alertDiv.innerHTML = '<div class="alert alert-info mb-0 py-2"><i class="bi bi-pencil-square me-1"></i>Editing <strong>' + escapeHtml(s.scheduleName || '') + '</strong>. Saving will update this schedule in place &mdash; click <em>Reset</em> to start a new one instead.</div>';
+                alertDiv.style.display = '';
+            }
+        })
+        .catch(function() { showScheduleToast('Network error loading schedule', 'danger'); });
 }
 
 // Load schedules and init date range visibility when modal opens
@@ -1747,6 +1874,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var modal = document.getElementById('scheduleModal');
     if (modal) {
         modal.addEventListener('show.bs.modal', function() {
+            resetScheduleForm();               // A2: always start clean
             loadExistingSchedules();
             autoSelectScheduleDateRange();
             onSchedDateRangeTypeChange();
@@ -1954,15 +2082,35 @@ function collectCurrentLayout() {
     return parms;
 }
 
+// Detects the case where [Authorize] sent us a 302 to /Account/Login after the cookie expired,
+// so we don't end up trying to JSON.parse a login page (which just fails silently otherwise).
+function isAuthRedirect(response) {
+    if (!response) return false;
+    if (response.status === 401 || response.status === 403) return true;
+    if (response.redirected && /\/Account\/Login/i.test(response.url || '')) return true;
+    var ct = response.headers && response.headers.get ? response.headers.get('content-type') : '';
+    if (ct && ct.indexOf('text/html') !== -1) return true;
+    return false;
+}
+
+function showSessionExpiredToast() {
+    showLayoutToast('Session expired — please reload the page and sign in again.', 'warning');
+}
+
 function saveCurrentLayout() {
     var parms = collectCurrentLayout();
     fetch('@Url.Action("SaveLayout", "Reports")', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parms)
     })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+        if (isAuthRedirect(r)) { showSessionExpiredToast(); return null; }
+        return r.json();
+    })
     .then(function(data) {
+        if (data == null) return;
         if (data.success) {
             showLayoutToast('Layout saved successfully', 'success');
         } else {
@@ -1976,9 +2124,13 @@ function saveCurrentLayout() {
 
 function resetSavedLayout() {
     if (!confirm('Reset your saved layout to factory defaults?')) return;
-    fetch('@Url.Action("ResetLayout", "Reports")', { method: 'POST' })
-    .then(function(r) { return r.json(); })
+    fetch('@Url.Action("ResetLayout", "Reports")', { method: 'POST', credentials: 'same-origin' })
+    .then(function(r) {
+        if (isAuthRedirect(r)) { showSessionExpiredToast(); return null; }
+        return r.json();
+    })
     .then(function(data) {
+        if (data == null) return;
         if (data.success) {
             showLayoutToast('Layout reset — reloading...', 'success');
             setTimeout(function() { window.location.href = '@Url.Action("AverageBasket", new { layoutReset = true })'; }, 800);

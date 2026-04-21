@@ -63,8 +63,18 @@ appsettings.Local.json
 
 # Publish artifacts
 _publish/
+publish/
+publish_deploy/
 *.publish.zip
 *_publish.zip
+*.zip
+
+# Local verification scratch (SQL output, app run logs — may contain data)
+_VERIFY/
 
 # Personal docs
 _DOCS/
+
+# DataProtection keys (per-machine; regenerated on first run if missing)
+Powersoft.Reporting.Web/dp-keys/
+publish_deploy/dp-keys/

@@ -12,4 +12,8 @@ public interface IDimensionRepository
     Task<List<DimensionItem>> GetCustomersAsync(string? search = null, int maxResults = 500);
     Task<List<DimensionItem>> GetAgentsAsync(string? search = null, int maxResults = 500);
     Task<List<DimensionItem>> GetPostalCodesAsync(string? search = null, int maxResults = 500);
+    Task<List<DimensionItem>> GetPaymentTypesAsync();
+    Task<List<DimensionItem>> GetZReportsAsync(string? search = null, int maxResults = 500);
+    Task<List<DimensionItem>> GetTownsAsync(string? search = null, int maxResults = 500);
+    Task<List<DimensionItem>> GetUsersAsync(string? search = null, int maxResults = 500);
 }

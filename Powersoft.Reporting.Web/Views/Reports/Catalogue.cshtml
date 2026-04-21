@@ -48,6 +48,7 @@
             <input type="hidden" asp-for="SortColumn" id="sortColumnHidden" />
             <input type="hidden" asp-for="SortDirection" id="sortDirectionHidden" />
             <input type="hidden" asp-for="DisplayColumnsString" id="displayColumnsHidden" />
+            <input type="hidden" asp-for="ColumnOrder" id="columnOrderHidden" />
             @foreach (var col in filterCols)
             {
                 <input type="hidden" name="FilterValues[@col]" id="fv_@col" value="@(Model.FilterValues.GetValueOrDefault(col, ""))" />
@@ -190,13 +191,26 @@
                     </button>
                 }
                 <div class="btn-group ms-auto">
-                    <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Save current parameters as your default layout">
-                        <i class="bi bi-save me-1"></i>Save Layout
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"
+                                title="Saved report layouts" id="layoutsDropdownBtn">
+                            <i class="bi bi-bookmark me-1"></i><span id="layoutsCurrentName">Layouts</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" id="layoutsDropdownMenu" style="min-width: 320px;">
+                            <li><h6 class="dropdown-header">Loading...</h6></li>
+                        </ul>
+                    </div>
+                    <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Overwrite your default layout with current parameters">
+                        <i class="bi bi-save me-1"></i>Save
+                    </button>
+                    <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveLayoutAsModal"
+                            title="Save current parameters as a new named layout (optionally shared with all users)">
+                        <i class="bi bi-bookmark-plus me-1"></i>Save as...
                     </button>
                     @if (Model.HasSavedLayout)
                     {
-                        <button type="button" class="btn btn-outline-secondary" onclick="resetSavedLayout()" title="Discard your saved layout and restore factory defaults">
-                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Layout
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetSavedLayout()" title="Discard your saved default layout and restore factory defaults">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Default
                         </button>
                     }
                     <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#columnSettingsModal" title="Choose which columns to show/hide">
@@ -230,6 +244,10 @@
     ShowPostalCodes = true,
     ShowStores = true,
     ShowItems = false,
+    ShowPaymentTypes = true,
+    ShowZReports = true,
+    ShowTowns = true,
+    ShowUsers = true,
     StoresJson = storesJson,
     SavedFilterJson = Model.ItemsSelectionJson ?? ""
 })
@@ -352,11 +370,13 @@
                 <table class="table table-sm table-hover table-striped mb-0" id="resultsTable">
                     <thead class="table-light sticky-top">
                         <tr>
-                            @if (hasL1) { <th class="sortable" data-col="Level1Description">Group 1</th> }
-                            @if (hasL2) { <th class="sortable" data-col="Level2Description">Group 2</th> }
-                            @if (hasL3) { <th class="sortable" data-col="Level3Description">Group 3</th> }
-                            @if (showItem && dc("ItemCode")) { <th class="sortable" data-col="ItemCode">Code</th> }
-                            @if (showItem && dc("ItemName")) { <th class="sortable" data-col="ItemDescription">Description</th> }
+                            @* data-fixed-left="1" marks columns that stay anchored to the left and are NOT part of
+                               drag&drop reordering (controlled by Primary/Secondary/Third Group + Item visibility). *@
+                            @if (hasL1) { <th class="sortable" data-col="Level1Description" data-fixed-left="1">Group 1</th> }
+                            @if (hasL2) { <th class="sortable" data-col="Level2Description" data-fixed-left="1">Group 2</th> }
+                            @if (hasL3) { <th class="sortable" data-col="Level3Description" data-fixed-left="1">Group 3</th> }
+                            @if (showItem && dc("ItemCode")) { <th class="sortable" data-col="ItemCode" data-fixed-left="1">Code</th> }
+                            @if (showItem && dc("ItemName")) { <th class="sortable" data-col="ItemDescription" data-fixed-left="1">Description</th> }
                             @if (dc("Quantity")) { <th class="sortable text-end col-trans" data-col="Quantity">Qty</th> }
                             @if (dc("Value")) { <th class="sortable text-end col-trans" data-col="ValueBeforeDiscount">Value</th> }
                             @if (dc("Discount")) { <th class="sortable text-end col-trans" data-col="Discount">Discount</th> }
@@ -397,6 +417,22 @@
                             @if (dc("Price2Incl")) { <th class="text-end" data-col="Price2Incl">Price 2 In</th> }
                             @if (dc("Price3Excl")) { <th class="text-end" data-col="Price3Excl">Price 3 Ex</th> }
                             @if (dc("Price3Incl")) { <th class="text-end" data-col="Price3Incl">Price 3 In</th> }
+                            @if (dc("Price4Excl")) { <th class="text-end" data-col="Price4Excl">Price 4 Ex</th> }
+                            @if (dc("Price4Incl")) { <th class="text-end" data-col="Price4Incl">Price 4 In</th> }
+                            @if (dc("Price5Excl")) { <th class="text-end" data-col="Price5Excl">Price 5 Ex</th> }
+                            @if (dc("Price5Incl")) { <th class="text-end" data-col="Price5Incl">Price 5 In</th> }
+                            @if (dc("Price6Excl")) { <th class="text-end" data-col="Price6Excl">Price 6 Ex</th> }
+                            @if (dc("Price6Incl")) { <th class="text-end" data-col="Price6Incl">Price 6 In</th> }
+                            @if (dc("Price7Excl")) { <th class="text-end" data-col="Price7Excl">Price 7 Ex</th> }
+                            @if (dc("Price7Incl")) { <th class="text-end" data-col="Price7Incl">Price 7 In</th> }
+                            @if (dc("Price8Excl")) { <th class="text-end" data-col="Price8Excl">Price 8 Ex</th> }
+                            @if (dc("Price8Incl")) { <th class="text-end" data-col="Price8Incl">Price 8 In</th> }
+                            @if (dc("Price9Excl")) { <th class="text-end" data-col="Price9Excl">Price 9 Ex</th> }
+                            @if (dc("Price9Incl")) { <th class="text-end" data-col="Price9Incl">Price 9 In</th> }
+                            @if (dc("Price10Excl")) { <th class="text-end" data-col="Price10Excl">Price 10 Ex</th> }
+                            @if (dc("Price10Incl")) { <th class="text-end" data-col="Price10Incl">Price 10 In</th> }
+                            @if (dc("InvPriceExcl")) { <th class="text-end" data-col="InvPriceExcl">Inv. Price Ex</th> }
+                            @if (dc("InvPriceIncl")) { <th class="text-end" data-col="InvPriceIncl">Inv. Price In</th> }
                             @if (dc("ItemAttr1")) { <th data-col="ItemAttr1">Attr 1</th> }
                             @if (dc("ItemAttr2")) { <th data-col="ItemAttr2">Attr 2</th> }
                             @if (dc("ItemAttr3")) { <th data-col="ItemAttr3">Attr 3</th> }
@@ -417,10 +453,13 @@
                             "ZReportNumber","PaymentType","ItemCategory","ItemDepartment","Brand",
                             "Season","Model","Colour","Size","Franchise","ItemSupplier",
                             "Price1Excl","Price1Incl","Price2Excl","Price2Incl","Price3Excl","Price3Incl",
+                            "Price4Excl","Price4Incl","Price5Excl","Price5Incl","Price6Excl","Price6Incl",
+                            "Price7Excl","Price7Incl","Price8Excl","Price8Incl","Price9Excl","Price9Incl",
+                            "Price10Excl","Price10Incl","InvPriceExcl","InvPriceIncl",
                             "ItemAttr1","ItemAttr2","ItemAttr3","ItemAttr4","ItemAttr5","ItemAttr6"};
                         foreach (var c in dimColsForCount) { if (dc(c)) totalColumns++; }
 
-                        Func<CatalogueRow, object> renderDataRow = @<tr>
+                        Func<CatalogueRow, object> renderDataRow = @<tr class="data-row">
                             @if (hasL1) { <td>@(@item.Level1Value)</td> }
                             @if (hasL2) { <td>@(@item.Level2Value)</td> }
                             @if (hasL3) { <td>@(@item.Level3Value)</td> }
@@ -466,6 +505,22 @@
                             @if (dc("Price2Incl")) { <td class="text-end">@item.Price2Incl.ToString("N2")</td> }
                             @if (dc("Price3Excl")) { <td class="text-end">@item.Price3Excl.ToString("N2")</td> }
                             @if (dc("Price3Incl")) { <td class="text-end">@item.Price3Incl.ToString("N2")</td> }
+                            @if (dc("Price4Excl")) { <td class="text-end">@item.Price4Excl.ToString("N2")</td> }
+                            @if (dc("Price4Incl")) { <td class="text-end">@item.Price4Incl.ToString("N2")</td> }
+                            @if (dc("Price5Excl")) { <td class="text-end">@item.Price5Excl.ToString("N2")</td> }
+                            @if (dc("Price5Incl")) { <td class="text-end">@item.Price5Incl.ToString("N2")</td> }
+                            @if (dc("Price6Excl")) { <td class="text-end">@item.Price6Excl.ToString("N2")</td> }
+                            @if (dc("Price6Incl")) { <td class="text-end">@item.Price6Incl.ToString("N2")</td> }
+                            @if (dc("Price7Excl")) { <td class="text-end">@item.Price7Excl.ToString("N2")</td> }
+                            @if (dc("Price7Incl")) { <td class="text-end">@item.Price7Incl.ToString("N2")</td> }
+                            @if (dc("Price8Excl")) { <td class="text-end">@item.Price8Excl.ToString("N2")</td> }
+                            @if (dc("Price8Incl")) { <td class="text-end">@item.Price8Incl.ToString("N2")</td> }
+                            @if (dc("Price9Excl")) { <td class="text-end">@item.Price9Excl.ToString("N2")</td> }
+                            @if (dc("Price9Incl")) { <td class="text-end">@item.Price9Incl.ToString("N2")</td> }
+                            @if (dc("Price10Excl")) { <td class="text-end">@item.Price10Excl.ToString("N2")</td> }
+                            @if (dc("Price10Incl")) { <td class="text-end">@item.Price10Incl.ToString("N2")</td> }
+                            @if (dc("InvPriceExcl")) { <td class="text-end">@item.InvPriceExcl.ToString("N2")</td> }
+                            @if (dc("InvPriceIncl")) { <td class="text-end">@item.InvPriceIncl.ToString("N2")</td> }
                             @if (dc("ItemAttr1")) { <td class="small">@item.ItemAttr1Descr</td> }
                             @if (dc("ItemAttr2")) { <td class="small">@item.ItemAttr2Descr</td> }
                             @if (dc("ItemAttr3")) { <td class="small">@item.ItemAttr3Descr</td> }
@@ -601,6 +656,9 @@
                                         "ZReportNumber","PaymentType","ItemCategory","ItemDepartment","Brand",
                                         "Season","Model","Colour","Size","Franchise","ItemSupplier",
                                         "Price1Excl","Price1Incl","Price2Excl","Price2Incl","Price3Excl","Price3Incl",
+                                        "Price4Excl","Price4Incl","Price5Excl","Price5Incl","Price6Excl","Price6Incl",
+                                        "Price7Excl","Price7Incl","Price8Excl","Price8Incl","Price9Excl","Price9Incl",
+                                        "Price10Excl","Price10Incl","InvPriceExcl","InvPriceIncl",
                                         "ItemAttr1","ItemAttr2","ItemAttr3","ItemAttr4","ItemAttr5","ItemAttr6"};
                                 }
                                 @foreach (var c in dimCols) { if (dc(c)) { <td></td> } }
@@ -668,6 +726,29 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     /* Drill-down link style (same as PurchasesSales) */
     #resultsTable a.dd-link-item { color: #2563eb; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #2563eb; }
     #resultsTable a.dd-link-item:hover { color: #1d4ed8; border-bottom-style: solid; }
+
+    /* Column reorder (Column Options modal) */
+    #colToggleList .col-reorderable { cursor: default; }
+    #colToggleList .col-drag-handle { cursor: grab; padding: 2px 4px; border-radius: 3px; }
+    #colToggleList .col-drag-handle:hover { background: #e2e8f0; color: #334155 !important; }
+    #colToggleList .col-reorderable.dragging { opacity: 0.45; background: #e0f2fe !important; }
+    #colToggleList .col-reorderable.drop-before { border-top: 2px solid #2563eb !important; }
+    #colToggleList .col-reorderable.drop-after  { border-bottom: 2px solid #2563eb !important; }
+    #colToggleList .btn-group .btn { padding: 0.1rem 0.35rem; font-size: 0.75rem; line-height: 1; }
+
+    /* Highlight toggled row that requires a refresh (column not yet in the rendered grid) */
+    #colToggleList label.col-needs-refresh { background: #fff3cd !important; border-left: 3px solid #f59e0b; }
+
+    /* Pulse animation for "Apply & Refresh" when there are uncommitted column changes that affect data */
+    @@keyframes applyColsPulse {
+        0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+        70%  { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    }
+    #applyColumnsBtn.needs-refresh {
+        background: #f59e0b !important; border-color: #d97706 !important;
+        animation: applyColsPulse 1.6s infinite;
+    }
 </style>
 
 <!-- Schedule Modal -->
@@ -730,6 +811,7 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Schedule Name</label>
                         <input type="text" class="form-control" id="schedName" placeholder="e.g. Weekly Catalogue Summary" required>
+                        <input type="hidden" id="schedId" value="">
                         <small class="text-muted">A label to identify this schedule in the list</small>
                     </div>
                     <div class="col-md-6">
@@ -839,6 +921,9 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                 <div id="existingSchedules" class="small text-muted">Loading...</div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary me-auto" onclick="resetScheduleForm()" title="Clear the form to create a new schedule">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                </button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="saveSchedule()">
                     <i class="bi bi-check-lg me-1"></i>Save Schedule
@@ -861,6 +946,12 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                     Choose which columns appear in the table. Changes to column selection require re-running the report
                     (press <strong>Apply &amp; Refresh</strong>).
                 </p>
+                @* Prominent dirty banner — shown the moment the user checks a column that is NOT currently rendered.
+                   Placed ABOVE the list (within user's eye-line), not below. *@
+                <div id="colAddBanner" class="alert alert-warning py-2 px-3 mb-3 d-none" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <span id="colAddBannerText">New columns selected — click <strong>Apply &amp; Refresh</strong> to load their data.</span>
+                </div>
                 <div class="input-group mb-3">
                     <span class="input-group-text"><i class="bi bi-search"></i></span>
                     <input type="text" class="form-control" id="colSearchInput" placeholder="Search columns..." oninput="filterColumnList()">
@@ -916,6 +1007,22 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                                 ("Price2Incl","Price 2 In","price 2 incl","Price2Incl", false, dc("Price2Incl"), true),
                                 ("Price3Excl","Price 3 Ex","price 3 excl","Price3Excl", false, dc("Price3Excl"), true),
                                 ("Price3Incl","Price 3 In","price 3 incl","Price3Incl", false, dc("Price3Incl"), true),
+                                ("Price4Excl","Price 4 Ex","price 4 excl","Price4Excl", false, dc("Price4Excl"), true),
+                                ("Price4Incl","Price 4 In","price 4 incl","Price4Incl", false, dc("Price4Incl"), true),
+                                ("Price5Excl","Price 5 Ex","price 5 excl","Price5Excl", false, dc("Price5Excl"), true),
+                                ("Price5Incl","Price 5 In","price 5 incl","Price5Incl", false, dc("Price5Incl"), true),
+                                ("Price6Excl","Price 6 Ex","price 6 excl","Price6Excl", false, dc("Price6Excl"), true),
+                                ("Price6Incl","Price 6 In","price 6 incl","Price6Incl", false, dc("Price6Incl"), true),
+                                ("Price7Excl","Price 7 Ex","price 7 excl","Price7Excl", false, dc("Price7Excl"), true),
+                                ("Price7Incl","Price 7 In","price 7 incl","Price7Incl", false, dc("Price7Incl"), true),
+                                ("Price8Excl","Price 8 Ex","price 8 excl","Price8Excl", false, dc("Price8Excl"), true),
+                                ("Price8Incl","Price 8 In","price 8 incl","Price8Incl", false, dc("Price8Incl"), true),
+                                ("Price9Excl","Price 9 Ex","price 9 excl","Price9Excl", false, dc("Price9Excl"), true),
+                                ("Price9Incl","Price 9 In","price 9 incl","Price9Incl", false, dc("Price9Incl"), true),
+                                ("Price10Excl","Price 10 Ex","price 10 excl","Price10Excl", false, dc("Price10Excl"), true),
+                                ("Price10Incl","Price 10 In","price 10 incl","Price10Incl", false, dc("Price10Incl"), true),
+                                ("InvPriceExcl","Inv. Price Ex","invoice price excl line","InvPriceExcl", false, dc("InvPriceExcl"), true),
+                                ("InvPriceIncl","Inv. Price In","invoice price incl line","InvPriceIncl", false, dc("InvPriceIncl"), true),
                                 ("ItemAttr1","Attr 1","attribute 1","ItemAttr1", false, dc("ItemAttr1"), true),
                                 ("ItemAttr2","Attr 2","attribute 2","ItemAttr2", false, dc("ItemAttr2"), true),
                                 ("ItemAttr3","Attr 3","attribute 3","ItemAttr3", false, dc("ItemAttr3"), true),
@@ -928,12 +1035,23 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                         @foreach (var c in visCols)
                         {
                             var disabled = c.IsGrouping || !c.CanToggle;
+                            var reorderable = !c.IsGrouping; // grouping cols stay anchored left; everything else can be moved
                             var titleAttr = c.IsGrouping
                                 ? "Controlled by the Primary/Secondary/Third Group selector"
                                 : (!c.CanToggle ? "Item columns are available in detailed/ungrouped mode only" : "");
-                            <label class="list-group-item list-group-item-action d-flex align-items-center @(disabled ? "disabled text-muted" : "")"
+                            <label class="list-group-item list-group-item-action d-flex align-items-center @(disabled ? "disabled text-muted" : "") @(reorderable ? "col-reorderable" : "")"
                                    data-col-name="@c.Search"
+                                   data-col-sql="@c.SqlCol"
+                                   draggable="@(reorderable ? "true" : "false")"
                                    title="@titleAttr">
+                                @if (reorderable)
+                                {
+                                    <span class="col-drag-handle me-2 text-muted" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
+                                }
+                                else
+                                {
+                                    <span class="me-2 text-muted" title="Anchored left (grouping column)"><i class="bi bi-lock-fill small"></i></span>
+                                }
                                 <input class="form-check-input col-toggle me-2"
                                        type="checkbox"
                                        value="@c.SqlCol"
@@ -942,10 +1060,23 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                                        @(c.IsActive ? "checked" : "")
                                        @(disabled ? "disabled" : "")
                                        onchange="onColToggleChange(this)">
-                                <span>@c.Label</span>
+                                <span class="flex-grow-1">@c.Label</span>
                                 @if (c.IsGrouping)
                                 {
-                                    <span class="badge bg-info ms-auto small">Grouping</span>
+                                    <span class="badge bg-info ms-2 small">Grouping</span>
+                                }
+                                @if (reorderable)
+                                {
+                                    <span class="btn-group btn-group-sm ms-2" role="group" aria-label="Reorder column">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm col-move-up" tabindex="-1"
+                                                onclick="moveColumnOrder(this, -1)" title="Move up">
+                                            <i class="bi bi-chevron-up"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm col-move-down" tabindex="-1"
+                                                onclick="moveColumnOrder(this, 1)" title="Move down">
+                                            <i class="bi bi-chevron-down"></i>
+                                        </button>
+                                    </span>
                                 }
                             </label>
                         }
@@ -957,13 +1088,16 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                         <i class="bi bi-exclamation-circle me-1"></i>Press <strong>Apply &amp; Refresh</strong> to see changes
                     </span>
                 </div>
+                <div class="mt-1 small text-muted">
+                    <i class="bi bi-info-circle me-1"></i>Drag <i class="bi bi-grip-vertical"></i> or use <i class="bi bi-chevron-up"></i>/<i class="bi bi-chevron-down"></i> to reorder columns. Order applies immediately to the grid and is remembered for this session.
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllColumns(true)">Select All</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllColumns(false)">Deselect All</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetDefaultColumns()">Reset to Default</button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="applyAndRefreshColumns()">
+                <button type="button" class="btn btn-primary" id="applyColumnsBtn" onclick="applyAndRefreshColumns()">
                     <i class="bi bi-arrow-clockwise me-1"></i>Apply &amp; Refresh
                 </button>
             </div>
@@ -1338,6 +1472,40 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     </div>
 </div>
 
+<!-- Save Layout As Modal (named / public layouts) -->
+<div class="modal fade" id="saveLayoutAsModal" tabindex="-1" aria-labelledby="saveLayoutAsLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="saveLayoutAsLabel"><i class="bi bi-bookmark-plus me-2"></i>Save Layout As</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="saveLayoutAsName" class="form-label">Layout name <span class="text-danger">*</span></label>
+                    <input type="text" id="saveLayoutAsName" class="form-control" maxlength="100" placeholder="e.g. Monthly Sales Review" autocomplete="off" />
+                    <div class="form-text">Used to identify the layout. You can have multiple named layouts.</div>
+                </div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="saveLayoutAsPublic" />
+                    <label class="form-check-label" for="saveLayoutAsPublic">
+                        Share with all users (public layout)
+                    </label>
+                    <div class="form-text">Public layouts are visible to everyone but can only be edited or deleted by you.</div>
+                </div>
+                <div id="saveLayoutAsAlert" class="alert d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveLayoutAsConfirmBtn" onclick="saveLayoutAsConfirm()">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="saveLayoutAsSpinner"></span>
+                    <i class="bi bi-save me-1"></i>Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
 <script>
     function getSelectedDisplayCols() {
@@ -1404,21 +1572,26 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         });
     });
 
-    // Cascading group selects
+    // A6 (2026-04-17, George feedback): group selects are independent.
+    // User may leave any level as "None"; on submit we shift non-None values up so
+    // the backend always gets a compact hierarchy (no gaps, no "None → Category → None").
+    // The dropdowns stay enabled; only warn if all three are None and user hits Generate.
     const pg = document.getElementById('PrimaryGroup');
     const sg = document.getElementById('SecondaryGroup');
     const tg = document.getElementById('ThirdGroup');
 
-    function cascade() {
-        if (pg.value === '0') { sg.value = '0'; sg.disabled = true; tg.value = '0'; tg.disabled = true; }
-        else { sg.disabled = false; }
-        if (sg.value === '0') { tg.value = '0'; tg.disabled = true; }
-        else { tg.disabled = false; }
+    function normalizeGroupsBeforeSubmit() {
+        var vals = [pg.value, sg.value, tg.value].filter(function(v) { return v && v !== '0'; });
+        while (vals.length < 3) vals.push('0');
+        pg.value = vals[0];
+        sg.value = vals[1];
+        tg.value = vals[2];
     }
 
-    pg.addEventListener('change', cascade);
-    sg.addEventListener('change', cascade);
-    cascade();
+    var _catalogueReportForm = document.getElementById('reportForm');
+    if (_catalogueReportForm) {
+        _catalogueReportForm.addEventListener('submit', normalizeGroupsBeforeSubmit, { capture: true });
+    }
 
     function goToPage(p) {
         document.getElementById('pageNumberHidden').value = p;
@@ -1567,6 +1740,18 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         p['ShowStock'] = chk('ShowStock');
         p['PageSize'] = v('PageSize');
         p['DisplayColumns'] = v('displayColumnsHidden') || '';
+        // Column order — current "working" order from sessionStorage, or fallback to hidden input
+        // (which reflects the order loaded from the layout on last page render).
+        var co = '';
+        try {
+            var raw = sessionStorage.getItem(COL_ORDER_KEY);
+            if (raw) {
+                var arr = JSON.parse(raw);
+                if (Array.isArray(arr)) co = arr.join(',');
+            }
+        } catch (e) {}
+        if (!co) co = v('columnOrderHidden') || '';
+        if (co) p['ColumnOrder'] = co;
         var isj = v('itemsSelectionJsonHidden');
         if (isj) p['ItemsSelectionJson'] = isj;
         return p;
@@ -1608,6 +1793,252 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             showLayoutToast('Network error', 'danger');
         });
     }
+
+    // -------------------- Named / public layouts (multi per user) --------------------
+
+    var __layoutsCache = null; // last server response, used to look up canEdit etc.
+
+    // Detects when a JSON endpoint silently 302'd to the login page (auth cookie expired).
+    // Returns true if the caller should short-circuit with a "session expired" toast/UI and skip JSON parsing.
+    function isAuthRedirect(response) {
+        if (!response) return false;
+        if (response.status === 401 || response.status === 403) return true;
+        if (response.redirected && /\/Account\/Login/i.test(response.url || '')) return true;
+        // Fetch follows 3xx transparently; the only reliable non-OK signal for an HTML login body is content-type.
+        var ct = response.headers && response.headers.get ? response.headers.get('content-type') : '';
+        if (ct && ct.indexOf('text/html') !== -1) return true;
+        return false;
+    }
+
+    function showSessionExpiredToast() {
+        showLayoutToast('Session expired — please reload the page and sign in again.', 'warning');
+    }
+
+    function loadLayoutsList() {
+        var menu = document.getElementById('layoutsDropdownMenu');
+        if (menu) menu.innerHTML = '<li><h6 class="dropdown-header">Loading...</h6></li>';
+        return fetch('@Url.Action("ListCatalogueLayouts", "Reports")', { method: 'GET', credentials: 'same-origin' })
+            .then(function(r) {
+                if (isAuthRedirect(r)) {
+                    if (menu) menu.innerHTML = '<li><h6 class="dropdown-header text-danger">Session expired</h6></li>';
+                    showSessionExpiredToast();
+                    return null;
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (data == null) return;
+                __layoutsCache = data && data.layouts ? data.layouts : [];
+                renderLayoutsDropdown(__layoutsCache);
+            })
+            .catch(function() {
+                if (menu) menu.innerHTML = '<li><h6 class="dropdown-header text-danger">Failed to load</h6></li>';
+            });
+    }
+
+    function renderLayoutsDropdown(layouts) {
+        var menu = document.getElementById('layoutsDropdownMenu');
+        if (!menu) return;
+        if (!layouts || layouts.length === 0) {
+            menu.innerHTML =
+                '<li><h6 class="dropdown-header">No saved layouts</h6></li>' +
+                '<li><span class="dropdown-item-text small text-muted">Use "Save as..." to create one.</span></li>';
+            return;
+        }
+
+        // Group: own (private) first, then public.
+        var own = layouts.filter(function(l) { return !l.isPublic; });
+        var pub = layouts.filter(function(l) { return  l.isPublic; });
+
+        var html = '';
+        function renderGroup(label, items) {
+            if (!items.length) return;
+            html += '<li><h6 class="dropdown-header">' + label + '</h6></li>';
+            items.forEach(function(l) {
+                var safeName = String(l.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                var publicBadge = l.isPublic ? '<span class="badge bg-secondary ms-2" title="Visible to all users">Public</span>' : '';
+                var editorBadge = l.isPublic && l.createdBy
+                    ? '<span class="text-muted small ms-2">by ' + String(l.createdBy).replace(/</g,'&lt;') + '</span>'
+                    : '';
+                html += '<li class="d-flex align-items-center px-2 py-1 layout-row">' +
+                            '<a href="#" class="flex-grow-1 text-decoration-none text-body" onclick="loadNamedLayout(\'' +
+                                String(l.headerCode).replace(/'/g, "\\'") + '\'); return false;">' +
+                                '<i class="bi bi-bookmark me-1"></i>' + safeName + publicBadge + editorBadge +
+                            '</a>';
+                if (l.canEdit) {
+                    html += '<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2" ' +
+                                'title="Delete this layout" onclick="deleteNamedLayout(\'' +
+                                String(l.headerCode).replace(/'/g, "\\'") + '\', \'' +
+                                safeName.replace(/'/g, "\\'") + '\'); return false;">' +
+                                '<i class="bi bi-trash"></i>' +
+                            '</button>';
+                }
+                html += '</li>';
+            });
+        }
+        renderGroup('Your layouts', own);
+        renderGroup('Public layouts', pub);
+        menu.innerHTML = html;
+    }
+
+    function loadNamedLayout(headerCode) {
+        if (!headerCode) return;
+        // NOTE: deliberately does NOT auto-submit the form. Auto-submit was causing users to land on
+        // the login page when the auth cookie had expired between the save and the reload (ASP.NET
+        // cookie-auth responds to POST with a 302 to /Account/Login, which the browser follows as a
+        // navigation). Layout load now behaves like Reset Default: apply parameters in-place and let
+        // the user press Generate explicitly.
+        fetch('@Url.Action("LoadCatalogueLayout", "Reports")?headerCode=' + encodeURIComponent(headerCode),
+              { method: 'POST', credentials: 'same-origin' })
+            .then(function(r) {
+                if (isAuthRedirect(r)) { showSessionExpiredToast(); return null; }
+                return r.json();
+            })
+            .then(function(data) {
+                if (data == null) return;
+                if (!data.success) {
+                    showLayoutToast(data.message || 'Failed to load layout', 'danger');
+                    return;
+                }
+                applyLayoutParameters(data.parameters || {});
+                var label = document.getElementById('layoutsCurrentName');
+                if (label && __layoutsCache) {
+                    var match = __layoutsCache.find(function(l) { return l.headerCode === headerCode; });
+                    if (match) label.textContent = match.name;
+                }
+                showLayoutToast('Layout loaded — click Generate to run.', 'success');
+            })
+            .catch(function() { showLayoutToast('Network error loading layout', 'danger'); });
+    }
+
+    function applyLayoutParameters(parms) {
+        // Mirror the server-side parsing in LoadCatalogueSavedLayoutAsync. Apply to form controls in-place,
+        // then reapply downstream UI handlers (column toggles, items selection JSON, etc.).
+        function setVal(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
+        function setChk(id, v) { var el = document.getElementById(id); if (el && v != null) el.checked = (v === '1' || v === 1 || v === true); }
+
+        setVal('DateBasis',          parms.DateBasis);
+        setChk('UseDateTime',        parms.UseDateTime);
+        setVal('ReportMode',         parms.ReportMode);
+        setVal('ReportOn',           parms.ReportOn);
+        setVal('PrimaryGroup',       parms.PrimaryGroup);
+        setVal('SecondaryGroup',     parms.SecondaryGroup);
+        setVal('ThirdGroup',         parms.ThirdGroup);
+        setVal('ProfitBasedOn',      parms.ProfitBasedOn);
+        setChk('ProfitIncludesVat',  parms.ProfitIncludesVat);
+        setVal('StockValueBasedOn',  parms.StockValueBasedOn);
+        setChk('StockValueIncludesVat', parms.StockValueIncludesVat);
+        setVal('CostType',           parms.CostType);
+        setChk('ShowProfit',         parms.ShowProfit);
+        setChk('ShowStock',          parms.ShowStock);
+        setVal('PageSize',           parms.PageSize);
+
+        if (parms.DisplayColumns != null) {
+            var hidden = document.getElementById('displayColumnsHidden');
+            if (hidden) hidden.value = parms.DisplayColumns;
+            // Re-sync the column toggles modal so checkboxes match (best-effort: handler may not exist on first load).
+            if (typeof syncDisplayColumnCheckboxes === 'function') syncDisplayColumnCheckboxes();
+        }
+        if (parms.ColumnOrder != null) {
+            // Persist the layout's column order to sessionStorage so the grid picks it up after the
+            // form submit below re-renders. Also write to the hidden input so it round-trips.
+            var coHidden = document.getElementById('columnOrderHidden');
+            if (coHidden) coHidden.value = parms.ColumnOrder;
+            try {
+                var arr = String(parms.ColumnOrder).split(',').map(function(s){return s.trim();}).filter(function(s){return s.length>0;});
+                if (arr.length) sessionStorage.setItem(COL_ORDER_KEY, JSON.stringify(arr));
+                else sessionStorage.removeItem(COL_ORDER_KEY);
+            } catch (e) {}
+        }
+        if (parms.ItemsSelectionJson != null) {
+            var isj = document.getElementById('itemsSelectionJsonHidden');
+            if (isj) isj.value = parms.ItemsSelectionJson;
+            // Trigger items-selection partial to re-hydrate from the new JSON, if available.
+            if (typeof reloadItemsSelectionFromHidden === 'function') reloadItemsSelectionFromHidden();
+        }
+        // Bidirectional sync: ShowProfit/ShowStock <-> column visibility (existing handlers handle this).
+        if (typeof onShowProfitToggle === 'function') onShowProfitToggle();
+        if (typeof onShowStockToggle === 'function')  onShowStockToggle();
+    }
+
+    function saveLayoutAsConfirm() {
+        var nameEl = document.getElementById('saveLayoutAsName');
+        var pubEl  = document.getElementById('saveLayoutAsPublic');
+        var alertEl = document.getElementById('saveLayoutAsAlert');
+        var btn = document.getElementById('saveLayoutAsConfirmBtn');
+        var spinner = document.getElementById('saveLayoutAsSpinner');
+        if (alertEl) { alertEl.classList.add('d-none'); alertEl.textContent = ''; }
+
+        var name = (nameEl.value || '').trim();
+        if (!name) {
+            alertEl.textContent = 'Layout name is required.';
+            alertEl.className = 'alert alert-warning';
+            return;
+        }
+
+        btn.disabled = true; spinner.classList.remove('d-none');
+
+        var parms = collectCurrentLayout();
+        fetch('@Url.Action("SaveCatalogueLayoutAs", "Reports")', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, isPublic: !!(pubEl && pubEl.checked), parameters: parms })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false; spinner.classList.add('d-none');
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('saveLayoutAsModal')).hide();
+                showLayoutToast('Layout saved', 'success');
+                loadLayoutsList();
+                var label = document.getElementById('layoutsCurrentName');
+                if (label) label.textContent = name;
+            } else {
+                alertEl.textContent = data.message || 'Failed to save';
+                alertEl.className = 'alert alert-danger';
+            }
+        })
+        .catch(function() {
+            btn.disabled = false; spinner.classList.add('d-none');
+            alertEl.textContent = 'Network error.';
+            alertEl.className = 'alert alert-danger';
+        });
+    }
+
+    function deleteNamedLayout(headerCode, displayName) {
+        if (!confirm('Delete layout "' + displayName + '"?')) return;
+        fetch('@Url.Action("DeleteCatalogueLayout", "Reports")?headerCode=' + encodeURIComponent(headerCode), { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    showLayoutToast('Layout deleted', 'success');
+                    loadLayoutsList();
+                } else {
+                    showLayoutToast(data.message || 'Failed to delete', 'danger');
+                }
+            })
+            .catch(function() { showLayoutToast('Network error', 'danger'); });
+    }
+
+    // Lazy load the layouts list the first time the dropdown opens.
+    document.addEventListener('DOMContentLoaded', function() {
+        var btn = document.getElementById('layoutsDropdownBtn');
+        if (!btn) return;
+        var loadedOnce = false;
+        btn.addEventListener('show.bs.dropdown', function() {
+            if (!loadedOnce) { loadedOnce = true; loadLayoutsList(); }
+        });
+        // Reset the "Save as..." modal each time it opens.
+        var modalEl = document.getElementById('saveLayoutAsModal');
+        if (modalEl) {
+            modalEl.addEventListener('show.bs.modal', function() {
+                document.getElementById('saveLayoutAsName').value = '';
+                document.getElementById('saveLayoutAsPublic').checked = false;
+                var alertEl = document.getElementById('saveLayoutAsAlert');
+                if (alertEl) { alertEl.classList.add('d-none'); alertEl.textContent = ''; }
+            });
+        }
+    });
 
     function showLayoutToast(message, type) {
         var existing = document.getElementById('layoutToast');
@@ -1717,6 +2148,11 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         }
         fd.append('recurrenceJson', JSON.stringify(recurrenceJson));
 
+        // Edit mode: if the form was loaded from an existing schedule, send the id so the server
+        // performs an UPDATE instead of inserting a duplicate record.
+        var sid = document.getElementById('schedId').value;
+        if (sid) fd.append('scheduleId', sid);
+
         var saveBtn = document.querySelector('#scheduleModal .btn-primary[onclick="saveSchedule()"]');
         if (saveBtn) saveBtn.disabled = true;
 
@@ -1727,14 +2163,17 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                 if (data.success) {
                     alertDiv.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>' + data.message + '</div>';
                     alertDiv.style.display = '';
-                    document.getElementById('schedName').value = '';
                     loadExistingSchedules();
-                    setTimeout(function() {
-                        var m = document.getElementById('scheduleModal');
-                        var inst = bootstrap.Modal.getInstance(m) || bootstrap.Modal.getOrCreateInstance(m);
-                        if (inst) inst.hide();
-                        showScheduleToast('Schedule saved successfully', 'success');
-                    }, 700);
+                    if (data.updated) {
+                        // Update: keep the form populated so the user can tweak again or close the modal manually.
+                        showScheduleToast('Schedule updated', 'success');
+                    } else {
+                        // New schedule: clear the form after a beat so the user can queue another one.
+                        setTimeout(function() {
+                            resetScheduleForm();
+                            showScheduleToast('Schedule saved successfully', 'success');
+                        }, 700);
+                    }
                 } else {
                     alertDiv.innerHTML = '<div class="alert alert-danger mb-0">' + data.message + '</div>';
                     alertDiv.style.display = '';
@@ -1770,6 +2209,9 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                 if (data.success) {
                     showScheduleToast('Schedule deleted', 'success');
                     loadExistingSchedules();
+                    // If the form still held the deleted schedule's data (after a prior Load), wipe it so
+                    // the user isn't left editing a record that no longer exists.
+                    resetScheduleForm();
                 } else {
                     showScheduleToast(data.message || 'Failed to delete schedule', 'danger');
                 }
@@ -1783,22 +2225,102 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             .then(function(data) {
                 var c = document.getElementById('existingSchedules');
                 if (!data || data.length === 0) { c.innerHTML = '<em>No schedules configured yet.</em>'; return; }
-                var html = '<table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th class="text-end">Actions</th></tr></thead><tbody>';
+                var html = '<table class="table table-sm mb-0 align-middle"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th class="text-end">Actions</th></tr></thead><tbody>';
                 data.forEach(function(s) {
                     var safeName = (s.scheduleName || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    html += '<tr>'
-                        + '<td>' + s.scheduleName + '</td>'
+                    html += '<tr data-schedule-id="' + s.scheduleId + '" style="cursor:pointer;" title="Click to load this schedule">'
+                        + '<td>' + escapeHtml(s.scheduleName || '') + '</td>'
                         + '<td>' + s.recurrenceType + '</td>'
                         + '<td>' + s.exportFormat + '</td>'
                         + '<td>' + s.scheduleTime + '</td>'
                         + '<td>' + (s.nextRun || '-') + '</td>'
-                        + '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" title="Delete schedule" onclick="deleteScheduleRow(' + s.scheduleId + ', \'' + safeName + '\')"><i class="bi bi-trash"></i></button></td>'
+                        + '<td class="text-end">'
+                        +   '<button type="button" class="btn btn-sm btn-outline-primary me-1" title="Load into form" onclick="event.stopPropagation(); loadScheduleIntoForm(' + s.scheduleId + ')"><i class="bi bi-pencil"></i></button>'
+                        +   '<button type="button" class="btn btn-sm btn-outline-danger" title="Delete schedule" onclick="event.stopPropagation(); deleteScheduleRow(' + s.scheduleId + ', \'' + safeName + '\')"><i class="bi bi-trash"></i></button>'
+                        + '</td>'
                         + '</tr>';
                 });
                 html += '</tbody></table>';
                 c.innerHTML = html;
+                c.querySelectorAll('tr[data-schedule-id]').forEach(function(tr) {
+                    tr.addEventListener('click', function() {
+                        loadScheduleIntoForm(parseInt(tr.getAttribute('data-schedule-id'), 10));
+                    });
+                });
             })
             .catch(function() { document.getElementById('existingSchedules').innerHTML = '<em>Could not load schedules.</em>'; });
+    }
+
+    // A2 (2026-04-17): clean state + click-to-load, mirrored from AverageBasket.
+    function resetScheduleForm() {
+        var setVal = function(id, v) { var el = document.getElementById(id); if (el) el.value = v; };
+        var setChk = function(id, v) { var el = document.getElementById(id); if (el) el.checked = !!v; };
+        setVal('schedId', '');
+        setVal('schedName', '');
+        setVal('schedRecipients', 'gm@powersoft.com.cy');
+        setVal('schedSubject', '');
+        setVal('schedFormat', 'Excel');
+        setVal('schedRecurrence', 'Daily');
+        setVal('schedTime', '08:00');
+        setVal('schedStartDate', new Date().toISOString().slice(0, 10));
+        document.querySelectorAll('.sched-dow').forEach(function(cb) { cb.checked = false; });
+        setChk('schedSkipIfEmpty', false);
+        setChk('schedIncludeAi', false);
+        if (typeof onRecurrenceChange === 'function') onRecurrenceChange();
+        if (typeof onSchedAiToggle === 'function') onSchedAiToggle();
+        var alertDiv = document.getElementById('scheduleAlert');
+        if (alertDiv) { alertDiv.style.display = 'none'; alertDiv.innerHTML = ''; }
+    }
+
+    function loadScheduleIntoForm(scheduleId) {
+        fetch('@Url.Action("GetScheduleById", "Reports")?scheduleId=' + scheduleId)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data || !data.success || !data.schedule) {
+                    showScheduleToast((data && data.message) || 'Could not load schedule', 'danger');
+                    return;
+                }
+                var s = data.schedule;
+                var setVal = function(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; };
+                var setChk = function(id, v) { var el = document.getElementById(id); if (el) el.checked = !!v; };
+                // Remember the id so a subsequent Save updates this schedule instead of cloning it.
+                document.getElementById('schedId').value = scheduleId;
+                setVal('schedName', s.scheduleName);
+                setVal('schedRecipients', s.recipients);
+                setVal('schedSubject', s.emailSubject);
+                setVal('schedFormat', s.exportFormat);
+                setVal('schedRecurrence', s.recurrenceType);
+                setVal('schedTime', s.scheduleTime);
+                if (typeof onRecurrenceChange === 'function') onRecurrenceChange();
+
+                if (s.recurrenceJson) {
+                    try {
+                        var rec = typeof s.recurrenceJson === 'string' ? JSON.parse(s.recurrenceJson) : s.recurrenceJson;
+                        if (rec && rec.range && rec.range.startDate) setVal('schedStartDate', rec.range.startDate);
+                        if (rec && rec.pattern) {
+                            if (rec.type === 'Weekly' && Array.isArray(rec.pattern.daysOfWeek)) {
+                                document.querySelectorAll('.sched-dow').forEach(function(cb) {
+                                    cb.checked = rec.pattern.daysOfWeek.indexOf(parseInt(cb.value, 10)) !== -1;
+                                });
+                            } else if (rec.type === 'Monthly' && rec.pattern.dayOfMonth) {
+                                setVal('schedMonthDay', String(rec.pattern.dayOfMonth));
+                            }
+                        }
+                    } catch (e) { /* best-effort */ }
+                }
+
+                setChk('schedSkipIfEmpty', s.skipIfEmpty);
+                setChk('schedIncludeAi', s.includeAiAnalysis);
+                if (s.aiLocale) setVal('schedAiLocale', s.aiLocale);
+                if (typeof onSchedAiToggle === 'function') onSchedAiToggle();
+
+                var alertDiv = document.getElementById('scheduleAlert');
+                if (alertDiv) {
+                    alertDiv.innerHTML = '<div class="alert alert-info mb-0 py-2"><i class="bi bi-pencil-square me-1"></i>Editing <strong>' + escapeHtml(s.scheduleName || '') + '</strong>. Saving will update this schedule in place &mdash; click <em>Reset</em> to start a new one instead.</div>';
+                    alertDiv.style.display = '';
+                }
+            })
+            .catch(function() { showScheduleToast('Network error loading schedule', 'danger'); });
     }
 
     // Load schedules and init date range visibility when modal opens
@@ -1806,6 +2328,7 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         var scheduleModal = document.getElementById('scheduleModal');
         if (scheduleModal) {
             scheduleModal.addEventListener('show.bs.modal', function() {
+                resetScheduleForm();               // A2: always start clean
                 loadExistingSchedules();
                 autoSelectScheduleDateRange();
                 onSchedDateRangeTypeChange();
@@ -1951,6 +2474,55 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         if (el) el.textContent = visible;
     }
 
+    // Returns true if the given SQL column name is currently rendered in the grid (<th data-col="X"> exists).
+    function _isColumnInGrid(sqlCol) {
+        return !!document.querySelector('#resultsTable thead th[data-col="' + sqlCol + '"]');
+    }
+
+    // Returns the list of SQL columns that the user has checked in the modal but that are NOT yet in the grid.
+    // These require a server round-trip (Apply & Refresh) because we don't have their data client-side.
+    function _getColumnsNeedingRefresh() {
+        var out = [];
+        document.querySelectorAll('.col-toggle[data-is-grouping="0"]:checked:not([disabled])').forEach(function(cb) {
+            if (!_isColumnInGrid(cb.value)) out.push(cb.value);
+        });
+        return out;
+    }
+
+    // Updates the "add column needs refresh" UI: label highlight, banner, and Apply button pulse.
+    function _updateNeedsRefreshUi() {
+        // Mark individual labels
+        document.querySelectorAll('#colToggleList label').forEach(function(lbl) {
+            var cb = lbl.querySelector('input.col-toggle');
+            if (!cb || cb.disabled) { lbl.classList.remove('col-needs-refresh'); return; }
+            var needs = cb.checked && !_isColumnInGrid(cb.value);
+            lbl.classList.toggle('col-needs-refresh', needs);
+        });
+        // Banner + Apply button pulse
+        var missing = _getColumnsNeedingRefresh();
+        var banner = document.getElementById('colAddBanner');
+        var bannerText = document.getElementById('colAddBannerText');
+        var btn = document.getElementById('applyColumnsBtn');
+        if (missing.length > 0) {
+            if (banner) banner.classList.remove('d-none');
+            if (bannerText) {
+                var labels = missing.slice(0, 3).map(function(sql) {
+                    var cb = document.querySelector('.col-toggle[value="' + sql + '"]');
+                    var lbl = cb && cb.closest('label'); var sp = lbl && lbl.querySelector('span.flex-grow-1');
+                    return sp ? sp.textContent.trim() : sql;
+                });
+                var more = missing.length > 3 ? ' (+' + (missing.length - 3) + ' more)' : '';
+                bannerText.innerHTML = '<strong>' + missing.length + '</strong> new column' + (missing.length > 1 ? 's' : '')
+                    + ' selected: <em>' + labels.join(', ') + more + '</em>. '
+                    + 'Click <strong>Apply &amp; Refresh</strong> to load their data.';
+            }
+            if (btn) btn.classList.add('needs-refresh');
+        } else {
+            if (banner) banner.classList.add('d-none');
+            if (btn) btn.classList.remove('needs-refresh');
+        }
+    }
+
     // Rebuild DisplayColumnsString hidden input from modal checkboxes.
     function rebuildDisplayColumnsFromModal() {
         var keys = [];
@@ -2008,6 +2580,7 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         syncQuickTogglesFromColToggles();
         updateColVisibleCount();
         updateDirtyIndicator();
+        _updateNeedsRefreshUi();
     }
 
     function applyAndRefreshColumns() {
@@ -2016,6 +2589,298 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         document.getElementById('pageNumberHidden').value = '1';
         document.getElementById('reportForm').submit();
     }
+
+    // ==================== COLUMN REORDER (Phase 1 - client-side, session-scoped) ====================
+    // Scope:
+    //   - Grouping columns (L1/L2/L3) and Item columns (Code/Description) stay anchored LEFT
+    //     (data-fixed-left="1"). Everything to the right of them is user-reorderable.
+    //   - Order is persisted in sessionStorage under COL_ORDER_KEY per-tenant/per-session.
+    //   - Order is applied to: thead <th>, tbody .data-row <td>, .group-subtotal-row metric <td>,
+    //     tfoot .grand-total-row metric <td>. group-header-row is a single colspan cell and is skipped.
+    //   - Does NOT affect CSV/Excel/PDF export yet (server-side, fixed order). Phase 2.
+    var COL_ORDER_KEY = 'catalogue_col_order_v1';
+
+    function _getReorderableThs() {
+        var table = document.getElementById('resultsTable');
+        if (!table) return [];
+        var all = Array.from(table.querySelectorAll('thead tr:first-child th'));
+        return all.filter(function(th) { return th.getAttribute('data-fixed-left') !== '1'; });
+    }
+
+    function _getFixedLeftCount() {
+        var table = document.getElementById('resultsTable');
+        if (!table) return 0;
+        return table.querySelectorAll('thead tr:first-child th[data-fixed-left="1"]').length;
+    }
+
+    // Read the current order from the modal list (source of truth while user edits).
+    function getColumnOrderFromModal() {
+        var out = [];
+        document.querySelectorAll('#colToggleList label.col-reorderable').forEach(function(lbl) {
+            var sql = lbl.getAttribute('data-col-sql');
+            if (sql) out.push(sql);
+        });
+        return out;
+    }
+
+    // Compute the index permutation that maps original reorderable <th> order -> requested order.
+    function _computeReorderIndices(sqlOrder) {
+        var reorderableTh = _getReorderableThs();
+        var origIdxBySql = {};
+        reorderableTh.forEach(function(th, i) { origIdxBySql[th.getAttribute('data-col')] = i; });
+
+        var result = [];
+        var added = new Set();
+        for (var i = 0; i < sqlOrder.length; i++) {
+            var sql = sqlOrder[i];
+            if (origIdxBySql[sql] !== undefined && !added.has(sql)) {
+                result.push(origIdxBySql[sql]);
+                added.add(sql);
+            }
+        }
+        // Append any reorderable columns not mentioned (new cols, forward compat) in their original order.
+        reorderableTh.forEach(function(th, i) {
+            var sql = th.getAttribute('data-col');
+            if (!added.has(sql)) { result.push(i); added.add(sql); }
+        });
+        return result;
+    }
+
+    function _reorderCells(parent, startIdx, permutation) {
+        var children = Array.from(parent.children);
+        var reorderable = children.slice(startIdx);
+        if (reorderable.length !== permutation.length) return false; // row shape mismatch, skip
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < permutation.length; i++) frag.appendChild(reorderable[permutation[i]]);
+        parent.appendChild(frag);
+        return true;
+    }
+
+    // Count leading "fixed" cells in a subtotal row: the leading empty <td>s (indent) + 1 colspan label cell.
+    function _subtotalFixedCount(tr) {
+        var cells = tr.children;
+        var fixed = 0;
+        for (var i = 0; i < cells.length; i++) {
+            var c = cells[i];
+            if (c.hasAttribute('colspan')) { fixed = i + 1; break; }
+            fixed = i + 1;
+        }
+        return fixed;
+    }
+
+    // Apply the requested SQL-column order to the grid (header + all row types).
+    function applyColumnOrderToGrid(sqlOrder) {
+        var table = document.getElementById('resultsTable');
+        if (!table || !sqlOrder || !sqlOrder.length) return;
+
+        var perm = _computeReorderIndices(sqlOrder);
+        var fixedLeft = _getFixedLeftCount();
+
+        // 1. Header
+        var theadRow = table.querySelector('thead tr:first-child');
+        if (theadRow) _reorderCells(theadRow, fixedLeft, perm);
+
+        // 2. Data rows (exactly one <td> per <th>)
+        table.querySelectorAll('tbody tr.data-row').forEach(function(tr) {
+            _reorderCells(tr, fixedLeft, perm);
+        });
+
+        // 3. Subtotal rows (leading indent <td>s + colspan label + metric <td>s matching reorderable <th>s)
+        table.querySelectorAll('tbody tr.group-subtotal-row').forEach(function(tr) {
+            _reorderCells(tr, _subtotalFixedCount(tr), perm);
+        });
+
+        // 4. Grand total (1 colspan label + metric <td>s). Skip if spanCols == 0 (no group/item cols).
+        table.querySelectorAll('tfoot tr.grand-total-row').forEach(function(tr) {
+            var first = tr.firstElementChild;
+            var leading = (first && first.hasAttribute('colspan')) ? 1 : 0;
+            _reorderCells(tr, leading, perm);
+        });
+
+        // 5. Rebuild any hide-column <style> tags: they reference <th>/<td>:nth-child(N) which
+        //    must now point to the new DOM position of each hidden column.
+        _rebuildHideStyles();
+    }
+
+    // After any reorder (drag or up/down), update <style id="colHide_X"> tags to use the new nth-child.
+    function _rebuildHideStyles() {
+        var table = document.getElementById('resultsTable');
+        if (!table) return;
+        var headers = Array.from(table.querySelectorAll('thead tr:first-child th'));
+        document.querySelectorAll('style[id^="colHide_"]').forEach(function(s) {
+            var sql = s.id.substring('colHide_'.length);
+            var idx = -1;
+            for (var i = 0; i < headers.length; i++) {
+                if (headers[i].getAttribute('data-col') === sql) { idx = i + 1; break; }
+            }
+            if (idx > 0) {
+                s.textContent = '#resultsTable th:nth-child(' + idx + '), #resultsTable td:nth-child(' + idx + '){display:none;}';
+            }
+        });
+    }
+
+    function _saveColumnOrder() {
+        try {
+            var order = getColumnOrderFromModal();
+            sessionStorage.setItem(COL_ORDER_KEY, JSON.stringify(order));
+            // Keep the hidden input in sync so subsequent form submits (report generate,
+            // save layout, save-as) pick up the current order without extra round-trips.
+            var hidden = document.getElementById('columnOrderHidden');
+            if (hidden) hidden.value = order.join(',');
+        } catch (e) { /* sessionStorage blocked */ }
+    }
+
+    // Load order with priority: sessionStorage (current working) > Model.ColumnOrder (from saved layout)
+    function _loadColumnOrder() {
+        try {
+            var raw = sessionStorage.getItem(COL_ORDER_KEY);
+            if (raw) {
+                var arr = JSON.parse(raw);
+                if (Array.isArray(arr) && arr.length) return arr;
+            }
+        } catch (e) {}
+        // Fall back to server-provided layout order (Model.ColumnOrder → hidden input)
+        var hidden = document.getElementById('columnOrderHidden');
+        var val = hidden ? (hidden.value || '') : '';
+        if (val) {
+            var fromModel = val.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+            if (fromModel.length) return fromModel;
+        }
+        return null;
+    }
+
+    // Re-sort modal items to match a given SQL order. Non-reorderable items (grouping) keep their spots at the top.
+    function _applyOrderToModal(sqlOrder) {
+        var list = document.getElementById('colToggleList');
+        if (!list) return;
+        var items = Array.from(list.children);
+        var bySql = {};
+        var fixedItems = [];
+        items.forEach(function(el) {
+            var sql = el.getAttribute('data-col-sql');
+            if (!sql) return;
+            if (el.classList.contains('col-reorderable')) bySql[sql] = el;
+            else fixedItems.push(el);
+        });
+
+        var frag = document.createDocumentFragment();
+        fixedItems.forEach(function(el) { frag.appendChild(el); });
+
+        var added = new Set();
+        sqlOrder.forEach(function(sql) {
+            if (bySql[sql] && !added.has(sql)) { frag.appendChild(bySql[sql]); added.add(sql); }
+        });
+        // Append any leftover reorderable (new cols) in original order.
+        Object.keys(bySql).forEach(function(sql) {
+            if (!added.has(sql)) frag.appendChild(bySql[sql]);
+        });
+        list.appendChild(frag);
+    }
+
+    // ---- ↑/↓ buttons ----
+    function moveColumnOrder(btn, delta) {
+        var lbl = btn.closest('label.col-reorderable');
+        if (!lbl) return;
+        var sibling = delta < 0 ? lbl.previousElementSibling : lbl.nextElementSibling;
+        // Only swap with another reorderable item — do not cross the grouping/fixed boundary.
+        while (sibling && !sibling.classList.contains('col-reorderable')) {
+            sibling = delta < 0 ? sibling.previousElementSibling : sibling.nextElementSibling;
+        }
+        if (!sibling) return;
+        if (delta < 0) lbl.parentNode.insertBefore(lbl, sibling);
+        else lbl.parentNode.insertBefore(lbl, sibling.nextElementSibling);
+
+        _onColumnOrderChanged();
+    }
+
+    // ---- HTML5 drag&drop ----
+    var _dragSrc = null;
+    function _onDragStart(e) {
+        var lbl = e.target.closest('label.col-reorderable');
+        if (!lbl) return;
+        _dragSrc = lbl;
+        lbl.classList.add('dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', lbl.getAttribute('data-col-sql') || ''); } catch (_) {}
+    }
+    function _onDragEnd(e) {
+        if (_dragSrc) _dragSrc.classList.remove('dragging');
+        document.querySelectorAll('#colToggleList .drop-before, #colToggleList .drop-after')
+            .forEach(function(el) { el.classList.remove('drop-before', 'drop-after'); });
+        _dragSrc = null;
+    }
+    function _onDragOver(e) {
+        if (!_dragSrc) return;
+        var lbl = e.target.closest('label.col-reorderable');
+        if (!lbl || lbl === _dragSrc) return;
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+        var rect = lbl.getBoundingClientRect();
+        var before = (e.clientY - rect.top) < rect.height / 2;
+        document.querySelectorAll('#colToggleList .drop-before, #colToggleList .drop-after')
+            .forEach(function(el) { el.classList.remove('drop-before', 'drop-after'); });
+        lbl.classList.add(before ? 'drop-before' : 'drop-after');
+    }
+    function _onDrop(e) {
+        if (!_dragSrc) return;
+        var lbl = e.target.closest('label.col-reorderable');
+        if (!lbl || lbl === _dragSrc) { _onDragEnd(e); return; }
+        e.preventDefault();
+        var rect = lbl.getBoundingClientRect();
+        var before = (e.clientY - rect.top) < rect.height / 2;
+        if (before) lbl.parentNode.insertBefore(_dragSrc, lbl);
+        else lbl.parentNode.insertBefore(_dragSrc, lbl.nextElementSibling);
+        _onDragEnd(e);
+        _onColumnOrderChanged();
+    }
+
+    function _onColumnOrderChanged() {
+        _saveColumnOrder();
+        applyColumnOrderToGrid(getColumnOrderFromModal());
+    }
+
+    function _initColumnReorder() {
+        var list = document.getElementById('colToggleList');
+        if (!list) return;
+        list.addEventListener('dragstart', _onDragStart);
+        list.addEventListener('dragend', _onDragEnd);
+        list.addEventListener('dragover', _onDragOver);
+        list.addEventListener('drop', _onDrop);
+        list.addEventListener('dragleave', function(e) {
+            var lbl = e.target.closest && e.target.closest('label.col-reorderable');
+            if (lbl) lbl.classList.remove('drop-before', 'drop-after');
+        });
+
+        // Apply any previously saved order to BOTH the modal list and the grid.
+        var saved = _loadColumnOrder();
+        if (saved && saved.length) {
+            _applyOrderToModal(saved);
+            applyColumnOrderToGrid(saved);
+        }
+    }
+
+    // Hook Reset to Default: wipe session-scoped order AND the hidden input, so defaults are genuine
+    // on the next "Apply & Refresh" (the form post will carry ColumnOrder = empty => Model.ColumnOrder null).
+    (function _extendResetDefaults() {
+        var orig = window.resetDefaultColumns;
+        window.resetDefaultColumns = function() {
+            if (typeof orig === 'function') orig();
+            try { sessionStorage.removeItem(COL_ORDER_KEY); } catch (_) {}
+            var hidden = document.getElementById('columnOrderHidden');
+            if (hidden) hidden.value = '';
+        };
+    })();
+
+    // Also clear column order when the user resets their SAVED layout (server-side). The page
+    // reloads immediately after so we don't need to touch the hidden input here.
+    (function _extendResetSavedLayout() {
+        var orig = window.resetSavedLayout;
+        if (typeof orig !== 'function') return;
+        window.resetSavedLayout = function() {
+            try { sessionStorage.removeItem(COL_ORDER_KEY); } catch (_) {}
+            return orig.apply(this, arguments);
+        };
+    })();
+    // ==================== END COLUMN REORDER ====================
 
     // ==================== Show Profit / Show Stock <-> Display Columns sync ====================
     // Mapping of "quick toggle" -> Display Columns names (server) and col-toggle values (client visibility modal).
@@ -2109,6 +2974,10 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     document.addEventListener('DOMContentLoaded', function() {
         updateColVisibleCount();
         _colsInitialSig = currentColsSignature();
+
+        // Column reorder (drag + up/down) — restores saved order from sessionStorage and wires listeners.
+        _initColumnReorder();
+        _updateNeedsRefreshUi();
 
         // Wire bidirectional sync between quick-toggles and Display Columns / col-toggle modal
         initQuickTogglesFromDisplayCols();

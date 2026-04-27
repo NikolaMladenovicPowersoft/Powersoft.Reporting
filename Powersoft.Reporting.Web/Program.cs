@@ -73,14 +73,10 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
-// Persist DataProtection keys to disk so auth cookies survive app pool recycles / restarts.
-// Without this, every restart regenerates the ephemeral key ring, silently invalidating every
-// issued auth cookie — so the next POST from a long-lived browser tab (e.g. clicking a saved
-// layout) gets redirected to /Account/Login instead of running.
-var dpKeysPath = Path.Combine(builder.Environment.ContentRootPath, "dp-keys");
-Directory.CreateDirectory(dpKeysPath);
+// Pin the DataProtection application name so the key ring is scoped to this app.
+// We intentionally do NOT call PersistKeysToFileSystem — on IIS the default DPAPI-based
+// key storage works correctly and doesn't require file-system write access.
 builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(dpKeysPath))
     .SetApplicationName("PowersoftReporting");
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

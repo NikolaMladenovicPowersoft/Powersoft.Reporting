@@ -14,6 +14,7 @@ public class CatalogueRow
     public string? ItemCode { get; set; }
     public string? MainBarcode { get; set; }
     public string? ItemDescription { get; set; }
+    public string? ItemInvoiceDescription { get; set; }
 
     // Amounts
     public decimal Quantity { get; set; }
@@ -52,6 +53,9 @@ public class CatalogueRow
     // Entity (customer/supplier)
     public string? EntityCode { get; set; }
     public string? EntityName { get; set; }
+    public string? EntityShortName { get; set; }
+    public string? EntityID { get; set; }
+    public string? Sundry { get; set; }
 
     // Invoice
     public string? InvoiceNumber { get; set; }
@@ -115,6 +119,11 @@ public class CatalogueRow
     // Detail mode only — meaningless in summary aggregates.
     public decimal InvPriceExcl { get; set; }
     public decimal InvPriceIncl { get; set; }
+
+    // Customer categories (sale-only, from tbl_CustCategory via tbl_Customer.fk_Category1/2/3)
+    public string? CustomerCategory1Descr { get; set; }
+    public string? CustomerCategory2Descr { get; set; }
+    public string? CustomerCategory3Descr { get; set; }
 
     // Custom attributes
     public string? ItemAttr1Descr { get; set; }

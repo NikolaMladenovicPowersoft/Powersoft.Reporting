@@ -8,6 +8,10 @@ public class AverageBasketRow
     public string? Level2 { get; set; }
     public string? Level2Value { get; set; }
     
+    public decimal StoreArea { get; set; }
+    public decimal SalesPerArea => StoreArea > 0 ? CYTotalNet / StoreArea : 0;
+    public decimal GrossSalesPerArea => StoreArea > 0 ? CYTotalGross / StoreArea : 0;
+    
     // Current Year
     public int CYInvoiceCount { get; set; }
     public int CYCreditCount { get; set; }
@@ -21,6 +25,7 @@ public class AverageBasketRow
     public decimal CYGrossReturns { get; set; }
     
     // Computed Current Year
+    public int CYAllTransactions => CYInvoiceCount + CYCreditCount;
     public int CYTotalTransactions => CYInvoiceCount - CYCreditCount;
     public decimal CYTotalQty => CYQtySold - CYQtyReturned;
     public decimal CYTotalNet => CYNetSales - CYNetReturns;

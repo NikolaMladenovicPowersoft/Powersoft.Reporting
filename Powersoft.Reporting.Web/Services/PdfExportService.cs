@@ -375,6 +375,131 @@ public class PdfExportService
         table.AddCell(cell);
     }
 
+    public byte[] GenerateCancelLogPdf(
+        List<CancelLogDetailedRow>? detailedRows,
+        List<CancelLogSummaryRow>? summaryRows,
+        CancelLogFilter filter)
+    {
+        bool isDetailed = filter.ReportType == CancelLogReportType.Detailed;
+        bool hasL1 = filter.PrimaryGroup != "NONE";
+        bool hasL2 = filter.SecondaryGroup != "NONE";
+
+        int colCount;
+        if (isDetailed)
+            colCount = 16 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+        else
+            colCount = 6 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+
+        using var ms = new MemoryStream();
+        var pageSize = isDetailed ? PageSize.A4.Rotate() : PageSize.A4;
+        var document = new Document(pageSize, 20, 20, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Cancellation Logging Report", TitleFont));
+        document.Add(new Paragraph($"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}", SubtitleFont));
+        document.Add(new Paragraph($"Report Type: {filter.ReportType} | Action Type: {filter.ActionType}" +
+            (hasL1 ? $" | Primary: {filter.PrimaryGroup}" : "") +
+            (hasL2 ? $" | Secondary: {filter.SecondaryGroup}" : ""), SubtitleFont));
+        document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var table = new PdfPTable(colCount) { WidthPercentage = 100, SpacingBefore = 5f };
+
+        if (isDetailed)
+        {
+            var widths = new List<float> { 8f };
+            if (hasL1) widths.Add(7f);
+            if (hasL2) widths.Add(7f);
+            widths.AddRange(new[] { 5f, 7f, 4f, 7f, 5f, 8f, 4f, 5f, 4f, 3f, 5f, 4f, 5f, 4f, 5f, 5f });
+            table.SetWidths(widths.ToArray());
+
+            AddHeaderCell(table, "Store/Stn");
+            if (hasL1) AddHeaderCell(table, "Group 1");
+            if (hasL2) AddHeaderCell(table, "Group 2");
+            AddHeaderCell(table, "Action");
+            AddHeaderCell(table, "Session");
+            AddHeaderCell(table, "Kind");
+            AddHeaderCell(table, "Customer");
+            AddHeaderCell(table, "Code");
+            AddHeaderCell(table, "Item");
+            AddHeaderCell(table, "User");
+            AddHeaderCell(table, "Inv/Crd");
+            AddHeaderCell(table, "Z Rep");
+            AddHeaderCell(table, "Lines");
+            AddHeaderCell(table, "Inv Total");
+            AddHeaderCell(table, "Qty");
+            AddHeaderCell(table, "Amount");
+            AddHeaderCell(table, "Tbl No");
+            AddHeaderCell(table, "Table");
+            AddHeaderCell(table, "Compart.");
+
+            bool alternate = false;
+            foreach (var row in detailedRows ?? new())
+            {
+                var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+                AddDataCell(table, row.StoreAndStation, bg);
+                if (hasL1) AddDataCell(table, row.Level1Descr, bg);
+                if (hasL2) AddDataCell(table, row.Level2Descr, bg);
+                AddDataCell(table, row.ActionType, bg);
+                AddDataCell(table, row.SessionDateTime?.ToString("yyyy-MM-dd HH:mm") ?? "", bg);
+                AddDataCell(table, row.TransKind == "I" ? "Sale" : "Return", bg);
+                AddDataCell(table, row.CustomerFullName, bg);
+                AddDataCell(table, row.ItemCode, bg);
+                AddDataCell(table, row.ItemDescr, bg);
+                AddDataCell(table, row.UserCode, bg);
+                AddDataCell(table, !string.IsNullOrEmpty(row.InvoiceId) ? row.InvoiceId : row.CreditId, bg);
+                AddDataCell(table, row.ZReport, bg);
+                AddDataCell(table, row.TotalInvoiceLines.ToString("N0"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, row.InvoiceTotal.ToString("N2"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, row.Quantity.ToString("N2"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, row.Amount.ToString("N2"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, row.TableNo, bg);
+                AddDataCell(table, row.TableName, bg);
+                AddDataCell(table, row.CompartmentName, bg);
+                alternate = !alternate;
+            }
+        }
+        else
+        {
+            var widths = new List<float> { 20f };
+            if (hasL1) widths.Add(15f);
+            if (hasL2) widths.Add(15f);
+            widths.AddRange(new[] { 10f, 10f, 12f, 12f, 10f, 12f });
+            table.SetWidths(widths.ToArray());
+
+            AddHeaderCell(table, "Store/Station");
+            if (hasL1) AddHeaderCell(table, "Group 1");
+            if (hasL2) AddHeaderCell(table, "Group 2");
+            AddHeaderCell(table, "Deleted");
+            AddHeaderCell(table, "Cancelled");
+            AddHeaderCell(table, "Complimentary");
+            AddHeaderCell(table, "Invoice Total");
+            AddHeaderCell(table, "Quantity");
+            AddHeaderCell(table, "Amount");
+
+            bool alternate = false;
+            foreach (var row in summaryRows ?? new())
+            {
+                var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+                AddDataCell(table, row.StoreAndStation, bg);
+                if (hasL1) AddDataCell(table, row.Level1Descr, bg);
+                if (hasL2) AddDataCell(table, row.Level2Descr, bg);
+                AddDataCell(table, row.DeletedAction.ToString("N0"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, row.CancelledAction.ToString("N0"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, row.ComplimentaryAction.ToString("N0"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, row.InvoiceTotal.ToString("N2"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, row.Quantity.ToString("N2"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, row.Amount.ToString("N2"), bg, Element.ALIGN_RIGHT);
+                alternate = !alternate;
+            }
+        }
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
+
     private void WritePdfSubtotalRow(PdfPTable table, string label, SubtotalAgg agg,
         PurchasesSalesFilter filter, int colCount,
         bool hasL1, bool hasL2, bool hasL3, bool hasItem)

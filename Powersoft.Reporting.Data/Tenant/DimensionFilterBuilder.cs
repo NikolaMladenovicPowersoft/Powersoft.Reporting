@@ -17,8 +17,18 @@ internal static class DimensionFilterBuilder
         string Customer = "",
         string Agent = "",
         string PostalCode = "",
-        // User column applies to BOTH legs (every header has fk_UserCode).
         string User = "",
+        string Model = "",
+        string Colour = "",
+        string Size = "",
+        string GroupSize = "",
+        string Fabric = "",
+        string Attr1 = "",
+        string Attr2 = "",
+        string Attr3 = "",
+        string Attr4 = "",
+        string Attr5 = "",
+        string Attr6 = "",
         string ItemTableAlias = "t2");
 
     internal static readonly ColumnMap Default = new();
@@ -58,6 +68,29 @@ internal static class DimensionFilterBuilder
             AppendFilter(sb, parms, sel.PostalCodes, cols.PostalCode, "pcd", ref idx);
         if (!string.IsNullOrEmpty(cols.User))
             AppendFilter(sb, parms, sel.Users, cols.User, "usr", ref idx);
+
+        if (!string.IsNullOrEmpty(cols.Model))
+            AppendFilter(sb, parms, sel.Models, cols.Model, "mdl", ref idx);
+        if (!string.IsNullOrEmpty(cols.Colour))
+            AppendFilter(sb, parms, sel.Colours, cols.Colour, "clr", ref idx);
+        if (!string.IsNullOrEmpty(cols.Size))
+            AppendFilter(sb, parms, sel.Sizes, cols.Size, "siz", ref idx);
+        if (!string.IsNullOrEmpty(cols.GroupSize))
+            AppendFilter(sb, parms, sel.GroupSizes, cols.GroupSize, "gsz", ref idx);
+        if (!string.IsNullOrEmpty(cols.Fabric))
+            AppendFilter(sb, parms, sel.Fabrics, cols.Fabric, "fab", ref idx);
+        if (!string.IsNullOrEmpty(cols.Attr1))
+            AppendFilter(sb, parms, sel.Attributes1, cols.Attr1, "at1", ref idx);
+        if (!string.IsNullOrEmpty(cols.Attr2))
+            AppendFilter(sb, parms, sel.Attributes2, cols.Attr2, "at2", ref idx);
+        if (!string.IsNullOrEmpty(cols.Attr3))
+            AppendFilter(sb, parms, sel.Attributes3, cols.Attr3, "at3", ref idx);
+        if (!string.IsNullOrEmpty(cols.Attr4))
+            AppendFilter(sb, parms, sel.Attributes4, cols.Attr4, "at4", ref idx);
+        if (!string.IsNullOrEmpty(cols.Attr5))
+            AppendFilter(sb, parms, sel.Attributes5, cols.Attr5, "at5", ref idx);
+        if (!string.IsNullOrEmpty(cols.Attr6))
+            AppendFilter(sb, parms, sel.Attributes6, cols.Attr6, "at6", ref idx);
 
         AppendPropertyFilters(sb, parms, sel, cols.ItemTableAlias, ref idx);
 

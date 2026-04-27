@@ -13,4 +13,5 @@ public interface ITenantRepositoryFactory
     IDimensionRepository CreateDimensionRepository(string connectionString);
     IBelowMinStockRepository CreateBelowMinStockRepository(string connectionString);
     ICatalogueRepository CreateCatalogueRepository(string connectionString);
+    ICancelLogRepository CreateCancelLogRepository(string connectionString);
 }

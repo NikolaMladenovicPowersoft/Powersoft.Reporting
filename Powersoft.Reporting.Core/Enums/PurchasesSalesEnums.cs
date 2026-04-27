@@ -20,5 +20,8 @@ public enum PsGroupBy
     Colour = 8,
     Size = 9,
     GroupSize = 10,
-    Fabric = 11
+    Fabric = 11,
+    Franchise = 12,
+    User = 13,
+    PaymentType = 14
 }

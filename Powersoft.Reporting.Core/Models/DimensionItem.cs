@@ -35,6 +35,22 @@ public class ItemsSelectionFilter
     public DimensionFilter Stores { get; set; } = new();
     public DimensionFilter Items { get; set; } = new();
 
+    // Fashion/retail dimensions (tbl_Item / tbl_Model columns).
+    // Mirrors legacy ItemsSelections widget: ShowModels, ShowColours, ShowSizes, ShowGroupSizes, ShowFabrics.
+    public DimensionFilter Models { get; set; } = new();
+    public DimensionFilter Colours { get; set; } = new();
+    public DimensionFilter Sizes { get; set; } = new();
+    public DimensionFilter GroupSizes { get; set; } = new();
+    public DimensionFilter Fabrics { get; set; } = new();
+
+    // Item attribute dimensions (tbl_Item.fk_AttrID1..6).
+    public DimensionFilter Attributes1 { get; set; } = new();
+    public DimensionFilter Attributes2 { get; set; } = new();
+    public DimensionFilter Attributes3 { get; set; } = new();
+    public DimensionFilter Attributes4 { get; set; } = new();
+    public DimensionFilter Attributes5 { get; set; } = new();
+    public DimensionFilter Attributes6 { get; set; } = new();
+
     // Sale-leg only (tbl_InvoiceHeader / tbl_CreditNoteHeader): applied only when leg is a sales leg.
     public DimensionFilter Agents { get; set; } = new();
     public DimensionFilter PostalCodes { get; set; } = new();
@@ -76,6 +92,12 @@ public class ItemsSelectionConfig
     public bool ShowZReports { get; set; }
     public bool ShowTowns { get; set; }
     public bool ShowUsers { get; set; }
+    public bool ShowModels { get; set; }
+    public bool ShowColours { get; set; }
+    public bool ShowSizes { get; set; }
+    public bool ShowGroupSizes { get; set; }
+    public bool ShowFabrics { get; set; }
+    public bool ShowAttributes { get; set; }
     public bool ShowStockFilter { get; set; } = true;
     public bool ShowECommerce { get; set; } = true;
     public bool ShowModifiedDate { get; set; } = true;

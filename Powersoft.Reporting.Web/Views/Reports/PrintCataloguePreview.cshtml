@@ -40,7 +40,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Power Reports Catalogue - Print Preview</title>
+    <title>@(string.IsNullOrWhiteSpace(Model.ReportTitle) ? "Power Reports Catalogue" : Model.ReportTitle) - Print Preview</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -98,7 +98,7 @@
 </head>
 <body>
     <div class="toolbar">
-        <span class="title"><i class="bi bi-journal-text me-1"></i>Power Reports Catalogue &mdash; @db</span>
+        <span class="title"><i class="bi bi-journal-text me-1"></i>@(string.IsNullOrWhiteSpace(Model.ReportTitle) ? "Power Reports Catalogue" : Model.ReportTitle) &mdash; @db</span>
         <div class="zoom-controls">
             <button onclick="zoomOut()" title="Zoom out"><i class="bi bi-zoom-out"></i></button>
             <span class="zoom-level" id="zoomLabel">100%</span>
@@ -124,7 +124,7 @@
         <div class="paper" id="paper">
             <div class="report-header">
                 <div class="company-name">@db</div>
-                <div class="report-title">Power Reports Catalogue</div>
+                <div class="report-title">@(string.IsNullOrWhiteSpace(Model.ReportTitle) ? "Power Reports Catalogue" : Model.ReportTitle)</div>
             </div>
 
             <div class="report-meta">

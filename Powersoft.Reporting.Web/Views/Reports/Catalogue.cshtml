@@ -117,7 +117,7 @@
                 </div>
             </div>
 
-            @* ===== ROW 3: Grouping ===== *@
+            @* ===== ROW 3: Grouping + Report Title ===== *@
             <div class="row g-3 mb-3 align-items-end">
                 <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Primary Group</label>
@@ -130,6 +130,11 @@
                 <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold">Third Group</label>
                     <select asp-for="ThirdGroup" id="ThirdGroup" class="form-select group-select" asp-items="Html.GetEnumSelectList<CatalogueGroupBy>()"></select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label fw-semibold">Report Title</label>
+                    <input type="text" asp-for="ReportTitle" class="form-control" id="ReportTitle"
+                           placeholder="Power Report" />
                 </div>
             </div>
 
@@ -295,64 +300,25 @@
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span>
                 <i class="bi bi-table me-2"></i>
-                Results <span class="badge bg-primary ms-2">@Model.TotalCount.ToString("N0") rows</span>
+                <span id="resultsTitle">@(string.IsNullOrWhiteSpace(Model.ReportTitle) ? "Results" : Model.ReportTitle)</span>
+                <span class="badge bg-primary ms-2">@Model.TotalCount.ToString("N0") rows</span>
                 @if (Model.Totals != null)
                 {
                     <span class="badge bg-secondary ms-1">@Model.DateFrom.ToString("dd/MM/yyyy") - @Model.DateTo.ToString("dd/MM/yyyy")</span>
                 }
+                <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="toggleSelectionsBtn"
+                        title="Show/Hide active filter selections">
+                    <i class="bi bi-list-check me-1"></i>Selections
+                </button>
             </span>
             <div class="d-flex gap-2 flex-wrap align-items-center">
                 <div class="btn-group btn-group-sm">
-                    <a class="btn btn-outline-success"
-                       asp-action="ExportCatalogueCsv"
-                       asp-route-dateFrom="@(Model.UseDateTime ? Model.DateFrom.ToString("yyyy-MM-ddTHH:mm") : Model.DateFrom.ToString("yyyy-MM-dd"))"
-                       asp-route-dateTo="@(Model.UseDateTime ? Model.DateTo.ToString("yyyy-MM-ddTHH:mm") : Model.DateTo.ToString("yyyy-MM-dd"))"
-                       asp-route-dateBasis="@Model.DateBasis"
-                       asp-route-useDateTime="@Model.UseDateTime"
-                       asp-route-reportMode="@Model.ReportMode"
-                       asp-route-reportOn="@Model.ReportOn"
-                       asp-route-primaryGroup="@Model.PrimaryGroup"
-                       asp-route-secondaryGroup="@Model.SecondaryGroup"
-                       asp-route-thirdGroup="@Model.ThirdGroup"
-                       asp-route-displayColumns="@Model.DisplayColumnsString"
-                       asp-route-showProfit="@Model.ShowProfit"
-                       asp-route-showStock="@Model.ShowStock"
-                       asp-route-profitBasedOn="@((int)Model.ProfitBasedOn)"
-                       asp-route-profitIncludesVat="@Model.ProfitIncludesVat"
-                       asp-route-stockValueBasedOn="@((int)Model.StockValueBasedOn)"
-                       asp-route-stockValueIncludesVat="@Model.StockValueIncludesVat"
-                       asp-route-costType="@((int)Model.CostType)"
-                       asp-route-storeCodes="@Model.SelectedStoreCodesString"
-                       asp-route-itemsSelection="@(Model.ItemsSelectionJson ?? "")"
-                       asp-route-sortColumn="@Model.SortColumn"
-                       asp-route-sortDirection="@Model.SortDirection">
+                    <button type="button" class="btn btn-outline-success" onclick="exportCatalogue('csv')">
                         <i class="bi bi-filetype-csv me-1"></i>CSV
-                    </a>
-                    <a class="btn btn-outline-success"
-                       asp-action="ExportCatalogueExcel"
-                       asp-route-dateFrom="@(Model.UseDateTime ? Model.DateFrom.ToString("yyyy-MM-ddTHH:mm") : Model.DateFrom.ToString("yyyy-MM-dd"))"
-                       asp-route-dateTo="@(Model.UseDateTime ? Model.DateTo.ToString("yyyy-MM-ddTHH:mm") : Model.DateTo.ToString("yyyy-MM-dd"))"
-                       asp-route-dateBasis="@Model.DateBasis"
-                       asp-route-useDateTime="@Model.UseDateTime"
-                       asp-route-reportMode="@Model.ReportMode"
-                       asp-route-reportOn="@Model.ReportOn"
-                       asp-route-primaryGroup="@Model.PrimaryGroup"
-                       asp-route-secondaryGroup="@Model.SecondaryGroup"
-                       asp-route-thirdGroup="@Model.ThirdGroup"
-                       asp-route-displayColumns="@Model.DisplayColumnsString"
-                       asp-route-showProfit="@Model.ShowProfit"
-                       asp-route-showStock="@Model.ShowStock"
-                       asp-route-profitBasedOn="@((int)Model.ProfitBasedOn)"
-                       asp-route-profitIncludesVat="@Model.ProfitIncludesVat"
-                       asp-route-stockValueBasedOn="@((int)Model.StockValueBasedOn)"
-                       asp-route-stockValueIncludesVat="@Model.StockValueIncludesVat"
-                       asp-route-costType="@((int)Model.CostType)"
-                       asp-route-storeCodes="@Model.SelectedStoreCodesString"
-                       asp-route-itemsSelection="@(Model.ItemsSelectionJson ?? "")"
-                       asp-route-sortColumn="@Model.SortColumn"
-                       asp-route-sortDirection="@Model.SortDirection">
+                    </button>
+                    <button type="button" class="btn btn-outline-success" onclick="exportCatalogue('excel')">
                         <i class="bi bi-filetype-xlsx me-1"></i>Excel
-                    </a>
+                    </button>
                 </div>
                 <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()" id="previewToggleBtn" title="Toggle document-style preview">
                     <i class="bi bi-eye me-1"></i>Preview
@@ -365,6 +331,12 @@
                 </button>
             </div>
         </div>
+
+        <div id="selectionsPanel" class="border-bottom px-3 py-2 bg-light small" style="display:none;">
+            <strong class="text-muted">Active Selections:</strong>
+            <div id="selectionsContent" class="mt-1 d-flex flex-wrap gap-2"></div>
+        </div>
+
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-sm table-hover table-striped mb-0" id="resultsTable">
@@ -376,7 +348,9 @@
                             @if (hasL2) { <th class="sortable" data-col="Level2Description" data-fixed-left="1">Group 2</th> }
                             @if (hasL3) { <th class="sortable" data-col="Level3Description" data-fixed-left="1">Group 3</th> }
                             @if (showItem && dc("ItemCode")) { <th class="sortable" data-col="ItemCode" data-fixed-left="1">Code</th> }
+                            @if (showItem && dc("MainBarcode")) { <th class="sortable" data-col="MainBarcode" data-fixed-left="1">Barcode</th> }
                             @if (showItem && dc("ItemName")) { <th class="sortable" data-col="ItemDescription" data-fixed-left="1">Description</th> }
+                            @if (showItem && dc("ItemInvoiceDescription")) { <th class="sortable" data-col="ItemInvoiceDescription" data-fixed-left="1">Invoice Descr</th> }
                             @if (dc("Quantity")) { <th class="sortable text-end col-trans" data-col="Quantity">Qty</th> }
                             @if (dc("Value")) { <th class="sortable text-end col-trans" data-col="ValueBeforeDiscount">Value</th> }
                             @if (dc("Discount")) { <th class="sortable text-end col-trans" data-col="Discount">Discount</th> }
@@ -392,6 +366,9 @@
                             @if (dc("TotalStockValue")) { <th class="text-end col-stock" data-col="TotalStockValue">Stock Value</th> }
                             @if (dc("EntityCode")) { <th data-col="EntityCode">Entity Code</th> }
                             @if (dc("EntityName")) { <th data-col="EntityName">Entity Name</th> }
+                            @if (dc("EntityShortName")) { <th data-col="EntityShortName">Short Name</th> }
+                            @if (dc("EntityID")) { <th data-col="EntityID">Entity ID</th> }
+                            @if (dc("Sundry")) { <th data-col="Sundry">Sundry</th> }
                             @if (dc("InvoiceNumber")) { <th data-col="InvoiceNumber">Invoice No</th> }
                             @if (dc("InvoiceType")) { <th data-col="InvoiceType">Inv. Type</th> }
                             @if (dc("StoreCode")) { <th data-col="StoreCode">Store Code</th> }
@@ -410,6 +387,9 @@
                             @if (dc("Colour")) { <th data-col="Colour">Colour</th> }
                             @if (dc("Size")) { <th data-col="Size">Size</th> }
                             @if (dc("Franchise")) { <th data-col="Franchise">Franchise</th> }
+                            @if (dc("CustomerCategory1")) { <th data-col="CustomerCategory1Descr">Cust Cat 1</th> }
+                            @if (dc("CustomerCategory2")) { <th data-col="CustomerCategory2Descr">Cust Cat 2</th> }
+                            @if (dc("CustomerCategory3")) { <th data-col="CustomerCategory3Descr">Cust Cat 3</th> }
                             @if (dc("ItemSupplier")) { <th data-col="ItemSupplier">Supplier</th> }
                             @if (dc("Price1Excl")) { <th class="text-end" data-col="Price1Excl">Price 1 Ex</th> }
                             @if (dc("Price1Incl")) { <th class="text-end" data-col="Price1Incl">Price 1 In</th> }
@@ -443,12 +423,15 @@
                     </thead>
                     @{
                         int totalColumns = (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0)
-                            + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0)
+                            + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("MainBarcode") ? 1 : 0)
+                            + (showItem && dc("ItemName") ? 1 : 0) + (showItem && dc("ItemInvoiceDescription") ? 1 : 0)
                             + (dc("Quantity")?1:0)+(dc("Value")?1:0)+(dc("Discount")?1:0)+(dc("NetValue")?1:0)
                             + (dc("VatAmount")?1:0)+(dc("GrossAmount")?1:0)+(dc("Profit")?1:0)
                             + (dc("Markup")?1:0)+(dc("Margin")?1:0)+(dc("Cost")?1:0)+(dc("TotalCost")?1:0)
                             + (dc("TotalStockQty")?1:0)+(dc("TotalStockValue")?1:0);
-                        var dimColsForCount = new[] {"EntityCode","EntityName","InvoiceNumber","InvoiceType",
+                        var dimColsForCount = new[] {"EntityCode","EntityName","EntityShortName","EntityID","Sundry",
+                            "CustomerCategory1","CustomerCategory2","CustomerCategory3",
+                            "InvoiceNumber","InvoiceType",
                             "StoreCode","StoreName","StationCode","DateTrans","UserCode","AgentName",
                             "ZReportNumber","PaymentType","ItemCategory","ItemDepartment","Brand",
                             "Season","Model","Colour","Size","Franchise","ItemSupplier",
@@ -464,7 +447,9 @@
                             @if (hasL2) { <td>@(@item.Level2Value)</td> }
                             @if (hasL3) { <td>@(@item.Level3Value)</td> }
                             @if (showItem && dc("ItemCode")) { <td class="text-nowrap fw-semibold"><a href="#" class="dd-link-item" data-item-code="@item.ItemCode" data-item-name="@item.ItemDescription" title="View transaction history / stock position">@item.ItemCode</a></td> }
+                            @if (showItem && dc("MainBarcode")) { <td class="text-nowrap small">@item.MainBarcode</td> }
                             @if (showItem && dc("ItemName")) { <td><a href="#" class="dd-link-item" data-item-code="@item.ItemCode" data-item-name="@item.ItemDescription" title="View transaction history / stock position">@item.ItemDescription</a></td> }
+                            @if (showItem && dc("ItemInvoiceDescription")) { <td class="small">@item.ItemInvoiceDescription</td> }
                             @if (dc("Quantity")) { <td class="text-end">@item.Quantity.ToString("N2")</td> }
                             @if (dc("Value")) { <td class="text-end">@item.ValueBeforeDiscount.ToString("N2")</td> }
                             @if (dc("Discount")) { <td class="text-end">@item.Discount.ToString("N2")</td> }
@@ -478,8 +463,12 @@
                             @if (dc("TotalCost")) { <td class="text-end">@item.TotalCost.ToString("N2")</td> }
                             @if (dc("TotalStockQty")) { <td class="text-end">@item.TotalStockQty.ToString("N0")</td> }
                             @if (dc("TotalStockValue")) { <td class="text-end">@item.TotalStockValue.ToString("N2")</td> }
-                            @if (dc("EntityCode")) { <td class="small">@item.EntityCode</td> }
-                            @if (dc("EntityName")) { <td class="small">@item.EntityName</td> }
+                            @{var entityType = (item.InvoiceType == "P" || item.InvoiceType == "E") ? "supplier" : "customer";}
+                            @if (dc("EntityCode")) { <td class="small"><a href="#" class="dd-link-entity" data-entity-code="@item.EntityCode" data-entity-type="@entityType" title="View entity details">@item.EntityCode</a></td> }
+                            @if (dc("EntityName")) { <td class="small"><a href="#" class="dd-link-entity" data-entity-code="@item.EntityCode" data-entity-type="@entityType" title="View entity details">@item.EntityName</a></td> }
+                            @if (dc("EntityShortName")) { <td class="small">@item.EntityShortName</td> }
+                            @if (dc("EntityID")) { <td class="small">@item.EntityID</td> }
+                            @if (dc("Sundry")) { <td class="small">@item.Sundry</td> }
                             @if (dc("InvoiceNumber")) { <td class="small">@item.InvoiceNumber</td> }
                             @if (dc("InvoiceType")) { <td class="small">@item.InvoiceType</td> }
                             @if (dc("StoreCode")) { <td class="small">@item.StoreCode</td> }
@@ -498,6 +487,9 @@
                             @if (dc("Colour")) { <td class="small">@item.Colour</td> }
                             @if (dc("Size")) { <td class="small">@item.Size</td> }
                             @if (dc("Franchise")) { <td class="small">@item.FranchiseName</td> }
+                            @if (dc("CustomerCategory1")) { <td class="small">@item.CustomerCategory1Descr</td> }
+                            @if (dc("CustomerCategory2")) { <td class="small">@item.CustomerCategory2Descr</td> }
+                            @if (dc("CustomerCategory3")) { <td class="small">@item.CustomerCategory3Descr</td> }
                             @if (dc("ItemSupplier")) { <td class="small">@item.ItemSupplierName</td> }
                             @if (dc("Price1Excl")) { <td class="text-end">@item.Price1Excl.ToString("N2")</td> }
                             @if (dc("Price1Incl")) { <td class="text-end">@item.Price1Incl.ToString("N2")</td> }
@@ -551,7 +543,8 @@
                                     var subMarkup = subTransCost != 0 ? Math.Round(subProfit / subTransCost * 100m, 2) : 0;
 
                                     int groupCols = (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0);
-                                    int itemCols = (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
+                                    int itemCols = (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("MainBarcode") ? 1 : 0)
+                                        + (showItem && dc("ItemName") ? 1 : 0) + (showItem && dc("ItemInvoiceDescription") ? 1 : 0);
                                     int labelSpan = (groupCols - subIndent) + itemCols;
                                     if (labelSpan < 1) labelSpan = 1;
                                 }
@@ -631,7 +624,8 @@
                     @if (Model.Totals != null)
                     {
                         int countGroupCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
-                        int countItemCols = (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
+                        int countItemCols = (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("MainBarcode") ? 1 : 0)
+                            + (showItem && dc("ItemName") ? 1 : 0) + (showItem && dc("ItemInvoiceDescription") ? 1 : 0);
                         int spanCols = countGroupCols + countItemCols;
 
                         <tfoot>
@@ -651,7 +645,9 @@
                                 @if (dc("TotalStockQty")) { <td class="text-end">@Model.Totals.TotalStockQty.ToString("N0")</td> }
                                 @if (dc("TotalStockValue")) { <td></td> }
                                 @{
-                                    var dimCols = new[] {"EntityCode","EntityName","InvoiceNumber","InvoiceType",
+                                    var dimCols = new[] {"EntityCode","EntityName","EntityShortName","EntityID","Sundry",
+                                        "CustomerCategory1","CustomerCategory2","CustomerCategory3",
+                                        "InvoiceNumber","InvoiceType",
                                         "StoreCode","StoreName","StationCode","DateTrans","UserCode","AgentName",
                                         "ZReportNumber","PaymentType","ItemCategory","ItemDepartment","Brand",
                                         "Season","Model","Colour","Size","Franchise","ItemSupplier",
@@ -726,6 +722,8 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     /* Drill-down link style (same as PurchasesSales) */
     #resultsTable a.dd-link-item { color: #2563eb; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #2563eb; }
     #resultsTable a.dd-link-item:hover { color: #1d4ed8; border-bottom-style: solid; }
+    #resultsTable a.dd-link-entity { color: #7c3aed; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #7c3aed; }
+    #resultsTable a.dd-link-entity:hover { color: #5b21b6; border-bottom-style: solid; }
 
     /* Column reorder (Column Options modal) */
     #colToggleList .col-reorderable { cursor: default; }
@@ -966,7 +964,9 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                                 ("Level2Description","Group 2","group 2 level2","", true, hasL2, false),
                                 ("Level3Description","Group 3","group 3 level3","", true, hasL3, false),
                                 ("ItemCode","Code","code itemcode","ItemCode", false, dc("ItemCode"), showItem),
+                                ("MainBarcode","Barcode","barcode mainbarcode","MainBarcode", false, dc("MainBarcode"), showItem),
                                 ("ItemDescription","Description","description itemname name","ItemName", false, dc("ItemName"), showItem),
+                                ("ItemInvoiceDescription","Invoice Description","invoice description detail","ItemInvoiceDescription", false, dc("ItemInvoiceDescription"), showItem),
                                 ("Quantity","Qty","qty quantity","Quantity", false, dc("Quantity"), true),
                                 ("ValueBeforeDiscount","Value","value before discount","Value", false, dc("Value"), true),
                                 ("Discount","Discount","discount","Discount", false, dc("Discount"), true),
@@ -982,6 +982,9 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                                 ("TotalStockValue","Stock Value","stock value","TotalStockValue", false, dc("TotalStockValue"), true),
                                 ("EntityCode","Entity Code","entity code customer supplier","EntityCode", false, dc("EntityCode"), true),
                                 ("EntityName","Entity Name","entity name customer supplier","EntityName", false, dc("EntityName"), true),
+                                ("EntityShortName","Short Name","short name entity","EntityShortName", false, dc("EntityShortName"), true),
+                                ("EntityID","Entity ID","entity id customer supplier","EntityID", false, dc("EntityID"), true),
+                                ("Sundry","Sundry","sundry notes","Sundry", false, dc("Sundry"), true),
                                 ("InvoiceNumber","Invoice No","invoice number no","InvoiceNumber", false, dc("InvoiceNumber"), true),
                                 ("InvoiceType","Inv. Type","invoice type","InvoiceType", false, dc("InvoiceType"), true),
                                 ("StoreCode","Store Code","store code","StoreCode", false, dc("StoreCode"), true),
@@ -1000,6 +1003,9 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                                 ("Colour","Colour","colour color","Colour", false, dc("Colour"), true),
                                 ("Size","Size","size","Size", false, dc("Size"), true),
                                 ("Franchise","Franchise","franchise","Franchise", false, dc("Franchise"), true),
+                                ("CustomerCategory1Descr","Cust Cat 1","customer category 1","CustomerCategory1", false, dc("CustomerCategory1"), true),
+                                ("CustomerCategory2Descr","Cust Cat 2","customer category 2","CustomerCategory2", false, dc("CustomerCategory2"), true),
+                                ("CustomerCategory3Descr","Cust Cat 3","customer category 3","CustomerCategory3", false, dc("CustomerCategory3"), true),
                                 ("ItemSupplier","Supplier","supplier","ItemSupplier", false, dc("ItemSupplier"), true),
                                 ("Price1Excl","Price 1 Ex","price 1 excl","Price1Excl", false, dc("Price1Excl"), true),
                                 ("Price1Incl","Price 1 In","price 1 incl","Price1Incl", false, dc("Price1Incl"), true),
@@ -1259,6 +1265,39 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                 <button type="button" class="btn text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);display:none;" onclick="analyzeReport()" id="btnReanalyze">
                     <i class="bi bi-arrow-clockwise me-1"></i>Re-analyze
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Entity Detail Modal: Customer / Supplier quick-view (mirrors original Powersoft365 entity hyperlink) -->
+<div class="modal fade" id="entityDetailModal" tabindex="-1" aria-labelledby="entityDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="entityDetailModalLabel">
+                    <i class="bi bi-person-vcard me-2"></i>
+                    <span id="entityModalType">Customer</span> Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="entityModalLoading" class="text-center py-4"><div class="spinner-border text-primary"></div></div>
+                <div id="entityModalContent" class="d-none">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <table class="table table-sm table-borderless mb-0">
+                                <tbody id="entityModalInfoLeft"></tbody>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm table-borderless mb-0">
+                                <tbody id="entityModalInfoRight"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div id="entityModalError" class="d-none alert alert-warning mb-0"></div>
             </div>
         </div>
     </div>
@@ -1754,6 +1793,8 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         if (co) p['ColumnOrder'] = co;
         var isj = v('itemsSelectionJsonHidden');
         if (isj) p['ItemsSelectionJson'] = isj;
+        var rt = v('ReportTitle');
+        if (rt) p['ReportTitle'] = rt;
         return p;
     }
 
@@ -1933,10 +1974,14 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         setChk('ShowStock',          parms.ShowStock);
         setVal('PageSize',           parms.PageSize);
 
+        if (parms.ReportTitle != null) {
+            setVal('ReportTitle', parms.ReportTitle);
+            var hdr = document.getElementById('resultsTitle');
+            if (hdr) hdr.textContent = parms.ReportTitle || 'Results';
+        }
         if (parms.DisplayColumns != null) {
             var hidden = document.getElementById('displayColumnsHidden');
             if (hidden) hidden.value = parms.DisplayColumns;
-            // Re-sync the column toggles modal so checkboxes match (best-effort: handler may not exist on first load).
             if (typeof syncDisplayColumnCheckboxes === 'function') syncDisplayColumnCheckboxes();
         }
         if (parms.ColumnOrder != null) {
@@ -2053,10 +2098,23 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
     }
 
+    function collectColumnFiltersJson() {
+        var values = {}, operators = {}, hasAny = false;
+        document.querySelectorAll('input[id^="fv_"]').forEach(function(el) {
+            var col = el.id.substring(3);
+            if (el.value) { values[col] = el.value; hasAny = true; }
+        });
+        document.querySelectorAll('input[id^="fo_"]').forEach(function(el) {
+            var col = el.id.substring(3);
+            if (el.value) operators[col] = el.value;
+        });
+        return hasAny ? JSON.stringify({ values: values, operators: operators }) : '';
+    }
+
     function collectCatalogueParams() {
         function v(id){var el = document.getElementById(id); return el ? el.value : '';}
         function chk(id){var el = document.getElementById(id); return el ? el.checked : false;}
-        return {
+        var p = {
             dateFrom: v('DateFrom'),
             dateTo: v('DateTo'),
             dateBasis: v('DateBasis'),
@@ -2079,6 +2137,16 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             sortColumn: v('sortColumnHidden') || 'ItemCode',
             sortDirection: v('sortDirectionHidden') || 'ASC'
         };
+        var cf = collectColumnFiltersJson();
+        if (cf) p.columnFilters = cf;
+        return p;
+    }
+
+    function exportCatalogue(format) {
+        var action = format === 'csv' ? '@Url.Action("ExportCatalogueCsv", "Reports")' : '@Url.Action("ExportCatalogueExcel", "Reports")';
+        var p = collectCatalogueParams();
+        var qs = Object.keys(p).map(function(k) { return encodeURIComponent(k) + '=' + encodeURIComponent(p[k]); }).join('&');
+        window.location.href = action + '?' + qs;
     }
 
     function saveSchedule() {
@@ -3047,7 +3115,7 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                 }
                 var a = data.analysis;
                 renderAiAnalysis(a);
-                initAiConversation(a);
+                initAiConversation(a, data.csvPreview);
                 document.getElementById('aiResults').classList.remove('d-none');
                 document.getElementById('btnReanalyze').style.display = 'inline-block';
             })
@@ -3123,11 +3191,12 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         _aiTotalChatTokens = { input: 0, output: 0 };
     }
 
-    function initAiConversation(analysisJson) {
+    function initAiConversation(analysisJson, csvData) {
         _aiConversation = [
-            { role: 'system', content: 'You are a senior financial data analyst. The user has already received an AI analysis of their catalogue / sales report. Now they want to ask follow-up questions about the same data. Be concise, specific, and reference the data. Respond in the same language as the analysis.' },
-            { role: 'assistant', content: JSON.stringify(analysisJson) }
+            { role: 'system', content: 'You are a senior financial data analyst. The user has already received an AI analysis of their catalogue / sales report. The raw CSV data is included below so you can reference specific numbers when answering follow-up questions. Be concise, specific, and cite actual values from the data. Respond in the same language as the analysis.' }
         ];
+        if (csvData) _aiConversation.push({ role: 'user', content: 'Here is the raw report data for reference:\n' + csvData });
+        _aiConversation.push({ role: 'assistant', content: JSON.stringify(analysisJson) });
     }
 
     function sendAiChat() {
@@ -3319,28 +3388,9 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             btn.classList.add('btn-outline-warning');
             var f = document.getElementById('previewFrame');
             if (!f.src || f.src === 'about:blank' || f.src.endsWith('about:blank')) {
-                var qs = '@Url.Action("PrintCataloguePreview")'
-                    + '?dateFrom=@(Model.UseDateTime ? Model.DateFrom.ToString("yyyy-MM-ddTHH:mm") : Model.DateFrom.ToString("yyyy-MM-dd"))'
-                    + '&dateTo=@(Model.UseDateTime ? Model.DateTo.ToString("yyyy-MM-ddTHH:mm") : Model.DateTo.ToString("yyyy-MM-dd"))'
-                    + '&dateBasis=@Model.DateBasis'
-                    + '&useDateTime=@Model.UseDateTime'
-                    + '&reportMode=@Model.ReportMode'
-                    + '&reportOn=@Model.ReportOn'
-                    + '&primaryGroup=@Model.PrimaryGroup'
-                    + '&secondaryGroup=@Model.SecondaryGroup'
-                    + '&thirdGroup=@Model.ThirdGroup'
-                    + '&showProfit=@Model.ShowProfit'
-                    + '&showStock=@Model.ShowStock'
-                    + '&profitBasedOn=@((int)Model.ProfitBasedOn)'
-                    + '&profitIncludesVat=@Model.ProfitIncludesVat'
-                    + '&stockValueBasedOn=@((int)Model.StockValueBasedOn)'
-                    + '&stockValueIncludesVat=@Model.StockValueIncludesVat'
-                    + '&costType=@((int)Model.CostType)'
-                    + '&displayColumns=' + encodeURIComponent('@(Model.DisplayColumnsString ?? "")')
-                    + '&storeCodes=' + encodeURIComponent('@(Model.SelectedStoreCodesString ?? "")')
-                    + '&itemsSelection=' + encodeURIComponent('@(Model.ItemsSelectionJson ?? "")')
-                    + '&sortColumn=@Model.SortColumn'
-                    + '&sortDirection=@Model.SortDirection';
+                var p = collectCatalogueParams();
+                var qs = '@Url.Action("PrintCataloguePreview")' + '?' +
+                    Object.keys(p).map(function(k) { return encodeURIComponent(k) + '=' + encodeURIComponent(p[k]); }).join('&');
                 f.src = qs;
             }
             f.onload = function () {
@@ -3382,6 +3432,56 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         var name = link.getAttribute('data-item-name') || '';
         if (code) openItemModal(code, name);
     });
+
+    // Event delegation for entity (customer/supplier) links
+    document.addEventListener('click', function (e) {
+        var link = e.target.closest('a.dd-link-entity');
+        if (!link) return;
+        e.preventDefault();
+        var code = link.getAttribute('data-entity-code') || '';
+        var etype = link.getAttribute('data-entity-type') || 'customer';
+        if (code) openEntityModal(code, etype);
+    });
+
+    function openEntityModal(entityCode, entityType) {
+        if (!entityCode) return;
+        var loading = document.getElementById('entityModalLoading');
+        var content = document.getElementById('entityModalContent');
+        var error = document.getElementById('entityModalError');
+        var typeLabel = document.getElementById('entityModalType');
+        typeLabel.textContent = entityType === 'supplier' ? 'Supplier' : 'Customer';
+        loading.classList.remove('d-none');
+        content.classList.add('d-none');
+        error.classList.add('d-none');
+
+        var modal = new bootstrap.Modal(document.getElementById('entityDetailModal'));
+        modal.show();
+
+        fetch('/Reports/GetEntityDetail?code=' + encodeURIComponent(entityCode) + '&type=' + encodeURIComponent(entityType))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                loading.classList.add('d-none');
+                if (!data.success) {
+                    error.textContent = data.message || 'Entity not found';
+                    error.classList.remove('d-none');
+                    return;
+                }
+                var d = data.data;
+                var left = document.getElementById('entityModalInfoLeft');
+                var right = document.getElementById('entityModalInfoRight');
+                var row = function (lbl, val) { return '<tr><td class="text-muted small fw-semibold" style="width:120px">' + lbl + '</td><td>' + (val || '-') + '</td></tr>'; };
+                left.innerHTML = row('Code', d.Code) + row('Full Name', d.FullName) + row('Short Name', d.ShortName)
+                    + row('Entity ID', d.EntityId) + row('VAT No', d.VatNo) + row('Status', d.Status);
+                right.innerHTML = row('Address', d.Address1) + row('', d.Address2) + row('Town', d.Town)
+                    + row('Post Code', d.PostalCode) + row('Phone', d.Phone) + row('Mobile', d.Mobile) + row('Email', d.Email);
+                content.classList.remove('d-none');
+            })
+            .catch(function () {
+                loading.classList.add('d-none');
+                error.textContent = 'Failed to load entity details';
+                error.classList.remove('d-none');
+            });
+    }
 
     function openItemModal(itemCode, itemName) {
         if (!itemCode) return;
@@ -3724,5 +3824,60 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                 document.getElementById('docDetailError').textContent = 'Network error: ' + err.message;
             });
     }
+
+    // Report Title — sync input to results header
+    (function () {
+        var inp = document.getElementById('ReportTitle');
+        var hdr = document.getElementById('resultsTitle');
+        if (inp && hdr) {
+            inp.addEventListener('input', function () {
+                hdr.textContent = inp.value || 'Results';
+            });
+        }
+    })();
+
+    // Show/Hide Selections panel
+    (function () {
+        var btn = document.getElementById('toggleSelectionsBtn');
+        var panel = document.getElementById('selectionsPanel');
+        if (!btn || !panel) return;
+
+        function buildSelections() {
+            var parts = [];
+            var f = document.getElementById('DateFrom');
+            var t = document.getElementById('DateTo');
+            if (f && t) parts.push({ label: 'Period', value: f.value + ' \u2013 ' + t.value });
+
+            var rm = document.querySelector('[name="ReportMode"]');
+            if (rm) parts.push({ label: 'Mode', value: rm.options[rm.selectedIndex].text });
+            var ro = document.querySelector('[name="ReportOn"]');
+            if (ro) parts.push({ label: 'Report On', value: ro.options[ro.selectedIndex].text });
+
+            ['PrimaryGroup', 'SecondaryGroup', 'ThirdGroup'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el && el.value !== '0') parts.push({ label: id.replace(/Group$/, ' Group'), value: el.options[el.selectedIndex].text });
+            });
+
+            var ct = document.querySelector('[name="CostType"]');
+            if (ct) parts.push({ label: 'Cost', value: ct.options[ct.selectedIndex].text });
+
+            var cont = document.getElementById('selectionsContent');
+            cont.innerHTML = parts.map(function (p) {
+                return '<span class="badge bg-primary bg-opacity-10 text-primary border px-2 py-1">'
+                    + '<strong>' + p.label + ':</strong> ' + p.value + '</span>';
+            }).join('');
+        }
+
+        btn.addEventListener('click', function () {
+            if (panel.style.display === 'none') {
+                buildSelections();
+                panel.style.display = '';
+                btn.classList.add('active');
+            } else {
+                panel.style.display = 'none';
+                btn.classList.remove('active');
+            }
+        });
+    })();
 </script>
 }

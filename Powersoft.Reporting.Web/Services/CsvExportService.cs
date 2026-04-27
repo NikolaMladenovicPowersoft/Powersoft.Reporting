@@ -441,6 +441,94 @@ public class CsvExportService
         return new UTF8Encoding(true).GetBytes(sb.ToString());
     }
 
+    public byte[] GenerateCancelLogCsv(
+        List<CancelLogDetailedRow>? detailedRows,
+        List<CancelLogSummaryRow>? summaryRows,
+        CancelLogFilter filter)
+    {
+        bool isDetailed = filter.ReportType == CancelLogReportType.Detailed;
+        bool hasL1 = filter.PrimaryGroup != "NONE";
+        bool hasL2 = filter.SecondaryGroup != "NONE";
+
+        var sb = new StringBuilder();
+
+        sb.AppendLine("# Cancellation Logging Report");
+        sb.AppendLine($"# Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}");
+        sb.AppendLine($"# Report Type: {filter.ReportType}");
+        sb.AppendLine($"# Action Type: {filter.ActionType}");
+        if (hasL1) sb.AppendLine($"# Primary Group: {filter.PrimaryGroup}");
+        if (hasL2) sb.AppendLine($"# Secondary Group: {filter.SecondaryGroup}");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
+        if (isDetailed)
+        {
+            var headers = new List<string> { "Store/Station" };
+            if (hasL1) headers.Add("Group 1");
+            if (hasL2) headers.Add("Group 2");
+            headers.AddRange(new[]
+            {
+                "Action", "Session Date", "Trans Kind", "Customer",
+                "Item Code", "Item Descr", "User", "Invoice/Credit",
+                "Z Report", "Total Lines", "Invoice Total",
+                "Quantity", "Amount", "Table No", "Table Name", "Compartment"
+            });
+            sb.AppendLine(string.Join(",", headers.Select(Escape)));
+
+            foreach (var row in detailedRows ?? new())
+            {
+                var cells = new List<string> { row.StoreAndStation };
+                if (hasL1) cells.Add(row.Level1Descr);
+                if (hasL2) cells.Add(row.Level2Descr);
+                cells.Add(row.ActionType);
+                cells.Add(row.SessionDateTime?.ToString("yyyy-MM-dd HH:mm") ?? "");
+                cells.Add(row.TransKind == "I" ? "Sale" : "Return");
+                cells.Add(row.CustomerFullName);
+                cells.Add(row.ItemCode);
+                cells.Add(row.ItemDescr);
+                cells.Add(row.UserCode);
+                cells.Add(!string.IsNullOrEmpty(row.InvoiceId) ? row.InvoiceId : row.CreditId);
+                cells.Add(row.ZReport);
+                cells.Add(row.TotalInvoiceLines.ToString(CultureInfo.InvariantCulture));
+                cells.Add(row.InvoiceTotal.ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(row.Quantity.ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(row.Amount.ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(row.TableNo);
+                cells.Add(row.TableName);
+                cells.Add(row.CompartmentName);
+                sb.AppendLine(string.Join(",", cells.Select(Escape)));
+            }
+        }
+        else
+        {
+            var headers = new List<string> { "Store/Station" };
+            if (hasL1) headers.Add("Group 1");
+            if (hasL2) headers.Add("Group 2");
+            headers.AddRange(new[]
+            {
+                "Deleted", "Cancelled", "Complimentary",
+                "Invoice Total", "Quantity", "Amount"
+            });
+            sb.AppendLine(string.Join(",", headers.Select(Escape)));
+
+            foreach (var row in summaryRows ?? new())
+            {
+                var cells = new List<string> { row.StoreAndStation };
+                if (hasL1) cells.Add(row.Level1Descr);
+                if (hasL2) cells.Add(row.Level2Descr);
+                cells.Add(row.DeletedAction.ToString(CultureInfo.InvariantCulture));
+                cells.Add(row.CancelledAction.ToString(CultureInfo.InvariantCulture));
+                cells.Add(row.ComplimentaryAction.ToString(CultureInfo.InvariantCulture));
+                cells.Add(row.InvoiceTotal.ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(row.Quantity.ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(row.Amount.ToString("F2", CultureInfo.InvariantCulture));
+                sb.AppendLine(string.Join(",", cells.Select(Escape)));
+            }
+        }
+
+        return new UTF8Encoding(true).GetBytes(sb.ToString());
+    }
+
     private static string Escape(string value)
     {
         if (string.IsNullOrEmpty(value)) return "";

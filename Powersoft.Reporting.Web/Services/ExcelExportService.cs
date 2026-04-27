@@ -626,6 +626,139 @@ public class ExcelExportService
         return stream.ToArray();
     }
 
+    public byte[] GenerateCancelLogExcel(
+        List<CancelLogDetailedRow>? detailedRows,
+        List<CancelLogSummaryRow>? summaryRows,
+        CancelLogFilter filter)
+    {
+        bool isDetailed = filter.ReportType == CancelLogReportType.Detailed;
+        bool hasL1 = filter.PrimaryGroup != "NONE";
+        bool hasL2 = filter.SecondaryGroup != "NONE";
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Cancel Log");
+
+        ws.Cell(1, 1).Value = "Cancellation Logging Report";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(selRow++, 1).Value = $"Report Type: {filter.ReportType}";
+        ws.Cell(selRow++, 1).Value = $"Action Type: {filter.ActionType}";
+        if (hasL1) ws.Cell(selRow++, 1).Value = $"Primary Group: {filter.PrimaryGroup}";
+        if (hasL2) ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.SecondaryGroup}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        int headerRow = selRow + 1;
+        int col = 1;
+
+        if (isDetailed)
+        {
+            ws.Cell(headerRow, col++).Value = "Store/Station";
+            if (hasL1) ws.Cell(headerRow, col++).Value = "Group 1";
+            if (hasL2) ws.Cell(headerRow, col++).Value = "Group 2";
+            ws.Cell(headerRow, col++).Value = "Action";
+            ws.Cell(headerRow, col++).Value = "Session Date";
+            ws.Cell(headerRow, col++).Value = "Trans Kind";
+            ws.Cell(headerRow, col++).Value = "Customer";
+            ws.Cell(headerRow, col++).Value = "Item Code";
+            ws.Cell(headerRow, col++).Value = "Item Descr";
+            ws.Cell(headerRow, col++).Value = "User";
+            ws.Cell(headerRow, col++).Value = "Invoice/Credit";
+            ws.Cell(headerRow, col++).Value = "Z Report";
+            ws.Cell(headerRow, col++).Value = "Total Lines";
+            ws.Cell(headerRow, col++).Value = "Invoice Total";
+            ws.Cell(headerRow, col++).Value = "Quantity";
+            ws.Cell(headerRow, col++).Value = "Amount";
+            ws.Cell(headerRow, col++).Value = "Table No";
+            ws.Cell(headerRow, col++).Value = "Table Name";
+            ws.Cell(headerRow, col++).Value = "Compartment";
+        }
+        else
+        {
+            ws.Cell(headerRow, col++).Value = "Store/Station";
+            if (hasL1) ws.Cell(headerRow, col++).Value = "Group 1";
+            if (hasL2) ws.Cell(headerRow, col++).Value = "Group 2";
+            ws.Cell(headerRow, col++).Value = "Deleted";
+            ws.Cell(headerRow, col++).Value = "Cancelled";
+            ws.Cell(headerRow, col++).Value = "Complimentary";
+            ws.Cell(headerRow, col++).Value = "Invoice Total";
+            ws.Cell(headerRow, col++).Value = "Quantity";
+            ws.Cell(headerRow, col++).Value = "Amount";
+        }
+
+        int totalCols = col - 1;
+        var headerRange = ws.Range(headerRow, 1, headerRow, totalCols);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+
+        if (isDetailed)
+        {
+            foreach (var row in detailedRows ?? new())
+            {
+                col = 1;
+                ws.Cell(dataRow, col++).Value = row.StoreAndStation;
+                if (hasL1) ws.Cell(dataRow, col++).Value = row.Level1Descr;
+                if (hasL2) ws.Cell(dataRow, col++).Value = row.Level2Descr;
+                ws.Cell(dataRow, col++).Value = row.ActionType;
+                if (row.SessionDateTime.HasValue)
+                    ws.Cell(dataRow, col).Value = row.SessionDateTime.Value;
+                col++;
+                ws.Cell(dataRow, col++).Value = row.TransKind == "I" ? "Sale" : "Return";
+                ws.Cell(dataRow, col++).Value = row.CustomerFullName;
+                ws.Cell(dataRow, col++).Value = row.ItemCode;
+                ws.Cell(dataRow, col++).Value = row.ItemDescr;
+                ws.Cell(dataRow, col++).Value = row.UserCode;
+                ws.Cell(dataRow, col++).Value = !string.IsNullOrEmpty(row.InvoiceId) ? row.InvoiceId : row.CreditId;
+                ws.Cell(dataRow, col++).Value = row.ZReport;
+                ws.Cell(dataRow, col++).Value = row.TotalInvoiceLines;
+                ws.Cell(dataRow, col).Value = row.InvoiceTotal;
+                ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, col).Value = row.Quantity;
+                ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, col).Value = row.Amount;
+                ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, col++).Value = row.TableNo;
+                ws.Cell(dataRow, col++).Value = row.TableName;
+                ws.Cell(dataRow, col++).Value = row.CompartmentName;
+                dataRow++;
+            }
+        }
+        else
+        {
+            foreach (var row in summaryRows ?? new())
+            {
+                col = 1;
+                ws.Cell(dataRow, col++).Value = row.StoreAndStation;
+                if (hasL1) ws.Cell(dataRow, col++).Value = row.Level1Descr;
+                if (hasL2) ws.Cell(dataRow, col++).Value = row.Level2Descr;
+                ws.Cell(dataRow, col++).Value = row.DeletedAction;
+                ws.Cell(dataRow, col++).Value = row.CancelledAction;
+                ws.Cell(dataRow, col++).Value = row.ComplimentaryAction;
+                ws.Cell(dataRow, col).Value = row.InvoiceTotal;
+                ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, col).Value = row.Quantity;
+                ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, col).Value = row.Amount;
+                ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+                dataRow++;
+            }
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
     private int WriteExcelSubtotalRow(IXLWorksheet ws, int dataRow, int totalCols,
         string label, SubtotalAgg agg, PurchasesSalesFilter filter,
         bool hasL1, bool hasL2, bool hasL3, bool hasItem)

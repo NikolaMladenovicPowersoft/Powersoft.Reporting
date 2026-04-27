@@ -306,6 +306,15 @@ public class ReportsController : Controller
         await LoadAvailableStoresAsync(model, tenantConnString);
         ApplyDatePreset(model);
         
+        if (model.IsPeopleCount)
+        {
+            model.Breakdown = BreakdownType.Daily;
+            model.GroupBy = GroupByType.None;
+            model.SecondaryGroupBy = GroupByType.Store;
+            model.CompareLastYear = false;
+            model.PageSize = 1000;
+        }
+        
         var filter = model.ToReportFilter();
         filter.ItemsSelection = ParseItemsSelection(model.ItemsSelectionJson);
         if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
@@ -323,10 +332,14 @@ public class ReportsController : Controller
             var repo = _repositoryFactory.CreateAverageBasketRepository(tenantConnString);
             var result = await repo.GetAverageBasketDataAsync(filter);
             
-            model.Results = result.Items;
-            model.TotalCount = result.TotalCount;
+            var items = result.Items;
+            if (model.IsPeopleCount)
+                items = items.Where(r => r.CYAllTransactions > 0).ToList();
+
+            model.Results = items;
+            model.TotalCount = model.IsPeopleCount ? items.Count : result.TotalCount;
             model.PageNumber = result.PageNumber;
-            model.PageSize = result.PageSize;
+            model.PageSize = model.IsPeopleCount ? items.Count : result.PageSize;
             model.GrandTotals = result.GrandTotals;
         }
         catch (Exception ex)
@@ -414,6 +427,17 @@ public class ReportsController : Controller
                 "user" or "users" => await repo.GetUsersAsync(search),
                 "store" or "stores" => new List<DimensionItem>(),
                 "item" or "items" => new List<DimensionItem>(),
+                "model" or "models" => await repo.GetModelsAsync(),
+                "colour" or "colours" => await repo.GetColoursAsync(),
+                "size" or "sizes" => await repo.GetSizesAsync(),
+                "groupsize" or "groupsizes" => await repo.GetGroupSizesAsync(),
+                "fabric" or "fabrics" => await repo.GetFabricsAsync(),
+                "attr1" => await repo.GetAttributeValuesAsync(1),
+                "attr2" => await repo.GetAttributeValuesAsync(2),
+                "attr3" => await repo.GetAttributeValuesAsync(3),
+                "attr4" => await repo.GetAttributeValuesAsync(4),
+                "attr5" => await repo.GetAttributeValuesAsync(5),
+                "attr6" => await repo.GetAttributeValuesAsync(6),
                 _ => new List<DimensionItem>()
             };
             return Json(results);
@@ -425,6 +449,51 @@ public class ReportsController : Controller
         }
     }
     
+    [HttpGet]
+    public async Task<IActionResult> GetEntityDetail(string code, string type)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        try
+        {
+            var isCustomer = type?.ToLowerInvariant() == "customer";
+            var table = isCustomer ? "tbl_Customer" : "tbl_Supplier";
+            var pk = isCustomer ? "pk_CustomerNo" : "pk_SupplierNo";
+
+            await using var conn = new Microsoft.Data.SqlClient.SqlConnection(tenantConnString);
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $@"SELECT TOP 1
+                {pk} AS Code,
+                CASE WHEN ISNULL(Company,0) = 1 THEN LastCompanyName ELSE FirstName + ' ' + LastCompanyName END AS FullName,
+                ISNULL(ShortName,'') AS ShortName,
+                ISNULL({(isCustomer ? "CustomerId" : "SupplierId")},'') AS EntityId,
+                ISNULL(Address1,'') AS Address1, ISNULL(Address2,'') AS Address2,
+                ISNULL(Town,'') AS Town, ISNULL(PostalCode,'') AS PostalCode,
+                ISNULL(Phone,'') AS Phone, ISNULL(Mobile,'') AS Mobile,
+                ISNULL(Email,'') AS Email, ISNULL(VatNo,'') AS VatNo,
+                CASE WHEN ISNULL(Active,0) = 1 THEN 'Active' ELSE 'Inactive' END AS Status
+                FROM {table} WHERE {pk} = @Code";
+            cmd.Parameters.AddWithValue("@Code", code ?? "");
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+                return Json(new { success = false, message = $"{(isCustomer ? "Customer" : "Supplier")} not found" });
+
+            var result = new Dictionary<string, string>();
+            for (int i = 0; i < reader.FieldCount; i++)
+                result[reader.GetName(i)] = reader.IsDBNull(i) ? "" : reader.GetValue(i)?.ToString() ?? "";
+
+            return Json(new { success = true, data = result, entityType = isCustomer ? "Customer" : "Supplier" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading entity detail: {Code}", code);
+            return Json(new { success = false, message = "Failed to load entity details" });
+        }
+    }
+
     [HttpPost]
     public async Task<IActionResult> SaveSchedule(
         string scheduleName, string recurrenceType, int? recurrenceDay,
@@ -850,6 +919,45 @@ public class ReportsController : Controller
         var candidate = new DateTime(now.Year, now.Month, Math.Min(dayOfMonth, DateTime.DaysInMonth(now.Year, now.Month))).Add(time);
         if (candidate <= now) candidate = candidate.AddMonths(1);
         return candidate;
+    }
+
+    /// <summary>
+    /// Truncate CSV to a safe size for inclusion in AI chat context.
+    /// Keeps the metadata header block (lines starting with #) + first N data lines.
+    /// gpt-4o-mini 128k context can handle ~50k chars comfortably; 200 rows covers
+    /// virtually all real-world reports while keeping follow-up costs low.
+    /// </summary>
+    private static string TruncateCsvForChat(string csv, int maxDataRows = 200)
+    {
+        if (string.IsNullOrEmpty(csv)) return csv;
+
+        var lines = csv.Split('\n');
+        var sb = new StringBuilder();
+        int dataCount = 0;
+        bool truncated = false;
+
+        foreach (var line in lines)
+        {
+            if (line.StartsWith('#') || string.IsNullOrWhiteSpace(line) || dataCount == 0)
+            {
+                sb.AppendLine(line.TrimEnd('\r'));
+                if (!line.StartsWith('#') && !string.IsNullOrWhiteSpace(line))
+                    dataCount++;
+            }
+            else
+            {
+                dataCount++;
+                if (dataCount <= maxDataRows + 1) // +1 for header row
+                    sb.AppendLine(line.TrimEnd('\r'));
+                else
+                    truncated = true;
+            }
+        }
+
+        if (truncated)
+            sb.AppendLine($"# ... truncated to first {maxDataRows} data rows for chat context");
+
+        return sb.ToString();
     }
 
     [HttpGet]
@@ -2036,10 +2144,14 @@ public class ReportsController : Controller
                 }
             }
 
+            _logger.LogInformation(
+                "AI analysis [AverageBasket]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
+                result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
+
             var analyzer = _analyzerFactory.Create();
             var analysis = await analyzer.AnalyzeAsync(csvData, "AverageBasket", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
 
-            return Json(new { success = true, analysis });
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
         catch (Exception ex)
         {
@@ -2090,10 +2202,14 @@ public class ReportsController : Controller
                 }
             }
 
+            _logger.LogInformation(
+                "AI analysis [PurchasesSales]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
+                result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
+
             var analyzer = _analyzerFactory.Create();
             var analysis = await analyzer.AnalyzeAsync(csvData, "PurchasesSales", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
 
-            return Json(new { success = true, analysis });
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
         catch (Exception ex)
         {
@@ -2730,16 +2846,10 @@ public class ReportsController : Controller
             if (data == null || data.Count == 0)
                 return Json(new { success = false, message = "No chart data to analyze. Please generate the chart first." });
 
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine(compareLastYear ? "Label,Value,CompareValue" : "Label,Value");
-            foreach (var dp in data)
-            {
-                if (compareLastYear)
-                    sb.AppendLine($"\"{dp.Label}\",{dp.Value},{dp.CompareValue ?? 0}");
-                else
-                    sb.AppendLine($"\"{dp.Label}\",{dp.Value}");
-            }
-            var csvData = sb.ToString();
+            // Use the same rich CSV format as the export path — gives AI proper column labels
+            // (e.g. "Last Year", "YoY %") instead of the old "CompareValue" bare header.
+            var csvBytes = new CsvExportService().GenerateChartCsv(data, filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
 
             string? customPrompt = null;
             if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
@@ -2753,11 +2863,17 @@ public class ReportsController : Controller
                 catch { }
             }
 
-            var reportContext = $"Charts ({dimension} by {metric}, Top {topN}, {dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd})";
+            var reportContext = $"Charts ({dimension} by {metric}, Top {topN}, {dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}"
+                + (compareLastYear ? ", with Last Year comparison" : "") + ")";
+
+            _logger.LogInformation(
+                "AI analysis [Chart]: {Dimension} x {Metric}, Top {TopN}, compareLY={CompareLY}, {DataPoints} points, {CsvLen} chars, user={User}",
+                dimension, metric, topN, compareLastYear, data.Count, csvData.Length, User.Identity?.Name);
+
             var analyzer = _analyzerFactory.Create();
             var analysis = await analyzer.AnalyzeAsync(csvData, reportContext, locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
 
-            return Json(new { success = true, analysis });
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
         catch (Exception ex)
         {
@@ -3171,9 +3287,12 @@ public class ReportsController : Controller
             model.PageSize = result.PageSize;
 
             var totalsSw = Stopwatch.StartNew();
-            var totals = await repo.GetCatalogueTotalsAsync(filter);
+            if (filter.ReportOn != CatalogueReportOn.Both)
+            {
+                var totals = await repo.GetCatalogueTotalsAsync(filter);
+                model.Totals = totals;
+            }
             totalsSw.Stop();
-            model.Totals = totals;
 
             // Performance instrumentation — see _DOCS/CATALOGUE_PRODUCTION_AUDIT.md §3.
             // Surface in app logs to detect slow queries per tenant/parameter combo.
@@ -3221,6 +3340,12 @@ public class ReportsController : Controller
     private async Task<(List<CatalogueRow> rows, CatalogueTotals? totals, CatalogueFilter filter)?>
         RunCatalogueExportQuery(CatalogueFilter filter)
     {
+        if (!filter.IsValid(out var validationErrors))
+        {
+            _logger.LogWarning("Export/print requested with invalid filter: {Errors}", string.Join("; ", validationErrors));
+            return null;
+        }
+
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString)) return null;
 
@@ -3230,7 +3355,9 @@ public class ReportsController : Controller
             filter.PageNumber = 1;
             filter.PageSize = int.MaxValue;
             var result = await repo.GetCatalogueDataAsync(filter);
-            var totals = await repo.GetCatalogueTotalsAsync(filter);
+            CatalogueTotals? totals = filter.ReportOn != CatalogueReportOn.Both
+                ? await repo.GetCatalogueTotalsAsync(filter)
+                : null;
             return (result.Items, totals, filter);
         }
         catch (Exception ex)
@@ -3248,7 +3375,8 @@ public class ReportsController : Controller
         string? storeCodes, string? itemsSelectionJson,
         string sortColumn, string sortDirection,
         CatalogueDateBasis dateBasis = CatalogueDateBasis.TransactionDate,
-        bool useDateTime = false)
+        bool useDateTime = false,
+        string? columnFilters = null)
     {
         var filter = new CatalogueFilter
         {
@@ -3283,7 +3411,40 @@ public class ReportsController : Controller
         if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
             filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
 
+        ApplyColumnFiltersFromJson(filter, columnFilters);
+
         return filter;
+    }
+
+    private static void ApplyColumnFiltersFromJson(CatalogueFilter filter, string? columnFilters)
+    {
+        if (string.IsNullOrWhiteSpace(columnFilters)) return;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(columnFilters);
+            if (doc.RootElement.TryGetProperty("values", out var vals) && vals.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var prop in vals.EnumerateObject())
+                {
+                    var v = prop.Value.GetString();
+                    if (!string.IsNullOrEmpty(v))
+                        filter.FilterValues[prop.Name] = v;
+                }
+            }
+            if (doc.RootElement.TryGetProperty("operators", out var ops) && ops.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var prop in ops.EnumerateObject())
+                {
+                    var v = prop.Value.GetString();
+                    if (!string.IsNullOrEmpty(v))
+                        filter.FilterOperators[prop.Name] = v;
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Malformed JSON — silently ignore, filters won't be applied.
+        }
     }
 
     [HttpGet]
@@ -3299,11 +3460,12 @@ public class ReportsController : Controller
         bool useDateTime = false,
         int profitBasedOn = 99, bool profitIncludesVat = false,
         int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
-        int costType = 99)
+        int costType = 99,
+        string? columnFilters = null)
     {
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
-            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime, columnFilters);
         filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
         filter.ProfitIncludesVat = profitIncludesVat;
         filter.StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn;
@@ -3332,11 +3494,12 @@ public class ReportsController : Controller
         bool useDateTime = false,
         int profitBasedOn = 99, bool profitIncludesVat = false,
         int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
-        int costType = 99)
+        int costType = 99,
+        string? columnFilters = null)
     {
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
-            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime, columnFilters);
         filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
         filter.ProfitIncludesVat = profitIncludesVat;
         filter.StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn;
@@ -3365,11 +3528,12 @@ public class ReportsController : Controller
         string? storeCodes = null, string? itemsSelection = null,
         string sortColumn = "ItemCode", string sortDirection = "ASC",
         CatalogueDateBasis dateBasis = CatalogueDateBasis.TransactionDate,
-        bool useDateTime = false)
+        bool useDateTime = false,
+        string? columnFilters = null)
     {
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
-            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime, columnFilters);
 
         filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
         filter.ProfitIncludesVat = profitIncludesVat;
@@ -3428,7 +3592,8 @@ public class ReportsController : Controller
         bool useDateTime = false,
         int profitBasedOn = 99, bool profitIncludesVat = false,
         int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
-        int costType = 99)
+        int costType = 99,
+        string? columnFilters = null)
     {
         if (string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Please enter at least one email address." });
@@ -3447,7 +3612,7 @@ public class ReportsController : Controller
 
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
-            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime, columnFilters);
         filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
         filter.ProfitIncludesVat = profitIncludesVat;
         filter.StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn;
@@ -3733,14 +3898,15 @@ public class ReportsController : Controller
         bool useDateTime = false,
         int profitBasedOn = 99, bool profitIncludesVat = false,
         int stockValueBasedOn = 99, bool stockValueIncludesVat = false,
-        int costType = 99)
+        int costType = 99,
+        string? columnFilters = null)
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
 
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
-            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime);
+            storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime, columnFilters);
         filter.ProfitBasedOn = (CatalogueCostBasis)profitBasedOn;
         filter.ProfitIncludesVat = profitIncludesVat;
         filter.StockValueBasedOn = (CatalogueCostBasis)stockValueBasedOn;
@@ -3775,10 +3941,14 @@ public class ReportsController : Controller
                 }
             }
 
+            _logger.LogInformation(
+                "AI analysis [Catalogue]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
+                result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
+
             var analyzer = _analyzerFactory.Create();
             var analysis = await analyzer.AnalyzeAsync(csvData, "Catalogue", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
 
-            return Json(new { success = true, analysis });
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
         catch (Exception ex)
         {
@@ -3923,6 +4093,509 @@ public class ReportsController : Controller
             }));
         }
         catch { return Json(Array.Empty<object>()); }
+    }
+
+    // ==================== Cancellation Logging ====================
+
+    public async Task<IActionResult> CancelLog()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+        var stores = await storeRepo.GetActiveStoresAsync();
+        ViewBag.StoresJson = System.Text.Json.JsonSerializer.Serialize(
+            stores.Select(s => new { code = s.StoreCode, name = s.StoreName }));
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetCancelLogData(
+        DateTime dateFrom, DateTime dateTo,
+        bool reportByDateTime = false,
+        string actionType = "All",
+        string reportType = "Detailed",
+        string primaryGroup = "NONE",
+        string secondaryGroup = "NONE",
+        int timezoneOffsetMinutes = 0,
+        int maxRecords = 50000,
+        string? itemsSelection = null,
+        string sortColumn = "SessionDateTime",
+        string sortDirection = "ASC")
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        try
+        {
+            var filter = new CancelLogFilter
+            {
+                DateFrom = dateFrom,
+                DateTo = dateTo,
+                ReportByDateTime = reportByDateTime,
+                ActionType = Enum.TryParse<CancelLogActionType>(actionType, true, out var at) ? at : CancelLogActionType.All,
+                ReportType = Enum.TryParse<CancelLogReportType>(reportType, true, out var rt) ? rt : CancelLogReportType.Detailed,
+                PrimaryGroup = primaryGroup ?? "NONE",
+                SecondaryGroup = secondaryGroup ?? "NONE",
+                TimezoneOffsetMinutes = timezoneOffsetMinutes,
+                MaxRecords = maxRecords,
+                ItemsSelection = ParseItemsSelection(itemsSelection),
+                SortColumn = sortColumn,
+                SortDirection = sortDirection
+            };
+
+            var repo = _repositoryFactory.CreateCancelLogRepository(tenantConnString);
+
+            if (filter.ReportType == CancelLogReportType.Summary)
+            {
+                var (rows, totalRecords) = await repo.GetSummaryAsync(filter);
+                return Json(new { success = true, data = rows, totalRows = rows.Count, totalRecords, reportType = "Summary" });
+            }
+            else
+            {
+                var (rows, totalRecords) = await repo.GetDetailedAsync(filter);
+                return Json(new { success = true, data = rows, totalRows = rows.Count, totalRecords, reportType = "Detailed" });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading cancellation log data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveCancelLogSchedule(
+        string scheduleName, string recurrenceType, string exportFormat,
+        string scheduleTime, string recipients, string? filterJson = null,
+        bool includeAiAnalysis = false, bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected." });
+
+        try
+        {
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.CancelLog,
+                ScheduleName = scheduleName,
+                RecurrenceType = recurrenceType,
+                ExportFormat = exportFormat,
+                ScheduleTime = TimeSpan.Parse(scheduleTime),
+                Recipients = recipients,
+                ParametersJson = filterJson ?? "{}",
+                IncludeAiAnalysis = includeAiAnalysis,
+                SkipIfEmpty = skipIfEmpty,
+                IsActive = true,
+                CreatedBy = User.Identity?.Name ?? "unknown"
+            };
+
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.CancelLog);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            schedule.CreatedBy = User.Identity?.Name ?? "unknown";
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving cancel log schedule");
+            return Json(new { success = false, message = "Failed to save schedule. The schedule tables may not exist yet." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetCancelLogSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(Array.Empty<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.CancelLog);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                s.SkipIfEmpty
+            }));
+        }
+        catch { return Json(Array.Empty<object>()); }
+    }
+
+    // ==================== CancelLog Export / Email / AI ====================
+
+    private async Task<(List<CancelLogDetailedRow>? detailed, List<CancelLogSummaryRow>? summary, CancelLogFilter filter)?> RunCancelLogQuery(
+        DateTime dateFrom, DateTime dateTo, bool reportByDateTime, string actionType, string reportType,
+        string primaryGroup, string secondaryGroup, int timezoneOffsetMinutes, int maxRecords,
+        string sortColumn, string sortDirection, string? itemsSelectionJson)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var filter = new CancelLogFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            ReportByDateTime = reportByDateTime,
+            ActionType = Enum.TryParse<CancelLogActionType>(actionType, true, out var at) ? at : CancelLogActionType.All,
+            ReportType = Enum.TryParse<CancelLogReportType>(reportType, true, out var rt) ? rt : CancelLogReportType.Detailed,
+            PrimaryGroup = primaryGroup ?? "NONE",
+            SecondaryGroup = secondaryGroup ?? "NONE",
+            TimezoneOffsetMinutes = timezoneOffsetMinutes,
+            MaxRecords = maxRecords,
+            ItemsSelection = ParseItemsSelection(itemsSelectionJson),
+            SortColumn = sortColumn,
+            SortDirection = sortDirection
+        };
+
+        try
+        {
+            var repo = _repositoryFactory.CreateCancelLogRepository(tenantConnString);
+
+            if (filter.ReportType == CancelLogReportType.Summary)
+            {
+                var (rows, _) = await repo.GetSummaryAsync(filter);
+                return (null, rows, filter);
+            }
+            else
+            {
+                var (rows, _) = await repo.GetDetailedAsync(filter);
+                return (rows, null, filter);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting CancelLog report");
+            return null;
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportCancelLogCsv(
+        DateTime dateFrom, DateTime dateTo,
+        bool reportByDateTime = false,
+        string actionType = "All",
+        string reportType = "Detailed",
+        string primaryGroup = "NONE",
+        string secondaryGroup = "NONE",
+        int timezoneOffsetMinutes = 0,
+        int maxRecords = 50000,
+        string sortColumn = "SessionDateTime",
+        string sortDirection = "ASC",
+        string? itemsSelectionJson = null)
+    {
+        var result = await RunCancelLogQuery(dateFrom, dateTo, reportByDateTime, actionType, reportType,
+            primaryGroup, secondaryGroup, timezoneOffsetMinutes, maxRecords,
+            sortColumn, sortDirection, itemsSelectionJson);
+        if (result == null) return RedirectToAction("CancelLog");
+
+        var service = new CsvExportService();
+        var bytes = service.GenerateCancelLogCsv(result.Value.detailed, result.Value.summary, result.Value.filter);
+        return File(bytes, "text/csv", $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportCancelLogExcel(
+        DateTime dateFrom, DateTime dateTo,
+        bool reportByDateTime = false,
+        string actionType = "All",
+        string reportType = "Detailed",
+        string primaryGroup = "NONE",
+        string secondaryGroup = "NONE",
+        int timezoneOffsetMinutes = 0,
+        int maxRecords = 50000,
+        string sortColumn = "SessionDateTime",
+        string sortDirection = "ASC",
+        string? itemsSelectionJson = null)
+    {
+        var result = await RunCancelLogQuery(dateFrom, dateTo, reportByDateTime, actionType, reportType,
+            primaryGroup, secondaryGroup, timezoneOffsetMinutes, maxRecords,
+            sortColumn, sortDirection, itemsSelectionJson);
+        if (result == null) return RedirectToAction("CancelLog");
+
+        var service = new ExcelExportService();
+        var bytes = service.GenerateCancelLogExcel(result.Value.detailed, result.Value.summary, result.Value.filter);
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportCancelLogPdf(
+        DateTime dateFrom, DateTime dateTo,
+        bool reportByDateTime = false,
+        string actionType = "All",
+        string reportType = "Detailed",
+        string primaryGroup = "NONE",
+        string secondaryGroup = "NONE",
+        int timezoneOffsetMinutes = 0,
+        int maxRecords = 50000,
+        string sortColumn = "SessionDateTime",
+        string sortDirection = "ASC",
+        string? itemsSelectionJson = null)
+    {
+        var result = await RunCancelLogQuery(dateFrom, dateTo, reportByDateTime, actionType, reportType,
+            primaryGroup, secondaryGroup, timezoneOffsetMinutes, maxRecords,
+            sortColumn, sortDirection, itemsSelectionJson);
+        if (result == null) return RedirectToAction("CancelLog");
+
+        var service = new PdfExportService();
+        var bytes = service.GenerateCancelLogPdf(result.Value.detailed, result.Value.summary, result.Value.filter);
+        return File(bytes, "application/pdf", $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf");
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendCancelLogReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo,
+        bool reportByDateTime = false,
+        string actionType = "All",
+        string reportType = "Detailed",
+        string primaryGroup = "NONE",
+        string secondaryGroup = "NONE",
+        int timezoneOffsetMinutes = 0,
+        int maxRecords = 50000,
+        string sortColumn = "SessionDateTime",
+        string sortDirection = "ASC",
+        string? itemsSelectionJson = null)
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Please enter at least one email address." });
+
+        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        if (invalidEmails.Length > 0)
+            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
+
+        var ccList = ParseAndValidateEmailList(cc);
+        var bccList = ParseAndValidateEmailList(bcc);
+        if (ccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
+        if (bccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
+
+        var result = await RunCancelLogQuery(dateFrom, dateTo, reportByDateTime, actionType, reportType,
+            primaryGroup, secondaryGroup, timezoneOffsetMinutes, maxRecords,
+            sortColumn, sortDirection, itemsSelectionJson);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateCancelLogPdf(result.Value.detailed, result.Value.summary, result.Value.filter);
+                fileName = $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateCancelLogCsv(result.Value.detailed, result.Value.summary, result.Value.filter);
+                fileName = $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateCancelLogExcel(result.Value.detailed, result.Value.summary, result.Value.filter);
+                fileName = $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        var rowCount = result.Value.detailed?.Count ?? result.Value.summary?.Count ?? 0;
+
+        string? templateBody = null;
+        string? templateSubject = null;
+        if (templateId.HasValue && templateId > 0)
+        {
+            try
+            {
+                var tenantConnString = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConnString))
+                {
+                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
+                    if (tmpl != null)
+                    {
+                        templateBody = tmpl.EmailBodyHtml;
+                        templateSubject = tmpl.EmailSubject;
+                    }
+                }
+            }
+            catch { /* fall back to default */ }
+        }
+
+        string ReplaceMergeFields(string text) => text
+            .Replace("\u00ABReportName\u00BB", "Cancel Log")
+            .Replace("\u00ABDatabaseName\u00BB", dbName)
+            .Replace("\u00ABPeriod\u00BB", period)
+            .Replace("\u00ABRowCount\u00BB", rowCount.ToString())
+            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
+            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
+            .Replace("\u00ABUserName\u00BB", userName)
+            .Replace("\u00ABCompanyName\u00BB", dbName)
+            .Replace("\u00AB", "").Replace("\u00BB", "");
+
+        var subject = string.IsNullOrWhiteSpace(emailSubject)
+            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Cancel Log Report \u2014 {period}")
+            : emailSubject;
+
+        var selectionLines = new List<string>
+        {
+            $"Action Type: {actionType}",
+            $"Report Type: {reportType}"
+        };
+        if (primaryGroup != "NONE") selectionLines.Add($"Primary Group: {primaryGroup}");
+        if (secondaryGroup != "NONE") selectionLines.Add($"Secondary Group: {secondaryGroup}");
+        if (reportByDateTime) selectionLines.Add("Report by DateTime: Yes");
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
+        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
+            ? ReplaceMergeFields(templateBody)
+            : $@"
+<div style='font-family:Arial,sans-serif;max-width:600px;'>
+    <h2 style='color:#2563eb;'>Cancel Log Report</h2>
+    <table style='border-collapse:collapse;width:100%;margin:16px 0;'>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Database</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Period</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{period}</td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Rows</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{rowCount}</td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{exportFormat}</td></tr>
+    </table>
+    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
+    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
+    <p style='color:#6b7280;font-size:13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
+</div>";
+        var selectionsText = string.Join("\n", selectionLines);
+        var textBody = $"Cancel Log Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {rowCount}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+
+        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
+        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
+        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+
+        var sentCount = 0;
+        var sendErrors = new List<string>();
+        foreach (var email in emails)
+        {
+            try
+            {
+                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
+                sentCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send CancelLog report email to {Email}", email);
+                sendErrors.Add(email);
+            }
+        }
+
+        if (sendErrors.Count > 0 && sentCount == 0)
+            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", sendErrors)}" });
+
+        var msg = sentCount == 1 ? $"Report sent to {emails[0]}" : $"Report sent to {sentCount} recipient(s)";
+        if (sendErrors.Count > 0) msg += $" (failed: {string.Join(", ", sendErrors)})";
+        return Json(new { success = true, message = msg });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeCancelLogReport(
+        DateTime dateFrom, DateTime dateTo,
+        bool reportByDateTime = false,
+        string actionType = "All",
+        string reportType = "Detailed",
+        string primaryGroup = "NONE",
+        string secondaryGroup = "NONE",
+        int timezoneOffsetMinutes = 0,
+        int maxRecords = 50000,
+        string sortColumn = "SessionDateTime",
+        string sortDirection = "ASC",
+        string? itemsSelectionJson = null,
+        string? locale = "el", int? promptTemplateId = null)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var result = await RunCancelLogQuery(dateFrom, dateTo, reportByDateTime, actionType, reportType,
+            primaryGroup, secondaryGroup, timezoneOffsetMinutes, maxRecords,
+            sortColumn, sortDirection, itemsSelectionJson);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        var rowCount = result.Value.detailed?.Count ?? result.Value.summary?.Count ?? 0;
+        if (rowCount == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvService = new CsvExportService();
+            var csvBytes = csvService.GenerateCancelLogCsv(result.Value.detailed, result.Value.summary, result.Value.filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
+            _logger.LogInformation(
+                "AI analysis [CancelLog]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
+                rowCount, csvData.Length, locale, User.Identity?.Name);
+
+            var analyzer = _analyzerFactory.Create();
+            var analysis = await analyzer.AnalyzeAsync(csvData, "CancelLog", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Cancel Log report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
     }
 
 }

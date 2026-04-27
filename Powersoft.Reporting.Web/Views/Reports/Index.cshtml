@@ -29,6 +29,9 @@
                 <a class="nav-link" asp-action="BelowMinStock">
                     <i class="bi bi-exclamation-triangle me-2"></i>Below Minimum Stock
                 </a>
+                <a class="nav-link" asp-action="CancelLog">
+                    <i class="bi bi-x-circle me-2"></i>Cancellation Logging
+                </a>
             </nav>
             
             <hr class="my-3">
@@ -187,6 +190,29 @@
                                     ready for replenishment orders with supplier and store breakdown.
                                 </p>
                                 <a asp-action="BelowMinStock" class="btn btn-danger mt-auto">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100" style="border-color:#dc2626;">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="rounded-circle p-3 me-3" style="background:rgba(220,38,38,0.10);">
+                                        <i class="bi bi-x-circle" style="font-size: 1.5rem; color:#dc2626;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Cancellation Logging</h5>
+                                        <p class="text-muted small mb-0">POS void &amp; cancel tracking</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Track deleted lines, cancelled invoices, and complimentary items
+                                    from POS transactions with detailed or summary grouping.
+                                </p>
+                                <a asp-action="CancelLog" class="btn mt-auto text-white" style="background:#dc2626;">
                                     <i class="bi bi-arrow-right me-1"></i>Open Report
                                 </a>
                             </div>

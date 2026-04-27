@@ -1,0 +1,1083 @@
+@using Powersoft.Reporting.Core.Models
+@{
+    ViewData["Title"] = "Cancellation Logging";
+    var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
+    var storesJson = ViewBag.StoresJson as string ?? "[]";
+    var canSchedule = true;
+}
+
+<style>
+    .stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+    .stat-value{font-size:1.5rem;font-weight:700;color:#1e293b;}
+    .stat-label{font-size:.8rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:4px;}
+    .group-header-row td{background:#f1f5f9!important;font-weight:600;border-top:2px solid #cbd5e1;}
+    .group-header-row.l2 td{background:#e8f0fe!important;font-weight:600;border-top:1px solid #93c5fd;}
+</style>
+
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-start">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
+                    <li class="breadcrumb-item active">Cancellation Logging</li>
+                </ol>
+            </nav>
+            <h2 class="mb-0">
+                <i class="bi bi-x-circle me-2 text-danger"></i>Cancellation Logging
+            </h2>
+            <p class="text-muted mb-0">Deleted lines, cancelled invoices, and complimentary items from POS transactions</p>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-funnel me-2"></i>Report Parameters</div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-12">
+                <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                <div class="date-presets btn-group flex-wrap" role="group">
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetYesterday" value="yesterday" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetYesterday">Yesterday</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLast7" value="last7" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLast7">Last 7 Days</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                </div>
+            </div>
+        </div>
+        <hr class="my-3">
+        <div class="row g-3 mb-3 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Date From <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="dateFrom" onchange="clearPreset()">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Date To <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="dateTo" onchange="clearPreset()">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Date Mode</label>
+                <select class="form-select" id="dateMode">
+                    <option value="date" selected>Date Only</option>
+                    <option value="datetime">Date + Time</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Line Type</label>
+                <select class="form-select" id="lineType">
+                    <option value="All" selected>All</option>
+                    <option value="Deleted">Deleted Lines</option>
+                    <option value="Cancelled">Cancelled Invoices</option>
+                    <option value="Complimentary">Complimentary</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Report Type</label>
+                <select class="form-select" id="reportType">
+                    <option value="Detailed" selected>Detailed</option>
+                    <option value="Summary">Summary</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Max Records</label>
+                <input type="number" class="form-control" id="maxRecords" value="50000" min="100" max="200000">
+            </div>
+        </div>
+        <div class="row g-3 mb-3 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold">Primary Group</label>
+                <select class="form-select" id="primaryGroup">
+                    <option value="NONE" selected>None</option>
+                    <option value="DATE">Date</option>
+                    <option value="MONTH">Month</option>
+                    <option value="CUST">Customer</option>
+                    <option value="ACTION">Action</option>
+                    <option value="STORE">Store</option>
+                    <option value="USER">User</option>
+                    <option value="ZREPORT">Z-Report</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold">Secondary Group</label>
+                <select class="form-select" id="secondaryGroup">
+                    <option value="NONE" selected>None</option>
+                    <option value="DATE">Date</option>
+                    <option value="MONTH">Month</option>
+                    <option value="CUST">Customer</option>
+                    <option value="ACTION">Action</option>
+                    <option value="STORE">Store</option>
+                    <option value="USER">User</option>
+                    <option value="ZREPORT">Z-Report</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
+            <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
+                <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
+                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            </button>
+            @if (canSchedule)
+            {
+                <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                    <i class="bi bi-clock-history me-2"></i>Schedule
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@await Html.PartialAsync("_ItemsSelection", new ItemsSelectionConfig
+{
+    ShowCategories = true,
+    ShowDepartments = true,
+    ShowBrands = true,
+    ShowSeasons = true,
+    ShowSuppliers = true,
+    ShowStores = true,
+    ShowCustomers = true,
+    ShowItems = true,
+    ShowUsers = true,
+    ShowZReports = true,
+    ShowModels = true,
+    ShowColours = true,
+    ShowSizes = true,
+    ShowGroupSizes = true,
+    ShowFabrics = true,
+    ShowAttributes = true,
+    ShowStockFilter = false,
+    ShowECommerce = false,
+    ShowModifiedDate = false,
+    StoresJson = storesJson
+})
+
+<div id="reportAlert" style="display:none;"></div>
+
+<div id="reportLoading" style="display:none;" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2 text-muted">Loading report data...</p>
+</div>
+
+<!-- KPI Cards -->
+<div id="kpiCards" class="row mb-4 g-3" style="display:none;"></div>
+
+<!-- Results -->
+<div id="reportResults" style="display:none;">
+    <div class="card" id="results">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>
+                <i class="bi bi-table me-2"></i>Results: <span id="rowCountInfo">0</span> rows
+                <span id="groupBadges"></span>
+            </span>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-success" onclick="exportServerCsv()" title="Export CSV">
+                        <i class="bi bi-filetype-csv me-1"></i>CSV
+                    </button>
+                    <button class="btn btn-outline-success" onclick="exportServerExcel()" title="Export Excel">
+                        <i class="bi bi-filetype-xlsx me-1"></i>Excel
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="exportServerPdf()" title="Export PDF">
+                        <i class="bi bi-filetype-pdf me-1"></i>PDF
+                    </button>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
+                    <i class="bi bi-envelope me-1"></i>Send to Email
+                </button>
+                <button class="btn btn-sm btn-outline-info" onclick="analyzeReport()" title="AI-powered report analysis" id="btnAnalyze">
+                    <i class="bi bi-stars me-1"></i>AI Analyze
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0" id="reportTable">
+                    <thead class="table-light" id="reportHead"></thead>
+                    <tbody id="reportBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Schedule Modal -->
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-clock-history me-2 text-warning"></i>Schedule Report</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="scheduleAlert" style="display:none;"></div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Schedule Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="schedName" placeholder="e.g. Daily Cancel Log">
+                        <input type="hidden" id="schedId" value="">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="schedRecipients" placeholder="user@@example.com" value="gm@@powersoft.com.cy">
+                        <small class="text-muted">Separate multiple emails with ; or ,</small>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Recurrence</label>
+                        <select class="form-select" id="schedRecurrence">
+                            <option value="Daily">Daily</option>
+                            <option value="Weekly">Weekly</option>
+                            <option value="Monthly">Monthly</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Time</label>
+                        <input type="time" class="form-control" id="schedTime" value="08:00">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Export Format</label>
+                        <select class="form-select" id="schedFormat">
+                            <option value="CSV">CSV</option>
+                            <option value="Excel">Excel</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="schedSkipIfEmpty" checked>
+                            <label class="form-check-label fw-semibold" for="schedSkipIfEmpty">Don't send if empty</label>
+                        </div>
+                    </div>
+                    <div class="col-12 mt-2">
+                        <h6 class="text-muted mb-2"><i class="bi bi-stars me-1"></i>AI Analysis</h6>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="schedIncludeAi">
+                            <label class="form-check-label fw-semibold" for="schedIncludeAi">Include AI Analysis in email</label>
+                        </div>
+                        <small class="text-muted d-block mt-1">When enabled, an AI-generated summary will be included in the scheduled email body.</small>
+                    </div>
+                </div>
+                <hr>
+                <h6 class="text-muted mb-2"><i class="bi bi-list-ul me-1"></i>Existing Schedules</h6>
+                <div id="existingSchedules"><em class="text-muted">Loading...</em></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary me-auto" onclick="resetScheduleForm()" title="Clear the form"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Send to Email Modal -->
+<div class="modal fade" id="sendEmailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-envelope me-2"></i>Send Report via Email</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">To <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="sendEmailRecipients" placeholder="user@@company.com, manager@@company.com">
+                        <small class="text-muted">Comma or semicolon separated</small>
+                        <div class="invalid-feedback" id="sendEmailRecipientsError"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Template</label>
+                        <select class="form-select" id="sendEmailTemplate" onchange="onEmailTemplateChange()">
+                            <option value="">-- No template (default) --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">CC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailCC" placeholder="cc@@example.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">BCC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailBCC" placeholder="bcc@@example.com">
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">Subject</label>
+                        <input type="text" class="form-control" id="sendEmailSubject" value="Cancellation Logging Report">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Format</label>
+                        <select class="form-select" id="sendEmailFormat">
+                            <option value="Excel" selected>Excel (.xlsx)</option>
+                            <option value="PDF">PDF</option>
+                            <option value="CSV">CSV</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email Message</label>
+                        <div class="border rounded" style="max-height:250px;overflow-y:auto;padding:12px;font-family:Arial,sans-serif;font-size:13px;background:#fafafa;" id="sendEmailBodyPreview">
+                            <em class="text-muted">Select a template to preview the email body, or the default body will be used.</em>
+                        </div>
+                    </div>
+                </div>
+                <div id="sendEmailAlert" class="mt-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <a asp-controller="Settings" asp-action="EmailTemplates" class="btn btn-outline-secondary me-auto" title="Manage email templates">
+                    <i class="bi bi-gear me-1"></i>Manage Templates
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="sendEmailBtn" onclick="sendReportEmail()">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="sendEmailSpinner"></span>
+                    <i class="bi bi-send me-1" id="sendEmailIcon"></i>Send
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Analysis Modal -->
+<div class="modal fade" id="aiAnalysisModal" tabindex="-1" aria-labelledby="aiAnalysisModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header" style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);color:white;">
+                <h5 class="modal-title" id="aiAnalysisModalLabel"><i class="bi bi-stars me-2"></i>AI Business Intelligence</h5>
+                <div class="ms-auto me-3 d-flex align-items-center gap-2">
+                    <select id="aiPromptTemplateSelect" class="form-select form-select-sm" style="width:auto;min-width:140px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" title="AI Prompt Template" onchange="this.setAttribute('data-user-picked','1')">
+                        <option value="0" style="color:#333;">Default Prompt</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="togglePromptEditor()" title="Manage AI prompt templates" style="border-color:rgba(255,255,255,0.3);">
+                        <i class="bi bi-gear"></i>
+                    </button>
+                    <label class="me-1 mb-0 small opacity-75" for="aiLangSelect"><i class="bi bi-translate"></i></label>
+                    <select id="aiLangSelect" class="form-select form-select-sm" style="width:auto;min-width:120px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" onchange="saveAiLang(this.value)">
+                        <option value="el" style="color:#333;">Ελληνικά</option>
+                        <option value="en" style="color:#333;">English</option>
+                        <option value="sr" style="color:#333;">Srpski</option>
+                        <option value="de" style="color:#333;">Deutsch</option>
+                        <option value="fr" style="color:#333;">Français</option>
+                    </select>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="aiLoading" class="text-center py-5">
+                    <div class="spinner-grow text-primary mb-2" style="width:3rem;height:3rem;"></div>
+                    <h6 class="mt-3 text-muted">AI is analyzing your report...</h6>
+                    <p class="text-muted small">Identifying patterns, trends, and actionable insights</p>
+                    <div class="progress mx-auto" style="width:200px;height:4px;"><div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:100%"></div></div>
+                </div>
+                <div id="aiError" class="d-none p-4"><div class="alert alert-danger" id="aiErrorMsg"></div></div>
+                <div id="aiPromptEditor" class="d-none border-bottom" style="background:#f8fafc;">
+                    <div class="p-4">
+                        <h6 class="mb-3"><i class="bi bi-pencil-square me-1"></i>AI Prompt Templates</h6>
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <label class="form-label small fw-semibold">Template Name</label>
+                                <input type="text" class="form-control form-control-sm" id="aiPromptName" placeholder="e.g. Focus on deletions">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Applies to</label>
+                                <select class="form-select form-select-sm" id="aiPromptReportType">
+                                    <option value="">All Reports</option>
+                                    <option value="CancelLog" selected>Cancellation Logging</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="aiPromptIsDefault">
+                                    <label class="form-check-label small" for="aiPromptIsDefault">Set as default</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-semibold">System Prompt</label>
+                                <textarea class="form-control form-control-sm" id="aiPromptText" rows="6" placeholder="You are a senior POS operations analyst..."></textarea>
+                                <small class="text-muted">This prompt will be sent to the AI as the system instruction.</small>
+                            </div>
+                            <div class="col-12 d-flex gap-2">
+                                <button class="btn btn-sm btn-primary" onclick="saveAiPromptTemplate()"><i class="bi bi-save me-1"></i>Save Template</button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="clearPromptEditor()">Clear</button>
+                                <div id="aiPromptAlert" class="ms-2 small align-self-center"></div>
+                            </div>
+                        </div>
+                        <hr class="my-3">
+                        <div id="aiPromptTemplatesList" class="small text-muted">Loading templates...</div>
+                    </div>
+                </div>
+                <div id="aiResults" class="d-none">
+                    <div id="aiHealthBanner" class="px-4 py-3 d-flex align-items-center justify-content-between" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+                        <div class="d-flex align-items-center gap-3">
+                            <div id="aiHealthBadge" class="d-flex flex-column align-items-center justify-content-center rounded-circle" style="width:64px;height:64px;font-weight:700;font-size:1.2rem;"></div>
+                            <div><div class="fw-bold" id="aiHealthLabel" style="font-size:1.1rem;"></div><div class="text-muted small" id="aiTrendDesc"></div></div>
+                        </div>
+                        <div id="aiTrendBadge" class="badge fs-6 px-3 py-2"></div>
+                    </div>
+                    <div class="p-4">
+                        <div class="alert border-start border-4 border-primary bg-primary bg-opacity-10 mb-4" id="aiExecSummary" style="font-size:0.95rem;"></div>
+                        <div class="row g-2 mb-4" id="aiKpis"></div>
+                        <div class="row g-4">
+                            <div class="col-md-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Key Findings</h6></div><div class="card-body pt-2" id="aiKeyFindings"></div></div></div>
+                            <div class="col-md-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-check2-circle text-success me-2"></i>Recommendations</h6></div><div class="card-body pt-2" id="aiRecs"></div></div></div>
+                        </div>
+                        <div class="row g-4 mt-1">
+                            <div class="col-md-6" id="aiTopSection"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-trophy-fill text-warning me-2"></i>Top Items</h6></div><div class="card-body pt-2" id="aiTopPerformers"></div></div></div>
+                            <div class="col-md-6" id="aiBottomSection"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Needs Attention</h6></div><div class="card-body pt-2" id="aiBottomPerformers"></div></div></div>
+                        </div>
+                        <div id="aiAlertsSection" class="mt-4"></div>
+                    </div>
+                    <div class="px-4 py-2 d-flex justify-content-between align-items-center" style="background:#f8fafc;border-top:1px solid #e2e8f0;">
+                        <span class="text-muted small"><i class="bi bi-cpu me-1"></i><span id="aiModel"></span></span>
+                        <span class="text-muted small"><i class="bi bi-currency-dollar me-1"></i><span id="aiTokens"></span></span>
+                        <span class="text-muted small"><i class="bi bi-clock me-1"></i><span id="aiTime"></span></span>
+                    </div>
+                    <div class="border-top" style="background:#f8fafc;">
+                        <div class="px-4 py-2"><h6 class="mb-2 text-muted"><i class="bi bi-chat-dots me-1"></i>Follow-up Questions</h6></div>
+                        <div id="aiChatMessages" class="px-4" style="max-height:300px;overflow-y:auto;"></div>
+                        <div class="px-4 py-3">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="aiChatInput" placeholder="Ask a follow-up question about this report..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendAiChat();}">
+                                <button class="btn btn-primary" type="button" onclick="sendAiChat()" id="btnSendChat"><i class="bi bi-send"></i></button>
+                            </div>
+                            <div id="aiChatTokenInfo" class="text-muted small mt-1" style="display:none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);" onclick="analyzeReport()" id="btnReanalyze" style="display:none;"><i class="bi bi-arrow-clockwise me-1"></i>Re-analyze</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var _sortCol = 'SessionDateTime';
+var _sortDir = 'ASC';
+var _lastData = [];
+var _lastReportType = 'Detailed';
+var _lastTotalRecords = 0;
+var _aiConversation = [];
+var _aiTotalChatTokens = { input: 0, output: 0 };
+var _emailTemplatesCache = [];
+
+(function init() {
+    var today = new Date();
+    var yyyy = today.getFullYear(), mm = String(today.getMonth()+1).padStart(2,'0'), dd = String(today.getDate()).padStart(2,'0');
+    document.getElementById('dateFrom').value = yyyy+'-'+mm+'-'+dd;
+    document.getElementById('dateTo').value = yyyy+'-'+mm+'-'+dd;
+    document.querySelectorAll('input[name="DatePreset"]').forEach(function(r) {
+        r.addEventListener('change', function() { applyPresetDates(this.value); });
+    });
+    document.getElementById('scheduleModal').addEventListener('show.bs.modal', function() { loadSchedules(); });
+    fetch('/Reports/GetAiStatus').then(r=>r.json()).then(d=>{
+        if(!d.configured){var btn=document.getElementById('btnAnalyze');if(btn){btn.title='AI not configured';btn.classList.add('disabled');}}
+    }).catch(()=>{});
+})();
+
+function escapeHtml(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmtDec(v) { if (v==null) return '0.00'; return Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtInt(v) { if (v==null) return '0'; return Number(v).toLocaleString(undefined,{maximumFractionDigits:0}); }
+
+function clearPreset() { document.querySelectorAll('input[name="DatePreset"]').forEach(r=>r.checked=false); }
+
+function applyPresetDates(preset) {
+    var today = new Date(), y = today.getFullYear(), m = today.getMonth(), d = today.getDate();
+    var from, to;
+    switch(preset) {
+        case 'today': from = to = today; break;
+        case 'yesterday': from = to = new Date(y,m,d-1); break;
+        case 'last7': from = new Date(y,m,d-7); to = today; break;
+        case 'last30': from = new Date(y,m,d-30); to = today; break;
+        case 'thisMonth': from = new Date(y,m,1); to = today; break;
+        case 'lastMonth': from = new Date(y,m-1,1); to = new Date(y,m,0); break;
+        case 'ytd': from = new Date(y,0,1); to = today; break;
+        case 'lastYear': from = new Date(y-1,0,1); to = new Date(y-1,11,31); break;
+        default: return;
+    }
+    document.getElementById('dateFrom').value = fmtDate(from);
+    document.getElementById('dateTo').value = fmtDate(to);
+}
+function fmtDate(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+function showAlert(id, type, msg) {
+    var el = document.getElementById(id);
+    el.innerHTML = '<div class="alert alert-'+type+' alert-dismissible fade show"><i class="bi bi-info-circle me-2"></i>'+escapeHtml(msg)+'<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    el.style.display = '';
+}
+
+function getFilterParams() {
+    return {
+        dateFrom: document.getElementById('dateFrom').value,
+        dateTo: document.getElementById('dateTo').value,
+        reportByDateTime: document.getElementById('dateMode').value === 'datetime',
+        actionType: document.getElementById('lineType').value,
+        reportType: document.getElementById('reportType').value,
+        primaryGroup: document.getElementById('primaryGroup').value,
+        secondaryGroup: document.getElementById('secondaryGroup').value,
+        timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+        maxRecords: document.getElementById('maxRecords').value,
+        sortColumn: _sortCol,
+        sortDirection: _sortDir
+    };
+}
+
+function buildExportUrl(action) {
+    var p = getFilterParams();
+    var qs = 'dateFrom='+p.dateFrom+'&dateTo='+p.dateTo+'&reportByDateTime='+p.reportByDateTime
+        +'&actionType='+p.actionType+'&reportType='+p.reportType+'&primaryGroup='+p.primaryGroup
+        +'&secondaryGroup='+p.secondaryGroup+'&timezoneOffsetMinutes='+p.timezoneOffsetMinutes
+        +'&maxRecords='+p.maxRecords+'&sortColumn='+p.sortColumn+'&sortDirection='+p.sortDirection;
+    if (typeof getItemsSelectionFilter === 'function') {
+        var sel = getItemsSelectionFilter();
+        if (sel) qs += '&itemsSelectionJson=' + encodeURIComponent(JSON.stringify(sel));
+    }
+    return '/Reports/' + action + '?' + qs;
+}
+
+function exportServerCsv() { if (!_lastData.length) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportCancelLogCsv'); }
+function exportServerExcel() { if (!_lastData.length) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportCancelLogExcel'); }
+function exportServerPdf() { if (!_lastData.length) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportCancelLogPdf'); }
+
+function generateReport() {
+    var dateFrom = document.getElementById('dateFrom').value;
+    var dateTo = document.getElementById('dateTo').value;
+    if (!dateFrom || !dateTo) { showAlert('reportAlert','danger','Please select both From and To dates.'); return; }
+    if (dateFrom > dateTo) { showAlert('reportAlert','danger','Date From cannot be after Date To.'); return; }
+    var pg = document.getElementById('primaryGroup').value;
+    var sg = document.getElementById('secondaryGroup').value;
+    if (pg !== 'NONE' && sg !== 'NONE' && pg === sg) { showAlert('reportAlert','danger','Primary and Secondary groups must be different.'); return; }
+
+    document.getElementById('reportAlert').style.display = 'none';
+    document.getElementById('reportResults').style.display = 'none';
+    document.getElementById('kpiCards').style.display = 'none';
+    document.getElementById('reportLoading').style.display = '';
+
+    var btn = document.getElementById('generateBtn');
+    btn.querySelector('.btn-text').classList.add('d-none');
+    btn.querySelector('.spinner-border').classList.remove('d-none');
+    btn.disabled = true;
+
+    var fd = new FormData();
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+    if (typeof getItemsSelectionFilter === 'function') fd.append('itemsSelection', JSON.stringify(getItemsSelectionFilter()));
+
+    fetch('@Url.Action("GetCancelLogData","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            if (!d.success) { showAlert('reportAlert','danger',d.message); return; }
+            _lastData = d.data || [];
+            _lastReportType = d.reportType || 'Detailed';
+            _lastTotalRecords = d.totalRecords || _lastData.length;
+            renderKpis(_lastData, _lastReportType);
+            renderTable(_lastData, _lastReportType);
+            var info = _lastData.length + ' row(s)';
+            if (_lastTotalRecords > _lastData.length) info += ' (limited from ' + fmtInt(_lastTotalRecords) + ')';
+            document.getElementById('rowCountInfo').textContent = info;
+            var badges = '';
+            if (pg !== 'NONE') badges += '<span class="badge bg-secondary ms-2">Grouped by '+pg+'</span>';
+            if (sg !== 'NONE') badges += '<span class="badge bg-secondary ms-1">then '+sg+'</span>';
+            document.getElementById('groupBadges').innerHTML = badges;
+            document.getElementById('reportResults').style.display = '';
+            if (_lastData.length === 0) showAlert('reportAlert','info','No cancellation records found for the selected criteria.');
+        })
+        .catch(function(e) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            showAlert('reportAlert','danger','Request failed: '+e.message);
+        });
+}
+
+function renderKpis(data, rType) {
+    var cards = document.getElementById('kpiCards');
+    if (!data.length) { cards.style.display = 'none'; return; }
+
+    if (rType === 'Summary') {
+        var totalDel = 0, totalCanc = 0, totalComp = 0, totalAmt = 0;
+        data.forEach(function(r) { totalDel += r.deletedAction||0; totalCanc += r.cancelledAction||0; totalComp += r.complimentaryAction||0; totalAmt += r.amount||0; });
+        cards.innerHTML =
+            '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-danger">'+fmtInt(totalDel)+'</div><div class="stat-label">Total Deleted</div></div></div>' +
+            '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-warning">'+fmtInt(totalCanc)+'</div><div class="stat-label">Total Cancelled</div></div></div>' +
+            '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-info">'+fmtInt(totalComp)+'</div><div class="stat-label">Total Complimentary</div></div></div>' +
+            '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value">'+fmtDec(totalAmt)+'</div><div class="stat-label">Total Amount</div></div></div>';
+    } else {
+        var delCnt = 0, cancCnt = 0, compCnt = 0, totalAmt = 0;
+        data.forEach(function(r) {
+            if (r.actionType === 'Deleted') delCnt++;
+            else if (r.actionType === 'Cancelled') cancCnt++;
+            else compCnt++;
+            totalAmt += r.amount || 0;
+        });
+        cards.innerHTML =
+            '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-danger">'+fmtInt(delCnt)+'</div><div class="stat-label">Deleted</div></div></div>' +
+            '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-warning">'+fmtInt(cancCnt)+'</div><div class="stat-label">Cancelled</div></div></div>' +
+            '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-info">'+fmtInt(compCnt)+'</div><div class="stat-label">Complimentary</div></div></div>' +
+            '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value">'+fmtDec(totalAmt)+'</div><div class="stat-label">Total Amount</div></div></div>';
+    }
+    cards.style.display = '';
+}
+
+function renderTable(data, rType) {
+    var thead = document.getElementById('reportHead');
+    var tbody = document.getElementById('reportBody');
+    var hasPrimary = document.getElementById('primaryGroup').value !== 'NONE';
+    var hasSecondary = document.getElementById('secondaryGroup').value !== 'NONE';
+    var pgLabel = document.getElementById('primaryGroup').value;
+    var sgLabel = document.getElementById('secondaryGroup').value;
+
+    if (rType === 'Summary') {
+        var hdr = '<tr><th>Store/Station</th>';
+        if (hasPrimary) hdr += '<th>'+escapeHtml(pgLabel)+'</th>';
+        if (hasSecondary) hdr += '<th>'+escapeHtml(sgLabel)+'</th>';
+        hdr += '<th class="text-end">Deleted</th><th class="text-end">Cancelled</th><th class="text-end">Complimentary</th>';
+        hdr += '<th class="text-end">Invoice Total</th><th class="text-end">Quantity</th><th class="text-end">Amount</th></tr>';
+        thead.innerHTML = hdr;
+
+        if (hasPrimary) {
+            tbody.innerHTML = renderGroupedSummary(data, hasPrimary, hasSecondary, pgLabel, sgLabel);
+        } else {
+            var html = '';
+            for (var i = 0; i < data.length; i++) {
+                var r = data[i];
+                html += '<tr><td>'+escapeHtml(r.storeAndStation)+'</td>';
+                if (hasPrimary) html += '<td>'+escapeHtml(r.level1Descr)+'</td>';
+                if (hasSecondary) html += '<td>'+escapeHtml(r.level2Descr)+'</td>';
+                html += '<td class="text-end">'+fmtInt(r.deletedAction)+'</td>';
+                html += '<td class="text-end">'+fmtInt(r.cancelledAction)+'</td>';
+                html += '<td class="text-end">'+fmtInt(r.complimentaryAction)+'</td>';
+                html += '<td class="text-end">'+fmtDec(r.invoiceTotal)+'</td>';
+                html += '<td class="text-end">'+fmtDec(r.quantity)+'</td>';
+                html += '<td class="text-end">'+fmtDec(r.amount)+'</td></tr>';
+            }
+            tbody.innerHTML = html;
+        }
+    } else {
+        var hdr = '<tr><th>Store/Station</th>';
+        if (hasPrimary) hdr += '<th>'+escapeHtml(pgLabel)+'</th>';
+        if (hasSecondary) hdr += '<th>'+escapeHtml(sgLabel)+'</th>';
+        hdr += '<th>Action</th><th>Date/Time</th><th>Trans</th><th>Customer</th>';
+        hdr += '<th>Item Code</th><th>Item</th><th>User</th><th>Invoice</th><th>Z-Report</th>';
+        hdr += '<th class="text-end">Inv Lines</th><th class="text-end">Inv Total</th>';
+        hdr += '<th class="text-end">Qty</th><th class="text-end">Amount</th></tr>';
+        thead.innerHTML = hdr;
+
+        if (hasPrimary) {
+            tbody.innerHTML = renderGroupedDetailed(data, hasPrimary, hasSecondary, pgLabel, sgLabel);
+        } else {
+            tbody.innerHTML = renderDetailedRows(data, hasPrimary, hasSecondary);
+        }
+    }
+}
+
+function renderGroupedDetailed(data, hasPrimary, hasSecondary, pgLabel, sgLabel) {
+    var colCount = 12 + (hasPrimary?1:0) + (hasSecondary?1:0);
+    var groups = groupBy(data, 'level1Descr');
+    var html = '';
+    groups.forEach(function(g) {
+        html += '<tr class="group-header-row"><td colspan="'+colCount+'"><i class="bi bi-diagram-3 me-2"></i><strong>'+escapeHtml(pgLabel)+':</strong> '+escapeHtml(g.key)+'</td></tr>';
+        if (hasSecondary) {
+            var subGroups = groupBy(g.items, 'level2Descr');
+            subGroups.forEach(function(sg2) {
+                html += '<tr class="group-header-row l2"><td colspan="'+colCount+'" class="ps-4"><i class="bi bi-chevron-right me-1"></i><strong>'+escapeHtml(sgLabel)+':</strong> '+escapeHtml(sg2.key)+'</td></tr>';
+                html += renderDetailedRows(sg2.items, hasPrimary, hasSecondary);
+            });
+        } else {
+            html += renderDetailedRows(g.items, hasPrimary, hasSecondary);
+        }
+    });
+    return html;
+}
+
+function renderGroupedSummary(data, hasPrimary, hasSecondary, pgLabel, sgLabel) {
+    var colCount = 6 + (hasPrimary?1:0) + (hasSecondary?1:0);
+    var groups = groupBy(data, 'level1Descr');
+    var html = '';
+    groups.forEach(function(g) {
+        html += '<tr class="group-header-row"><td colspan="'+colCount+'"><i class="bi bi-diagram-3 me-2"></i><strong>'+escapeHtml(pgLabel)+':</strong> '+escapeHtml(g.key)+'</td></tr>';
+        if (hasSecondary) {
+            var subGroups = groupBy(g.items, 'level2Descr');
+            subGroups.forEach(function(sg2) {
+                html += '<tr class="group-header-row l2"><td colspan="'+colCount+'" class="ps-4"><i class="bi bi-chevron-right me-1"></i><strong>'+escapeHtml(sgLabel)+':</strong> '+escapeHtml(sg2.key)+'</td></tr>';
+                sg2.items.forEach(function(r) { html += renderSummaryRow(r, hasPrimary, hasSecondary); });
+            });
+        } else {
+            g.items.forEach(function(r) { html += renderSummaryRow(r, hasPrimary, hasSecondary); });
+        }
+    });
+    return html;
+}
+
+function renderDetailedRows(items, hasPrimary, hasSecondary) {
+    var html = '';
+    for (var i = 0; i < items.length; i++) {
+        var r = items[i];
+        var actionCls = r.actionType === 'Deleted' ? 'text-danger' : (r.actionType === 'Cancelled' ? 'text-warning' : 'text-info');
+        var transLabel = r.transKind === 'I' ? 'Sale' : 'Return';
+        var dtStr = r.sessionDateTime ? new Date(r.sessionDateTime).toLocaleString() : '';
+        var docId = r.invoiceId || r.creditId || '';
+        html += '<tr>';
+        html += '<td class="text-nowrap">'+escapeHtml(r.storeAndStation)+'</td>';
+        if (hasPrimary) html += '<td class="text-info fw-semibold">'+escapeHtml(r.level1Descr)+'</td>';
+        if (hasSecondary) html += '<td class="text-info">'+escapeHtml(r.level2Descr)+'</td>';
+        html += '<td class="'+actionCls+' fw-semibold">'+escapeHtml(r.actionType)+'</td>';
+        html += '<td class="text-nowrap">'+escapeHtml(dtStr)+'</td>';
+        html += '<td>'+escapeHtml(transLabel)+'</td>';
+        html += '<td>'+escapeHtml(r.customerFullName)+'</td>';
+        html += '<td>'+escapeHtml(r.itemCode)+'</td>';
+        html += '<td>'+escapeHtml(r.itemDescr)+'</td>';
+        html += '<td>'+escapeHtml(r.userCode)+'</td>';
+        html += '<td class="text-nowrap">'+escapeHtml(docId)+'</td>';
+        html += '<td>'+escapeHtml(r.zReport)+'</td>';
+        html += '<td class="text-end">'+r.totalInvoiceLines+'</td>';
+        html += '<td class="text-end">'+fmtDec(r.invoiceTotal)+'</td>';
+        html += '<td class="text-end">'+fmtDec(r.quantity)+'</td>';
+        html += '<td class="text-end">'+fmtDec(r.amount)+'</td>';
+        html += '</tr>';
+    }
+    return html;
+}
+
+function renderSummaryRow(r, hasPrimary, hasSecondary) {
+    var html = '<tr><td>'+escapeHtml(r.storeAndStation)+'</td>';
+    if (hasPrimary) html += '<td class="text-info fw-semibold">'+escapeHtml(r.level1Descr)+'</td>';
+    if (hasSecondary) html += '<td class="text-info">'+escapeHtml(r.level2Descr)+'</td>';
+    html += '<td class="text-end">'+fmtInt(r.deletedAction)+'</td>';
+    html += '<td class="text-end">'+fmtInt(r.cancelledAction)+'</td>';
+    html += '<td class="text-end">'+fmtInt(r.complimentaryAction)+'</td>';
+    html += '<td class="text-end">'+fmtDec(r.invoiceTotal)+'</td>';
+    html += '<td class="text-end">'+fmtDec(r.quantity)+'</td>';
+    html += '<td class="text-end">'+fmtDec(r.amount)+'</td></tr>';
+    return html;
+}
+
+function groupBy(arr, key) {
+    var map = {}, order = [];
+    arr.forEach(function(item) {
+        var k = item[key] || '';
+        if (!map[k]) { map[k] = []; order.push(k); }
+        map[k].push(item);
+    });
+    return order.map(function(k) { return { key: k, items: map[k] }; });
+}
+
+// ========== SCHEDULE ==========
+function loadSchedules() {
+    fetch('@Url.Action("GetCancelLogSchedules","Reports")', { credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(list) {
+            var container = document.getElementById('existingSchedules');
+            if (!list || list.length === 0) { container.innerHTML = '<p class="text-muted">No schedules configured yet.</p>'; return; }
+            var html = '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>Name</th><th>Recurrence</th><th>Time</th><th>Format</th><th>Next Run</th><th></th></tr></thead><tbody>';
+            for (var i = 0; i < list.length; i++) {
+                var s = list[i];
+                html += '<tr><td>'+escapeHtml(s.scheduleName)+'</td><td>'+escapeHtml(s.recurrenceType)+'</td><td>'+escapeHtml(s.scheduleTime)+'</td><td>'+escapeHtml(s.exportFormat)+'</td><td>'+escapeHtml(s.nextRun||'-')+'</td>';
+                html += '<td class="text-nowrap"><button class="btn btn-sm btn-outline-primary me-1" onclick="loadScheduleIntoForm('+s.scheduleId+')"><i class="bi bi-pencil"></i></button>';
+                html += '<button class="btn btn-sm btn-outline-danger" onclick="deleteSchedule('+s.scheduleId+')"><i class="bi bi-trash"></i></button></td></tr>';
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }).catch(function() { document.getElementById('existingSchedules').innerHTML = '<p class="text-danger">Failed to load schedules.</p>'; });
+}
+function resetScheduleForm() {
+    document.getElementById('schedId').value = '';
+    document.getElementById('schedName').value = '';
+    document.getElementById('schedRecipients').value = 'gm@@powersoft.com.cy';
+    document.getElementById('schedRecurrence').value = 'Daily';
+    document.getElementById('schedTime').value = '08:00';
+    document.getElementById('schedFormat').value = 'CSV';
+    document.getElementById('schedSkipIfEmpty').checked = true;
+    document.getElementById('schedIncludeAi').checked = false;
+    document.getElementById('scheduleAlert').style.display = 'none';
+}
+function saveSchedule() {
+    var name = document.getElementById('schedName').value.trim();
+    var recipients = document.getElementById('schedRecipients').value.trim();
+    if (!name) { showAlert('scheduleAlert','danger','Schedule name is required.'); return; }
+    if (!recipients) { showAlert('scheduleAlert','danger','At least one recipient is required.'); return; }
+    var fd = new FormData();
+    fd.append('scheduleName',name); fd.append('recurrenceType',document.getElementById('schedRecurrence').value);
+    fd.append('exportFormat',document.getElementById('schedFormat').value); fd.append('scheduleTime',document.getElementById('schedTime').value);
+    fd.append('recipients',recipients); fd.append('skipIfEmpty',document.getElementById('schedSkipIfEmpty').checked);
+    var sid = document.getElementById('schedId').value;
+    if (sid) fd.append('scheduleId', sid);
+    fetch('@Url.Action("SaveCancelLogSchedule","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d.success) { showAlert('scheduleAlert','danger',d.message); return; }
+            showAlert('scheduleAlert','success', d.updated ? 'Schedule updated.' : 'Schedule saved.');
+            resetScheduleForm(); loadSchedules();
+        }).catch(function(e) { showAlert('scheduleAlert','danger','Save failed: '+e.message); });
+}
+function loadScheduleIntoForm(id) {
+    fetch('@Url.Action("GetScheduleById","Reports")?id='+id, { credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(s) {
+            if (!s || s.error) return;
+            document.getElementById('schedId').value = s.scheduleId;
+            document.getElementById('schedName').value = s.scheduleName||'';
+            document.getElementById('schedRecipients').value = s.recipients||'';
+            document.getElementById('schedRecurrence').value = s.recurrenceType||'Daily';
+            document.getElementById('schedTime').value = s.scheduleTime||'08:00';
+            document.getElementById('schedFormat').value = s.exportFormat||'CSV';
+            document.getElementById('schedSkipIfEmpty').checked = s.skipIfEmpty !== false;
+            showAlert('scheduleAlert','info','Editing: '+escapeHtml(s.scheduleName));
+        });
+}
+function deleteSchedule(id) {
+    if (!confirm('Delete this schedule?')) return;
+    fetch('@Url.Action("DeleteSchedule","Reports")?id='+id, { method:'DELETE', credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d.success) { loadSchedules(); resetScheduleForm(); } else showAlert('scheduleAlert','danger',d.message||'Delete failed.'); });
+}
+
+// ========== SEND EMAIL ==========
+function validateEmailList(input) {
+    if(!input||!input.trim()) return {valid:false,errors:['Enter at least one email.']};
+    var emails = input.split(/[,;]/).map(function(e){return e.trim();}).filter(function(e){return e.length>0;});
+    var re = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
+    var invalid = emails.filter(function(e){return !re.test(e);});
+    if(invalid.length>0) return {valid:false,errors:invalid.map(function(e){return 'Invalid: '+e;})};
+    return {valid:true,emails:emails,errors:[]};
+}
+function openSendEmailModal() {
+    if (!_lastData.length) { alert('Generate a report first.'); return; }
+    document.getElementById('sendEmailRecipients').value = '';
+    document.getElementById('sendEmailAlert').style.display = 'none';
+    document.getElementById('sendEmailRecipients').classList.remove('is-invalid');
+    document.getElementById('sendEmailSubject').value = 'Cancellation Logging Report — '+document.getElementById('dateFrom').value+' to '+document.getElementById('dateTo').value;
+    loadEmailTemplates();
+    var m = new bootstrap.Modal(document.getElementById('sendEmailModal')); m.show();
+}
+function loadEmailTemplates() {
+    fetch('@Url.Action("GetEmailTemplates","Reports")?reportType=CancelLog').then(r=>r.json()).then(function(data) {
+        _emailTemplatesCache = data||[];
+        var sel = document.getElementById('sendEmailTemplate');
+        sel.innerHTML = '<option value="">-- No template (default) --</option>';
+        data.forEach(function(t) {
+            var opt = document.createElement('option'); opt.value=t.templateId; opt.textContent=t.templateName+(t.isDefault?' (default)':'');
+            if(t.isDefault) opt.selected=true; sel.appendChild(opt);
+        });
+        onEmailTemplateChange();
+    }).catch(function(){});
+}
+function onEmailTemplateChange() {
+    var sel = document.getElementById('sendEmailTemplate');
+    var id = parseInt(sel.value,10);
+    var preview = document.getElementById('sendEmailBodyPreview');
+    if(isNaN(id)||!id) { preview.innerHTML='<em class="text-muted">Default email body will be used.</em>'; return; }
+    var tmpl = _emailTemplatesCache.find(function(t){return t.templateId===id;});
+    if(!tmpl) return;
+    if(tmpl.emailSubject) document.getElementById('sendEmailSubject').value = tmpl.emailSubject;
+    if(tmpl.emailBodyHtml) preview.innerHTML = tmpl.emailBodyHtml;
+}
+function sendReportEmail() {
+    var ri = document.getElementById('sendEmailRecipients');
+    var ad = document.getElementById('sendEmailAlert');
+    var v = validateEmailList(ri.value);
+    if(!v.valid) { ri.classList.add('is-invalid'); document.getElementById('sendEmailRecipientsError').textContent=v.errors.join('; '); return; }
+    ri.classList.remove('is-invalid');
+    var btn = document.getElementById('sendEmailBtn');
+    var sp = document.getElementById('sendEmailSpinner');
+    var ic = document.getElementById('sendEmailIcon');
+    btn.disabled=true; sp.classList.remove('d-none'); ic.classList.add('d-none');
+
+    var fd = new FormData();
+    fd.append('recipients',ri.value.trim());
+    fd.append('cc',(document.getElementById('sendEmailCC').value||'').trim());
+    fd.append('bcc',(document.getElementById('sendEmailBCC').value||'').trim());
+    fd.append('emailSubject',document.getElementById('sendEmailSubject').value);
+    fd.append('exportFormat',document.getElementById('sendEmailFormat').value);
+    fd.append('templateId',document.getElementById('sendEmailTemplate').value||'');
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+    if (typeof getItemsSelectionFilter === 'function') fd.append('itemsSelectionJson', JSON.stringify(getItemsSelectionFilter()));
+
+    fetch('@Url.Action("SendCancelLogReportEmail","Reports")', { method:'POST', body:fd })
+        .then(r=>r.json())
+        .then(function(d) {
+            btn.disabled=false; sp.classList.add('d-none'); ic.classList.remove('d-none');
+            ad.innerHTML='<div class="alert alert-'+(d.success?'success':'danger')+' mb-0">'+(d.success?'<i class="bi bi-check-circle me-1"></i>':'<i class="bi bi-exclamation-triangle me-1"></i>')+escapeHtml(d.message)+'</div>';
+            ad.style.display='';
+        }).catch(function() {
+            btn.disabled=false; sp.classList.add('d-none'); ic.classList.remove('d-none');
+            ad.innerHTML='<div class="alert alert-danger mb-0">Network error.</div>'; ad.style.display='';
+        });
+}
+
+// ========== AI ANALYSIS ==========
+function saveAiLang(v) { localStorage.setItem('cl_ai_lang', v); }
+function getAiLang() { return localStorage.getItem('cl_ai_lang') || 'el'; }
+(function() { var s = document.getElementById('aiLangSelect'); if (s) s.value = getAiLang(); })();
+
+function analyzeReport() {
+    if (!_lastData.length) { alert('Generate a report first.'); return; }
+    var modalEl = document.getElementById('aiAnalysisModal');
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    document.getElementById('aiLoading').classList.remove('d-none');
+    document.getElementById('aiError').classList.add('d-none');
+    document.getElementById('aiResults').classList.add('d-none');
+    document.getElementById('aiPromptEditor').classList.add('d-none');
+    document.getElementById('btnReanalyze').style.display = 'none';
+    modal.show();
+
+    var fd = new FormData();
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+    fd.append('locale', getAiLang());
+    if (typeof getItemsSelectionFilter === 'function') fd.append('itemsSelectionJson', JSON.stringify(getItemsSelectionFilter()));
+    var promptTplId = document.getElementById('aiPromptTemplateSelect').value;
+    if (promptTplId && promptTplId !== '0') fd.append('promptTemplateId', promptTplId);
+
+    fetch('@Url.Action("AnalyzeCancelLogReport","Reports")', { method:'POST', body:fd })
+        .then(r=>r.json())
+        .then(function(data) {
+            document.getElementById('aiLoading').classList.add('d-none');
+            if (!data.success) {
+                document.getElementById('aiError').classList.remove('d-none');
+                document.getElementById('aiErrorMsg').textContent = data.message;
+                document.getElementById('btnReanalyze').style.display = 'inline-block';
+                return;
+            }
+            renderAiAnalysis(data.analysis);
+            initAiConversation(data.analysis, data.csvPreview);
+            document.getElementById('aiResults').classList.remove('d-none');
+            document.getElementById('btnReanalyze').style.display = 'inline-block';
+        }).catch(function(err) {
+            document.getElementById('aiLoading').classList.add('d-none');
+            document.getElementById('aiError').classList.remove('d-none');
+            document.getElementById('aiErrorMsg').textContent = 'Network error: '+err.message;
+            document.getElementById('btnReanalyze').style.display = 'inline-block';
+        });
+}
+
+function renderAiAnalysis(a) {
+    if (a.healthScore != null) {
+        var badge = document.getElementById('aiHealthBadge');
+        var color = a.healthScore >= 80 ? '#22c55e' : a.healthScore >= 60 ? '#eab308' : '#ef4444';
+        badge.style.background = color; badge.style.color = '#fff'; badge.textContent = a.healthScore;
+        document.getElementById('aiHealthLabel').textContent = a.healthLabel || '';
+        document.getElementById('aiTrendDesc').textContent = a.trendDescription || '';
+        var tb = document.getElementById('aiTrendBadge');
+        if (a.trend === 'up') { tb.className='badge fs-6 px-3 py-2 bg-success'; tb.textContent='↑ Improving'; }
+        else if (a.trend === 'down') { tb.className='badge fs-6 px-3 py-2 bg-danger'; tb.textContent='↓ Declining'; }
+        else { tb.className='badge fs-6 px-3 py-2 bg-secondary'; tb.textContent='→ Stable'; }
+        document.getElementById('aiHealthBanner').style.display = '';
+    } else { document.getElementById('aiHealthBanner').style.display = 'none'; }
+    document.getElementById('aiExecSummary').innerHTML = a.executiveSummary || '';
+    var kpiHtml = '';
+    if (a.kpis && a.kpis.length) { a.kpis.forEach(function(k){ kpiHtml += '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value">'+escapeHtml(k.value)+'</div><div class="stat-label">'+escapeHtml(k.label)+'</div></div></div>'; }); }
+    document.getElementById('aiKpis').innerHTML = kpiHtml;
+    document.getElementById('aiKeyFindings').innerHTML = renderList(a.keyFindings);
+    document.getElementById('aiRecs').innerHTML = renderList(a.recommendations);
+    document.getElementById('aiTopPerformers').innerHTML = renderList(a.topPerformers);
+    document.getElementById('aiBottomPerformers').innerHTML = renderList(a.bottomPerformers);
+    if (a.alerts && a.alerts.length) {
+        var ah = '<div class="card border-0 shadow-sm"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-bell-fill text-danger me-2"></i>Alerts</h6></div><div class="card-body pt-2">'+renderList(a.alerts)+'</div></div>';
+        document.getElementById('aiAlertsSection').innerHTML = ah;
+    } else { document.getElementById('aiAlertsSection').innerHTML = ''; }
+    document.getElementById('aiModel').textContent = a.model || '';
+    document.getElementById('aiTokens').textContent = a.inputTokens ? ('In: '+a.inputTokens+' Out: '+a.outputTokens) : '';
+    document.getElementById('aiTime').textContent = a.durationMs ? ((a.durationMs/1000).toFixed(1)+'s') : '';
+}
+function renderList(arr) {
+    if (!arr || !arr.length) return '<p class="text-muted small">None</p>';
+    return '<ul class="mb-0">'+arr.map(function(item){return '<li>'+escapeHtml(typeof item === 'string' ? item : item.text || JSON.stringify(item))+'</li>';}).join('')+'</ul>';
+}
+function estimateAiCost(inp,out) { return '$'+((inp*0.000003+out*0.000015).toFixed(4)); }
+
+function initAiConversation(analysisJson, csvData) {
+    _aiConversation = [{role:'system',content:'You are a POS operations analyst. The user received an AI analysis of their cancellation logging report. Raw CSV data is below for reference. Be concise, cite specific values. Respond in the same language as the analysis.'}];
+    if(csvData) _aiConversation.push({role:'user',content:'Here is the raw report data:\n'+csvData});
+    _aiConversation.push({role:'assistant',content:JSON.stringify(analysisJson)});
+}
+
+function sendAiChat() {
+    var input = document.getElementById('aiChatInput');
+    var msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    appendChatBubble('user', msg);
+    var btn = document.getElementById('btnSendChat'); btn.disabled=true; input.disabled=true;
+    var thinkingId = 'thinking_'+Date.now();
+    appendChatBubble('thinking', 'Thinking...', thinkingId);
+
+    fetch('/Reports/AiChatFollowup', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({history:_aiConversation,message:msg}) })
+        .then(function(r){return r.json();})
+        .then(function(data) {
+            removeChatBubble(thinkingId); btn.disabled=false; input.disabled=false; input.focus();
+            if(!data.success){appendChatBubble('error',data.message||'Failed.');return;}
+            _aiConversation.push({role:'user',content:msg});
+            _aiConversation.push({role:'assistant',content:data.content});
+            appendChatBubble('assistant',data.content);
+            _aiTotalChatTokens.input += (data.inputTokens||0);
+            _aiTotalChatTokens.output += (data.outputTokens||0);
+            var info = document.getElementById('aiChatTokenInfo');
+            info.style.display=''; info.innerHTML='<i class="bi bi-currency-dollar me-1"></i>Chat: '+estimateAiCost(_aiTotalChatTokens.input,_aiTotalChatTokens.output);
+        }).catch(function(err) {
+            removeChatBubble(thinkingId); btn.disabled=false; input.disabled=false;
+            appendChatBubble('error','Network error: '+err.message);
+        });
+}
+
+function appendChatBubble(role, content, id) {
+    var container = document.getElementById('aiChatMessages');
+    var div = document.createElement('div');
+    if(id) div.id = id;
+    div.className = 'mb-2 p-2 rounded small';
+    if(role==='user') { div.style.cssText='background:#e0e7ff;margin-left:20%;'; div.innerHTML='<strong>You:</strong> '+escapeHtml(content); }
+    else if(role==='assistant') { div.style.cssText='background:#f0fdf4;margin-right:20%;'; div.innerHTML='<strong>AI:</strong> '+escapeHtml(content); }
+    else if(role==='thinking') { div.style.cssText='background:#fefce8;'; div.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>'+escapeHtml(content); }
+    else { div.style.cssText='background:#fef2f2;'; div.innerHTML='<i class="bi bi-exclamation-triangle me-1"></i>'+escapeHtml(content); }
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+function removeChatBubble(id) { var el = document.getElementById(id); if(el) el.remove(); }
+
+function togglePromptEditor() { document.getElementById('aiPromptEditor').classList.toggle('d-none'); if(!document.getElementById('aiPromptEditor').classList.contains('d-none')) loadAiPromptTemplates(); }
+function clearPromptEditor() { document.getElementById('aiPromptName').value=''; document.getElementById('aiPromptText').value=''; document.getElementById('aiPromptIsDefault').checked=false; }
+function loadAiPromptTemplates() {
+    fetch('/Reports/GetAiPromptTemplates?reportType=CancelLog').then(r=>r.json()).then(function(data) {
+        var sel = document.getElementById('aiPromptTemplateSelect');
+        sel.innerHTML='<option value="0" style="color:#333;">Default Prompt</option>';
+        var listHtml = '';
+        (data||[]).forEach(function(t) {
+            var opt = document.createElement('option'); opt.value=t.templateId; opt.textContent=t.templateName; opt.style.color='#333'; sel.appendChild(opt);
+            listHtml += '<div class="d-flex justify-content-between align-items-center border-bottom py-1"><span>'+escapeHtml(t.templateName)+(t.isDefault?' <span class="badge bg-primary">default</span>':'')+'</span>'
+                +'<div><button class="btn btn-sm btn-link p-0 me-2" onclick="editAiPrompt('+t.templateId+')">Edit</button><button class="btn btn-sm btn-link text-danger p-0" onclick="deleteAiPrompt('+t.templateId+')">Del</button></div></div>';
+        });
+        document.getElementById('aiPromptTemplatesList').innerHTML = listHtml || '<em>No templates yet.</em>';
+    }).catch(function(){});
+}
+function saveAiPromptTemplate() {
+    var fd = new FormData();
+    fd.append('templateName',document.getElementById('aiPromptName').value);
+    fd.append('systemPrompt',document.getElementById('aiPromptText').value);
+    fd.append('reportType',document.getElementById('aiPromptReportType').value);
+    fd.append('isDefault',document.getElementById('aiPromptIsDefault').checked);
+    fetch('/Reports/SaveAiPromptTemplate',{method:'POST',body:fd}).then(r=>r.json()).then(function(d){
+        document.getElementById('aiPromptAlert').innerHTML=d.success?'<span class="text-success">Saved!</span>':'<span class="text-danger">'+escapeHtml(d.message)+'</span>';
+        if(d.success){clearPromptEditor();loadAiPromptTemplates();}
+    }).catch(function(){});
+}
+function deleteAiPrompt(id){if(!confirm('Delete?'))return;fetch('/Reports/DeleteAiPromptTemplate?id='+id,{method:'DELETE'}).then(r=>r.json()).then(function(){loadAiPromptTemplates();});}
+function editAiPrompt(id){fetch('/Reports/GetAiPromptTemplate?id='+id).then(r=>r.json()).then(function(t){if(!t)return;document.getElementById('aiPromptName').value=t.templateName||'';document.getElementById('aiPromptText').value=t.systemPrompt||'';document.getElementById('aiPromptIsDefault').checked=!!t.isDefault;}).catch(function(){});}
+</script>

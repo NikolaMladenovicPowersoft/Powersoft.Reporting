@@ -92,4 +92,12 @@ public class TenantRepositoryFactory : ITenantRepositoryFactory
 
         return new CatalogueRepository(connectionString);
     }
+
+    public ICancelLogRepository CreateCancelLogRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+
+        return new CancelLogRepository(connectionString);
+    }
 }

@@ -114,58 +114,100 @@ public class AverageBasketRepository : IAverageBasketRepository
         return type switch
         {
             GroupByType.Store => new GroupingFragment(
-                $"t1.fk_StoreCode AS {codeAlias}, ISNULL(st{suffix}.StoreName, t1.fk_StoreCode) AS {nameAlias},",
+                $"t1.fk_StoreCode AS {codeAlias}, CASE WHEN ISNULL(st{suffix}.pk_StoreCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(t1.fk_StoreCode)) + N' - ' + LTRIM(RTRIM(ISNULL(st{suffix}.StoreName, t1.fk_StoreCode))) END AS {nameAlias}, ISNULL(st{suffix}.StoreArea, 0) AS StoreArea,",
                 $"LEFT JOIN tbl_Store st{suffix} ON t1.fk_StoreCode = st{suffix}.pk_StoreCode",
-                $"t1.fk_StoreCode, ISNULL(st{suffix}.StoreName, t1.fk_StoreCode)",
+                $"t1.fk_StoreCode, CASE WHEN ISNULL(st{suffix}.pk_StoreCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(t1.fk_StoreCode)) + N' - ' + LTRIM(RTRIM(ISNULL(st{suffix}.StoreName, t1.fk_StoreCode))) END, ISNULL(st{suffix}.StoreArea, 0)",
                 "t1.fk_StoreCode"),
 
             GroupByType.Category => new GroupingFragment(
-                $"CAST(ISNULL({itemAlias}.fk_CategoryID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(cat{suffix}.CategoryDescr, 'N/A') AS {nameAlias},",
+                $"CAST(ISNULL({itemAlias}.fk_CategoryID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(cat{suffix}.CategoryCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(cat{suffix}.CategoryCode)) + N' - ' + LTRIM(RTRIM(cat{suffix}.CategoryDescr)) END AS {nameAlias},",
                 $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_ItemCategory cat{suffix} ON {itemAlias}.fk_CategoryID = cat{suffix}.pk_CategoryID",
-                $"CAST(ISNULL({itemAlias}.fk_CategoryID, 0) AS NVARCHAR(20)), ISNULL(cat{suffix}.CategoryDescr, 'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_CategoryID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(cat{suffix}.CategoryCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(cat{suffix}.CategoryCode)) + N' - ' + LTRIM(RTRIM(cat{suffix}.CategoryDescr)) END",
                 $"CAST(ISNULL({itemAlias}.fk_CategoryID, 0) AS NVARCHAR(20))"),
 
             GroupByType.Department => new GroupingFragment(
-                $"CAST(ISNULL({itemAlias}.fk_DepartmentID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(dep{suffix}.DepartmentDescr, N'N/A') AS {nameAlias},",
+                $"CAST(ISNULL({itemAlias}.fk_DepartmentID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(dep{suffix}.DepartmentCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(dep{suffix}.DepartmentCode)) + N' - ' + LTRIM(RTRIM(dep{suffix}.DepartmentDescr)) END AS {nameAlias},",
                 $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_ItemDepartment dep{suffix} ON {itemAlias}.fk_DepartmentID = dep{suffix}.pk_DepartmentID",
-                $"CAST(ISNULL({itemAlias}.fk_DepartmentID, 0) AS NVARCHAR(20)), ISNULL(dep{suffix}.DepartmentDescr, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_DepartmentID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(dep{suffix}.DepartmentCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(dep{suffix}.DepartmentCode)) + N' - ' + LTRIM(RTRIM(dep{suffix}.DepartmentDescr)) END",
                 $"CAST(ISNULL({itemAlias}.fk_DepartmentID, 0) AS NVARCHAR(20))"),
 
             GroupByType.Brand => new GroupingFragment(
-                $"CAST(ISNULL({itemAlias}.fk_BrandID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(br{suffix}.BrandDesc, N'N/A') AS {nameAlias},",
+                $"CAST(ISNULL({itemAlias}.fk_BrandID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(br{suffix}.BrandCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(br{suffix}.BrandCode)) + N' - ' + LTRIM(RTRIM(br{suffix}.BrandDesc)) END AS {nameAlias},",
                 $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Brands br{suffix} ON {itemAlias}.fk_BrandID = br{suffix}.pk_BrandID",
-                $"CAST(ISNULL({itemAlias}.fk_BrandID, 0) AS NVARCHAR(20)), ISNULL(br{suffix}.BrandDesc, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_BrandID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(br{suffix}.BrandCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(br{suffix}.BrandCode)) + N' - ' + LTRIM(RTRIM(br{suffix}.BrandDesc)) END",
                 $"CAST(ISNULL({itemAlias}.fk_BrandID, 0) AS NVARCHAR(20))"),
 
             GroupByType.Season => new GroupingFragment(
-                $"CAST(ISNULL({itemAlias}.fk_SeasonID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(sea{suffix}.SeasonDesc, N'N/A') AS {nameAlias},",
+                $"CAST(ISNULL({itemAlias}.fk_SeasonID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(sea{suffix}.SeasonCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(sea{suffix}.SeasonCode)) + N' - ' + LTRIM(RTRIM(sea{suffix}.SeasonDesc)) END AS {nameAlias},",
                 $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Season sea{suffix} ON {itemAlias}.fk_SeasonID = sea{suffix}.pk_SeasonID",
-                $"CAST(ISNULL({itemAlias}.fk_SeasonID, 0) AS NVARCHAR(20)), ISNULL(sea{suffix}.SeasonDesc, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_SeasonID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(sea{suffix}.SeasonCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(sea{suffix}.SeasonCode)) + N' - ' + LTRIM(RTRIM(sea{suffix}.SeasonDesc)) END",
                 $"CAST(ISNULL({itemAlias}.fk_SeasonID, 0) AS NVARCHAR(20))"),
 
+            GroupByType.Customer => new GroupingFragment(
+                $"ISNULL(cust{suffix}.pk_CustomerNo, N'') AS {codeAlias}, ISNULL(CASE WHEN cust{suffix}.Company = 1 THEN cust{suffix}.LastCompanyName ELSE cust{suffix}.FirstName + N' ' + cust{suffix}.LastCompanyName END, N'N/A') AS {nameAlias},",
+                $"LEFT JOIN tbl_Customer cust{suffix} ON t1.fk_CustomerCode = cust{suffix}.pk_CustomerNo",
+                $"ISNULL(cust{suffix}.pk_CustomerNo, N''), ISNULL(CASE WHEN cust{suffix}.Company = 1 THEN cust{suffix}.LastCompanyName ELSE cust{suffix}.FirstName + N' ' + cust{suffix}.LastCompanyName END, N'N/A')",
+                $"ISNULL(cust{suffix}.pk_CustomerNo, N'')"),
+
+            GroupByType.User => new GroupingFragment(
+                $"ISNULL(t1.fk_UserCode, N'') AS {codeAlias}, ISNULL(t1.UserName, ISNULL(t1.fk_UserCode, N'N/A')) AS {nameAlias},",
+                "",
+                $"ISNULL(t1.fk_UserCode, N''), ISNULL(t1.UserName, ISNULL(t1.fk_UserCode, N'N/A'))",
+                $"ISNULL(t1.fk_UserCode, N'')"),
+
             GroupByType.Supplier => new GroupingFragment(
-                $"ISNULL(sup{suffix}.pk_SupplierNo, N'') AS {codeAlias}, ISNULL(sup{suffix}.SupplierName, N'N/A') AS {nameAlias},",
+                $"ISNULL(sup{suffix}.pk_SupplierNo, N'') AS {codeAlias}, ISNULL(CASE WHEN sup{suffix}.Company = 1 THEN sup{suffix}.LastCompanyName ELSE sup{suffix}.FirstName + N' ' + sup{suffix}.LastCompanyName END, N'N/A') AS {nameAlias},",
                 $"LEFT JOIN tbl_RelItemSuppliers ris{suffix} ON t2.fk_ItemID = ris{suffix}.fk_ItemID AND ISNULL(ris{suffix}.PrimarySupplier,0) = 1 LEFT JOIN tbl_Supplier sup{suffix} ON ris{suffix}.fk_SupplierNo = sup{suffix}.pk_SupplierNo",
-                $"ISNULL(sup{suffix}.pk_SupplierNo, N''), ISNULL(sup{suffix}.SupplierName, N'N/A')",
+                $"ISNULL(sup{suffix}.pk_SupplierNo, N''), ISNULL(CASE WHEN sup{suffix}.Company = 1 THEN sup{suffix}.LastCompanyName ELSE sup{suffix}.FirstName + N' ' + sup{suffix}.LastCompanyName END, N'N/A')",
                 $"ISNULL(sup{suffix}.pk_SupplierNo, N'')"),
 
             GroupByType.Model => new GroupingFragment(
-                $"CAST(ISNULL({itemAlias}.fk_ModelID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(mod{suffix}.ModelDesc, N'N/A') AS {nameAlias},",
+                $"CAST(ISNULL({itemAlias}.fk_ModelID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(mod{suffix}.ModelCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(mod{suffix}.ModelCode)) + N' - ' + LTRIM(RTRIM(ISNULL(mod{suffix}.ModelNamePrimary, mod{suffix}.ModelCode))) END AS {nameAlias},",
                 $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Model mod{suffix} ON {itemAlias}.fk_ModelID = mod{suffix}.pk_ModelID",
-                $"CAST(ISNULL({itemAlias}.fk_ModelID, 0) AS NVARCHAR(20)), ISNULL(mod{suffix}.ModelDesc, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_ModelID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(mod{suffix}.ModelCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(mod{suffix}.ModelCode)) + N' - ' + LTRIM(RTRIM(ISNULL(mod{suffix}.ModelNamePrimary, mod{suffix}.ModelCode))) END",
                 $"CAST(ISNULL({itemAlias}.fk_ModelID, 0) AS NVARCHAR(20))"),
 
             GroupByType.Colour => new GroupingFragment(
-                $"CAST(ISNULL({itemAlias}.fk_ColourID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(col{suffix}.ColourDesc, N'N/A') AS {nameAlias},",
+                $"CAST(ISNULL({itemAlias}.fk_ColourID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(col{suffix}.ColourCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(col{suffix}.ColourCode)) + N' - ' + LTRIM(RTRIM(col{suffix}.ColourName)) END AS {nameAlias},",
                 $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Colour col{suffix} ON {itemAlias}.fk_ColourID = col{suffix}.pk_ColourID",
-                $"CAST(ISNULL({itemAlias}.fk_ColourID, 0) AS NVARCHAR(20)), ISNULL(col{suffix}.ColourDesc, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_ColourID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(col{suffix}.ColourCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(col{suffix}.ColourCode)) + N' - ' + LTRIM(RTRIM(col{suffix}.ColourName)) END",
                 $"CAST(ISNULL({itemAlias}.fk_ColourID, 0) AS NVARCHAR(20))"),
 
             GroupByType.Size => new GroupingFragment(
-                $"CAST(ISNULL({itemAlias}.fk_SizeID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(sz{suffix}.SizeDesc, N'N/A') AS {nameAlias},",
+                $"CAST(ISNULL({itemAlias}.fk_SizeID, 0) AS NVARCHAR(20)) AS {codeAlias}, ISNULL(sz{suffix}.SizeInvoiceDescr, N'N/A') AS {nameAlias},",
                 $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Size sz{suffix} ON {itemAlias}.fk_SizeID = sz{suffix}.pk_SizeID",
-                $"CAST(ISNULL({itemAlias}.fk_SizeID, 0) AS NVARCHAR(20)), ISNULL(sz{suffix}.SizeDesc, N'N/A')",
+                $"CAST(ISNULL({itemAlias}.fk_SizeID, 0) AS NVARCHAR(20)), ISNULL(sz{suffix}.SizeInvoiceDescr, N'N/A')",
                 $"CAST(ISNULL({itemAlias}.fk_SizeID, 0) AS NVARCHAR(20))"),
+
+            GroupByType.CustomerCategory1 => new GroupingFragment(
+                $"CAST(ISNULL(cc1{suffix}.pk_CategoryID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(cc1{suffix}.CategoryCode, N'N/A') = ISNULL(cc1{suffix}.CategoryDescr, N'N/A') THEN ISNULL(cc1{suffix}.CategoryCode, N'N/A') ELSE LTRIM(RTRIM(ISNULL(cc1{suffix}.CategoryCode, N'N/A'))) + N' - ' + LTRIM(RTRIM(ISNULL(cc1{suffix}.CategoryDescr, N'N/A'))) END AS {nameAlias},",
+                $"LEFT JOIN tbl_Customer cust1{suffix} ON t1.fk_CustomerCode = cust1{suffix}.pk_CustomerNo LEFT JOIN tbl_CustCategory cc1{suffix} ON cust1{suffix}.fk_Category1 = cc1{suffix}.pk_CategoryID",
+                $"CAST(ISNULL(cc1{suffix}.pk_CategoryID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(cc1{suffix}.CategoryCode, N'N/A') = ISNULL(cc1{suffix}.CategoryDescr, N'N/A') THEN ISNULL(cc1{suffix}.CategoryCode, N'N/A') ELSE LTRIM(RTRIM(ISNULL(cc1{suffix}.CategoryCode, N'N/A'))) + N' - ' + LTRIM(RTRIM(ISNULL(cc1{suffix}.CategoryDescr, N'N/A'))) END",
+                $"CAST(ISNULL(cc1{suffix}.pk_CategoryID, 0) AS NVARCHAR(20))"),
+
+            GroupByType.CustomerCategory2 => new GroupingFragment(
+                $"CAST(ISNULL(cc2{suffix}.pk_CategoryID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(cc2{suffix}.CategoryCode, N'N/A') = ISNULL(cc2{suffix}.CategoryDescr, N'N/A') THEN ISNULL(cc2{suffix}.CategoryCode, N'N/A') ELSE LTRIM(RTRIM(ISNULL(cc2{suffix}.CategoryCode, N'N/A'))) + N' - ' + LTRIM(RTRIM(ISNULL(cc2{suffix}.CategoryDescr, N'N/A'))) END AS {nameAlias},",
+                $"LEFT JOIN tbl_Customer cust2{suffix} ON t1.fk_CustomerCode = cust2{suffix}.pk_CustomerNo LEFT JOIN tbl_CustCategory cc2{suffix} ON cust2{suffix}.fk_Category2 = cc2{suffix}.pk_CategoryID",
+                $"CAST(ISNULL(cc2{suffix}.pk_CategoryID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(cc2{suffix}.CategoryCode, N'N/A') = ISNULL(cc2{suffix}.CategoryDescr, N'N/A') THEN ISNULL(cc2{suffix}.CategoryCode, N'N/A') ELSE LTRIM(RTRIM(ISNULL(cc2{suffix}.CategoryCode, N'N/A'))) + N' - ' + LTRIM(RTRIM(ISNULL(cc2{suffix}.CategoryDescr, N'N/A'))) END",
+                $"CAST(ISNULL(cc2{suffix}.pk_CategoryID, 0) AS NVARCHAR(20))"),
+
+            GroupByType.Item => new GroupingFragment(
+                $"CAST(itm{suffix}.pk_ItemID AS NVARCHAR(20)) AS {codeAlias}, LTRIM(RTRIM(itm{suffix}.ItemCode)) + N' - ' + LTRIM(RTRIM(itm{suffix}.ItemNamePrimary)) AS {nameAlias},",
+                $"LEFT JOIN tbl_Item itm{suffix} ON t2.fk_ItemID = itm{suffix}.pk_ItemID",
+                $"CAST(itm{suffix}.pk_ItemID AS NVARCHAR(20)), LTRIM(RTRIM(itm{suffix}.ItemCode)) + N' - ' + LTRIM(RTRIM(itm{suffix}.ItemNamePrimary))",
+                $"CAST(itm{suffix}.pk_ItemID AS NVARCHAR(20))"),
+
+            GroupByType.GroupSize => new GroupingFragment(
+                $"CAST(ISNULL(sg{suffix}.pk_SizeGroupID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(sg{suffix}.SizeGroupCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(sg{suffix}.SizeGroupCode)) + N' - ' + LTRIM(RTRIM(sg{suffix}.SizeGroupName)) END AS {nameAlias},",
+                $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Model mdl{suffix} ON {itemAlias}.fk_ModelID = mdl{suffix}.pk_ModelID LEFT JOIN tbl_SizeGroup sg{suffix} ON mdl{suffix}.fk_SizeGroupID = sg{suffix}.pk_SizeGroupID",
+                $"CAST(ISNULL(sg{suffix}.pk_SizeGroupID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(sg{suffix}.SizeGroupCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(sg{suffix}.SizeGroupCode)) + N' - ' + LTRIM(RTRIM(sg{suffix}.SizeGroupName)) END",
+                $"CAST(ISNULL(sg{suffix}.pk_SizeGroupID, 0) AS NVARCHAR(20))"),
+
+            GroupByType.Fabric => new GroupingFragment(
+                $"CAST(ISNULL(fab{suffix}.pk_FabricID, 0) AS NVARCHAR(20)) AS {codeAlias}, CASE WHEN ISNULL(fab{suffix}.FabricCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(fab{suffix}.FabricCode)) + N' - ' + LTRIM(RTRIM(fab{suffix}.FabricDescr)) END AS {nameAlias},",
+                $"LEFT JOIN tbl_Item {itemAlias} ON t2.fk_ItemID = {itemAlias}.pk_ItemID LEFT JOIN tbl_Model mdl{suffix} ON {itemAlias}.fk_ModelID = mdl{suffix}.pk_ModelID LEFT JOIN tbl_Fabric fab{suffix} ON mdl{suffix}.fk_FabricID = fab{suffix}.pk_FabricID",
+                $"CAST(ISNULL(fab{suffix}.pk_FabricID, 0) AS NVARCHAR(20)), CASE WHEN ISNULL(fab{suffix}.FabricCode, N'N/A') = N'N/A' THEN N'N/A' ELSE LTRIM(RTRIM(fab{suffix}.FabricCode)) + N' - ' + LTRIM(RTRIM(fab{suffix}.FabricDescr)) END",
+                $"CAST(ISNULL(fab{suffix}.pk_FabricID, 0) AS NVARCHAR(20))"),
 
             _ => null
         };
@@ -415,6 +457,7 @@ public class AverageBasketRepository : IAverageBasketRepository
         var itemWhere = itemFilter.whereClause;
         var includeLastYear = filter.CompareLastYear;
         bool hasL2 = grouping.hasLevel2;
+        bool hasStoreGroup = filter.GroupBy == GroupByType.Store || filter.SecondaryGroupBy == GroupByType.Store;
 
         var groupSelectClause = grouping.select;
         var groupJoinClause = grouping.join;
@@ -430,7 +473,14 @@ public class AverageBasketRepository : IAverageBasketRepository
             ? "COALESCE(s.Group2Code, r.Group2Code) AS Group2Code,\n                COALESCE(s.Group2Name, r.Group2Name) AS Group2Name,"
             : "NULL AS Group2Code, NULL AS Group2Name,";
 
-        var g2FinalSelect = ",\n                cy.Group2Code, cy.Group2Name";
+        var storeAreaCySelect = hasStoreGroup
+            ? "\n                COALESCE(s.StoreArea, r.StoreArea) AS StoreArea,"
+            : "";
+        var storeAreaFinalSelect = hasStoreGroup
+            ? ",\n                cy.StoreArea"
+            : "";
+
+        var g2FinalSelect = $",\n                cy.Group2Code, cy.Group2Name{storeAreaFinalSelect}";
 
         var salesCte = $@"
             SELECT 
@@ -468,7 +518,7 @@ public class AverageBasketRepository : IAverageBasketRepository
                 COALESCE(s.Period, r.Period) AS Period,
                 COALESCE(s.GroupCode, r.GroupCode) AS GroupCode,
                 COALESCE(s.GroupName, r.GroupName) AS GroupName,
-                {g2CySelect}
+                {g2CySelect}{storeAreaCySelect}
                 ISNULL(s.InvoiceCount, 0) AS InvoiceCount,
                 ISNULL(r.CreditCount, 0) AS CreditCount,
                 ISNULL(s.QtySold, 0) AS QtySold,
@@ -523,12 +573,16 @@ public class AverageBasketRepository : IAverageBasketRepository
             WHERE CONVERT(DATE, t1.DateTrans) BETWEEN DATEADD(YEAR, -1, @DateFrom) AND DATEADD(YEAR, -1, @DateTo){storeWhere}{itemWhere}{dimWhere}
             GROUP BY {lyPeriodField}{groupByClause}";
 
+            var lyStoreAreaSelect = hasStoreGroup
+                ? "\n                COALESCE(lys.StoreArea, lyr.StoreArea) AS StoreArea,"
+                : "";
+
             var lyMergeCte = $@"
             SELECT 
                 COALESCE(lys.Period, lyr.Period) AS Period,
                 COALESCE(lys.GroupCode, lyr.GroupCode) AS GroupCode,
                 COALESCE(lys.GroupName, lyr.GroupName) AS GroupName,
-                {g2LyCySelect}
+                {g2LyCySelect}{lyStoreAreaSelect}
                 ISNULL(lys.InvoiceCount, 0) AS InvoiceCount,
                 ISNULL(lyr.CreditCount, 0) AS CreditCount,
                 ISNULL(lys.QtySold, 0) AS QtySold,
@@ -823,30 +877,43 @@ public class AverageBasketRepository : IAverageBasketRepository
         
         using var reader = await cmd.ExecuteReaderAsync();
         var hasLy = filter.CompareLastYear;
-        
-        // Column layout: Period(0), GroupCode(1), GroupName(2), Group2Code(3), Group2Name(4),
-        // InvoiceCount(5), CreditCount(6), QtySold(7), QtyReturned(8),
-        // NetSales(9), NetReturns(10), VatSales(11), VatReturns(12)
-        // [LY: LYInvoiceCount(13), LYCreditCount(14), LYQtySold(15), LYQtyReturned(16),
-        //  LYNetSales(17), LYNetReturns(18), LYVatSales(19), LYVatReturns(20)]
+        bool hasStoreGroup = filter.GroupBy == GroupByType.Store || filter.SecondaryGroupBy == GroupByType.Store;
+
+        int colIdx(string name) { try { return reader.GetOrdinal(name); } catch { return -1; } }
         
         while (await reader.ReadAsync())
         {
+            var iPeriod = colIdx("Period");
+            var iGroupCode = colIdx("GroupCode");
+            var iGroupName = colIdx("GroupName");
+            var iGroup2Code = colIdx("Group2Code");
+            var iGroup2Name = colIdx("Group2Name");
+            var iStoreArea = colIdx("StoreArea");
+            var iInvoiceCount = colIdx("InvoiceCount");
+            var iCreditCount = colIdx("CreditCount");
+            var iQtySold = colIdx("QtySold");
+            var iQtyReturned = colIdx("QtyReturned");
+            var iNetSales = colIdx("NetSales");
+            var iNetReturns = colIdx("NetReturns");
+            var iVatSales = colIdx("VatSales");
+            var iVatReturns = colIdx("VatReturns");
+
             var row = new AverageBasketRow
             {
-                Period = reader.GetString(0),
-                Level1 = reader.IsDBNull(1) ? null : reader.GetString(1),
-                Level1Value = reader.IsDBNull(2) ? null : reader.GetString(2),
-                Level2 = reader.IsDBNull(3) ? null : reader.GetString(3),
-                Level2Value = reader.IsDBNull(4) ? null : reader.GetString(4),
-                CYInvoiceCount = reader.GetInt32(5),
-                CYCreditCount = reader.GetInt32(6),
-                CYQtySold = reader.IsDBNull(7) ? 0 : reader.GetDecimal(7),
-                CYQtyReturned = reader.IsDBNull(8) ? 0 : reader.GetDecimal(8),
-                CYNetSales = reader.IsDBNull(9) ? 0 : reader.GetDecimal(9),
-                CYNetReturns = reader.IsDBNull(10) ? 0 : reader.GetDecimal(10),
-                CYVatSales = reader.IsDBNull(11) ? 0 : reader.GetDecimal(11),
-                CYVatReturns = reader.IsDBNull(12) ? 0 : reader.GetDecimal(12)
+                Period = reader.GetString(iPeriod),
+                Level1 = reader.IsDBNull(iGroupCode) ? null : reader.GetString(iGroupCode),
+                Level1Value = reader.IsDBNull(iGroupName) ? null : reader.GetString(iGroupName),
+                Level2 = reader.IsDBNull(iGroup2Code) ? null : reader.GetString(iGroup2Code),
+                Level2Value = reader.IsDBNull(iGroup2Name) ? null : reader.GetString(iGroup2Name),
+                StoreArea = iStoreArea >= 0 && !reader.IsDBNull(iStoreArea) ? reader.GetDecimal(iStoreArea) : 0,
+                CYInvoiceCount = reader.GetInt32(iInvoiceCount),
+                CYCreditCount = reader.GetInt32(iCreditCount),
+                CYQtySold = reader.IsDBNull(iQtySold) ? 0 : reader.GetDecimal(iQtySold),
+                CYQtyReturned = reader.IsDBNull(iQtyReturned) ? 0 : reader.GetDecimal(iQtyReturned),
+                CYNetSales = reader.IsDBNull(iNetSales) ? 0 : reader.GetDecimal(iNetSales),
+                CYNetReturns = reader.IsDBNull(iNetReturns) ? 0 : reader.GetDecimal(iNetReturns),
+                CYVatSales = reader.IsDBNull(iVatSales) ? 0 : reader.GetDecimal(iVatSales),
+                CYVatReturns = reader.IsDBNull(iVatReturns) ? 0 : reader.GetDecimal(iVatReturns)
             };
             
             row.CYGrossSales = row.CYNetSales + row.CYVatSales;
@@ -854,14 +921,23 @@ public class AverageBasketRepository : IAverageBasketRepository
             
             if (hasLy)
             {
-                row.LYInvoiceCount = reader.IsDBNull(13) ? 0 : reader.GetInt32(13);
-                row.LYCreditCount = reader.IsDBNull(14) ? 0 : reader.GetInt32(14);
-                row.LYQtySold = reader.IsDBNull(15) ? 0 : reader.GetDecimal(15);
-                row.LYQtyReturned = reader.IsDBNull(16) ? 0 : reader.GetDecimal(16);
-                row.LYNetSales = reader.IsDBNull(17) ? 0 : reader.GetDecimal(17);
-                row.LYNetReturns = reader.IsDBNull(18) ? 0 : reader.GetDecimal(18);
-                row.LYVatSales = reader.IsDBNull(19) ? 0 : reader.GetDecimal(19);
-                row.LYVatReturns = reader.IsDBNull(20) ? 0 : reader.GetDecimal(20);
+                var iLYInvoiceCount = colIdx("LYInvoiceCount");
+                var iLYCreditCount = colIdx("LYCreditCount");
+                var iLYQtySold = colIdx("LYQtySold");
+                var iLYQtyReturned = colIdx("LYQtyReturned");
+                var iLYNetSales = colIdx("LYNetSales");
+                var iLYNetReturns = colIdx("LYNetReturns");
+                var iLYVatSales = colIdx("LYVatSales");
+                var iLYVatReturns = colIdx("LYVatReturns");
+
+                row.LYInvoiceCount = iLYInvoiceCount >= 0 && !reader.IsDBNull(iLYInvoiceCount) ? reader.GetInt32(iLYInvoiceCount) : 0;
+                row.LYCreditCount = iLYCreditCount >= 0 && !reader.IsDBNull(iLYCreditCount) ? reader.GetInt32(iLYCreditCount) : 0;
+                row.LYQtySold = iLYQtySold >= 0 && !reader.IsDBNull(iLYQtySold) ? reader.GetDecimal(iLYQtySold) : 0;
+                row.LYQtyReturned = iLYQtyReturned >= 0 && !reader.IsDBNull(iLYQtyReturned) ? reader.GetDecimal(iLYQtyReturned) : 0;
+                row.LYNetSales = iLYNetSales >= 0 && !reader.IsDBNull(iLYNetSales) ? reader.GetDecimal(iLYNetSales) : 0;
+                row.LYNetReturns = iLYNetReturns >= 0 && !reader.IsDBNull(iLYNetReturns) ? reader.GetDecimal(iLYNetReturns) : 0;
+                row.LYVatSales = iLYVatSales >= 0 && !reader.IsDBNull(iLYVatSales) ? reader.GetDecimal(iLYVatSales) : 0;
+                row.LYVatReturns = iLYVatReturns >= 0 && !reader.IsDBNull(iLYVatReturns) ? reader.GetDecimal(iLYVatReturns) : 0;
                 row.LYTotalNet = row.LYNetSales - row.LYNetReturns;
                 row.LYTotalGross = row.LYTotalNet + (row.LYVatSales - row.LYVatReturns);
             }

@@ -153,13 +153,22 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
     {
         if (filter.HasStoreFilter || NeedsStoreJoin(filter))
             sb.AppendLine(",t3.fk_StoreCode");
+        if (NeedsUserColumn(filter))
+            sb.AppendLine(",t3.fk_UserCode");
+        if (NeedsPaymentTypeColumn(filter))
+            sb.AppendLine(",ISNULL(t3.fk_PayTypeCode,'CREDIT') AS fk_PayTypeCode");
     }
 
     private string AppendHeaderGroupBy(PurchasesSalesFilter filter)
     {
+        var extra = "";
         if (filter.HasStoreFilter || NeedsStoreJoin(filter))
-            return ", t3.fk_StoreCode";
-        return "";
+            extra += ", t3.fk_StoreCode";
+        if (NeedsUserColumn(filter))
+            extra += ", t3.fk_UserCode";
+        if (NeedsPaymentTypeColumn(filter))
+            extra += ", ISNULL(t3.fk_PayTypeCode,'CREDIT')";
+        return extra;
     }
 
     private static void AppendModelSupplierJoins(StringBuilder sb)
@@ -181,16 +190,39 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
     {
         return filter.PrimaryGroup == PsGroupBy.Store
             || filter.SecondaryGroup == PsGroupBy.Store
-            || filter.ThirdGroup == PsGroupBy.Store;
+            || filter.ThirdGroup == PsGroupBy.Store
+            || filter.PrimaryGroup == PsGroupBy.Franchise
+            || filter.SecondaryGroup == PsGroupBy.Franchise
+            || filter.ThirdGroup == PsGroupBy.Franchise;
+    }
+
+    private static bool NeedsUserColumn(PurchasesSalesFilter filter)
+    {
+        return filter.PrimaryGroup == PsGroupBy.User
+            || filter.SecondaryGroup == PsGroupBy.User
+            || filter.ThirdGroup == PsGroupBy.User;
+    }
+
+    private static bool NeedsPaymentTypeColumn(PurchasesSalesFilter filter)
+    {
+        return filter.PrimaryGroup == PsGroupBy.PaymentType
+            || filter.SecondaryGroup == PsGroupBy.PaymentType
+            || filter.ThirdGroup == PsGroupBy.PaymentType;
     }
 
     private string BuildOuterQuery(PurchasesSalesFilter filter, GroupingInfo grouping, string innerUnion, bool isSummary)
     {
         var needsStore = NeedsStoreJoin(filter);
-        var storeCol = needsStore ? "fk_StoreCode," : "";
-        var storeGroupBy = needsStore ? ", fk_StoreCode" : "";
+        var needsUser = NeedsUserColumn(filter);
+        var needsPayType = NeedsPaymentTypeColumn(filter);
 
-        var perItemSql = $@"SELECT ItemCode, ItemNamePrimary, {storeCol}
+        var extraSelectCols = "";
+        var extraGroupByCols = "";
+        if (needsStore) { extraSelectCols += "fk_StoreCode,"; extraGroupByCols += ", fk_StoreCode"; }
+        if (needsUser) { extraSelectCols += "fk_UserCode,"; extraGroupByCols += ", fk_UserCode"; }
+        if (needsPayType) { extraSelectCols += "fk_PayTypeCode,"; extraGroupByCols += ", fk_PayTypeCode"; }
+
+        var perItemSql = $@"SELECT ItemCode, ItemNamePrimary, {extraSelectCols}
   SUM(QuantityPurchased) AS QuantityPurchased,
   SUM(NetPurchasedValue) AS NetPurchasedValue,
   SUM(GrossPurchasedValue) AS GrossPurchasedValue,
@@ -199,7 +231,7 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
   SUM(GrossSoldValue) AS GrossSoldValue,
   MAX(TotalStockQty) AS TotalStockQty
 FROM ({innerUnion}) raw
-GROUP BY ItemCode, ItemNamePrimary{storeGroupBy}";
+GROUP BY ItemCode, ItemNamePrimary{extraGroupByCols}";
 
         var sb = new StringBuilder();
 
@@ -263,6 +295,10 @@ GROUP BY ItemCode, ItemNamePrimary{storeGroupBy}";
 
         if (needsStore)
             groupByCols.Add("tf.fk_StoreCode");
+        if (needsUser)
+            groupByCols.Add("tf.fk_UserCode");
+        if (needsPayType)
+            groupByCols.Add("tf.fk_PayTypeCode");
 
         if (groupByCols.Any())
             sb.AppendLine($"GROUP BY {string.Join(", ", groupByCols)}");
@@ -294,6 +330,7 @@ FROM (
   INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
   INNER JOIN tbl_PurchInvoiceHeader t3 ON t1.fk_PurchInvoiceID=t3.pk_PurchInvoiceID
   LEFT JOIN tbl_CostingDetails cost ON t1.pk_ID=cost.fk_ID
+  LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
   LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
   {dateWhere}{selCond}
   GROUP BY t2.ItemCode
@@ -305,6 +342,7 @@ FROM (
   FROM tbl_PurchReturnDetails t1
   INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
   INNER JOIN tbl_PurchReturnHeader t3 ON t1.fk_PurchReturnID=t3.pk_PurchReturnID
+  LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
   LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
   {dateWhere}{selCond}
   GROUP BY t2.ItemCode
@@ -316,6 +354,7 @@ FROM (
   FROM tbl_InvoiceDetails t1
   INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
   INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice=t3.pk_InvoiceID
+  LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
   LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
   {dateWhere}{selCond}
   GROUP BY t2.ItemCode
@@ -327,6 +366,7 @@ FROM (
   FROM tbl_CreditDetails t1
   INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
   INNER JOIN tbl_CreditHeader t3 ON t1.fk_Credit=t3.pk_CreditID
+  LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
   LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
   {dateWhere}{selCond}
   GROUP BY t2.ItemCode
@@ -598,16 +638,34 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
                 new List<string> { $"ISNULL({alias}.SizeCode,'N/A')", $"ISNULL({alias}.SizeInvoiceDescr,'N/A')" }
             ),
             PsGroupBy.GroupSize => (
-                $"CAST(ISNULL(m.fk_SizeGroupID,0) AS NVARCHAR(20))",
-                $"ISNULL({alias}.SizeGroupDesc,'N/A')",
+                $"ISNULL({alias}.SizeGroupCode,'N/A')",
+                $"CASE WHEN ISNULL({alias}.SizeGroupCode,'N/A')='N/A' THEN 'N/A' ELSE LTRIM(RTRIM({alias}.SizeGroupCode))+' - '+LTRIM(RTRIM({alias}.SizeGroupName)) END",
                 $"LEFT JOIN tbl_SizeGroup {alias} ON m.fk_SizeGroupID = {alias}.pk_SizeGroupID",
-                new List<string> { $"CAST(ISNULL(m.fk_SizeGroupID,0) AS NVARCHAR(20))", $"ISNULL({alias}.SizeGroupDesc,'N/A')" }
+                new List<string> { $"ISNULL({alias}.SizeGroupCode,'N/A')", $"CASE WHEN ISNULL({alias}.SizeGroupCode,'N/A')='N/A' THEN 'N/A' ELSE LTRIM(RTRIM({alias}.SizeGroupCode))+' - '+LTRIM(RTRIM({alias}.SizeGroupName)) END" }
             ),
             PsGroupBy.Fabric => (
-                $"CAST(ISNULL(m.fk_FabricID,0) AS NVARCHAR(20))",
-                $"ISNULL({alias}.FabricDesc,'N/A')",
+                $"ISNULL({alias}.FabricCode,'N/A')",
+                $"CASE WHEN ISNULL({alias}.FabricCode,'N/A')='N/A' THEN 'N/A' ELSE LTRIM(RTRIM({alias}.FabricCode))+' - '+LTRIM(RTRIM({alias}.FabricDescr)) END",
                 $"LEFT JOIN tbl_Fabric {alias} ON m.fk_FabricID = {alias}.pk_FabricID",
-                new List<string> { $"CAST(ISNULL(m.fk_FabricID,0) AS NVARCHAR(20))", $"ISNULL({alias}.FabricDesc,'N/A')" }
+                new List<string> { $"ISNULL({alias}.FabricCode,'N/A')", $"CASE WHEN ISNULL({alias}.FabricCode,'N/A')='N/A' THEN 'N/A' ELSE LTRIM(RTRIM({alias}.FabricCode))+' - '+LTRIM(RTRIM({alias}.FabricDescr)) END" }
+            ),
+            PsGroupBy.Franchise => (
+                $"ISNULL({alias}.fk_FranchiseCode,'N/A')",
+                $"ISNULL({alias}f.FranchiseName,'N/A')",
+                $"LEFT JOIN tbl_Store {alias} ON tf.fk_StoreCode = {alias}.pk_StoreCode LEFT JOIN tbl_Franchise {alias}f ON {alias}.fk_FranchiseCode = {alias}f.pk_FranchiseCode",
+                new List<string> { $"ISNULL({alias}.fk_FranchiseCode,'N/A')", $"ISNULL({alias}f.FranchiseName,'N/A')" }
+            ),
+            PsGroupBy.User => (
+                $"ISNULL(tf.fk_UserCode,'N/A')",
+                $"CASE WHEN ISNULL(tf.fk_UserCode,'N/A')='N/A' THEN 'N/A' ELSE ISNULL(tf.fk_UserCode,'N/A') END",
+                "",
+                new List<string> { $"ISNULL(tf.fk_UserCode,'N/A')", $"CASE WHEN ISNULL(tf.fk_UserCode,'N/A')='N/A' THEN 'N/A' ELSE ISNULL(tf.fk_UserCode,'N/A') END" }
+            ),
+            PsGroupBy.PaymentType => (
+                $"ISNULL({alias}.pk_ptcode,'CREDIT')",
+                $"CASE WHEN ISNULL({alias}.pk_ptcode,'CREDIT')=ISNULL({alias}.ptdesc,'CREDIT') THEN ISNULL({alias}.pk_ptcode,'CREDIT') ELSE ISNULL({alias}.pk_ptcode,'CREDIT')+' - '+ISNULL({alias}.ptdesc,'CREDIT') END",
+                $"LEFT JOIN tbl_paymtype {alias} ON tf.fk_PayTypeCode = {alias}.pk_ptcode",
+                new List<string> { $"ISNULL({alias}.pk_ptcode,'CREDIT')", $"CASE WHEN ISNULL({alias}.pk_ptcode,'CREDIT')=ISNULL({alias}.ptdesc,'CREDIT') THEN ISNULL({alias}.pk_ptcode,'CREDIT') ELSE ISNULL({alias}.pk_ptcode,'CREDIT')+' - '+ISNULL({alias}.ptdesc,'CREDIT') END" }
             ),
             _ => ("''", "''", "", new List<string>())
         };
@@ -713,6 +771,38 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
                 parms.Add(new SqlParameter(p, s));
             }
             sb.Append($" AND t2.fk_SeasonID IN ({string.Join(",", names)})");
+        }
+
+        if (filter.HasUserFilter)
+        {
+            var names = new List<string>();
+            foreach (var u in filter.UserCodes)
+            {
+                var p = $"@usr{idx++}";
+                names.Add(p);
+                parms.Add(new SqlParameter(p, u));
+            }
+            sb.Append($" AND t3.fk_UserCode IN ({string.Join(",", names)})");
+        }
+
+        if (filter.HasPaymentTypeFilter)
+        {
+            var names = new List<string>();
+            foreach (var pt in filter.PaymentTypeCodes)
+            {
+                var p = $"@pt{idx++}";
+                names.Add(p);
+                parms.Add(new SqlParameter(p, pt));
+            }
+            sb.Append($" AND ISNULL(t3.fk_PayTypeCode,'CREDIT') IN ({string.Join(",", names)})");
+        }
+
+        if (filter.FilterByReleaseDate && filter.ReleaseDateFrom.HasValue && filter.ReleaseDateTo.HasValue)
+        {
+            sb.Append(" AND (ISNULL(CONVERT(DATETIME, DATEADD(MINUTE, @tzOffsetMin, t2.ReleaseDate)), CONVERT(DATETIME, '1970-01-01')) BETWEEN @relDateFrom AND @relDateTo)");
+            parms.Add(new SqlParameter("@tzOffsetMin", filter.TimeZoneOffsetMinutes));
+            parms.Add(new SqlParameter("@relDateFrom", filter.ReleaseDateFrom.Value));
+            parms.Add(new SqlParameter("@relDateTo", filter.ReleaseDateTo.Value));
         }
 
         if (filter.ItemsSelection != null)

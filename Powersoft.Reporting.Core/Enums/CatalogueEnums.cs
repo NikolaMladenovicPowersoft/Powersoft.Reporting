@@ -55,7 +55,22 @@ public enum CatalogueGroupBy
     [Display(Name = "Z Report")]
     ZReport = 25,
     [Display(Name = "Invoice No")]
-    InvoiceNo = 26
+    InvoiceNo = 26,
+    [Display(Name = "Item Agent")]
+    ItemAgent = 27,
+    [Display(Name = "Customer/Supplier Agent")]
+    CSAgent = 28,
+    [Display(Name = "VAT Code")]
+    VAT = 29,
+    [Display(Name = "Customer Category 1")]
+    CustomerCategory1 = 30,
+    [Display(Name = "Customer Category 2")]
+    CustomerCategory2 = 31,
+    [Display(Name = "Customer Category 3")]
+    CustomerCategory3 = 32,
+    Town = 33,
+    [Display(Name = "Recommended By")]
+    RecommendedBy = 34
 }
 
 /// <summary>
@@ -64,20 +79,36 @@ public enum CatalogueGroupBy
 /// </summary>
 public enum CatalogueCostBasis
 {
-    [Display(Name = "Latest Cost")]
-    LatestCost = 99,
-    [Display(Name = "Average Cost")]
-    AverageCost = 88,
-    [Display(Name = "Weighted Average Cost")]
-    WeightedAverageCost = 87,
-    [Display(Name = "Cost on Sale")]
-    CostOnSale = 98,
+    [Display(Name = "Default Price")]
+    DefaultPrice = 0,
     [Display(Name = "Price 1")]
     Price1 = 1,
     [Display(Name = "Price 2")]
     Price2 = 2,
     [Display(Name = "Price 3")]
-    Price3 = 3
+    Price3 = 3,
+    [Display(Name = "Price 4")]
+    Price4 = 4,
+    [Display(Name = "Price 5")]
+    Price5 = 5,
+    [Display(Name = "Price 6")]
+    Price6 = 6,
+    [Display(Name = "Price 7")]
+    Price7 = 7,
+    [Display(Name = "Price 8")]
+    Price8 = 8,
+    [Display(Name = "Price 9")]
+    Price9 = 9,
+    [Display(Name = "Price 10")]
+    Price10 = 10,
+    [Display(Name = "Weighted Average Cost")]
+    WeightedAverageCost = 87,
+    [Display(Name = "Average Cost")]
+    AverageCost = 88,
+    [Display(Name = "Cost on Sale")]
+    CostOnSale = 98,
+    [Display(Name = "Latest Cost")]
+    LatestCost = 99
 }
 
 /// <summary>

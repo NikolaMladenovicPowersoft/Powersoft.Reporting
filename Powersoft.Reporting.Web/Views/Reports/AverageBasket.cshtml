@@ -2,8 +2,9 @@
 @using Powersoft.Reporting.Core.Models
 @{
     ViewData["Title"] = "Average Basket Report";
-    var filterCols = new[] { "Period", "GroupName", "Group2Name", "Invoices", "Returns", "NetTransactions", "QtySold", "QtyReturned", "NetQty", "Sales", "AvgBasket", "AvgQty" };
+    var filterCols = new[] { "Period", "GroupName", "Group2Name", "Invoices", "SaleValue", "Returns", "ReturnValue", "NetTransactions", "QtySold", "QtyReturned", "NetQty", "Sales", "AvgBasket", "AvgQty" };
     bool hasAnyFilter = Model.FilterValues != null && Model.FilterValues.Any(kv => !string.IsNullOrEmpty(kv.Value));
+    bool hasStoreGroup = Model.GroupBy == Powersoft.Reporting.Core.Enums.GroupByType.Store || Model.SecondaryGroupBy == Powersoft.Reporting.Core.Enums.GroupByType.Store;
 }
 
 <div class="row mb-4">
@@ -46,6 +47,18 @@
                 <input type="hidden" name="FilterOperators[@col]" id="fo_@col" value="@(Model.FilterOperators.GetValueOrDefault(col, ""))" />
             }
             
+            <div class="row mb-3">
+                <div class="col-12">
+                    <label class="form-label fw-semibold mb-2">Report Layout</label>
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="ReportLayout" id="layoutAvgBasket" value="AverageBasket" @(Model.ReportLayout == Powersoft.Reporting.Core.Enums.ReportLayout.AverageBasket ? "checked" : "") autocomplete="off" onchange="onLayoutChange()">
+                        <label class="btn btn-outline-primary btn-sm" for="layoutAvgBasket">Average Basket</label>
+                        <input type="radio" class="btn-check" name="ReportLayout" id="layoutPeopleCount" value="PeopleCount" @(Model.ReportLayout == Powersoft.Reporting.Core.Enums.ReportLayout.PeopleCount ? "checked" : "") autocomplete="off" onchange="onLayoutChange()">
+                        <label class="btn btn-outline-primary btn-sm" for="layoutPeopleCount">People Count</label>
+                    </div>
+                </div>
+            </div>
+
             <div class="row mb-3">
                 <div class="col-12">
                     <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
@@ -113,6 +126,12 @@
                     <div class="form-check">
                         <input type="checkbox" asp-for="CompareLastYear" class="form-check-input" id="compareLyCheck" />
                         <label asp-for="CompareLastYear" class="form-check-label" for="compareLyCheck">Compare with Last Year</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="ShowTotalQty" class="form-check-input" id="showTotalQtyCheck" />
+                        <label asp-for="ShowTotalQty" class="form-check-label" for="showTotalQtyCheck">Show Total Qty</label>
                     </div>
                 </div>
                 <div class="col-auto ms-md-auto">
@@ -218,7 +237,9 @@
 {
     var gt0 = Model.GrandTotals;
     var showGtCards = gt0 != null;
-    var cardTransactions = showGtCards ? gt0!.NetTransactions : Model.TotalTransactions;
+    var cardTransactions = Model.IsPeopleCount
+        ? Model.Results.Sum(r => r.CYAllTransactions)
+        : (showGtCards ? gt0!.NetTransactions : Model.TotalTransactions);
     var cardQty = showGtCards ? gt0!.NetQty : Model.TotalQty;
     var cardSales = showGtCards 
         ? (Model.IncludeVat ? gt0!.GrossSales : gt0!.NetSales) 
@@ -231,7 +252,7 @@
         <div class="col-6 col-md-3">
             <div class="stat-card text-center">
                 <div class="stat-value">@cardTransactions.ToString("N0")</div>
-                <div class="stat-label">Net Transactions</div>
+                <div class="stat-label">@(Model.IsPeopleCount ? "Transactions" : "Net Transactions")</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
@@ -317,21 +338,21 @@
             </div>
         </div>
         <div class="card-body p-0">
+            @{
+                var sc = Model.SortColumn ?? "Period";
+                var sd = Model.SortDirection ?? "ASC";
+                string SortClass(string col) => sc.Equals(col, StringComparison.OrdinalIgnoreCase)
+                    ? (sd == "ASC" ? "sortable sort-asc" : "sortable sort-desc")
+                    : "sortable";
+                string SortIcon(string col) => sc.Equals(col, StringComparison.OrdinalIgnoreCase)
+                    ? (sd == "ASC" ? "bi-caret-up-fill" : "bi-caret-down-fill")
+                    : "bi-caret-up-fill";
+                string FilterVal(string col) => (Model.FilterValues ?? new Dictionary<string, string>()).GetValueOrDefault(col, "") ?? "";
+            }
+            @if (!Model.IsPeopleCount)
+            {
             <div class="table-responsive">
                 <table class="table table-hover mb-0" id="resultsTable">
-                    @{
-                        var sc = Model.SortColumn ?? "Period";
-                        var sd = Model.SortDirection ?? "ASC";
-                        string SortClass(string col) => sc.Equals(col, StringComparison.OrdinalIgnoreCase)
-                            ? (sd == "ASC" ? "sortable sort-asc" : "sortable sort-desc")
-                            : "sortable";
-                        string SortIcon(string col) => sc.Equals(col, StringComparison.OrdinalIgnoreCase)
-                            ? (sd == "ASC" ? "bi-caret-up-fill" : "bi-caret-down-fill")
-                            : "bi-caret-up-fill";
-                    }
-                    @{
-                        string FilterVal(string col) => (Model.FilterValues ?? new Dictionary<string, string>()).GetValueOrDefault(col, "") ?? "";
-                    }
                     <thead>
                         <tr>
                             @if (Model.HasGrouping)
@@ -371,11 +392,16 @@
                                 @(Model.IncludeVat ? "Gross" : "Net") Sales<i class="bi @SortIcon("Sales") sort-icon"></i>
                             </th>
                             <th data-col="AvgBasket" class="text-end @SortClass("AvgBasket")" onclick="sortBy('AvgBasket')">
-                                Avg Basket<i class="bi @SortIcon("AvgBasket") sort-icon"></i>
+                                @(Model.ShowTotalQty ? "Total Value" : "Avg Basket")<i class="bi @SortIcon("AvgBasket") sort-icon"></i>
                             </th>
                             <th data-col="AvgQty" class="text-end @SortClass("AvgQty")" onclick="sortBy('AvgQty')">
-                                Avg Qty<i class="bi @SortIcon("AvgQty") sort-icon"></i>
+                                @(Model.ShowTotalQty ? "Total Qty" : "Avg Qty")<i class="bi @SortIcon("AvgQty") sort-icon"></i>
                             </th>
+                            @if (hasStoreGroup)
+                            {
+                                <th data-col="StoreArea" class="text-end">Area (m²)</th>
+                                <th data-col="SalesPerArea" class="text-end">Sales/m²</th>
+                            }
                             @if (Model.CompareLastYear)
                             {
                                 <th class="text-end">LY Invoices</th>
@@ -413,7 +439,7 @@
                                 </div>
                             </td>
                             @{
-                                var numColNames = new[] { "Invoices", "Returns", "NetTransactions", "QtySold", "QtyReturned", "NetQty", "Sales", "AvgBasket", "AvgQty" };
+                                var numColNames = new[] { "Invoices", "SaleValue", "Returns", "ReturnValue", "NetTransactions", "QtySold", "QtyReturned", "NetQty", "Sales", "AvgBasket", "AvgQty" };
                             }
                             @foreach (var colName in numColNames)
                             {
@@ -425,8 +451,14 @@
                                     </div>
                                 </td>
                             }
+                            @if (hasStoreGroup)
+                            {
+                                <td></td>
+                                <td></td>
+                            }
                             @if (Model.CompareLastYear)
                             {
+                                <td></td>
                                 <td></td>
                                 <td></td>
                                 <td></td>
@@ -435,7 +467,7 @@
                     </thead>
                     <tbody>
                         @{
-                            var baseColumnCount = 12 + (Model.CompareLastYear ? 4 : 0);
+                            var baseColumnCount = 14 + (Model.CompareLastYear ? 4 : 0) + (hasStoreGroup ? 2 : 0);
                             var totalColumns = baseColumnCount + (Model.HasGrouping ? 1 : 0) + (Model.HasSecondaryGrouping ? 1 : 0);
                         }
                         @if (Model.HasGrouping)
@@ -453,7 +485,10 @@
                                 </tr>
                                 foreach (var row in groupRows)
                                 {
-                                    var avgBasket = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
+                                    var avgBasket = Model.ShowTotalQty
+                                        ? (Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet)
+                                        : (Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet);
+                                    var displayQty = Model.ShowTotalQty ? row.CYTotalQty : row.CYAverageQty;
                                     var totalSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
                                     var saleValue = Model.IncludeVat ? row.CYGrossSales : row.CYNetSales;
                                     var returnValue = Model.IncludeVat ? row.CYGrossReturns : row.CYNetReturns;
@@ -477,7 +512,13 @@
                                         <td class="text-end fw-semibold">@row.CYTotalQty.ToString("N0")</td>
                                         <td class="text-end">@totalSales.ToString("N2")</td>
                                         <td class="text-end fw-semibold text-primary">@avgBasket.ToString("N2")</td>
-                                        <td class="text-end">@row.CYAverageQty.ToString("N2")</td>
+                                        <td class="text-end">@displayQty.ToString("N2")</td>
+                                        @if (hasStoreGroup)
+                                        {
+                                            var areaValue = Model.IncludeVat ? row.GrossSalesPerArea : row.SalesPerArea;
+                                            <td class="text-end">@(row.StoreArea > 0 ? row.StoreArea.ToString("N0") : "-")</td>
+                                            <td class="text-end">@(row.StoreArea > 0 ? areaValue.ToString("N2") : "-")</td>
+                                        }
                                         @if (Model.CompareLastYear)
                                         {
                                             var lyTrans = row.LYTotalTransactions;
@@ -502,8 +543,8 @@
                                 var gQtyReturned = groupRows.Sum(r => r.CYQtyReturned);
                                 var gNetQty = groupRows.Sum(r => r.CYTotalQty);
                                 var gSales = groupRows.Sum(r => Model.IncludeVat ? r.CYTotalGross : r.CYTotalNet);
-                                var gAvgBasket = gNetTransactions > 0 ? gSales / gNetTransactions : 0;
-                                var gAvgQty = gNetTransactions > 0 ? (decimal)gNetQty / gNetTransactions : 0;
+                                var gAvgBasket = Model.ShowTotalQty ? gSales : (gNetTransactions > 0 ? gSales / gNetTransactions : 0);
+                                var gAvgQty = Model.ShowTotalQty ? gNetQty : (gNetTransactions > 0 ? (decimal)gNetQty / gNetTransactions : 0);
                                 decimal gLyTrans = 0, gLySales = 0, gLyAvg = 0, gYoY = 0;
                                 if (Model.CompareLastYear)
                                 {
@@ -534,6 +575,11 @@
                                     <td class="text-end fw-semibold">@gSales.ToString("N2")</td>
                                     <td class="text-end fw-semibold text-primary">@gAvgBasket.ToString("N2")</td>
                                     <td class="text-end fw-semibold">@gAvgQty.ToString("N2")</td>
+                                    @if (hasStoreGroup)
+                                    {
+                                        <td></td>
+                                        <td></td>
+                                    }
                                     @if (Model.CompareLastYear)
                                     {
                                         var yoyClass = gYoY >= 0 ? "text-success" : "text-danger";
@@ -550,7 +596,10 @@
                         {
                             foreach (var row in Model.Results)
                             {
-                                var avgBasket = Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet;
+                                var avgBasket = Model.ShowTotalQty
+                                    ? (Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet)
+                                    : (Model.IncludeVat ? row.CYAverageGross : row.CYAverageNet);
+                                var displayQtyNg = Model.ShowTotalQty ? row.CYTotalQty : row.CYAverageQty;
                                 var totalSales = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
                                 var saleValue = Model.IncludeVat ? row.CYGrossSales : row.CYNetSales;
                                 var returnValue = Model.IncludeVat ? row.CYGrossReturns : row.CYNetReturns;
@@ -574,7 +623,13 @@
                                     <td class="text-end fw-semibold">@row.CYTotalQty.ToString("N0")</td>
                                     <td class="text-end">@totalSales.ToString("N2")</td>
                                     <td class="text-end fw-semibold text-primary">@avgBasket.ToString("N2")</td>
-                                    <td class="text-end">@row.CYAverageQty.ToString("N2")</td>
+                                    <td class="text-end">@displayQtyNg.ToString("N2")</td>
+                                    @if (hasStoreGroup)
+                                    {
+                                        var areaValueNg = Model.IncludeVat ? row.GrossSalesPerArea : row.SalesPerArea;
+                                        <td class="text-end">@(row.StoreArea > 0 ? row.StoreArea.ToString("N0") : "-")</td>
+                                        <td class="text-end">@(row.StoreArea > 0 ? areaValueNg.ToString("N2") : "-")</td>
+                                    }
                                     @if (Model.CompareLastYear)
                                     {
                                         var lyTrans = row.LYTotalTransactions;
@@ -594,24 +649,45 @@
                     <tfoot>
                         @if (Model.TotalPages > 1)
                         {
+                            var ptInvoices = Model.Results.Sum(r => r.CYInvoiceCount);
+                            var ptSaleVal = Model.Results.Sum(r => Model.IncludeVat ? r.CYGrossSales : r.CYNetSales);
+                            var ptCredits = Model.Results.Sum(r => r.CYCreditCount);
+                            var ptRetVal = Model.Results.Sum(r => Model.IncludeVat ? r.CYGrossReturns : r.CYNetReturns);
+                            var ptNetTrans = Model.TotalTransactions;
+                            var ptQtySold = Model.Results.Sum(r => r.CYQtySold);
+                            var ptQtyRet = Model.Results.Sum(r => r.CYQtyReturned);
+                            var ptNetQty = Model.TotalQty;
+                            var ptSales = Model.IncludeVat ? Model.TotalGrossSales : Model.TotalNetSales;
+                            var ptAvgBasket = Model.ShowTotalQty ? ptSales : Model.OverallAverageBasket;
+                            var ptAvgQty = Model.ShowTotalQty ? ptNetQty : (ptNetTrans > 0 ? ptNetQty / ptNetTrans : 0);
                             <tr class="table-light fw-bold">
                                 @if (Model.HasGrouping) { <td></td> }
                                 @if (Model.HasSecondaryGrouping) { <td></td> }
                                 <td>PAGE TOTAL</td>
-                                <td class="text-end">@Model.Results.Sum(r => r.CYInvoiceCount).ToString("N0")</td>
-                                <td class="text-end text-danger">@Model.Results.Sum(r => r.CYCreditCount).ToString("N0")</td>
-                                <td class="text-end">@Model.TotalTransactions.ToString("N0")</td>
-                                <td class="text-end">@Model.Results.Sum(r => r.CYQtySold).ToString("N0")</td>
-                                <td class="text-end text-danger">@Model.Results.Sum(r => r.CYQtyReturned).ToString("N0")</td>
-                                <td class="text-end">@Model.TotalQty.ToString("N0")</td>
-                                <td class="text-end">@((Model.IncludeVat ? Model.TotalGrossSales : Model.TotalNetSales).ToString("N2"))</td>
-                                <td class="text-end text-primary">@Model.OverallAverageBasket.ToString("N2")</td>
-                                <td class="text-end">-</td>
+                                <td class="text-end">@ptInvoices.ToString("N0")</td>
+                                <td class="text-end">@ptSaleVal.ToString("N2")</td>
+                                <td class="text-end text-danger">@ptCredits.ToString("N0")</td>
+                                <td class="text-end text-danger">@ptRetVal.ToString("N2")</td>
+                                <td class="text-end">@ptNetTrans.ToString("N0")</td>
+                                <td class="text-end">@ptQtySold.ToString("N0")</td>
+                                <td class="text-end text-danger">@ptQtyRet.ToString("N0")</td>
+                                <td class="text-end">@ptNetQty.ToString("N0")</td>
+                                <td class="text-end">@ptSales.ToString("N2")</td>
+                                <td class="text-end text-primary">@ptAvgBasket.ToString("N2")</td>
+                                <td class="text-end">@ptAvgQty.ToString("N2")</td>
+                                @if (hasStoreGroup)
+                                {
+                                    <td></td>
+                                    <td></td>
+                                }
                                 @if (Model.CompareLastYear)
                                 {
+                                    var footLyTrans = Model.TotalLYTransactions;
+                                    var footLySales = Model.IncludeVat ? Model.TotalLYGrossSales : Model.TotalLYNetSales;
                                     var footYoyClass = Model.OverallYoYChangePercent >= 0 ? "text-success" : "text-danger";
                                     var footYoyIcon = Model.OverallYoYChangePercent >= 0 ? "bi-arrow-up" : "bi-arrow-down";
-                                    <td class="text-end text-muted">@((Model.IncludeVat ? Model.TotalLYGrossSales : Model.TotalLYNetSales).ToString("N2"))</td>
+                                    <td class="text-end text-muted">@footLyTrans.ToString("N0")</td>
+                                    <td class="text-end text-muted">@footLySales.ToString("N2")</td>
                                     <td class="text-end">-</td>
                                     <td class="text-end @footYoyClass"><i class="bi @footYoyIcon"></i> @Model.OverallYoYChangePercent.ToString("N1")%</td>
                                 }
@@ -623,7 +699,8 @@
                             var gtSaleValue = Model.IncludeVat ? (gt.TotalNetSales + gt.TotalVatSales) : gt.TotalNetSales;
                             var gtReturnValue = Model.IncludeVat ? (gt.TotalNetReturns + gt.TotalVatReturns) : gt.TotalNetReturns;
                             var gtSales = Model.IncludeVat ? gt.GrossSales : gt.NetSales;
-                            var gtAvg = Model.IncludeVat ? gt.AverageBasketGross : gt.AverageBasketNet;
+                            var gtAvg = Model.ShowTotalQty ? gtSales : (Model.IncludeVat ? gt.AverageBasketGross : gt.AverageBasketNet);
+                            var gtDisplayQty = Model.ShowTotalQty ? gt.NetQty : gt.AverageQty;
                             <tr class="grand-total-row">
                                 @if (Model.HasGrouping) { <td></td> }
                                 @if (Model.HasSecondaryGrouping) { <td></td> }
@@ -638,7 +715,12 @@
                                 <td class="text-end">@gt.NetQty.ToString("N0")</td>
                                 <td class="text-end">@gtSales.ToString("N2")</td>
                                 <td class="text-end text-primary">@gtAvg.ToString("N2")</td>
-                                <td class="text-end">@gt.AverageQty.ToString("N2")</td>
+                                <td class="text-end">@gtDisplayQty.ToString("N2")</td>
+                                @if (hasStoreGroup)
+                                {
+                                    <td></td>
+                                    <td></td>
+                                }
                                 @if (Model.CompareLastYear)
                                 {
                                     var gtLyTrans = gt.LYNetTransactions;
@@ -656,6 +738,57 @@
                     </tfoot>
                 </table>
             </div>
+            }
+            else
+            {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="peopleCountTable">
+                    <thead>
+                        <tr>
+                            <th class="@SortClass("Period")" onclick="sortBy('Period')">
+                                Date<i class="bi @SortIcon("Period") sort-icon"></i>
+                            </th>
+                            <th>Store Name</th>
+                            <th>Store Code</th>
+                            <th class="text-end">Transactions</th>
+                            <th class="text-end">Items Sold</th>
+                            <th class="text-end">Total Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.Results)
+                        {
+                            var storeName = row.Level2Value ?? row.Level2 ?? "N/A";
+                            var dashIdx = storeName.IndexOf(" - ");
+                            if (dashIdx > 0) { storeName = storeName.Substring(dashIdx + 3); }
+                            var totalAmount = Model.IncludeVat ? row.CYTotalGross : row.CYTotalNet;
+                            <tr>
+                                <td class="fw-semibold">@row.Period</td>
+                                <td>@storeName</td>
+                                <td class="text-muted">@(row.Level2 ?? "N/A")</td>
+                                <td class="text-end">@row.CYAllTransactions.ToString("N0")</td>
+                                <td class="text-end">@row.CYTotalQty.ToString("N0")</td>
+                                <td class="text-end fw-semibold">@totalAmount.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    @if (Model.Results.Any())
+                    {
+                        var pcTotalTrans = Model.Results.Sum(r => r.CYAllTransactions);
+                        var pcTotalItems = Model.Results.Sum(r => r.CYTotalQty);
+                        var pcTotalAmount = Model.Results.Sum(r => Model.IncludeVat ? r.CYTotalGross : r.CYTotalNet);
+                        <tfoot>
+                            <tr class="grand-total-row">
+                                <td colspan="3"><i class="bi bi-calculator me-1"></i>TOTAL</td>
+                                <td class="text-end">@pcTotalTrans.ToString("N0")</td>
+                                <td class="text-end">@pcTotalItems.ToString("N0")</td>
+                                <td class="text-end fw-semibold">@pcTotalAmount.ToString("N2")</td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+            }
         </div>
         
         <!-- Pagination -->
@@ -1262,6 +1395,35 @@ function populateItemsSelectionHidden() {
     document.getElementById('selectedItemIdsHidden').value = typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : '';
 }
 
+// Layout switching: People Count locks breakdown/grouping controls
+function onLayoutChange() {
+    var isPeopleCount = document.getElementById('layoutPeopleCount').checked;
+    var breakdownEl = document.getElementById('Breakdown');
+    var groupByEl = document.getElementById('GroupBy');
+    var secondaryGroupByEl = document.getElementById('SecondaryGroupBy');
+    var compareLyEl = document.getElementById('compareLyCheck');
+
+    if (isPeopleCount) {
+        breakdownEl.value = 'Daily';
+        groupByEl.value = 'None';
+        secondaryGroupByEl.value = 'Store';
+        compareLyEl.checked = false;
+        breakdownEl.disabled = true;
+        groupByEl.disabled = true;
+        secondaryGroupByEl.disabled = true;
+        compareLyEl.disabled = true;
+    } else {
+        breakdownEl.disabled = false;
+        groupByEl.disabled = false;
+        secondaryGroupByEl.disabled = false;
+        compareLyEl.disabled = false;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    onLayoutChange();
+});
+
 // Date preset handling
 function clearPreset() {
     document.querySelectorAll('input[name="DatePreset"]').forEach(r => r.checked = false);
@@ -1340,6 +1502,7 @@ function formatDate(d) {
 // Submit form with anchor to keep scroll at results
 function submitToResults() {
     populateItemsSelectionHidden();
+    document.querySelectorAll('#reportForm select[disabled], #reportForm input[disabled]').forEach(function(el) { el.disabled = false; });
     var form = document.getElementById('reportForm');
     var action = form.getAttribute('action') || '';
     if (action.indexOf('#') > -1) action = action.substring(0, action.indexOf('#'));
@@ -2263,6 +2426,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('reportForm');
     form.addEventListener('submit', function() {
         populateItemsSelectionHidden();
+        document.querySelectorAll('#reportForm select[disabled], #reportForm input[disabled]').forEach(function(el) { el.disabled = false; });
         showLoading();
     });
     
@@ -2323,7 +2487,7 @@ function analyzeReport() {
             }
             var a = data.analysis;
             renderAiAnalysis(a);
-            initAiConversation(a);
+            initAiConversation(a, data.csvPreview);
 
             document.getElementById('aiResults').classList.remove('d-none');
             document.getElementById('btnReanalyze').style.display = 'inline-block';
@@ -2408,11 +2572,12 @@ function estimateAiCost(inputTok, outputTok) {
     return cost < 0.005 ? '< $0.01' : '$' + cost.toFixed(2);
 }
 
-function initAiConversation(analysisJson) {
+function initAiConversation(analysisJson, csvData) {
     _aiConversation = [
-        { role: 'system', content: 'You are a senior financial data analyst. The user has already received an AI analysis of their report. Now they want to ask follow-up questions about the same data. Be concise, specific, and reference the data. Respond in the same language as the analysis.' },
-        { role: 'assistant', content: JSON.stringify(analysisJson) }
+        { role: 'system', content: 'You are a senior financial data analyst. The user has already received an AI analysis of their report. The raw CSV data is included below so you can reference specific numbers when answering follow-up questions. Be concise, specific, and cite actual values from the data. Respond in the same language as the analysis.' }
     ];
+    if (csvData) _aiConversation.push({ role: 'user', content: 'Here is the raw report data for reference:\n' + csvData });
+    _aiConversation.push({ role: 'assistant', content: JSON.stringify(analysisJson) });
 }
 
 function sendAiChat() {

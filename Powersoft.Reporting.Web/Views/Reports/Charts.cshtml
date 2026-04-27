@@ -527,7 +527,7 @@ function analyzeChart() {
                 return;
             }
             renderAiAnalysis(data.analysis);
-            initAiConversation(data.analysis);
+            initAiConversation(data.analysis, data.csvPreview);
             document.getElementById('aiResults').classList.remove('d-none');
             document.getElementById('btnReanalyze').style.display = 'inline-block';
         })
@@ -714,11 +714,12 @@ function estimateAiCost(inputTok, outputTok) {
     return cost < 0.005 ? '< $0.01' : '$' + cost.toFixed(2);
 }
 
-function initAiConversation(analysisJson) {
+function initAiConversation(analysisJson, csvData) {
     _aiConversation = [
-        { role: 'system', content: 'You are a senior data analyst. The user has already received an AI analysis of their chart report. Now they want to ask follow-up questions about the same data. Be concise, specific, and reference the data. Respond in the same language as the analysis.' },
-        { role: 'assistant', content: JSON.stringify(analysisJson) }
+        { role: 'system', content: 'You are a senior data analyst. The user has already received an AI analysis of their chart report. The raw CSV data is included below so you can reference specific numbers when answering follow-up questions. Be concise, specific, and cite actual values from the data. Respond in the same language as the analysis.' }
     ];
+    if (csvData) _aiConversation.push({ role: 'user', content: 'Here is the raw report data for reference:\n' + csvData });
+    _aiConversation.push({ role: 'assistant', content: JSON.stringify(analysisJson) });
 }
 
 function sendAiChat() {

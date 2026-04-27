@@ -28,6 +28,13 @@ public class PurchasesSalesFilter : IValidatableObject
     public List<string> SupplierIds { get; set; } = new();
     public List<string> BrandIds { get; set; } = new();
     public List<string> SeasonIds { get; set; } = new();
+    public List<string> UserCodes { get; set; } = new();
+    public List<string> PaymentTypeCodes { get; set; } = new();
+
+    public bool FilterByReleaseDate { get; set; }
+    public DateTime? ReleaseDateFrom { get; set; }
+    public DateTime? ReleaseDateTo { get; set; }
+    public int TimeZoneOffsetMinutes { get; set; }
 
     public ItemsSelectionFilter? ItemsSelection { get; set; }
 
@@ -49,6 +56,8 @@ public class PurchasesSalesFilter : IValidatableObject
     public bool HasSupplierFilter => SupplierIds.Any();
     public bool HasBrandFilter => BrandIds.Any();
     public bool HasSeasonFilter => SeasonIds.Any();
+    public bool HasUserFilter => UserCodes.Any();
+    public bool HasPaymentTypeFilter => PaymentTypeCodes.Any();
 
     public Dictionary<string, string> FilterValues { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> FilterOperators { get; set; } = new(StringComparer.OrdinalIgnoreCase);

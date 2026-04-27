@@ -16,6 +16,9 @@ public class AverageBasketViewModel
     [Display(Name = "Date To")]
     public DateTime DateTo { get; set; } = DateTime.Today;
     
+    [Display(Name = "Report Layout")]
+    public ReportLayout ReportLayout { get; set; } = ReportLayout.AverageBasket;
+    
     [Display(Name = "Breakdown")]
     public BreakdownType Breakdown { get; set; } = BreakdownType.Monthly;
     
@@ -30,6 +33,9 @@ public class AverageBasketViewModel
     
     [Display(Name = "Compare with Last Year")]
     public bool CompareLastYear { get; set; } = true;
+    
+    [Display(Name = "Show Total Qty")]
+    public bool ShowTotalQty { get; set; } = false;
     
     public string? DatePreset { get; set; }
     
@@ -95,6 +101,7 @@ public class AverageBasketViewModel
     /// </summary>
     public string? HiddenColumns { get; set; }
     
+    public bool IsPeopleCount => ReportLayout == ReportLayout.PeopleCount;
     public bool HasGrouping => GroupBy != GroupByType.None;
     public bool HasSecondaryGrouping => SecondaryGroupBy != GroupByType.None;
     public bool HasStoreFilter => SelectedStoreCodes.Any();

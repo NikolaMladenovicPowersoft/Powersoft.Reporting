@@ -55,6 +55,29 @@
             @if (Model.ShowItems) {
                 <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("item", "Items", "bi-box-seam"))</div>
             }
+            @if (Model.ShowModels) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("model", "Model", "bi-diagram-3"))</div>
+            }
+            @if (Model.ShowColours) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("colour", "Colour", "bi-palette"))</div>
+            }
+            @if (Model.ShowSizes) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("size", "Size", "bi-rulers"))</div>
+            }
+            @if (Model.ShowGroupSizes) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("groupsize", "Group Size", "bi-collection"))</div>
+            }
+            @if (Model.ShowFabrics) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("fabric", "Fabric", "bi-layers"))</div>
+            }
+            @if (Model.ShowAttributes) {
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("attr1", "Attribute 1", "bi-tags"))</div>
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("attr2", "Attribute 2", "bi-tags"))</div>
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("attr3", "Attribute 3", "bi-tags"))</div>
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("attr4", "Attribute 4", "bi-tags"))</div>
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("attr5", "Attribute 5", "bi-tags"))</div>
+                <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("attr6", "Attribute 6", "bi-tags"))</div>
+            }
         </div>
 
         @if (Model.ShowStockFilter || Model.ShowECommerce || Model.ShowModifiedDate)
@@ -173,7 +196,9 @@
     }
 
     ['category','department','brand','season','supplier','customer','agent','postalcode',
-     'paymenttype','zreport','town','user','store','item'].forEach(initDim);
+     'paymenttype','zreport','town','user','store','item',
+     'model','colour','size','groupsize','fabric',
+     'attr1','attr2','attr3','attr4','attr5','attr6'].forEach(initDim);
 
     if (_storesJson && _storesJson.length) {
         _dims['store'] = _storesJson.map(s => ({
@@ -193,7 +218,11 @@
                 agents: 'agent', postalcodes: 'postalcode',
                 paymenttypes: 'paymenttype', zreports: 'zreport',
                 towns: 'town', users: 'user',
-                stores: 'store', items: 'item'
+                stores: 'store', items: 'item',
+                models: 'model', colours: 'colour', sizes: 'size',
+                groupsizes: 'groupsize', fabrics: 'fabric',
+                attributes1: 'attr1', attributes2: 'attr2', attributes3: 'attr3',
+                attributes4: 'attr4', attributes5: 'attr5', attributes6: 'attr6'
             };
             var hasAny = false;
             Object.keys(saved).forEach(function (key) {
@@ -335,6 +364,8 @@
         });
     };
 
+    var _naMarker = '__NA__';
+
     function renderModalList(filter) {
         var list = document.getElementById('dimModalList');
         var items = _dims[_modalDim] || [];
@@ -344,11 +375,20 @@
                 return (i.code || '').toLowerCase().indexOf(f) >= 0 || (i.name || '').toLowerCase().indexOf(f) >= 0;
             });
         }
-        if (!items.length) {
+        var html = '';
+        // Prepend "N/A" option (matches items with no value / NULL) unless filtered out
+        if (!filter || 'n/a'.indexOf(filter.toLowerCase()) >= 0) {
+            var naChk = _modalTempSelected.has(_naMarker) ? 'checked' : '';
+            html += '<label class="list-group-item list-group-item-action d-flex align-items-center py-2 px-3 border-bottom-2" style="cursor:pointer;background:#fefce8">' +
+                '<input class="form-check-input me-3 flex-shrink-0" type="checkbox" value="' + _naMarker + '" ' + naChk +
+                ' onchange="toggleDimModalItem(\'' + _naMarker + '\',this.checked)">' +
+                '<span class="text-muted small me-2" style="min-width:60px"><i class="bi bi-dash-circle"></i></span>' +
+                '<span class="fst-italic text-secondary">N/A (no value)</span></label>';
+        }
+        if (!items.length && !html) {
             list.innerHTML = '<div class="text-muted text-center py-4">No items found</div>';
             return;
         }
-        var html = '';
         items.forEach(function (item) {
             var chk = _modalTempSelected.has(item.id) ? 'checked' : '';
             html += '<label class="list-group-item list-group-item-action d-flex align-items-center py-2 px-3" style="cursor:pointer">' +
@@ -368,6 +408,7 @@
     };
 
     window.selectAllDimModal = function () {
+        _modalTempSelected.add(_naMarker);
         (_dims[_modalDim] || []).forEach(function (i) { _modalTempSelected.add(i.id); });
         renderModalList(document.getElementById('dimModalSearch').value);
         updateModalCount();
@@ -461,7 +502,11 @@
             agent: 'agents', postalcode: 'postalcodes',
             paymenttype: 'paymenttypes', zreport: 'zreports',
             town: 'towns', user: 'users',
-            store: 'stores', item: 'items'
+            store: 'stores', item: 'items',
+            model: 'models', colour: 'colours', size: 'sizes',
+            groupsize: 'groupSizes', fabric: 'fabrics',
+            attr1: 'attributes1', attr2: 'attributes2', attr3: 'attributes3',
+            attr4: 'attributes4', attr5: 'attributes5', attr6: 'attributes6'
         };
         Object.keys(_modes).forEach(function (dim) {
             var key = dimKeyMap[dim] || dim;

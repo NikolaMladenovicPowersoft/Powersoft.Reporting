@@ -68,6 +68,7 @@ public class CatalogueViewModel
     public bool ShowStock { get; set; }
 
     public string? DatePreset { get; set; }
+    public string ReportTitle { get; set; } = "Power Report";
     public string SortColumn { get; set; } = "ItemCode";
     public string SortDirection { get; set; } = "ASC";
 

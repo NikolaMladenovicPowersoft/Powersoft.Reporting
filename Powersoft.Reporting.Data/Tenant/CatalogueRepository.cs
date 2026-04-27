@@ -210,6 +210,9 @@ ORDER BY s.pk_StoreCode;";
                 entityJoin: "h.fk_CustomerCode = e.pk_CustomerNo",
                 entityCodeExpr: "ISNULL(e.pk_CustomerNo,'')",
                 entityNameExpr: "CASE WHEN ISNULL(e.Company,0) = 1 THEN ISNULL(e.LastCompanyName,'') ELSE ISNULL(e.FirstName,'') + ' ' + ISNULL(e.LastCompanyName,'') END",
+                entityShortNameExpr: "ISNULL(e.ShortName,'')",
+                entityIdExpr: "ISNULL(e.CustomerId,'')",
+                sundryExpr: "LEFT(ISNULL(h.SundryCustomer,''),255)",
                 invoiceIdExpr: "h.pk_InvoiceID",
                 invoiceType: "I",
                 signMultiplier: 1,
@@ -225,6 +228,9 @@ ORDER BY s.pk_StoreCode;";
                 entityJoin: "h.fk_CustomerCode = e.pk_CustomerNo",
                 entityCodeExpr: "ISNULL(e.pk_CustomerNo,'')",
                 entityNameExpr: "CASE WHEN ISNULL(e.Company,0) = 1 THEN ISNULL(e.LastCompanyName,'') ELSE ISNULL(e.FirstName,'') + ' ' + ISNULL(e.LastCompanyName,'') END",
+                entityShortNameExpr: "ISNULL(e.ShortName,'')",
+                entityIdExpr: "ISNULL(e.CustomerId,'')",
+                sundryExpr: "LEFT(ISNULL(h.SundryCustomer,''),255)",
                 invoiceIdExpr: "h.pk_CreditID",
                 invoiceType: "C",
                 signMultiplier: -1,
@@ -247,6 +253,9 @@ ORDER BY s.pk_StoreCode;";
                 entityJoin: "h.fk_SupplierCode = e.pk_SupplierNo",
                 entityCodeExpr: "ISNULL(e.pk_SupplierNo,'')",
                 entityNameExpr: "CASE WHEN ISNULL(e.Company,0) = 1 THEN ISNULL(e.LastCompanyName,'') ELSE ISNULL(e.FirstName,'') + ' ' + ISNULL(e.LastCompanyName,'') END",
+                entityShortNameExpr: "ISNULL(e.ShortName,'')",
+                entityIdExpr: "ISNULL(e.SupplierId,'')",
+                sundryExpr: "''",
                 invoiceIdExpr: "h.pk_PurchInvoiceID",
                 invoiceType: "P",
                 signMultiplier: 1);
@@ -261,6 +270,9 @@ ORDER BY s.pk_StoreCode;";
                 entityJoin: "h.fk_SupplierCode = e.pk_SupplierNo",
                 entityCodeExpr: "ISNULL(e.pk_SupplierNo,'')",
                 entityNameExpr: "CASE WHEN ISNULL(e.Company,0) = 1 THEN ISNULL(e.LastCompanyName,'') ELSE ISNULL(e.FirstName,'') + ' ' + ISNULL(e.LastCompanyName,'') END",
+                entityShortNameExpr: "ISNULL(e.ShortName,'')",
+                entityIdExpr: "ISNULL(e.SupplierId,'')",
+                sundryExpr: "''",
                 invoiceIdExpr: "h.pk_PurchReturnID",
                 invoiceType: "E",
                 signMultiplier: -1);
@@ -277,6 +289,13 @@ ORDER BY s.pk_StoreCode;";
         CatalogueCostBasis.Price1 => "ISNULL(it.Price1Excl,0)",
         CatalogueCostBasis.Price2 => "ISNULL(it.Price2Excl,0)",
         CatalogueCostBasis.Price3 => "ISNULL(it.Price3Excl,0)",
+        CatalogueCostBasis.Price4 => "ISNULL(it.Price4Excl,0)",
+        CatalogueCostBasis.Price5 => "ISNULL(it.Price5Excl,0)",
+        CatalogueCostBasis.Price6 => "ISNULL(it.Price6Excl,0)",
+        CatalogueCostBasis.Price7 => "ISNULL(it.Price7Excl,0)",
+        CatalogueCostBasis.Price8 => "ISNULL(it.Price8Excl,0)",
+        CatalogueCostBasis.Price9 => "ISNULL(it.Price9Excl,0)",
+        CatalogueCostBasis.Price10 => "ISNULL(it.Price10Excl,0)",
         _ => "ISNULL(it.Cost,0)"
     };
 
@@ -321,6 +340,7 @@ ORDER BY s.pk_StoreCode;";
         string detailTable, string headerTable, string headerJoin,
         string entityTable, string entityJoin,
         string entityCodeExpr, string entityNameExpr,
+        string entityShortNameExpr, string entityIdExpr, string sundryExpr,
         string invoiceIdExpr, string invoiceType, int signMultiplier,
         string saleOnlyCond = "")
     {
@@ -331,19 +351,24 @@ ORDER BY s.pk_StoreCode;";
             "I" => "Sale", "C" => "Sale Return", "P" => "Purchase", "E" => "Purchase Return", _ => invoiceType
         };
 
+        bool isSale = invoiceType == "I" || invoiceType == "C";
         string ReplacePlaceholders(string expr) =>
             expr.Replace("__INVTYPE__", invoiceType)
                 .Replace("__INVTYPEDESC__", invTypeDesc)
                 .Replace("__INVID__", invoiceIdExpr)
                 .Replace("__ENTITYCODE__", entityCodeExpr)
-                .Replace("__ENTITYNAME__", entityNameExpr);
+                .Replace("__ENTITYNAME__", entityNameExpr)
+                .Replace("__CC3FK__", isSale ? "e.fk_Category3" : "NULL")
+                .Replace("__RECOMFK__", isSale ? "e.fk_RecommendID" : "0");
 
         sb.AppendLine("SELECT");
         sb.AppendLine($"  {ReplacePlaceholders(grouping.Level1Select)},");
         sb.AppendLine($"  {ReplacePlaceholders(grouping.Level2Select)},");
         sb.AppendLine($"  {ReplacePlaceholders(grouping.Level3Select)},");
         sb.AppendLine("  it.ItemCode,");
+        sb.AppendLine("  ISNULL(bc.Code, it.ItemCode) AS MainBarcode,");
         sb.AppendLine("  it.ItemNamePrimary AS ItemDescription,");
+        sb.AppendLine("  CASE WHEN ISNULL(d.DetailDesc,'') = '' THEN it.ItemNamePrimary ELSE d.DetailDesc END AS ItemInvoiceDescription,");
 
         // Financial columns
         sb.AppendLine($"  {sign}ISNULL(d.Quantity, 0) AS Quantity,");
@@ -368,6 +393,9 @@ ORDER BY s.pk_StoreCode;";
             // Entity
             sb.AppendLine($"  {entityCodeExpr} AS EntityCode,");
             sb.AppendLine($"  {entityNameExpr} AS EntityName,");
+            sb.AppendLine($"  {entityShortNameExpr} AS EntityShortName,");
+            sb.AppendLine($"  {entityIdExpr} AS EntityID,");
+            sb.AppendLine($"  {sundryExpr} AS Sundry,");
             // Invoice
             sb.AppendLine($"  CAST({invoiceIdExpr} AS NVARCHAR(50)) AS InvoiceNumber,");
             sb.AppendLine($"  '{invoiceType}' AS InvoiceType,");
@@ -429,6 +457,19 @@ ORDER BY s.pk_StoreCode;";
                     sb.AppendLine("  '' AS StationName,");
                 }
                 sb.AppendLine("  ISNULL(fr.FranchiseName,'') AS FranchiseName,");
+                // Customer categories (sale legs only — tbl_CustCategory via tbl_Customer.fk_Category1/2/3)
+                if (isSaleLeg)
+                {
+                    sb.AppendLine("  ISNULL(cc1.CategoryDescr,'') AS CustomerCategory1Descr,");
+                    sb.AppendLine("  ISNULL(cc2.CategoryDescr,'') AS CustomerCategory2Descr,");
+                    sb.AppendLine("  ISNULL(cc3.CategoryDescr,'') AS CustomerCategory3Descr,");
+                }
+                else
+                {
+                    sb.AppendLine("  '' AS CustomerCategory1Descr,");
+                    sb.AppendLine("  '' AS CustomerCategory2Descr,");
+                    sb.AppendLine("  '' AS CustomerCategory3Descr,");
+                }
             }
             // Attrs
             sb.AppendLine("  ISNULL(a1.FieldDetailDescr,'') AS ItemAttr1Descr,");
@@ -440,7 +481,7 @@ ORDER BY s.pk_StoreCode;";
         }
         else
         {
-            sb.AppendLine("  '' AS EntityCode, '' AS EntityName,");
+            sb.AppendLine("  '' AS EntityCode, '' AS EntityName, '' AS EntityShortName, '' AS EntityID, '' AS Sundry,");
             sb.AppendLine("  '' AS InvoiceNumber, '' AS InvoiceType,");
             sb.AppendLine("  '' AS StoreCode, '' AS StoreName,");
             sb.AppendLine("  NULL AS DateTrans, '' AS UserCode,");
@@ -460,9 +501,10 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price9Excl, CAST(0 AS DECIMAL(18,4)) AS Price9Incl,");
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS Price10Excl, CAST(0 AS DECIMAL(18,4)) AS Price10Incl,");
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS InvPriceExcl, CAST(0 AS DECIMAL(18,4)) AS InvPriceIncl,");
-            // Header-derived display columns are not aggregable in summary mode → placeholders.
+            // Header-derived display columns are not aggregable in summary mode -> placeholders.
             sb.AppendLine("  '' AS PaymentType, '' AS AgentName, '' AS ZReportNumber,");
             sb.AppendLine("  '' AS StationCode, '' AS StationName, '' AS FranchiseName,");
+            sb.AppendLine("  '' AS CustomerCategory1Descr, '' AS CustomerCategory2Descr, '' AS CustomerCategory3Descr,");
             sb.AppendLine("  '' AS ItemAttr1Descr, '' AS ItemAttr2Descr, '' AS ItemAttr3Descr,");
             sb.AppendLine("  '' AS ItemAttr4Descr, '' AS ItemAttr5Descr, '' AS ItemAttr6Descr");
         }
@@ -472,6 +514,7 @@ ORDER BY s.pk_StoreCode;";
         sb.AppendLine($"INNER JOIN {headerTable} h ON {headerJoin}");
         sb.AppendLine("INNER JOIN tbl_Item it ON d.fk_ItemID = it.pk_ItemID");
         sb.AppendLine("LEFT JOIN tbl_RelItemSuppliers rs ON it.pk_ItemID = rs.fk_ItemID AND ISNULL(rs.PrimarySupplier,0) = 1");
+        sb.AppendLine("LEFT JOIN (SELECT fk_ItemID, Code, ROW_NUMBER() OVER (PARTITION BY fk_ItemID ORDER BY fk_ItemID, Code) AS rowNo FROM tbl_CodeList WHERE ISNULL(LabelBarcode,0) = 1) bc ON d.fk_ItemID = bc.fk_ItemID AND bc.rowNo = 1");
 
         if (!isSummary)
         {
@@ -502,16 +545,20 @@ ORDER BY s.pk_StoreCode;";
                 sb.AppendLine("LEFT JOIN tbl_paymtype pt ON ISNULL(h.fk_PayTypeCode,'CREDIT') = pt.pk_ptcode");
                 sb.AppendLine("LEFT JOIN tbl_Agent ag ON h.fk_AgentID = ag.pk_SystemNo");
                 sb.AppendLine("LEFT JOIN tbl_Station st ON h.fk_StoreCode = st.fk_StoreCode AND ISNULL(h.fk_StationCode,'0001') = st.fk_StationCode");
+                sb.AppendLine("LEFT JOIN tbl_CustCategory cc1 ON e.fk_Category1 = cc1.pk_CategoryID");
+                sb.AppendLine("LEFT JOIN tbl_CustCategory cc2 ON e.fk_Category2 = cc2.pk_CategoryID");
+                sb.AppendLine("LEFT JOIN tbl_CustCategory cc3 ON e.fk_Category3 = cc3.pk_CategoryID");
             }
             sb.AppendLine("LEFT JOIN tbl_Franchise fr ON s.fk_FranchiseCode = fr.pk_FranchiseCode");
         }
 
         // Grouping-specific joins (needed in both modes for Level expressions)
-        // In detailed mode, skip joins whose alias is already present from the detail block
+        // In detailed mode, skip joins whose alias is already present from the detail block.
+        // Placeholder replacement ensures supplier legs get NULL for missing columns (fk_Category3, fk_RecommendID).
         foreach (var rawLine in grouping.JoinLines)
         {
             if (string.IsNullOrEmpty(rawLine)) continue;
-            var joinLine = rawLine
+            var joinLine = ReplacePlaceholders(rawLine)
                 .Replace("__ENTITYJOIN__", $"LEFT JOIN {entityTable} e ON {entityJoin}");
             if (!isSummary && (joinLine.Contains(" e ON ") || joinLine.Contains(" s ON ")))
                 continue;
@@ -539,9 +586,9 @@ ORDER BY s.pk_StoreCode;";
                     && filter.ThirdGroup == CatalogueGroupBy.None;
 
         if (!isSummary || allNone)
-            sb.AppendLine("  r.ItemCode, r.ItemDescription,");
+            sb.AppendLine("  r.ItemCode, r.MainBarcode, r.ItemDescription, r.ItemInvoiceDescription,");
         else
-            sb.AppendLine("  NULL AS ItemCode, NULL AS ItemDescription,");
+            sb.AppendLine("  NULL AS ItemCode, NULL AS MainBarcode, NULL AS ItemDescription, NULL AS ItemInvoiceDescription,");
 
         // Aggregated financial columns
         sb.AppendLine("  SUM(r.Quantity) AS Quantity,");
@@ -568,7 +615,7 @@ ORDER BY s.pk_StoreCode;";
 
         if (!isSummary || allNone)
         {
-            sb.AppendLine("  r.EntityCode, r.EntityName,");
+            sb.AppendLine("  r.EntityCode, r.EntityName, r.EntityShortName, r.EntityID, r.Sundry,");
             sb.AppendLine("  r.InvoiceNumber, r.InvoiceType,");
             sb.AppendLine("  r.StoreCode, r.StoreName,");
             sb.AppendLine("  r.DateTrans, r.UserCode,");
@@ -590,12 +637,13 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine("  r.InvPriceExcl, r.InvPriceIncl,");
             sb.AppendLine("  r.PaymentType, r.AgentName, r.ZReportNumber,");
             sb.AppendLine("  r.StationCode, r.StationName, r.FranchiseName,");
+            sb.AppendLine("  r.CustomerCategory1Descr, r.CustomerCategory2Descr, r.CustomerCategory3Descr,");
             sb.AppendLine("  r.ItemAttr1Descr, r.ItemAttr2Descr, r.ItemAttr3Descr,");
             sb.AppendLine("  r.ItemAttr4Descr, r.ItemAttr5Descr, r.ItemAttr6Descr");
         }
         else
         {
-            sb.AppendLine("  '' AS EntityCode, '' AS EntityName,");
+            sb.AppendLine("  '' AS EntityCode, '' AS EntityName, '' AS EntityShortName, '' AS EntityID, '' AS Sundry,");
             sb.AppendLine("  '' AS InvoiceNumber, '' AS InvoiceType,");
             sb.AppendLine("  '' AS StoreCode, '' AS StoreName,");
             sb.AppendLine("  NULL AS DateTrans, '' AS UserCode,");
@@ -617,6 +665,7 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine("  CAST(0 AS DECIMAL(18,4)) AS InvPriceExcl, CAST(0 AS DECIMAL(18,4)) AS InvPriceIncl,");
             sb.AppendLine("  '' AS PaymentType, '' AS AgentName, '' AS ZReportNumber,");
             sb.AppendLine("  '' AS StationCode, '' AS StationName, '' AS FranchiseName,");
+            sb.AppendLine("  '' AS CustomerCategory1Descr, '' AS CustomerCategory2Descr, '' AS CustomerCategory3Descr,");
             sb.AppendLine("  '' AS ItemAttr1Descr, '' AS ItemAttr2Descr, '' AS ItemAttr3Descr,");
             sb.AppendLine("  '' AS ItemAttr4Descr, '' AS ItemAttr5Descr, '' AS ItemAttr6Descr");
         }
@@ -635,8 +684,8 @@ ORDER BY s.pk_StoreCode;";
         {
             groupByCols.AddRange(new[]
             {
-                "r.ItemCode", "r.ItemDescription",
-                "r.EntityCode", "r.EntityName",
+                "r.ItemCode", "r.MainBarcode", "r.ItemDescription", "r.ItemInvoiceDescription",
+                "r.EntityCode", "r.EntityName", "r.EntityShortName", "r.EntityID", "r.Sundry",
                 "r.InvoiceNumber", "r.InvoiceType",
                 "r.StoreCode", "r.StoreName",
                 "r.DateTrans", "r.UserCode",
@@ -658,6 +707,7 @@ ORDER BY s.pk_StoreCode;";
                 "r.InvPriceExcl", "r.InvPriceIncl",
                 "r.PaymentType", "r.AgentName", "r.ZReportNumber",
                 "r.StationCode", "r.StationName", "r.FranchiseName",
+                "r.CustomerCategory1Descr", "r.CustomerCategory2Descr", "r.CustomerCategory3Descr",
                 "r.ItemAttr1Descr", "r.ItemAttr2Descr", "r.ItemAttr3Descr",
                 "r.ItemAttr4Descr", "r.ItemAttr5Descr", "r.ItemAttr6Descr"
             });
@@ -903,6 +953,43 @@ ORDER BY s.pk_StoreCode;";
                 $"ISNULL({alias}.FieldDetailCode,'N/A') AS {lc}, ISNULL({alias}.FieldDetailDescr,'N/A') AS {ld}",
                 $"LEFT JOIN tbl_FieldDetail {alias} ON it.fk_AttrID6 = {alias}.pk_FieldDetailID"),
 
+            CatalogueGroupBy.ItemAgent => new(
+                $"ISNULL({alias}a.AgentCode,'N/A') AS {lc}, ISNULL({alias}a.FirstName + ' ' + {alias}a.LastName,'N/A') AS {ld}",
+                $"LEFT JOIN (SELECT fk_ItemID, fk_AgentID, ROW_NUMBER() OVER (PARTITION BY fk_ItemID ORDER BY fk_ItemID) AS rn FROM tbl_RelItemAgent) {alias}r ON it.pk_ItemID = {alias}r.fk_ItemID AND {alias}r.rn = 1\nLEFT JOIN tbl_Agent {alias}a ON {alias}r.fk_AgentID = {alias}a.pk_SystemNo"),
+
+            CatalogueGroupBy.CSAgent => new(
+                $"ISNULL({alias}.AgentCode,'N/A') AS {lc}, ISNULL({alias}.FirstName + ' ' + {alias}.LastName,'N/A') AS {ld}",
+                $"LEFT JOIN tbl_Agent {alias} ON e.fk_AgentID = {alias}.pk_SystemNo"),
+
+            CatalogueGroupBy.VAT => new(
+                $"ISNULL(d.fk_VatCode,'N/A') AS {lc}, ISNULL(d.fk_VatCode,'N/A') AS {ld}",
+                null),
+
+            CatalogueGroupBy.CustomerCategory1 => new(
+                $"ISNULL({alias}.CategoryCode,'N/A') AS {lc}, ISNULL({alias}.CategoryDescr,'N/A') AS {ld}",
+                $"LEFT JOIN tbl_CustCategory {alias} ON e.fk_Category1 = {alias}.pk_CategoryID"),
+
+            CatalogueGroupBy.CustomerCategory2 => new(
+                $"ISNULL({alias}.CategoryCode,'N/A') AS {lc}, ISNULL({alias}.CategoryDescr,'N/A') AS {ld}",
+                $"LEFT JOIN tbl_CustCategory {alias} ON e.fk_Category2 = {alias}.pk_CategoryID"),
+
+            CatalogueGroupBy.CustomerCategory3 => new(
+                $"ISNULL({alias}.CategoryCode,'N/A') AS {lc}, ISNULL({alias}.CategoryDescr,'N/A') AS {ld}",
+                $"LEFT JOIN tbl_CustCategory {alias} ON __CC3FK__ = {alias}.pk_CategoryID"),
+
+            CatalogueGroupBy.Town => new(
+                $"ISNULL(e.Town,'N/A') AS {lc}, ISNULL(e.Town,'N/A') AS {ld}",
+                null),
+
+            CatalogueGroupBy.RecommendedBy => new(
+                $"ISNULL(CAST(__RECOMFK__ AS NVARCHAR(20)),'0') AS {lc}, " +
+                $"CASE WHEN ISNULL(__RECOMFK__,0) = 0 THEN 'N/A' " +
+                $"ELSE ISNULL({alias}rc.tk_RecommendSrc,'N/A') + " +
+                $"CASE WHEN {alias}rc.Recommendation='CUSTOMER' THEN ' (CUSTOMER)' " +
+                $"WHEN {alias}rc.Recommendation='AGENT' THEN ' (AGENT)' " +
+                $"ELSE ' (OTHER)' END END AS {ld}",
+                $"LEFT JOIN tbl_RecommendSrc {alias}rc ON __RECOMFK__ = {alias}rc.pk_RecomID"),
+
             _ => null
         };
     }
@@ -1026,7 +1113,9 @@ ORDER BY s.pk_StoreCode;";
     private static readonly Dictionary<string, string> ColumnSqlMap = new(StringComparer.OrdinalIgnoreCase)
     {
         ["ItemCode"] = "d.ItemCode",
+        ["MainBarcode"] = "d.MainBarcode",
         ["ItemDescription"] = "d.ItemDescription",
+        ["ItemInvoiceDescription"] = "d.ItemInvoiceDescription",
         ["Level1Code"] = "d.Level1Code",
         ["Level1Description"] = "d.Level1Description",
         ["Level2Code"] = "d.Level2Code",
@@ -1041,24 +1130,48 @@ ORDER BY s.pk_StoreCode;";
         ["GrossAmount"] = "d.GrossAmount",
         ["ProfitValue"] = "d.ProfitValue",
         ["TransactionCost"] = "d.TransactionCost",
+        ["Cost"] = "d.Cost",
         ["TotalCost"] = "d.TotalCost",
         ["TotalStockQty"] = "d.TotalStockQty",
+        ["TotalStockValue"] = "d.TotalStockValue",
         ["EntityCode"] = "d.EntityCode",
         ["EntityName"] = "d.EntityName",
+        ["EntityShortName"] = "d.EntityShortName",
+        ["EntityID"] = "d.EntityID",
+        ["Sundry"] = "d.Sundry",
+        ["InvoiceNumber"] = "d.InvoiceNumber",
+        ["InvoiceType"] = "d.InvoiceType",
         ["StoreCode"] = "d.StoreCode",
         ["StoreName"] = "d.StoreName",
+        ["StationCode"] = "d.StationCode",
+        ["DateTrans"] = "d.DateTrans",
+        ["UserCode"] = "d.UserCode",
+        ["AgentName"] = "d.AgentName",
+        ["ZReportNumber"] = "d.ZReportNumber",
+        ["PaymentType"] = "d.PaymentType",
         ["BrandName"] = "d.BrandName",
         ["SeasonName"] = "d.SeasonName",
         ["ItemCategoryDescr"] = "d.ItemCategoryDescr",
-        ["ItemDepartmentDescr"] = "d.ItemDepartmentDescr"
+        ["ItemDepartmentDescr"] = "d.ItemDepartmentDescr",
+        ["CustomerCategory1Descr"] = "d.CustomerCategory1Descr",
+        ["CustomerCategory2Descr"] = "d.CustomerCategory2Descr",
+        ["CustomerCategory3Descr"] = "d.CustomerCategory3Descr",
+        ["FranchiseName"] = "d.FranchiseName",
+        ["ItemSupplier"] = "d.ItemSupplier"
     };
 
     private static readonly HashSet<string> TextColumns = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ItemCode", "ItemDescription", "Level1Code", "Level1Description",
+        "ItemCode", "MainBarcode", "ItemDescription", "ItemInvoiceDescription",
+        "Level1Code", "Level1Description",
         "Level2Code", "Level2Description", "Level3Code", "Level3Description",
-        "EntityCode", "EntityName", "StoreCode", "StoreName",
-        "BrandName", "SeasonName", "ItemCategoryDescr", "ItemDepartmentDescr"
+        "EntityCode", "EntityName", "EntityShortName", "EntityID", "Sundry",
+        "InvoiceNumber", "InvoiceType",
+        "StoreCode", "StoreName", "StationCode", "UserCode", "AgentName",
+        "ZReportNumber", "PaymentType",
+        "BrandName", "SeasonName", "ItemCategoryDescr", "ItemDepartmentDescr",
+        "CustomerCategory1Descr", "CustomerCategory2Descr", "CustomerCategory3Descr",
+        "FranchiseName", "ItemSupplier"
     };
 
     private string ResolveSortExpression(CatalogueFilter filter)
@@ -1212,7 +1325,9 @@ ORDER BY s.pk_StoreCode;";
                     case "Level3Code": row.Level3 = reader.GetString(i); break;
                     case "Level3Description": row.Level3Value = reader.GetString(i); break;
                     case "ItemCode": row.ItemCode = reader.GetString(i); break;
+                    case "MainBarcode": row.MainBarcode = reader.GetString(i); break;
                     case "ItemDescription": row.ItemDescription = reader.GetString(i); break;
+                    case "ItemInvoiceDescription": row.ItemInvoiceDescription = reader.GetString(i); break;
                     case "Quantity": row.Quantity = reader.GetDecimal(i); break;
                     case "ValueBeforeDiscount": row.ValueBeforeDiscount = reader.GetDecimal(i); break;
                     case "Discount": row.Discount = reader.GetDecimal(i); break;
@@ -1227,6 +1342,9 @@ ORDER BY s.pk_StoreCode;";
                     case "TotalStockValue": row.TotalStockValue = reader.GetDecimal(i); break;
                     case "EntityCode": row.EntityCode = reader.GetString(i); break;
                     case "EntityName": row.EntityName = reader.GetString(i); break;
+                    case "EntityShortName": row.EntityShortName = reader.GetString(i); break;
+                    case "EntityID": row.EntityID = reader.GetString(i); break;
+                    case "Sundry": row.Sundry = reader.GetString(i); break;
                     case "InvoiceNumber": row.InvoiceNumber = reader.GetString(i); break;
                     case "InvoiceType": row.InvoiceType = reader.GetString(i); break;
                     case "StoreCode": row.StoreCode = reader.GetString(i); break;
@@ -1274,6 +1392,9 @@ ORDER BY s.pk_StoreCode;";
                     case "StationCode": row.StationCode = reader.GetString(i); break;
                     case "StationName": row.StationName = reader.GetString(i); break;
                     case "FranchiseName": row.FranchiseName = reader.GetString(i); break;
+                    case "CustomerCategory1Descr": row.CustomerCategory1Descr = reader.GetString(i); break;
+                    case "CustomerCategory2Descr": row.CustomerCategory2Descr = reader.GetString(i); break;
+                    case "CustomerCategory3Descr": row.CustomerCategory3Descr = reader.GetString(i); break;
                     case "ItemAttr1Descr": row.ItemAttr1Descr = reader.GetString(i); break;
                     case "ItemAttr2Descr": row.ItemAttr2Descr = reader.GetString(i); break;
                     case "ItemAttr3Descr": row.ItemAttr3Descr = reader.GetString(i); break;

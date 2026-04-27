@@ -260,6 +260,69 @@ public class DimensionRepository : IDimensionRepository
         return await ReadResultsAsync(cmd);
     }
 
+    public async Task<List<DimensionItem>> GetModelsAsync()
+    {
+        const string sql = @"
+            SELECT CAST(pk_ModelID AS NVARCHAR(20)), ISNULL(ModelCode,''), ISNULL(ModelNamePrimary, ModelCode)
+            FROM tbl_Model
+            ORDER BY ModelCode";
+        return await ExecuteListQueryAsync(sql);
+    }
+
+    public async Task<List<DimensionItem>> GetColoursAsync()
+    {
+        const string sql = @"
+            SELECT CAST(pk_ColourID AS NVARCHAR(20)), ISNULL(ColourCode,''), ISNULL(ColourName, ColourCode)
+            FROM tbl_Colour
+            ORDER BY ColourCode";
+        return await ExecuteListQueryAsync(sql);
+    }
+
+    public async Task<List<DimensionItem>> GetSizesAsync()
+    {
+        const string sql = @"
+            SELECT CAST(pk_SizeID AS NVARCHAR(20)), ISNULL(SizeCode,''), ISNULL(SizeName, SizeCode)
+            FROM tbl_Size
+            ORDER BY SizeCode";
+        return await ExecuteListQueryAsync(sql);
+    }
+
+    public async Task<List<DimensionItem>> GetGroupSizesAsync()
+    {
+        const string sql = @"
+            SELECT CAST(pk_SizeGroupID AS NVARCHAR(20)), ISNULL(SizeGroupCode,''), ISNULL(SizeGroupName, SizeGroupCode)
+            FROM tbl_SizeGroup
+            ORDER BY SizeGroupCode";
+        return await ExecuteListQueryAsync(sql);
+    }
+
+    public async Task<List<DimensionItem>> GetFabricsAsync()
+    {
+        const string sql = @"
+            SELECT CAST(pk_FabricID AS NVARCHAR(20)), ISNULL(FabricCode,''), ISNULL(FabricDescr, FabricCode)
+            FROM tbl_Fabric
+            ORDER BY FabricCode";
+        return await ExecuteListQueryAsync(sql);
+    }
+
+    public async Task<List<DimensionItem>> GetAttributeValuesAsync(int attrIndex)
+    {
+        if (attrIndex < 1 || attrIndex > 6) return new List<DimensionItem>();
+
+        var codeCol = $"Attribute{attrIndex}Code";
+        var nameCol = $"Attribute{attrIndex}Name";
+        var sql = $@"
+            SELECT DISTINCT
+                CAST(fk_AttrID{attrIndex} AS NVARCHAR(20)) AS Id,
+                ISNULL({codeCol},'') AS Code,
+                ISNULL({nameCol}, {codeCol}) AS Name
+            FROM tbl_RelItemAttributes
+            WHERE fk_AttrID{attrIndex} IS NOT NULL AND fk_AttrID{attrIndex} > 0
+            ORDER BY Code";
+
+        return await ExecuteListQueryAsync(sql);
+    }
+
     private async Task<List<DimensionItem>> ExecuteListQueryAsync(string sql)
     {
         using var conn = new SqlConnection(_connectionString);

@@ -566,12 +566,15 @@ public class ExcelExportService
         ws.Cell(headerRow, 1).Value = "#";
         ws.Cell(headerRow, 2).Value = "Code";
         ws.Cell(headerRow, 3).Value = "Name";
-        ws.Cell(headerRow, 4).Value = filter.Metric == ParetoMetric.Quantity ? "Quantity" : "Value";
-        ws.Cell(headerRow, 5).Value = "%";
-        ws.Cell(headerRow, 6).Value = "Cumul. %";
-        ws.Cell(headerRow, 7).Value = "Class";
+        ws.Cell(headerRow, 4).Value = "Quantity";
+        ws.Cell(headerRow, 5).Value = "Subtotal";
+        ws.Cell(headerRow, 6).Value = "Profit";
+        ws.Cell(headerRow, 7).Value = "%";
+        ws.Cell(headerRow, 8).Value = "Cumul. %";
+        ws.Cell(headerRow, 9).Value = "Class";
+        ws.Cell(headerRow, 10).Value = "Display";
 
-        var headerRange = ws.Range(headerRow, 1, headerRow, 7);
+        var headerRange = ws.Range(headerRow, 1, headerRow, 10);
         headerRange.Style.Font.Bold = true;
         headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
         headerRange.Style.Font.FontColor = XLColor.White;
@@ -590,34 +593,44 @@ public class ExcelExportService
             ws.Cell(dataRow, 1).Value = row.Rank;
             ws.Cell(dataRow, 2).Value = row.Code;
             ws.Cell(dataRow, 3).Value = row.Name;
-            ws.Cell(dataRow, 4).Value = row.Value;
-            ws.Cell(dataRow, 5).Value = row.Percentage;
-            ws.Cell(dataRow, 6).Value = row.CumulativePercentage;
-            ws.Cell(dataRow, 7).Value = row.Classification;
+            ws.Cell(dataRow, 4).Value = row.Quantity;
+            ws.Cell(dataRow, 5).Value = row.Subtotal;
+            ws.Cell(dataRow, 6).Value = row.Profit;
+            ws.Cell(dataRow, 7).Value = row.Percentage;
+            ws.Cell(dataRow, 8).Value = row.CumulativePercentage;
+            ws.Cell(dataRow, 9).Value = row.Classification;
+            ws.Cell(dataRow, 10).Value = row.IsDisplay ? "Yes" : "";
 
-            var rowRange = ws.Range(dataRow, 1, dataRow, 7);
+            var rowRange = ws.Range(dataRow, 1, dataRow, 10);
             rowRange.Style.Fill.BackgroundColor = bgColor;
 
-            ws.Cell(dataRow, 4).Style.NumberFormat.Format = filter.Metric == ParetoMetric.Quantity ? "#,##0" : "#,##0.00";
-            ws.Cell(dataRow, 5).Style.NumberFormat.Format = "0.00";
-            ws.Cell(dataRow, 6).Style.NumberFormat.Format = "0.0";
-            ws.Cell(dataRow, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(dataRow, 4).Style.NumberFormat.Format = "#,##0.####";
+            ws.Cell(dataRow, 5).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, 6).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, 7).Style.NumberFormat.Format = "0.00";
+            ws.Cell(dataRow, 8).Style.NumberFormat.Format = "0.0";
+            ws.Cell(dataRow, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             dataRow++;
         }
 
-        var totalRange = ws.Range(dataRow, 1, dataRow, 7);
+        var totalRange = ws.Range(dataRow, 1, dataRow, 10);
         ws.Cell(dataRow, 1).Value = "";
         ws.Cell(dataRow, 2).Value = "";
         ws.Cell(dataRow, 3).Value = "TOTAL";
-        ws.Cell(dataRow, 4).Value = result.GrandTotal;
-        ws.Cell(dataRow, 5).Value = 100;
-        ws.Cell(dataRow, 6).Value = "";
-        ws.Cell(dataRow, 7).Value = "";
+        ws.Cell(dataRow, 4).Value = result.TotalQuantity;
+        ws.Cell(dataRow, 5).Value = result.TotalSubtotal;
+        ws.Cell(dataRow, 6).Value = result.TotalProfit;
+        ws.Cell(dataRow, 7).Value = 100;
+        ws.Cell(dataRow, 8).Value = "";
+        ws.Cell(dataRow, 9).Value = "";
+        ws.Cell(dataRow, 10).Value = "";
         totalRange.Style.Font.Bold = true;
         totalRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
         totalRange.Style.Border.TopBorder = XLBorderStyleValues.Medium;
-        ws.Cell(dataRow, 4).Style.NumberFormat.Format = filter.Metric == ParetoMetric.Quantity ? "#,##0" : "#,##0.00";
+        ws.Cell(dataRow, 4).Style.NumberFormat.Format = "#,##0.####";
+        ws.Cell(dataRow, 5).Style.NumberFormat.Format = "#,##0.00";
+        ws.Cell(dataRow, 6).Style.NumberFormat.Format = "#,##0.00";
 
         ws.Columns().AdjustToContents();
 

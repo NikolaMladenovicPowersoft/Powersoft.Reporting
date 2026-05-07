@@ -1,0 +1,557 @@
+@model Powersoft.Reporting.Web.ViewModels.CancelLogViewModel
+@{
+    Layout = null;
+    var db = Model.ConnectedDatabase ?? "Unknown";
+    var now = DateTime.Now;
+    var isDetailed = Model.IsDetailed;
+    var hasPG = Model.HasPrimaryGroup;
+    var hasSG = Model.HasSecondaryGroup;
+
+    var detailedGrouped = isDetailed && hasPG
+        ? Model.DetailedRows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A").ToList()
+        : null;
+
+    var summaryGrouped = !isDetailed && hasPG
+        ? Model.SummaryRows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A").ToList()
+        : null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cancellation Logging - Print Preview</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #525659;
+            color: #1e293b;
+        }
+
+        .toolbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            background: #2c3e50;
+            color: white;
+            padding: 6px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-size: 13px;
+        }
+
+        .toolbar .title {
+            font-weight: 600;
+            margin-right: auto;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toolbar .separator {
+            width: 1px;
+            height: 24px;
+            background: rgba(255,255,255,0.2);
+        }
+
+        .toolbar button, .toolbar .dropdown-btn {
+            background: none;
+            border: 1px solid rgba(255,255,255,0.25);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .toolbar button:hover, .toolbar .dropdown-btn:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.4);
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .zoom-controls button { padding: 5px 8px; }
+
+        .zoom-level {
+            min-width: 42px;
+            text-align: center;
+            font-size: 12px;
+            color: rgba(255,255,255,0.8);
+        }
+
+        .export-wrap { position: relative; }
+
+        .export-menu {
+            display: none;
+            position: absolute;
+            top: 100%; right: 0;
+            margin-top: 4px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            min-width: 160px;
+            z-index: 200;
+            overflow: hidden;
+        }
+
+        .export-menu.show { display: block; }
+
+        .export-menu a {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            color: #1e293b;
+            text-decoration: none;
+            font-size: 13px;
+            transition: background 0.1s;
+        }
+
+        .export-menu a:hover { background: #f1f5f9; }
+        .export-menu a i { width: 18px; text-align: center; color: #64748b; }
+
+        .paper-container {
+            margin: 56px auto 40px;
+            padding: 20px;
+        }
+
+        .paper {
+            background: white;
+            margin: 0 auto;
+            padding: 48px 56px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+            transform-origin: top center;
+            transition: transform 0.2s ease;
+            max-width: 1200px;
+        }
+
+        .report-header {
+            text-align: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #1e293b;
+        }
+
+        .report-header .company-name {
+            font-size: 20px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #1e293b;
+        }
+
+        .report-header .report-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #475569;
+            margin-top: 2px;
+        }
+
+        .report-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 16px;
+        }
+
+        .report-meta .meta-right { text-align: right; }
+
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .report-table thead th {
+            background: #e2e8f0;
+            padding: 5px 8px;
+            text-align: right;
+            font-weight: 700;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #334155;
+            border-bottom: 2px solid #94a3b8;
+            white-space: nowrap;
+        }
+
+        .report-table thead th:first-child { text-align: left; }
+
+        .report-table .group-header td {
+            background: #f8fafc;
+            padding: 6px 8px 3px;
+            font-weight: 700;
+            font-size: 11px;
+            color: #1e293b;
+            border-top: 1px solid #94a3b8;
+            text-align: left;
+        }
+
+        .report-table tbody td {
+            padding: 3px 8px;
+            text-align: right;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+        }
+
+        .report-table tbody td:first-child {
+            text-align: left;
+            color: #64748b;
+        }
+
+        .report-table tbody tr:hover td { background: #fafbfd; }
+
+        .report-table .group-subtotal td {
+            font-weight: 600;
+            border-top: 1px solid #cbd5e1;
+            border-bottom: 1px solid #94a3b8;
+            padding: 4px 8px;
+            background: #f8fafc;
+            font-style: italic;
+            color: #475569;
+        }
+
+        .report-table .grand-total td {
+            font-weight: 700;
+            border-top: 3px double #1e293b;
+            padding: 6px 8px;
+            background: #f1f5f9;
+            font-size: 11.5px;
+            color: #0f172a;
+        }
+
+        .text-danger { color: #dc2626; }
+        .text-end { text-align: right; }
+        .action-deleted { color: #dc2626; }
+        .action-cancelled { color: #d97706; }
+        .action-complimentary { color: #059669; }
+
+        .report-footer {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 10px;
+            color: #94a3b8;
+        }
+
+        @@media print {
+            body { background: white; }
+            .toolbar { display: none !important; }
+            .paper-container { margin: 0; padding: 0; }
+            .paper {
+                box-shadow: none;
+                padding: 20px;
+                transform: none !important;
+            }
+            .report-table { page-break-inside: auto; }
+            .report-table tr { page-break-inside: avoid; }
+            .report-table .group-header { page-break-after: avoid; }
+            .report-footer { page-break-before: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <span class="title">
+            <i class="bi bi-x-circle me-1"></i>
+            Cancellation Logging — @db
+        </span>
+
+        <div class="zoom-controls">
+            <button onclick="zoomOut()" title="Zoom out"><i class="bi bi-zoom-out"></i></button>
+            <span class="zoom-level" id="zoomLabel">100%</span>
+            <button onclick="zoomIn()" title="Zoom in"><i class="bi bi-zoom-in"></i></button>
+            <button onclick="zoomReset()" title="Fit to width" style="font-size:11px;">Fit</button>
+        </div>
+
+        <div class="separator"></div>
+
+        <button onclick="window.print()">
+            <i class="bi bi-printer"></i> Print
+        </button>
+
+        <div class="export-wrap">
+            <button class="dropdown-btn" onclick="toggleExportMenu(event)">
+                <i class="bi bi-download"></i> Export <i class="bi bi-chevron-down" style="font-size:10px;"></i>
+            </button>
+            <div class="export-menu" id="exportMenu">
+                @{
+                    var qs = $"dateFrom={Model.DateFrom:yyyy-MM-dd}&dateTo={Model.DateTo:yyyy-MM-dd}"
+                           + $"&reportByDateTime={Model.ReportByDateTime}"
+                           + $"&actionType={Model.ActionType}&reportType={Model.ReportType}"
+                           + $"&primaryGroup={Model.PrimaryGroup}&secondaryGroup={Model.SecondaryGroup}"
+                           + $"&timezoneOffsetMinutes={Model.TimezoneOffsetMinutes}"
+                           + $"&sortColumn={Model.SortColumn}&sortDirection={Model.SortDirection}";
+                }
+                <a href="@Url.Action("ExportCancelLogPdf")?@qs">
+                    <i class="bi bi-filetype-pdf"></i> PDF
+                </a>
+                <a href="@Url.Action("ExportCancelLogExcel")?@qs">
+                    <i class="bi bi-filetype-xlsx"></i> Excel (.xlsx)
+                </a>
+                <a href="@Url.Action("ExportCancelLogCsv")?@qs">
+                    <i class="bi bi-filetype-csv"></i> CSV
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="paper-container">
+        <div class="paper" id="paper">
+            <div class="report-header">
+                <div class="company-name">@db</div>
+                <div class="report-title">Cancellation Logging — @(isDetailed ? "Detailed" : "Summary") Report</div>
+            </div>
+
+            <div class="report-meta">
+                <div>
+                    <strong>Printed:</strong> @now.ToString("dd/MM/yyyy HH:mm:ss")<br />
+                    <strong>Records:</strong> @Model.TotalCount.ToString("N0")
+                </div>
+                <div class="meta-right">
+                    <strong>Period:</strong> @Model.DateFrom.ToString("dd/MM/yyyy") — @Model.DateTo.ToString("dd/MM/yyyy")
+                    @if (Model.ReportByDateTime) { <span>&nbsp;| DateTime mode</span> }
+                    <br />
+                    <strong>Action:</strong> @Model.ActionTypeLabel
+                    @if (hasPG) { <span>&nbsp;| Group: @Model.PrimaryGroup</span> }
+                    @if (hasSG) { <span> &gt; @Model.SecondaryGroup</span> }
+                </div>
+            </div>
+
+            @if (isDetailed)
+            {
+                <table class="report-table" id="reportTable">
+                    <thead>
+                        <tr>
+                            @if (hasPG) { <th style="text-align:left;">Group</th> }
+                            <th style="text-align:left;">Date/Time</th>
+                            <th style="text-align:left;">Store</th>
+                            <th style="text-align:left;">User</th>
+                            <th style="text-align:left;">Action</th>
+                            <th style="text-align:left;">Customer</th>
+                            <th style="text-align:left;">Item</th>
+                            <th style="text-align:left;">Description</th>
+                            <th>Invoice</th>
+                            <th>Z-Report</th>
+                            <th>Qty</th>
+                            <th>Amount</th>
+                            <th>Inv. Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @if (hasPG && detailedGrouped != null)
+                    {
+                        @foreach (var grp in detailedGrouped)
+                        {
+                            var rows = grp.ToList();
+                            var colSpan = 13;
+                            <tr class="group-header">
+                                <td colspan="@colSpan">@grp.Key</td>
+                            </tr>
+                            @foreach (var r in rows)
+                            {
+                                <tr>
+                                    @if (hasPG) { <td>@r.Level2Descr</td> }
+                                    <td>@(r.SessionDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "")</td>
+                                    <td>@r.StoreAndStation</td>
+                                    <td>@r.UserCode</td>
+                                    <td class="@ActionClass(r.ActionType)">@r.ActionType</td>
+                                    <td>@r.CustomerFullName</td>
+                                    <td>@r.ItemCode</td>
+                                    <td>@r.ItemDescr</td>
+                                    <td>@r.InvoiceId</td>
+                                    <td>@r.ZReport</td>
+                                    <td>@r.Quantity.ToString("N2")</td>
+                                    <td>@r.Amount.ToString("N2")</td>
+                                    <td>@r.InvoiceTotal.ToString("N2")</td>
+                                </tr>
+                            }
+                            <tr class="group-subtotal">
+                                <td colspan="@(hasPG ? 10 : 9)">Subtotal (@rows.Count rows)</td>
+                                <td>@rows.Sum(x => x.Quantity).ToString("N2")</td>
+                                <td>@rows.Sum(x => x.Amount).ToString("N2")</td>
+                                <td>@rows.Sum(x => x.InvoiceTotal).ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        @foreach (var r in Model.DetailedRows)
+                        {
+                            <tr>
+                                @if (hasPG) { <td></td> }
+                                <td>@(r.SessionDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "")</td>
+                                <td>@r.StoreAndStation</td>
+                                <td>@r.UserCode</td>
+                                <td class="@ActionClass(r.ActionType)">@r.ActionType</td>
+                                <td>@r.CustomerFullName</td>
+                                <td>@r.ItemCode</td>
+                                <td>@r.ItemDescr</td>
+                                <td>@r.InvoiceId</td>
+                                <td>@r.ZReport</td>
+                                <td>@r.Quantity.ToString("N2")</td>
+                                <td>@r.Amount.ToString("N2")</td>
+                                <td>@r.InvoiceTotal.ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+
+                    <tr class="grand-total">
+                        <td colspan="@(hasPG ? 10 : 9)">Grand Total (@Model.DetailedRows.Count rows)</td>
+                        <td>@Model.DetailedRows.Sum(x => x.Quantity).ToString("N2")</td>
+                        <td>@Model.DetailedRows.Sum(x => x.Amount).ToString("N2")</td>
+                        <td>@Model.DetailedRows.Sum(x => x.InvoiceTotal).ToString("N2")</td>
+                    </tr>
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <table class="report-table" id="reportTable">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;">Store/Station</th>
+                            @if (hasPG) { <th style="text-align:left;">Group 1</th> }
+                            @if (hasSG) { <th style="text-align:left;">Group 2</th> }
+                            <th>Deleted</th>
+                            <th>Cancelled</th>
+                            <th>Complimentary</th>
+                            <th>Qty</th>
+                            <th>Amount</th>
+                            <th>Inv. Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @if (hasPG && summaryGrouped != null)
+                    {
+                        @foreach (var grp in summaryGrouped)
+                        {
+                            var rows = grp.ToList();
+                            var colSpan = 6 + (hasPG ? 1 : 0) + (hasSG ? 1 : 0) + 1;
+                            <tr class="group-header">
+                                <td colspan="@colSpan">@grp.Key</td>
+                            </tr>
+                            @foreach (var r in rows)
+                            {
+                                <tr>
+                                    <td>@r.StoreAndStation</td>
+                                    @if (hasPG) { <td>@r.Level1Descr</td> }
+                                    @if (hasSG) { <td>@r.Level2Descr</td> }
+                                    <td class="action-deleted">@r.DeletedAction.ToString("N0")</td>
+                                    <td class="action-cancelled">@r.CancelledAction.ToString("N0")</td>
+                                    <td class="action-complimentary">@r.ComplimentaryAction.ToString("N0")</td>
+                                    <td>@r.Quantity.ToString("N2")</td>
+                                    <td>@r.Amount.ToString("N2")</td>
+                                    <td>@r.InvoiceTotal.ToString("N2")</td>
+                                </tr>
+                            }
+                            <tr class="group-subtotal">
+                                <td colspan="@(1 + (hasPG ? 1 : 0) + (hasSG ? 1 : 0))">Subtotal</td>
+                                <td>@rows.Sum(x => x.DeletedAction).ToString("N0")</td>
+                                <td>@rows.Sum(x => x.CancelledAction).ToString("N0")</td>
+                                <td>@rows.Sum(x => x.ComplimentaryAction).ToString("N0")</td>
+                                <td>@rows.Sum(x => x.Quantity).ToString("N2")</td>
+                                <td>@rows.Sum(x => x.Amount).ToString("N2")</td>
+                                <td>@rows.Sum(x => x.InvoiceTotal).ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        @foreach (var r in Model.SummaryRows)
+                        {
+                            <tr>
+                                <td>@r.StoreAndStation</td>
+                                @if (hasPG) { <td>@r.Level1Descr</td> }
+                                @if (hasSG) { <td>@r.Level2Descr</td> }
+                                <td class="action-deleted">@r.DeletedAction.ToString("N0")</td>
+                                <td class="action-cancelled">@r.CancelledAction.ToString("N0")</td>
+                                <td class="action-complimentary">@r.ComplimentaryAction.ToString("N0")</td>
+                                <td>@r.Quantity.ToString("N2")</td>
+                                <td>@r.Amount.ToString("N2")</td>
+                                <td>@r.InvoiceTotal.ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+
+                    <tr class="grand-total">
+                        <td colspan="@(1 + (hasPG ? 1 : 0) + (hasSG ? 1 : 0))">Grand Total</td>
+                        <td>@Model.SummaryRows.Sum(x => x.DeletedAction).ToString("N0")</td>
+                        <td>@Model.SummaryRows.Sum(x => x.CancelledAction).ToString("N0")</td>
+                        <td>@Model.SummaryRows.Sum(x => x.ComplimentaryAction).ToString("N0")</td>
+                        <td>@Model.SummaryRows.Sum(x => x.Quantity).ToString("N2")</td>
+                        <td>@Model.SummaryRows.Sum(x => x.Amount).ToString("N2")</td>
+                        <td>@Model.SummaryRows.Sum(x => x.InvoiceTotal).ToString("N2")</td>
+                    </tr>
+                    </tbody>
+                </table>
+            }
+
+            <div class="report-footer">
+                End of Report<br />
+                &copy; @now.Year Power Soft Ltd.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var currentZoom = 100;
+        var paper = document.getElementById('paper');
+
+        function setZoom(val) {
+            currentZoom = Math.max(50, Math.min(250, val));
+            paper.style.transform = 'scale(' + (currentZoom / 100) + ')';
+            paper.style.transformOrigin = 'top center';
+            document.getElementById('zoomLabel').textContent = currentZoom + '%';
+        }
+
+        function zoomIn() { setZoom(currentZoom + 10); }
+        function zoomOut() { setZoom(currentZoom - 10); }
+        function zoomReset() { setZoom(100); }
+
+        setZoom(100);
+
+        function toggleExportMenu(e) {
+            e.stopPropagation();
+            document.getElementById('exportMenu').classList.toggle('show');
+        }
+
+        document.addEventListener('click', function() {
+            document.getElementById('exportMenu').classList.remove('show');
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'p') { e.preventDefault(); window.print(); }
+            if (e.ctrlKey && e.key === '+') { e.preventDefault(); zoomIn(); }
+            if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
+            if (e.key === 'Escape') window.close();
+        });
+    </script>
+</body>
+</html>
+
+@functions {
+    static string ActionClass(string action) => action switch
+    {
+        "Deleted" => "action-deleted",
+        "Cancelled" => "action-cancelled",
+        "Complimentary" => "action-complimentary",
+        _ => ""
+    };
+}

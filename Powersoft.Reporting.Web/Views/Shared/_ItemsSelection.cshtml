@@ -288,6 +288,12 @@
 
     restoreFromJson(_savedFilterJson);
 
+    window.reloadItemsSelectionFromJson = function (obj) {
+        if (!obj) return;
+        var json = typeof obj === 'string' ? obj : JSON.stringify(obj);
+        restoreFromJson(json);
+    };
+
     window.toggleItemsSelection = function () {
         var body = document.getElementById('isBody');
         var txt = document.getElementById('isToggleText');
@@ -530,6 +536,11 @@
     window.getItemsSelectionStoreCodes = function () {
         if (_modes['store'] === 'all' || _selected['store'].size === 0) return '';
         return Array.from(_selected['store']).join(',');
+    };
+
+    window.getItemsSelectionItemIds = function () {
+        if (_modes['item'] === 'all' || !_selected['item'] || _selected['item'].size === 0) return '';
+        return Array.from(_selected['item']).join(',');
     };
 })();
 </script>

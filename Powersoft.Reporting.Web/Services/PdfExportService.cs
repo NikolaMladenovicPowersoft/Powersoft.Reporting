@@ -318,13 +318,15 @@ public class PdfExportService
         AddSummaryCard(summaryTable, $"Class C: {result.ClassCCount}", $"{cPct:N1}% of value", new BaseColor(254, 226, 226), summaryBold, summaryFont);
         document.Add(summaryTable);
 
-        var table = new PdfPTable(7) { WidthPercentage = 100, SpacingBefore = 5f };
-        table.SetWidths(new float[] { 5f, 12f, 30f, 15f, 10f, 12f, 8f });
+        var table = new PdfPTable(9) { WidthPercentage = 100, SpacingBefore = 5f };
+        table.SetWidths(new float[] { 4f, 10f, 22f, 10f, 12f, 12f, 8f, 9f, 6f });
 
         AddHeaderCell(table, "#");
         AddHeaderCell(table, "Code");
         AddHeaderCell(table, "Name");
-        AddHeaderCell(table, filter.Metric == ParetoMetric.Quantity ? "Quantity" : "Value");
+        AddHeaderCell(table, "Qty");
+        AddHeaderCell(table, "Subtotal");
+        AddHeaderCell(table, "Profit");
         AddHeaderCell(table, "%");
         AddHeaderCell(table, "Cumul. %");
         AddHeaderCell(table, "Class");
@@ -341,7 +343,9 @@ public class PdfExportService
             AddDataCell(table, row.Rank.ToString(), bg, Element.ALIGN_CENTER);
             AddDataCell(table, row.Code, bg);
             AddDataCell(table, row.Name, bg);
-            AddDataCell(table, row.Value.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.Quantity.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.Subtotal.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.Profit.ToString("N2"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, $"{row.Percentage:N2}%", bg, Element.ALIGN_RIGHT);
             AddDataCell(table, $"{row.CumulativePercentage:N1}%", bg, Element.ALIGN_RIGHT);
             AddDataCell(table, row.Classification, bg, Element.ALIGN_CENTER);
@@ -350,10 +354,103 @@ public class PdfExportService
         AddTotalCell(table, "");
         AddTotalCell(table, "");
         AddTotalCell(table, "TOTAL");
-        AddTotalCell(table, result.GrandTotal.ToString("N2"), Element.ALIGN_RIGHT);
+        AddTotalCell(table, result.TotalQuantity.ToString("N0"), Element.ALIGN_RIGHT);
+        AddTotalCell(table, result.TotalSubtotal.ToString("N2"), Element.ALIGN_RIGHT);
+        AddTotalCell(table, result.TotalProfit.ToString("N2"), Element.ALIGN_RIGHT);
         AddTotalCell(table, "100%", Element.ALIGN_RIGHT);
         AddTotalCell(table, "");
         AddTotalCell(table, "");
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
+
+    public byte[] GenerateChartPdf(List<ChartDataPoint> data, ChartFilter filter)
+    {
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4, 30, 30, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Charts & Dashboards — Data Export", TitleFont));
+        document.Add(new Paragraph($"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}", SubtitleFont));
+        document.Add(new Paragraph($"Mode: {filter.Mode} | Dimension: {filter.Dimension} | Metric: {filter.Metric} | Top {filter.TopN}", SubtitleFont));
+        document.Add(new Paragraph($"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}" +
+            (filter.CompareLastYear ? " | Compare Last Year: Yes" : ""), SubtitleFont));
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            document.Add(new Paragraph($"Stores: {string.Join(", ", filter.StoreCodes)}", SubtitleFont));
+        document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        bool hasCompare = filter.CompareLastYear && data.Any(d => d.CompareValue.HasValue);
+        bool hasValue2 = data.Any(d => d.Value2.HasValue);
+
+        int colCount = 3;
+        if (hasValue2) colCount += 2;
+        if (hasCompare && !hasValue2) colCount += 2;
+
+        var table = new PdfPTable(colCount) { WidthPercentage = 100, SpacingBefore = 5f };
+
+        AddHeaderCell(table, "#");
+        AddHeaderCell(table, filter.Dimension.ToString());
+        string valLabel = filter.Metric == ChartMetric.Quantity ? "Qty" : filter.Metric == ChartMetric.Count ? "Transactions" : "Value";
+        AddHeaderCell(table, valLabel);
+
+        if (hasValue2)
+        {
+            AddHeaderCell(table, "Value 2");
+            AddHeaderCell(table, "Difference");
+        }
+        else if (hasCompare)
+        {
+            AddHeaderCell(table, "Last Year");
+            AddHeaderCell(table, "YoY %");
+        }
+
+        decimal grandTotal = data.Sum(d => d.Value);
+        bool alternate = false;
+        for (int i = 0; i < data.Count; i++)
+        {
+            var row = data[i];
+            var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+            bool isValueMetric = filter.Metric == ChartMetric.Value;
+            string fmtVal = isValueMetric ? row.Value.ToString("N2") : row.Value.ToString("N0");
+
+            AddDataCell(table, (i + 1).ToString(), bg, Element.ALIGN_CENTER);
+            AddDataCell(table, row.Label, bg);
+            AddDataCell(table, fmtVal, bg, Element.ALIGN_RIGHT);
+
+            if (hasValue2)
+            {
+                AddDataCell(table, isValueMetric ? (row.Value2 ?? 0).ToString("N2") : (row.Value2 ?? 0).ToString("N0"), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, isValueMetric ? (row.DiffValue ?? 0).ToString("N2") : (row.DiffValue ?? 0).ToString("N0"), bg, Element.ALIGN_RIGHT);
+            }
+            else if (hasCompare)
+            {
+                AddDataCell(table, isValueMetric ? (row.CompareValue ?? 0).ToString("N2") : (row.CompareValue ?? 0).ToString("N0"), bg, Element.ALIGN_RIGHT);
+                var yoy = row.CompareValue.HasValue && row.CompareValue != 0
+                    ? $"{(row.Value - row.CompareValue.Value) / row.CompareValue.Value * 100:N1}%"
+                    : "N/A";
+                AddDataCell(table, yoy, bg, Element.ALIGN_RIGHT);
+            }
+
+            alternate = !alternate;
+        }
+
+        AddTotalCell(table, "");
+        AddTotalCell(table, "TOTAL");
+        AddTotalCell(table, filter.Metric == ChartMetric.Value ? grandTotal.ToString("N2") : grandTotal.ToString("N0"), Element.ALIGN_RIGHT);
+        if (hasValue2)
+        {
+            AddTotalCell(table, data.Sum(d => d.Value2 ?? 0).ToString("N2"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, data.Sum(d => d.DiffValue ?? 0).ToString("N2"), Element.ALIGN_RIGHT);
+        }
+        else if (hasCompare)
+        {
+            AddTotalCell(table, data.Sum(d => d.CompareValue ?? 0).ToString("N2"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, "");
+        }
 
         document.Add(table);
         document.Close();

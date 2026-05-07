@@ -416,8 +416,7 @@ public class CsvExportService
         sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
         sb.AppendLine();
 
-        var metricLabel = filter.Metric == Core.Models.ParetoMetric.Quantity ? "Quantity" : "Value";
-        sb.AppendLine(string.Join(",", new[] { "Rank", "Code", "Name", metricLabel, "%", "Cumul. %", "Class" }.Select(Escape)));
+        sb.AppendLine(string.Join(",", new[] { "Rank", "Code", "Name", "Quantity", "Subtotal", "Profit", "%", "Cumul. %", "Class", "Display" }.Select(Escape)));
 
         foreach (var row in result.Rows)
         {
@@ -426,16 +425,22 @@ public class CsvExportService
                 row.Rank.ToString(CultureInfo.InvariantCulture),
                 row.Code,
                 row.Name,
-                row.Value.ToString("F2", CultureInfo.InvariantCulture),
+                row.Quantity.ToString("F4", CultureInfo.InvariantCulture),
+                row.Subtotal.ToString("F2", CultureInfo.InvariantCulture),
+                row.Profit.ToString("F2", CultureInfo.InvariantCulture),
                 row.Percentage.ToString("F2", CultureInfo.InvariantCulture),
                 row.CumulativePercentage.ToString("F1", CultureInfo.InvariantCulture),
-                row.Classification
+                row.Classification,
+                row.IsDisplay ? "Yes" : ""
             };
             sb.AppendLine(string.Join(",", cells.Select(Escape)));
         }
 
         var totalCells = new List<string> { "", "", "TOTAL",
-            result.GrandTotal.ToString("F2", CultureInfo.InvariantCulture), "100.00", "", "" };
+            result.TotalQuantity.ToString("F4", CultureInfo.InvariantCulture),
+            result.TotalSubtotal.ToString("F2", CultureInfo.InvariantCulture),
+            result.TotalProfit.ToString("F2", CultureInfo.InvariantCulture),
+            "100.00", "", "", "" };
         sb.AppendLine(string.Join(",", totalCells.Select(Escape)));
 
         return new UTF8Encoding(true).GetBytes(sb.ToString());

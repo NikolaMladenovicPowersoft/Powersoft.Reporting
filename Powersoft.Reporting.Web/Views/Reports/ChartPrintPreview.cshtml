@@ -1,0 +1,409 @@
+@using Powersoft.Reporting.Core.Models
+@{
+    Layout = null;
+    var data = ViewBag.ChartData as List<ChartDataPoint> ?? new List<ChartDataPoint>();
+    var filter = ViewBag.ChartFilter as ChartFilter;
+    var db = ViewBag.ConnectedDatabase as string ?? "Unknown";
+    var now = DateTime.Now;
+    var hasCompare = data.Any(d => d.CompareValue.HasValue);
+    var isVsMode = data.Any(d => d.Value2.HasValue);
+    var metricLabel = filter?.Metric == ChartMetric.Quantity ? "Quantity" : filter?.Metric == ChartMetric.Count ? "Transactions" : "Value";
+    var isValueMetric = filter?.Metric == ChartMetric.Value;
+    var total = data.Sum(d => d.Value);
+    var dateFromStr = filter?.DateFrom.ToString("dd/MM/yyyy") ?? "";
+    var dateToStr = filter?.DateTo.ToString("dd/MM/yyyy") ?? "";
+    var exportQs = $"dateFrom={filter?.DateFrom:yyyy-MM-dd}&dateTo={filter?.DateTo:yyyy-MM-dd}&dimension={filter?.Dimension}&metric={filter?.Metric}&topN={filter?.TopN}&showOthers={filter?.ShowOthers}&compareLastYear={filter?.CompareLastYear}&includeVat={filter?.IncludeVat}&chartType={filter?.ChartType}&mode={filter?.Mode}";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Charts & Dashboards - Print Preview</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #525659;
+            color: #1e293b;
+        }
+
+        .toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: #2c3e50;
+            color: white;
+            padding: 6px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-size: 13px;
+        }
+
+        .toolbar .title {
+            font-weight: 600;
+            margin-right: auto;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toolbar .separator {
+            width: 1px;
+            height: 24px;
+            background: rgba(255,255,255,0.2);
+        }
+
+        .toolbar button, .toolbar .dropdown-btn {
+            background: none;
+            border: 1px solid rgba(255,255,255,0.25);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .toolbar button:hover, .toolbar .dropdown-btn:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.4);
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .zoom-controls button { padding: 5px 8px; }
+        .zoom-level { min-width: 42px; text-align: center; font-size: 12px; color: rgba(255,255,255,0.8); }
+
+        .export-wrap { position: relative; }
+        .export-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 4px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            min-width: 160px;
+            z-index: 200;
+            overflow: hidden;
+        }
+        .export-menu.show { display: block; }
+        .export-menu a {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            color: #1e293b;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .export-menu a:hover { background: #f1f5f9; }
+        .export-menu a i { width: 18px; text-align: center; color: #64748b; }
+
+        .paper-container {
+            margin: 56px auto 40px;
+            padding: 20px;
+        }
+
+        .paper {
+            background: white;
+            margin: 0 auto;
+            padding: 48px 56px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+            transform-origin: top center;
+            transition: transform 0.2s ease;
+            max-width: 1200px;
+        }
+
+        .report-header {
+            text-align: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #1e293b;
+        }
+        .report-header .company-name {
+            font-size: 20px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #1e293b;
+        }
+        .report-header .report-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #475569;
+            margin-top: 2px;
+        }
+
+        .report-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 16px;
+        }
+        .report-meta .meta-right { text-align: right; }
+
+        .report-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+        .report-table thead th {
+            background: #e2e8f0;
+            padding: 5px 8px;
+            text-align: right;
+            font-weight: 700;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #334155;
+            border-bottom: 2px solid #94a3b8;
+            white-space: nowrap;
+        }
+        .report-table thead th:first-child,
+        .report-table thead th:nth-child(2) { text-align: left; }
+
+        .report-table tbody td {
+            padding: 3px 8px;
+            text-align: right;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+        }
+        .report-table tbody td:first-child,
+        .report-table tbody td:nth-child(2) {
+            text-align: left;
+            color: #64748b;
+        }
+        .report-table tbody tr:hover td { background: #fafbfd; }
+
+        .report-table .grand-total td {
+            font-weight: 700;
+            border-top: 3px double #1e293b;
+            padding: 6px 8px;
+            background: #f1f5f9;
+            font-size: 11.5px;
+            color: #0f172a;
+        }
+
+        .text-danger { color: #dc2626; }
+        .text-success { color: #16a34a; }
+        .text-end { text-align: right; }
+
+        .report-footer {
+            text-align: center;
+            margin-top: 24px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 10px;
+            color: #94a3b8;
+        }
+
+        @@media print {
+            body { background: white; }
+            .toolbar { display: none !important; }
+            .paper-container { margin: 0; padding: 0; }
+            .paper { box-shadow: none; padding: 20px; transform: none !important; }
+            .report-table { page-break-inside: auto; }
+            .report-table tr { page-break-inside: avoid; }
+            .report-footer { page-break-before: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <span class="title">
+            <i class="bi bi-pie-chart me-1"></i>
+            Charts & Dashboards — @db
+        </span>
+
+        <div class="zoom-controls">
+            <button onclick="zoomOut()" title="Zoom out"><i class="bi bi-zoom-out"></i></button>
+            <span class="zoom-level" id="zoomLabel">100%</span>
+            <button onclick="zoomIn()" title="Zoom in"><i class="bi bi-zoom-in"></i></button>
+            <button onclick="zoomReset()" title="Fit to width" style="font-size:11px;">Fit</button>
+        </div>
+
+        <div class="separator"></div>
+
+        <button onclick="window.print()">
+            <i class="bi bi-printer"></i> Print
+        </button>
+
+        <div class="export-wrap">
+            <button class="dropdown-btn" onclick="toggleExportMenu(event)">
+                <i class="bi bi-download"></i> Export <i class="bi bi-chevron-down" style="font-size:10px;"></i>
+            </button>
+            <div class="export-menu" id="exportMenu">
+                <a href="@Url.Action("ExportChartPdf")@("?" + exportQs)">
+                    <i class="bi bi-filetype-pdf"></i> PDF
+                </a>
+                <a href="@Url.Action("ExportChartExcel")@("?" + exportQs)">
+                    <i class="bi bi-filetype-xlsx"></i> Excel (.xlsx)
+                </a>
+                <a href="@Url.Action("ExportChartCsv")@("?" + exportQs)">
+                    <i class="bi bi-filetype-csv"></i> CSV
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="paper-container">
+        <div class="paper" id="paper">
+
+            <div class="report-header">
+                <div class="company-name">@db</div>
+                <div class="report-title">Charts & Dashboards — @filter?.Dimension</div>
+            </div>
+
+            <div class="report-meta">
+                <div>
+                    <strong>Printed:</strong> @now.ToString("dd/MM/yyyy HH:mm:ss")
+                </div>
+                <div class="meta-right">
+                    <strong>Period:</strong> @dateFromStr — @dateToStr<br />
+                    <strong>Mode:</strong> @filter?.Mode |
+                    <strong>Metric:</strong> @metricLabel |
+                    <strong>Top:</strong> @filter?.TopN
+                    @if (filter?.IncludeVat == true) { <text> | <strong>Inc. VAT</strong></text> }
+                    @if (filter?.CompareLastYear == true) { <text> | <strong>vs Last Year</strong></text> }
+                </div>
+            </div>
+
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th style="width:40px;">#</th>
+                        <th>@filter?.Dimension</th>
+                        @if (isVsMode)
+                        {
+                            <th>Value 1</th>
+                            <th>Value 2</th>
+                            <th>Difference</th>
+                        }
+                        else
+                        {
+                            <th>@metricLabel</th>
+                            <th>% of Total</th>
+                            @if (hasCompare)
+                            {
+                                <th>Last Year</th>
+                                <th>YoY Diff</th>
+                                <th>YoY %</th>
+                            }
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < data.Count; i++)
+                    {
+                        var d = data[i];
+                        var pct = total != 0 ? (d.Value / total * 100) : 0;
+                        <tr>
+                            <td>@(i + 1)</td>
+                            <td>@d.Label</td>
+                            @if (isVsMode)
+                            {
+                                <td>@(isValueMetric ? d.Value.ToString("N2") : d.Value.ToString("N0"))</td>
+                                <td>@(isValueMetric ? (d.Value2 ?? 0).ToString("N2") : (d.Value2 ?? 0).ToString("N0"))</td>
+                                <td>@(isValueMetric ? (d.DiffValue ?? 0).ToString("N2") : (d.DiffValue ?? 0).ToString("N0"))</td>
+                            }
+                            else
+                            {
+                                <td>@(isValueMetric ? d.Value.ToString("N2") : d.Value.ToString("N0"))</td>
+                                <td>@pct.ToString("F1")%</td>
+                                @if (hasCompare)
+                                {
+                                    var cv = d.CompareValue ?? 0;
+                                    var diff = d.Value - cv;
+                                    var yoyPct = cv != 0 ? ((d.Value - cv) / cv * 100) : 0;
+                                    var cls = diff >= 0 ? "text-success" : "text-danger";
+                                    <td>@(isValueMetric ? cv.ToString("N2") : cv.ToString("N0"))</td>
+                                    <td class="@cls">@(isValueMetric ? diff.ToString("N2") : diff.ToString("N0"))</td>
+                                    <td class="@cls">@yoyPct.ToString("F1")%</td>
+                                }
+                            }
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    @{
+                        var grandTotal = data.Sum(d => d.Value);
+                        var grandV2 = data.Sum(d => d.Value2 ?? 0);
+                        var grandDiff = data.Sum(d => d.DiffValue ?? 0);
+                        var grandCompare = data.Sum(d => d.CompareValue ?? 0);
+                    }
+                    <tr class="grand-total">
+                        <td></td>
+                        <td><strong>Grand Total</strong></td>
+                        @if (isVsMode)
+                        {
+                            <td><strong>@(isValueMetric ? grandTotal.ToString("N2") : grandTotal.ToString("N0"))</strong></td>
+                            <td><strong>@(isValueMetric ? grandV2.ToString("N2") : grandV2.ToString("N0"))</strong></td>
+                            <td><strong>@(isValueMetric ? grandDiff.ToString("N2") : grandDiff.ToString("N0"))</strong></td>
+                        }
+                        else
+                        {
+                            <td><strong>@(isValueMetric ? grandTotal.ToString("N2") : grandTotal.ToString("N0"))</strong></td>
+                            <td><strong>100.0%</strong></td>
+                            @if (hasCompare)
+                            {
+                                var gDiff = grandTotal - grandCompare;
+                                var gYoyPct = grandCompare != 0 ? ((grandTotal - grandCompare) / grandCompare * 100) : 0;
+                                var gCls = gDiff >= 0 ? "text-success" : "text-danger";
+                                <td><strong>@(isValueMetric ? grandCompare.ToString("N2") : grandCompare.ToString("N0"))</strong></td>
+                                <td class="@gCls"><strong>@(isValueMetric ? gDiff.ToString("N2") : gDiff.ToString("N0"))</strong></td>
+                                <td class="@gCls"><strong>@gYoyPct.ToString("F1")%</strong></td>
+                            }
+                        }
+                    </tr>
+                </tfoot>
+            </table>
+
+            <div class="report-footer">
+                <strong>@data.Count</strong> rows | Generated @now.ToString("dd/MM/yyyy HH:mm") |
+                Charts & Dashboards — Powersoft Reporting
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        var zoom = 100;
+        function setZoom(v) {
+            zoom = Math.max(50, Math.min(200, v));
+            document.getElementById('paper').style.transform = 'scale(' + (zoom / 100) + ')';
+            document.getElementById('zoomLabel').textContent = zoom + '%';
+        }
+        function zoomIn() { setZoom(zoom + 10); }
+        function zoomOut() { setZoom(zoom - 10); }
+        function zoomReset() {
+            var cw = document.querySelector('.paper-container').clientWidth - 40;
+            var pw = 1200;
+            setZoom(Math.round((cw / pw) * 100));
+        }
+        function toggleExportMenu(e) {
+            e.stopPropagation();
+            document.getElementById('exportMenu').classList.toggle('show');
+        }
+        document.addEventListener('click', function() {
+            document.getElementById('exportMenu').classList.remove('show');
+        });
+    </script>
+</body>
+</html>

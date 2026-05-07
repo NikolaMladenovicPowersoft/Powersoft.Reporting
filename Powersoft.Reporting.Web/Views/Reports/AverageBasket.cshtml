@@ -319,13 +319,13 @@
                     <i class="bi bi-eye me-1"></i>Preview
                 </button>
                 <div class="btn-group btn-group-sm">
-                <a class="btn btn-outline-success" asp-action="ExportCsv" asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")" asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")" asp-route-breakdown="@Model.Breakdown" asp-route-groupBy="@Model.GroupBy" asp-route-secondaryGroupBy="@Model.SecondaryGroupBy" asp-route-includeVat="@Model.IncludeVat" asp-route-compareLastYear="@Model.CompareLastYear" asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-itemIds="@(Model.SelectedItemIdsString ?? "")" asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                <a class="btn btn-outline-success" href="#" onclick="window.location.href=buildReportUrl('@Url.Action("ExportCsv")');return false;">
                     <i class="bi bi-filetype-csv me-1"></i>CSV
                 </a>
-                <a class="btn btn-outline-success" asp-action="ExportExcel" asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")" asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")" asp-route-breakdown="@Model.Breakdown" asp-route-groupBy="@Model.GroupBy" asp-route-secondaryGroupBy="@Model.SecondaryGroupBy" asp-route-includeVat="@Model.IncludeVat" asp-route-compareLastYear="@Model.CompareLastYear" asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-itemIds="@(Model.SelectedItemIdsString ?? "")" asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                <a class="btn btn-outline-success" href="#" onclick="window.location.href=buildReportUrl('@Url.Action("ExportExcel")');return false;">
                     <i class="bi bi-filetype-xlsx me-1"></i>Excel
                 </a>
-                <a class="btn btn-outline-danger" asp-action="ExportPdf" asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")" asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")" asp-route-breakdown="@Model.Breakdown" asp-route-groupBy="@Model.GroupBy" asp-route-secondaryGroupBy="@Model.SecondaryGroupBy" asp-route-includeVat="@Model.IncludeVat" asp-route-compareLastYear="@Model.CompareLastYear" asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-itemIds="@(Model.SelectedItemIdsString ?? "")" asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                <a class="btn btn-outline-danger" href="#" onclick="window.location.href=buildReportUrl('@Url.Action("ExportPdf")');return false;">
                     <i class="bi bi-filetype-pdf me-1"></i>PDF
                 </a>
                 </div>
@@ -907,16 +907,7 @@ else
                 </div>
 
                 <h6 class="text-muted mb-2"><i class="bi bi-funnel me-1"></i>Parameters (current selection)</h6>
-                <div class="bg-light rounded p-2 mb-3 small">
-                    <span class="me-3"><strong>Breakdown:</strong> @Model.Breakdown</span>
-                    @if (Model.HasStoreFilter)
-                    {
-                        <span class="me-3"><strong>Stores:</strong> @Model.SelectedStoreCodes.Count selected</span>
-                    }
-                    @if (Model.HasItemFilter)
-                    {
-                        <span><strong>Items:</strong> @Model.SelectedItemIds.Count selected</span>
-                    }
+                <div class="bg-light rounded p-2 mb-3 small" id="schedParamsSummary">
                 </div>
 
                 <h6 class="text-muted mb-2"><i class="bi bi-calendar-range me-1"></i>Report date range</h6>
@@ -1139,7 +1130,7 @@ else
                     </div>
                 </div>
                 <div class="mt-2 d-flex justify-content-between small text-muted">
-                    <span><span id="colVisibleCount">9</span> of 9 columns visible</span>
+                    <span><span id="colVisibleCount">9</span> of <span id="colTotalCount">9</span> columns visible</span>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1311,7 +1302,7 @@ else
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);" onclick="analyzeReport()" id="btnReanalyze" style="display:none;">
+                <button type="button" class="btn text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6); display:none;" onclick="analyzeReport()" id="btnReanalyze">
                     <i class="bi bi-arrow-clockwise me-1"></i>Re-analyze
                 </button>
             </div>
@@ -1396,14 +1387,22 @@ function populateItemsSelectionHidden() {
 }
 
 // Layout switching: People Count locks breakdown/grouping controls
+var _savedLayoutValues = null;
 function onLayoutChange() {
     var isPeopleCount = document.getElementById('layoutPeopleCount').checked;
     var breakdownEl = document.getElementById('Breakdown');
     var groupByEl = document.getElementById('GroupBy');
     var secondaryGroupByEl = document.getElementById('SecondaryGroupBy');
     var compareLyEl = document.getElementById('compareLyCheck');
+    var columnsBtn = document.querySelector('[data-bs-target="#columnSettingsModal"]');
 
     if (isPeopleCount) {
+        _savedLayoutValues = {
+            breakdown: breakdownEl.value,
+            groupBy: groupByEl.value,
+            secondaryGroupBy: secondaryGroupByEl.value,
+            compareLy: compareLyEl.checked
+        };
         breakdownEl.value = 'Daily';
         groupByEl.value = 'None';
         secondaryGroupByEl.value = 'Store';
@@ -1412,17 +1411,22 @@ function onLayoutChange() {
         groupByEl.disabled = true;
         secondaryGroupByEl.disabled = true;
         compareLyEl.disabled = true;
+        if (columnsBtn) columnsBtn.style.display = 'none';
     } else {
+        if (_savedLayoutValues) {
+            breakdownEl.value = _savedLayoutValues.breakdown;
+            groupByEl.value = _savedLayoutValues.groupBy;
+            secondaryGroupByEl.value = _savedLayoutValues.secondaryGroupBy;
+            compareLyEl.checked = _savedLayoutValues.compareLy;
+            _savedLayoutValues = null;
+        }
         breakdownEl.disabled = false;
         groupByEl.disabled = false;
         secondaryGroupByEl.disabled = false;
         compareLyEl.disabled = false;
+        if (columnsBtn) columnsBtn.style.display = '';
     }
 }
-
-document.addEventListener('DOMContentLoaded', function() {
-    onLayoutChange();
-});
 
 // Date preset handling
 function clearPreset() {
@@ -1577,6 +1581,9 @@ function sortBy(column) {
 
 // Pagination
 function goToPage(page) {
+    if (page < 1) return;
+    var totalPages = @(Model.TotalPages > 0 ? Model.TotalPages : 1);
+    if (page > totalPages) return;
     document.getElementById('pageNumberHidden').value = page;
     submitToResults();
 }
@@ -1598,6 +1605,33 @@ function showLoading() {
     setTimeout(() => { btn.disabled = true; }, 10);
 }
 
+function buildReportUrl(baseAction) {
+    var form = document.getElementById('reportForm');
+    var dateFrom = (form.querySelector('[name="DateFrom"]') || {}).value || '@Model.DateFrom.ToString("yyyy-MM-dd")';
+    var dateTo = (form.querySelector('[name="DateTo"]') || {}).value || '@Model.DateTo.ToString("yyyy-MM-dd")';
+    var breakdown = (document.getElementById('Breakdown') || {}).value || '@Model.Breakdown';
+    var groupBy = (document.getElementById('GroupBy') || {}).value || '@Model.GroupBy';
+    var secondaryGroupBy = (document.getElementById('SecondaryGroupBy') || {}).value || '@Model.SecondaryGroupBy';
+    var includeVat = document.getElementById('includeVatCheck') ? document.getElementById('includeVatCheck').checked : @(Model.IncludeVat ? "true" : "false");
+    var compareLy = document.getElementById('compareLyCheck') ? document.getElementById('compareLyCheck').checked : @(Model.CompareLastYear ? "true" : "false");
+    var storeCodes = typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : '';
+    var itemIds = typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : '';
+    var sortCol = (document.getElementById('sortColumnHidden') || {}).value || 'Period';
+    var sortDir = (document.getElementById('sortDirectionHidden') || {}).value || 'ASC';
+    return baseAction +
+        '?dateFrom=' + encodeURIComponent(dateFrom) +
+        '&dateTo=' + encodeURIComponent(dateTo) +
+        '&breakdown=' + encodeURIComponent(breakdown) +
+        '&groupBy=' + encodeURIComponent(groupBy) +
+        '&secondaryGroupBy=' + encodeURIComponent(secondaryGroupBy) +
+        '&includeVat=' + includeVat +
+        '&compareLastYear=' + compareLy +
+        '&storeCodes=' + encodeURIComponent(storeCodes) +
+        '&itemIds=' + encodeURIComponent(itemIds) +
+        '&sortColumn=' + encodeURIComponent(sortCol) +
+        '&sortDirection=' + encodeURIComponent(sortDir);
+}
+
 // Print Preview toggle
 var previewOpen = false;
 function togglePreview() {
@@ -1614,21 +1648,8 @@ function togglePreview() {
         btn.classList.add('btn-outline-warning');
 
         var frame = document.getElementById('previewFrame');
-        if (!frame.src || frame.src === 'about:blank') {
-            var url = '@Url.Action("PrintPreview")' +
-                '?dateFrom=@Model.DateFrom.ToString("yyyy-MM-dd")' +
-                '&dateTo=@Model.DateTo.ToString("yyyy-MM-dd")' +
-                '&breakdown=@Model.Breakdown' +
-                '&groupBy=@Model.GroupBy' +
-                '&secondaryGroupBy=@Model.SecondaryGroupBy' +
-                '&includeVat=@Model.IncludeVat' +
-                '&compareLastYear=@Model.CompareLastYear' +
-                '&storeCodes=' + encodeURIComponent(typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : '') +
-                '&itemIds=' + encodeURIComponent(typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : '') +
-                '&sortColumn=@Model.SortColumn' +
-                '&sortDirection=@Model.SortDirection';
-            frame.src = url;
-        }
+        var url = buildReportUrl('@Url.Action("PrintPreview")');
+        frame.src = url;
 
         // Auto-resize iframe to content
         frame.onload = function() {
@@ -1647,31 +1668,6 @@ function togglePreview() {
 }
 
 // CSV Export
-function exportToCSV() {
-    const table = document.getElementById('resultsTable');
-    let csv = [];
-    
-    // Headers
-    const headers = [];
-    table.querySelectorAll('thead th').forEach(th => headers.push('"' + th.textContent.trim() + '"'));
-    csv.push(headers.join(','));
-    
-    // Data rows
-    table.querySelectorAll('tbody tr').forEach(row => {
-        const rowData = [];
-        row.querySelectorAll('td').forEach(td => rowData.push('"' + td.textContent.trim() + '"'));
-        csv.push(rowData.join(','));
-    });
-    
-    // Download
-    const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `AverageBasket_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-}
-
     // Schedule modal
 function onSchedAiToggle() {
     document.getElementById('schedAiDetails').style.display =
@@ -1935,7 +1931,7 @@ function loadExistingSchedules() {
 function resetScheduleForm() {
     document.getElementById('schedId').value = '';
     document.getElementById('schedName').value = '';
-    document.getElementById('schedRecipients').value = 'gm@powersoft.com.cy';
+    document.getElementById('schedRecipients').value = '';
     document.getElementById('schedSubject').value = '';
     document.getElementById('schedFormat').value = 'Excel';
     document.getElementById('schedRecurrence').value = 'Daily';
@@ -2037,9 +2033,19 @@ document.addEventListener('DOMContentLoaded', function() {
     var modal = document.getElementById('scheduleModal');
     if (modal) {
         modal.addEventListener('show.bs.modal', function() {
-            resetScheduleForm();               // A2: always start clean
+            resetScheduleForm();
             loadExistingSchedules();
             autoSelectScheduleDateRange();
+            var summary = document.getElementById('schedParamsSummary');
+            if (summary) {
+                var bd = (document.getElementById('Breakdown') || {}).value || 'Monthly';
+                var stores = typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : '';
+                var items = typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : '';
+                var html = '<span class="me-3"><strong>Breakdown:</strong> ' + bd + '</span>';
+                if (stores) html += '<span class="me-3"><strong>Stores:</strong> ' + stores.split(',').length + ' selected</span>';
+                if (items) html += '<span><strong>Items:</strong> ' + items.split(',').length + ' selected</span>';
+                summary.innerHTML = html;
+            }
             onSchedDateRangeTypeChange();
         });
     }
@@ -2053,6 +2059,11 @@ function openSendEmailModal() {
     document.getElementById('sendEmailRecipients').value = '';
     document.getElementById('sendEmailAlert').style.display = 'none';
     document.getElementById('sendEmailRecipients').classList.remove('is-invalid');
+    var df = (document.querySelector('[name="DateFrom"]') || {}).value || '';
+    var dt = (document.querySelector('[name="DateTo"]') || {}).value || '';
+    if (df && dt) {
+        document.getElementById('sendEmailSubject').value = 'Average Basket Report \u2014 ' + df + ' to ' + dt;
+    }
     loadEmailTemplates();
     var modal = new bootstrap.Modal(document.getElementById('sendEmailModal'));
     modal.show();
@@ -2148,17 +2159,18 @@ function sendReportEmail() {
     formData.append('emailSubject', document.getElementById('sendEmailSubject').value);
     formData.append('exportFormat', document.getElementById('sendEmailFormat').value);
     formData.append('templateId', document.getElementById('sendEmailTemplate').value || '');
-    formData.append('dateFrom', '@Model.DateFrom.ToString("yyyy-MM-dd")');
-    formData.append('dateTo', '@Model.DateTo.ToString("yyyy-MM-dd")');
-    formData.append('breakdown', '@Model.Breakdown');
-    formData.append('groupBy', '@Model.GroupBy');
-    formData.append('secondaryGroupBy', '@Model.SecondaryGroupBy');
-    formData.append('includeVat', '@Model.IncludeVat');
-    formData.append('compareLastYear', '@Model.CompareLastYear');
+    var form = document.getElementById('reportForm');
+    formData.append('dateFrom', (form.querySelector('[name="DateFrom"]') || {}).value || '@Model.DateFrom.ToString("yyyy-MM-dd")');
+    formData.append('dateTo', (form.querySelector('[name="DateTo"]') || {}).value || '@Model.DateTo.ToString("yyyy-MM-dd")');
+    formData.append('breakdown', (document.getElementById('Breakdown') || {}).value || '@Model.Breakdown');
+    formData.append('groupBy', (document.getElementById('GroupBy') || {}).value || '@Model.GroupBy');
+    formData.append('secondaryGroupBy', (document.getElementById('SecondaryGroupBy') || {}).value || '@Model.SecondaryGroupBy');
+    formData.append('includeVat', document.getElementById('includeVatCheck') ? document.getElementById('includeVatCheck').checked : @(Model.IncludeVat ? "true" : "false"));
+    formData.append('compareLastYear', document.getElementById('compareLyCheck') ? document.getElementById('compareLyCheck').checked : @(Model.CompareLastYear ? "true" : "false"));
     formData.append('storeCodes', typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : (document.getElementById('selectedStoreCodesHidden').value || ''));
     formData.append('itemIds', typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : (document.getElementById('selectedItemIdsHidden').value || ''));
-    formData.append('sortColumn', '@Model.SortColumn');
-    formData.append('sortDirection', '@Model.SortDirection');
+    formData.append('sortColumn', (document.getElementById('sortColumnHidden') || {}).value || 'Period');
+    formData.append('sortDirection', (document.getElementById('sortDirectionHidden') || {}).value || 'ASC');
 
     fetch('@Url.Action("SendReportEmail", "Reports")', { method: 'POST', body: formData })
         .then(function(r) { return r.json(); })
@@ -2211,6 +2223,8 @@ function updateColVisibleCount() {
     var visible = document.querySelectorAll('.col-toggle:checked').length;
     var el = document.getElementById('colVisibleCount');
     if (el) el.textContent = visible;
+    var totalEl = document.getElementById('colTotalCount');
+    if (totalEl) totalEl.textContent = total;
 }
 
 // ==================== Layout Save/Load/Reset ====================
@@ -2222,13 +2236,17 @@ function collectCurrentLayout() {
     var cly = document.getElementById('compareLyCheck');
     if (cly) parms['CompareLastYear'] = cly.checked ? '1' : '0';
     var bd = document.getElementById('Breakdown');
-    if (bd) parms['Breakdown'] = bd.options[bd.selectedIndex].text;
+    if (bd) parms['Breakdown'] = bd.value;
     var gb = document.getElementById('GroupBy');
-    if (gb) parms['GroupBy'] = gb.options[gb.selectedIndex].text;
+    if (gb) parms['GroupBy'] = gb.value;
     var sgb = document.getElementById('SecondaryGroupBy');
-    if (sgb) parms['SecondaryGroupBy'] = sgb.options[sgb.selectedIndex].text;
+    if (sgb) parms['SecondaryGroupBy'] = sgb.value;
     var ps = document.getElementById('PageSize');
     if (ps) parms['PageSize'] = ps.value;
+    var layoutAb = document.getElementById('layoutAvgBasket');
+    if (layoutAb) parms['ReportLayout'] = layoutAb.checked ? 'AverageBasket' : 'PeopleCount';
+    var stq = document.getElementById('showTotalQtyCheck');
+    if (stq) parms['ShowTotalQty'] = stq.checked ? '1' : '0';
 
     // Column visibility
     var hidden = [];
@@ -2355,6 +2373,7 @@ function applyColumnVisibility() {
     });
 
     styleEl.textContent = rules.join('\n');
+    updateColVisibleCount();
 }
 
 function resetColumnVisibility() {
@@ -2377,6 +2396,7 @@ function initColumnVisibilityFromServer() {
 
     // Initialize on load
 document.addEventListener('DOMContentLoaded', function() {
+    onLayoutChange();
     initColumnVisibilityFromServer();
     updateColVisibleCount();
 
@@ -2436,12 +2456,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Check AI status on load
-    fetch('/Reports/GetAiStatus')
+    fetch('@Url.Action("GetAiStatus", "Reports")')
         .then(r => r.json())
         .then(d => {
             if (!d.configured) {
                 var btn = document.getElementById('btnAnalyze');
-                if (btn) { btn.title = 'AI not configured — set API key in Settings'; btn.classList.add('disabled'); }
+                if (btn) { btn.title = 'AI not configured \u2014 set API key in Settings'; btn.classList.add('disabled'); btn.disabled = true; }
                 var schedAi = document.getElementById('schedIncludeAi');
                 if (schedAi) { schedAi.disabled = true; schedAi.parentElement.title = 'AI not configured — set API key in Settings'; }
             }
@@ -2466,16 +2486,18 @@ function analyzeReport() {
     modal.show();
 
     var form = document.getElementById('reportForm');
+    document.querySelectorAll('#reportForm select[disabled], #reportForm input[disabled]').forEach(function(el) { el.disabled = false; });
     var formData = new FormData(form);
+    onLayoutChange();
     formData.append('storeCodes', typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : (document.getElementById('selectedStoreCodesHidden').value || ''));
     formData.append('itemIds', typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : (document.getElementById('selectedItemIdsHidden').value || ''));
-    formData.append('sortColumn', '@Model.SortColumn');
-    formData.append('sortDirection', '@Model.SortDirection');
+    formData.append('sortColumn', document.getElementById('sortColumnHidden').value || 'Period');
+    formData.append('sortDirection', document.getElementById('sortDirectionHidden').value || 'ASC');
     formData.append('locale', getAiLang());
     var promptTplId = document.getElementById('aiPromptTemplateSelect').value;
     if (promptTplId && promptTplId !== '0') formData.append('promptTemplateId', promptTplId);
 
-    fetch('/Reports/AnalyzeAbReport', { method: 'POST', body: formData })
+    fetch('@Url.Action("AnalyzeAbReport", "Reports")', { method: 'POST', body: formData })
         .then(r => r.json())
         .then(data => {
             document.getElementById('aiLoading').classList.add('d-none');
@@ -2595,7 +2617,7 @@ function sendAiChat() {
     var thinkingId = 'thinking_' + Date.now();
     appendChatBubble('thinking', 'Thinking...', thinkingId);
 
-    fetch('/Reports/AiChatFollowup', {
+    fetch('@Url.Action("AiChatFollowup", "Reports")', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2698,7 +2720,7 @@ function togglePromptEditor() {
 var _currentReportType = 'AverageBasket';
 
 function loadAiPromptTemplates() {
-    fetch('/Reports/GetAiPromptTemplates?reportType=' + encodeURIComponent(_currentReportType))
+    fetch('@Url.Action("GetAiPromptTemplates", "Reports")' + '?reportType=' + encodeURIComponent(_currentReportType))
         .then(function(r) { return r.json(); })
         .then(function(data) {
             var sel = document.getElementById('aiPromptTemplateSelect');
@@ -2740,7 +2762,7 @@ function saveAiPromptTemplate() {
     var alert = document.getElementById('aiPromptAlert');
     if (!name || !prompt) { alert.innerHTML = '<span class="text-danger">Name and prompt are required.</span>'; return; }
 
-    fetch('/Reports/SaveAiPromptTemplate', {
+    fetch('@Url.Action("SaveAiPromptTemplate", "Reports")', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2765,7 +2787,7 @@ function saveAiPromptTemplate() {
 }
 
 function editAiPromptTemplate(id) {
-    fetch('/Reports/GetAiPromptTemplates?reportType=' + encodeURIComponent(_currentReportType))
+    fetch('@Url.Action("GetAiPromptTemplates", "Reports")' + '?reportType=' + encodeURIComponent(_currentReportType))
         .then(function(r) { return r.json(); })
         .then(function(data) {
             var t = (data || []).find(function(x) { return x.templateId === id; });
@@ -2781,7 +2803,7 @@ function editAiPromptTemplate(id) {
 
 function deleteAiPromptTemplate(id) {
     if (!confirm('Delete this template?')) return;
-    fetch('/Reports/DeleteAiPromptTemplate', {
+    fetch('@Url.Action("DeleteAiPromptTemplate", "Reports")', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: 'templateId=' + id

@@ -1312,6 +1312,10 @@ public class ReportsController : Controller
                 model.HiddenColumns = hc;
             if (parms.TryGetValue("ItemsSelectionJson", out var isj) && !string.IsNullOrEmpty(isj))
                 model.ItemsSelectionJson = isj;
+            if (parms.TryGetValue("ReportLayout", out var rl) && Enum.TryParse<ReportLayout>(rl, out var rlt))
+                model.ReportLayout = rlt;
+            if (parms.TryGetValue("ShowTotalQty", out var stq))
+                model.ShowTotalQty = stq == "1";
         }
         catch (Exception ex)
         {
@@ -2520,6 +2524,9 @@ public class ReportsController : Controller
 
         ViewBag.ConnectedDatabase = connectedDb;
         ViewBag.Stores = stores;
+        ViewBag.CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePareto);
+        ViewBag.DateFrom = DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd");
+        ViewBag.DateTo = DateTime.Today.ToString("yyyy-MM-dd");
         return View();
     }
 
@@ -2532,7 +2539,14 @@ public class ReportsController : Controller
         string? storeCodes = null,
         decimal classAThreshold = 80,
         decimal classBThreshold = 95,
-        string? itemsSelection = null)
+        bool excludeNegativeAmounts = true,
+        bool showOthers = false,
+        ParetoProfitBasis profitBasis = ParetoProfitBasis.LatestCost,
+        string? itemsSelection = null,
+        int timezoneOffsetMinutes = 0,
+        decimal priceInterval = 10,
+        int priceOnIndex = 0,
+        bool priceOnIncludesVat = false)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
@@ -2549,7 +2563,14 @@ public class ReportsController : Controller
                 : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
             ClassAThreshold = classAThreshold,
             ClassBThreshold = classBThreshold,
-            ItemsSelection = ParseItemsSelection(itemsSelection)
+            ExcludeNegativeAmounts = excludeNegativeAmounts,
+            ShowOthers = showOthers,
+            ProfitBasis = profitBasis,
+            ItemsSelection = ParseItemsSelection(itemsSelection),
+            TimezoneOffsetMinutes = timezoneOffsetMinutes,
+            PriceInterval = priceInterval,
+            PriceOnIndex = priceOnIndex,
+            PriceOnIncludesVat = priceOnIncludesVat
         };
 
         try
@@ -2561,13 +2582,17 @@ public class ReportsController : Controller
                 success = true,
                 rows = result.Rows,
                 grandTotal = result.GrandTotal,
+                totalQuantity = result.TotalQuantity,
+                totalSubtotal = result.TotalSubtotal,
+                totalProfit = result.TotalProfit,
                 classACount = result.ClassACount,
                 classBCount = result.ClassBCount,
                 classCCount = result.ClassCCount,
                 classAValue = result.ClassAValue,
                 classBValue = result.ClassBValue,
                 classCValue = result.ClassCValue,
-                totalItems = result.Rows.Count
+                totalItems = result.Rows.Count,
+                metric = metric.ToString()
             });
         }
         catch (Exception ex)
@@ -2583,33 +2608,39 @@ public class ReportsController : Controller
         DateTime dateFrom, DateTime dateTo,
         ParetoDimension dimension, ParetoMetric metric,
         bool includeVat, string? storeCodes,
-        decimal classAThreshold, decimal classBThreshold)
+        decimal classAThreshold, decimal classBThreshold,
+        bool excludeNegativeAmounts = true,
+        ParetoProfitBasis profitBasis = ParetoProfitBasis.LatestCost,
+        int timezoneOffsetMinutes = 0,
+        decimal priceInterval = 10,
+        int priceOnIndex = 0,
+        bool priceOnIncludesVat = false,
+        string? itemsSelection = null)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString)) return null;
 
-        var filter = new ParetoFilter
-        {
-            DateFrom = dateFrom,
-            DateTo = dateTo,
-            Dimension = dimension,
-            Metric = metric,
-            IncludeVat = includeVat,
-            StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
-                : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
-            ClassAThreshold = classAThreshold,
-            ClassBThreshold = classBThreshold
-        };
+        var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+            classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+            timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat,
+            itemsSelection);
 
         var repo = _repositoryFactory.CreateParetoRepository(tenantConnString);
         return await repo.GetParetoDataAsync(filter);
     }
 
-    private static ParetoFilter BuildParetoFilter(
+    private ParetoFilter BuildParetoFilter(
         DateTime dateFrom, DateTime dateTo,
         ParetoDimension dimension, ParetoMetric metric,
         bool includeVat, string? storeCodes,
-        decimal classAThreshold, decimal classBThreshold)
+        decimal classAThreshold, decimal classBThreshold,
+        bool excludeNegativeAmounts = true,
+        ParetoProfitBasis profitBasis = ParetoProfitBasis.LatestCost,
+        int timezoneOffsetMinutes = 0,
+        decimal priceInterval = 10,
+        int priceOnIndex = 0,
+        bool priceOnIncludesVat = false,
+        string? itemsSelection = null)
     {
         return new ParetoFilter
         {
@@ -2621,7 +2652,14 @@ public class ReportsController : Controller
             StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
                 : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
             ClassAThreshold = classAThreshold,
-            ClassBThreshold = classBThreshold
+            ClassBThreshold = classBThreshold,
+            ExcludeNegativeAmounts = excludeNegativeAmounts,
+            ProfitBasis = profitBasis,
+            TimezoneOffsetMinutes = timezoneOffsetMinutes,
+            PriceInterval = priceInterval,
+            PriceOnIndex = priceOnIndex,
+            PriceOnIncludesVat = priceOnIncludesVat,
+            ItemsSelection = ParseItemsSelection(itemsSelection)
         };
     }
 
@@ -2631,14 +2669,23 @@ public class ReportsController : Controller
         ParetoDimension dimension = ParetoDimension.Item,
         ParetoMetric metric = ParetoMetric.Value,
         bool includeVat = false, string? storeCodes = null,
-        decimal classAThreshold = 80, decimal classBThreshold = 95)
+        decimal classAThreshold = 80, decimal classBThreshold = 95,
+        bool excludeNegativeAmounts = true,
+        ParetoProfitBasis profitBasis = ParetoProfitBasis.LatestCost,
+        int timezoneOffsetMinutes = 0,
+        decimal priceInterval = 10, int priceOnIndex = 0, bool priceOnIncludesVat = false,
+        string? itemsSelection = null)
     {
         try
         {
-            var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+                classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+                timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
             if (result == null) return RedirectToAction("Pareto");
 
-            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+                classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+                timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
             var service = new ExcelExportService();
             var bytes = service.GenerateParetoExcel(result, filter);
             var filename = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
@@ -2658,14 +2705,23 @@ public class ReportsController : Controller
         ParetoDimension dimension = ParetoDimension.Item,
         ParetoMetric metric = ParetoMetric.Value,
         bool includeVat = false, string? storeCodes = null,
-        decimal classAThreshold = 80, decimal classBThreshold = 95)
+        decimal classAThreshold = 80, decimal classBThreshold = 95,
+        bool excludeNegativeAmounts = true,
+        ParetoProfitBasis profitBasis = ParetoProfitBasis.LatestCost,
+        int timezoneOffsetMinutes = 0,
+        decimal priceInterval = 10, int priceOnIndex = 0, bool priceOnIncludesVat = false,
+        string? itemsSelection = null)
     {
         try
         {
-            var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+                classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+                timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
             if (result == null) return RedirectToAction("Pareto");
 
-            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+                classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+                timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
             var service = new PdfExportService();
             var bytes = service.GenerateParetoPdf(result, filter);
             var filename = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
@@ -2685,14 +2741,23 @@ public class ReportsController : Controller
         ParetoDimension dimension = ParetoDimension.Item,
         ParetoMetric metric = ParetoMetric.Value,
         bool includeVat = false, string? storeCodes = null,
-        decimal classAThreshold = 80, decimal classBThreshold = 95)
+        decimal classAThreshold = 80, decimal classBThreshold = 95,
+        bool excludeNegativeAmounts = true,
+        ParetoProfitBasis profitBasis = ParetoProfitBasis.LatestCost,
+        int timezoneOffsetMinutes = 0,
+        decimal priceInterval = 10, int priceOnIndex = 0, bool priceOnIncludesVat = false,
+        string? itemsSelection = null)
     {
         try
         {
-            var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+                classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+                timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
             if (result == null) return RedirectToAction("Pareto");
 
-            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes, classAThreshold, classBThreshold);
+            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+                classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+                timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
             var service = new CsvExportService();
             var bytes = service.GenerateParetoCsv(result, filter);
             var filename = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
@@ -2703,6 +2768,459 @@ public class ReportsController : Controller
             _logger.LogError(ex, "Error exporting Pareto CSV");
             TempData["Error"] = ex.Message;
             return RedirectToAction("Pareto");
+        }
+    }
+
+    // ==================== Pareto Schedule ====================
+
+    [HttpGet]
+    public async Task<IActionResult> GetParetoSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new List<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.Pareto);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                s.Recipients, s.ReportType,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                lastRun = s.LastRunDate?.ToString("yyyy-MM-dd HH:mm")
+            }));
+        }
+        catch
+        {
+            return Json(new List<object>());
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveParetoSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePareto))
+            return Json(new { success = false, message = "You don't have permission to create schedules." });
+
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            if (scheduleId <= 0)
+            {
+                var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
+                var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.Pareto);
+                if (count >= maxSchedules)
+                    return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+            }
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                    {
+                        var onceAt = RecurrenceNextRunCalculator.GetOnceScheduleDateTime(recurrenceJson);
+                        if (onceAt.HasValue && onceAt.Value < DateTime.Now)
+                            return Json(new { success = false, message = "For 'Run once', start date and time must be in the future." });
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                    }
+                }
+                else
+                {
+                    nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+            {
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            }
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.Pareto,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "Unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = parametersJson,
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty
+            };
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.Pareto);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving Pareto report schedule");
+            return Json(new { success = false, message = "Failed to save schedule." });
+        }
+    }
+
+    // ==================== Pareto Email ====================
+
+    [HttpPost]
+    public async Task<IActionResult> SendParetoEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo,
+        ParetoDimension dimension = ParetoDimension.Item,
+        ParetoMetric metric = ParetoMetric.Value,
+        bool includeVat = false, string? storeCodes = null,
+        decimal classAThreshold = 80, decimal classBThreshold = 95,
+        bool excludeNegativeAmounts = true,
+        ParetoProfitBasis profitBasis = ParetoProfitBasis.LatestCost,
+        int timezoneOffsetMinutes = 0,
+        decimal priceInterval = 10, int priceOnIndex = 0, bool priceOnIncludesVat = false,
+        string? itemsSelection = null)
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Please enter at least one email address." });
+
+        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        if (invalidEmails.Length > 0)
+            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
+
+        var ccList = ParseAndValidateEmailList(cc);
+        var bccList = ParseAndValidateEmailList(bcc);
+        if (ccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
+        if (bccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
+
+        var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+            classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+            timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+            classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+            timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateParetoPdf(result, filter);
+                fileName = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateParetoCsv(result, filter);
+                fileName = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateParetoExcel(result, filter);
+                fileName = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+
+        string? templateBody = null;
+        string? templateSubject = null;
+        if (templateId.HasValue && templateId > 0)
+        {
+            try
+            {
+                var tenantConnString = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConnString))
+                {
+                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
+                    if (tmpl != null)
+                    {
+                        templateBody = tmpl.EmailBodyHtml;
+                        templateSubject = tmpl.EmailSubject;
+                    }
+                }
+            }
+            catch { /* fall back to default */ }
+        }
+
+        string ReplaceMergeFields(string text) => text
+            .Replace("\u00ABReportName\u00BB", "Pareto 80/20")
+            .Replace("\u00ABDatabaseName\u00BB", dbName)
+            .Replace("\u00ABPeriod\u00BB", period)
+            .Replace("\u00ABRowCount\u00BB", result.Rows.Count.ToString())
+            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
+            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
+            .Replace("\u00ABUserName\u00BB", userName)
+            .Replace("\u00ABCompanyName\u00BB", dbName)
+            .Replace("\u00AB", "").Replace("\u00BB", "");
+
+        var subject = string.IsNullOrWhiteSpace(emailSubject)
+            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Pareto 80/20 Report \u2014 {period}")
+            : emailSubject;
+
+        var selectionLines = new List<string>
+        {
+            $"Dimension: {dimension}",
+            $"Metric: {metric}",
+            $"Include VAT: {(includeVat ? "Yes" : "No")}",
+            $"Exclude Negative: {(excludeNegativeAmounts ? "Yes" : "No")}",
+            $"Class A Threshold: {classAThreshold}%"
+        };
+        if (metric == ParetoMetric.Profit) selectionLines.Add($"Profit Basis: {profitBasis}");
+        if (!string.IsNullOrWhiteSpace(storeCodes)) selectionLines.Add($"Stores: {storeCodes}");
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
+        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
+            ? ReplaceMergeFields(templateBody)
+            : $@"
+<div style='font-family:Arial,sans-serif;max-width:600px;'>
+    <h2 style='color:#2563eb;'>Pareto 80/20 Report</h2>
+    <table style='border-collapse:collapse;width:100%;margin:16px 0;'>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Database</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Period</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{period}</td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Items</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{result.Rows.Count}</td></tr>
+        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
+            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{exportFormat}</td></tr>
+    </table>
+    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
+    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
+    <p style='color:#6b7280;font-size:13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
+</div>";
+        var selectionsText = string.Join("\n", selectionLines);
+        var textBody = $"Pareto 80/20 Report\nDatabase: {dbName}\nPeriod: {period}\nItems: {result.Rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+
+        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
+        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
+        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+
+        var sentCount = 0;
+        var sendErrors = new List<string>();
+        foreach (var email in emails)
+        {
+            try
+            {
+                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
+                sentCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send Pareto report email to {Email}", email);
+                sendErrors.Add(email);
+            }
+        }
+
+        if (sendErrors.Count > 0 && sentCount == 0)
+            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", sendErrors)}" });
+
+        var msg = sentCount == 1 ? $"Report sent to {emails[0]}" : $"Report sent to {sentCount} recipient(s)";
+        if (sendErrors.Count > 0) msg += $" (failed: {string.Join(", ", sendErrors)})";
+        return Json(new { success = true, message = msg });
+    }
+
+    // ==================== Pareto AI Analysis ====================
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeParetoReport(
+        DateTime dateFrom, DateTime dateTo,
+        ParetoDimension dimension = ParetoDimension.Item,
+        ParetoMetric metric = ParetoMetric.Value,
+        bool includeVat = false, string? storeCodes = null,
+        decimal classAThreshold = 80, decimal classBThreshold = 95,
+        bool excludeNegativeAmounts = true,
+        ParetoProfitBasis profitBasis = ParetoProfitBasis.LatestCost,
+        int timezoneOffsetMinutes = 0,
+        decimal priceInterval = 10, int priceOnIndex = 0, bool priceOnIncludesVat = false,
+        string? itemsSelection = null,
+        string? locale = "el", int? promptTemplateId = null)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+            classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+            timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        if (result.Rows.Count == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvService = new CsvExportService();
+            var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
+                classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
+                timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
+            var csvBytes = csvService.GenerateParetoCsv(result, filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
+            _logger.LogInformation(
+                "AI analysis [Pareto]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
+                result.Rows.Count, csvData.Length, locale, User.Identity?.Name);
+
+            var analyzer = _analyzerFactory.Create();
+            var analysis = await analyzer.AnalyzeAsync(csvData, "Pareto", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Pareto report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    // ==================== Pareto Layout ====================
+
+    [HttpGet]
+    public async Task<IActionResult> GetParetoLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var parms = await repo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderPareto,
+                userCode);
+
+            return Json(new { success = true, hasSaved = parms.Count > 0, parameters = parms });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Pareto layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to load layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveParetoLayout([FromBody] Dictionary<string, string> parameters)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (parameters == null || parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            await repo.SaveLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderPareto,
+                ModuleConstants.IniDescriptionPareto,
+                userCode,
+                parameters);
+
+            return Json(new { success = true, message = "Layout saved" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving Pareto layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ResetParetoLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var deleted = await repo.DeleteLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderPareto,
+                userCode);
+
+            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting Pareto layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to reset layout" });
         }
     }
 
@@ -2718,8 +3236,25 @@ public class ReportsController : Controller
         var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
         var stores = await storeRepo.GetActiveStoresAsync();
 
+        bool hasSavedLayout = false;
+        Dictionary<string, string>? savedLayout = null;
+        try
+        {
+            var iniRepo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            savedLayout = await iniRepo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCharts,
+                userCode);
+            hasSavedLayout = savedLayout.Count > 0;
+        }
+        catch { /* first time — no layout */ }
+
         ViewBag.ConnectedDatabase = connectedDb;
         ViewBag.Stores = stores;
+        ViewBag.CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCharts);
+        ViewBag.HasSavedLayout = hasSavedLayout;
+        ViewBag.SavedLayout = savedLayout;
         return View();
     }
 
@@ -2736,12 +3271,14 @@ public class ReportsController : Controller
         DateTime dateFrom, DateTime dateTo,
         ChartDimension dimension, ChartMetric metric,
         int topN, bool showOthers, bool compareLastYear, bool includeVat,
-        string? storeCodes, string chartType)
+        string? storeCodes, string chartType,
+        ChartMode mode = ChartMode.Sales)
     {
         return new ChartFilter
         {
             DateFrom = dateFrom,
             DateTo = dateTo,
+            Mode = mode,
             Dimension = dimension,
             Metric = metric,
             TopN = topN,
@@ -2761,11 +3298,12 @@ public class ReportsController : Controller
         ChartMetric metric = ChartMetric.Value,
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
-        string? storeCodes = null, string chartType = "pie")
+        string? storeCodes = null, string chartType = "pie",
+        ChartMode mode = ChartMode.Sales)
     {
         try
         {
-            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType);
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
             var data = await RunChartQuery(filter);
             if (data == null) return RedirectToAction("Charts");
 
@@ -2789,11 +3327,12 @@ public class ReportsController : Controller
         ChartMetric metric = ChartMetric.Value,
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
-        string? storeCodes = null, string chartType = "pie")
+        string? storeCodes = null, string chartType = "pie",
+        ChartMode mode = ChartMode.Sales)
     {
         try
         {
-            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType);
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
             var data = await RunChartQuery(filter);
             if (data == null) return RedirectToAction("Charts");
 
@@ -2818,7 +3357,8 @@ public class ReportsController : Controller
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
         string? storeCodes = null, string? itemsSelection = null,
-        string? locale = "el", int? promptTemplateId = null)
+        string? locale = "el", int? promptTemplateId = null,
+        ChartMode mode = ChartMode.Sales)
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
@@ -2830,6 +3370,7 @@ public class ReportsController : Controller
         var filter = new ChartFilter
         {
             DateFrom = dateFrom, DateTo = dateTo,
+            Mode = mode,
             Dimension = dimension, Metric = metric,
             TopN = topN, ShowOthers = showOthers,
             CompareLastYear = compareLastYear, IncludeVat = includeVat,
@@ -2890,7 +3431,8 @@ public class ReportsController : Controller
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
         string? storeCodes = null, string chartType = "pie",
-        string? itemsSelection = null)
+        string? itemsSelection = null,
+        ChartMode mode = ChartMode.Sales)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
@@ -2900,6 +3442,7 @@ public class ReportsController : Controller
         {
             DateFrom = dateFrom,
             DateTo = dateTo,
+            Mode = mode,
             Dimension = dimension,
             Metric = metric,
             TopN = topN,
@@ -2922,6 +3465,563 @@ public class ReportsController : Controller
         {
             _logger.LogError(ex, "Error getting chart data");
             return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    // ==================== Charts PDF Export ====================
+
+    [HttpGet]
+    public async Task<IActionResult> ExportChartPdf(
+        DateTime dateFrom, DateTime dateTo,
+        ChartDimension dimension = ChartDimension.Category,
+        ChartMetric metric = ChartMetric.Value,
+        int topN = 10, bool showOthers = true,
+        bool compareLastYear = false, bool includeVat = false,
+        string? storeCodes = null, string chartType = "pie",
+        ChartMode mode = ChartMode.Sales)
+    {
+        try
+        {
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
+            var data = await RunChartQuery(filter);
+            if (data == null) return RedirectToAction("Charts");
+
+            var service = new PdfExportService();
+            var bytes = service.GenerateChartPdf(data, filter);
+            var filename = $"Chart_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+            return File(bytes, "application/pdf", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting Chart PDF");
+            TempData["Error"] = ex.Message;
+            return RedirectToAction("Charts");
+        }
+    }
+
+    // ==================== Charts Print Preview ====================
+
+    [HttpGet]
+    public async Task<IActionResult> PrintChartPreview(
+        DateTime dateFrom, DateTime dateTo,
+        ChartDimension dimension = ChartDimension.Category,
+        ChartMetric metric = ChartMetric.Value,
+        int topN = 10, bool showOthers = true,
+        bool compareLastYear = false, bool includeVat = false,
+        string? storeCodes = null, string chartType = "pie",
+        ChartMode mode = ChartMode.Sales)
+    {
+        try
+        {
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
+            var data = await RunChartQuery(filter);
+            if (data == null) return RedirectToAction("Charts");
+
+            ViewBag.ChartData = data;
+            ViewBag.ChartFilter = filter;
+            ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+            return View("ChartPrintPreview");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating Chart Print Preview");
+            return Content($"<html><body><p>Error: {ex.Message}</p></body></html>", "text/html");
+        }
+    }
+
+    // ==================== Charts Schedule ====================
+
+    [HttpGet]
+    public async Task<IActionResult> GetChartSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new List<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.Charts);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                s.Recipients, s.ReportType,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                lastRun = s.LastRunDate?.ToString("yyyy-MM-dd HH:mm")
+            }));
+        }
+        catch
+        {
+            return Json(new List<object>());
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveChartSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCharts))
+            return Json(new { success = false, message = "You don't have permission to create schedules." });
+
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            if (scheduleId <= 0)
+            {
+                var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
+                var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.Charts);
+                if (count >= maxSchedules)
+                    return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+            }
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                    {
+                        var onceAt = RecurrenceNextRunCalculator.GetOnceScheduleDateTime(recurrenceJson);
+                        if (onceAt.HasValue && onceAt.Value < DateTime.Now)
+                            return Json(new { success = false, message = "For 'Run once', start date and time must be in the future." });
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                    }
+                }
+                else
+                {
+                    nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+            {
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            }
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.Charts,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "Unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = parametersJson,
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty
+            };
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.Charts);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving Charts schedule");
+            return Json(new { success = false, message = "Failed to save schedule." });
+        }
+    }
+
+    // ==================== Charts Send Email ====================
+
+    [HttpPost]
+    public async Task<IActionResult> SendChartEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo,
+        ChartDimension dimension = ChartDimension.Category,
+        ChartMetric metric = ChartMetric.Value,
+        int topN = 10, bool showOthers = true,
+        bool compareLastYear = false, bool includeVat = false,
+        string? storeCodes = null, string chartType = "pie",
+        ChartMode mode = ChartMode.Sales)
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Please enter at least one email address." });
+
+        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        if (invalidEmails.Length > 0)
+            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
+
+        var ccList = ParseAndValidateEmailList(cc);
+        var bccList = ParseAndValidateEmailList(bcc);
+        if (ccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
+        if (bccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
+
+        var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
+        var data = await RunChartQuery(filter);
+        if (data == null || data.Count == 0)
+            return Json(new { success = false, message = "Failed to generate chart data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateChartPdf(data, filter);
+                fileName = $"Chart_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateChartCsv(data, filter);
+                fileName = $"Chart_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateChartExcel(data, filter);
+                fileName = $"Chart_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+
+        string? templateBody = null;
+        string? templateSubject = null;
+        if (templateId.HasValue && templateId > 0)
+        {
+            try
+            {
+                var tenantConnString = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConnString))
+                {
+                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
+                    if (tmpl != null)
+                    {
+                        templateBody = tmpl.EmailBodyHtml;
+                        templateSubject = tmpl.EmailSubject;
+                    }
+                }
+            }
+            catch { /* fall back to default */ }
+        }
+
+        string ReplaceMergeFields(string text) => text
+            .Replace("\u00ABReportName\u00BB", "Charts & Dashboards")
+            .Replace("\u00ABDatabaseName\u00BB", dbName)
+            .Replace("\u00ABPeriod\u00BB", period)
+            .Replace("\u00ABRowCount\u00BB", data.Count.ToString())
+            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
+            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
+            .Replace("\u00ABUserName\u00BB", userName)
+            .Replace("\u00ABCompanyName\u00BB", dbName)
+            .Replace("\u00AB", "").Replace("\u00BB", "");
+
+        var subject = string.IsNullOrWhiteSpace(emailSubject)
+            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Charts & Dashboards — {period}")
+            : emailSubject;
+
+        var selectionLines = new List<string>
+        {
+            $"Mode: {mode}",
+            $"Dimension: {dimension}",
+            $"Metric: {metric}",
+            $"Top N: {topN}",
+            $"Include VAT: {(includeVat ? "Yes" : "No")}"
+        };
+        if (compareLastYear) selectionLines.Add("Compare Last Year: Yes");
+        if (!string.IsNullOrWhiteSpace(storeCodes)) selectionLines.Add($"Stores: {storeCodes}");
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
+        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
+            ? ReplaceMergeFields(templateBody)
+            : $@"
+<div style='font-family: Arial, sans-serif; max-width: 600px;'>
+    <h2 style='color: #2563eb;'>Charts & Dashboards Report</h2>
+    <table style='border-collapse: collapse; width: 100%; margin: 16px 0;'>
+        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Database</td>
+            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
+        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Period</td>
+            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{period}</td></tr>
+        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Data Points</td>
+            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{data.Count}</td></tr>
+        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Format</td>
+            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{exportFormat}</td></tr>
+    </table>
+    <h4 style='color:#374151;margin:16px 0 8px;'>Chart Parameters:</h4>
+    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
+    <p style='color: #6b7280; font-size: 13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
+</div>";
+
+        var textBody = $"Charts & Dashboards Report\nDatabase: {dbName}\nPeriod: {period}\nData Points: {data.Count}\nFormat: {exportFormat}\n\nParameters:\n{string.Join("\n", selectionLines)}";
+
+        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
+        var sentCount = 0;
+        var errors = new List<string>();
+
+        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
+        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+
+        foreach (var email in emails)
+        {
+            try
+            {
+                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
+                sentCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send chart email to {Email}", email);
+                errors.Add(email);
+            }
+        }
+
+        if (errors.Count > 0 && sentCount == 0)
+            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", errors)}" });
+
+        var msg = sentCount == 1
+            ? $"Report sent to {emails[0]}"
+            : $"Report sent to {sentCount} recipient(s)";
+        if (errors.Count > 0)
+            msg += $" (failed: {string.Join(", ", errors)})";
+
+        return Json(new { success = true, message = msg });
+    }
+
+    // ==================== Charts Layout ====================
+
+    [HttpPost]
+    public async Task<IActionResult> SaveChartLayout([FromBody] Dictionary<string, string> parameters)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (parameters == null || parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            await repo.SaveLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCharts,
+                ModuleConstants.IniDescriptionCharts,
+                userCode,
+                parameters);
+
+            return Json(new { success = true, message = "Layout saved" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving chart layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ResetChartLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var deleted = await repo.DeleteLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCharts,
+                userCode);
+
+            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting chart layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to reset layout" });
+        }
+    }
+
+    // ==================== Charts named/public layouts (multi per user) ====================
+
+    [HttpGet]
+    public async Task<IActionResult> ListChartLayouts()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var layouts = await repo.ListLayoutsAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCharts,
+                userCode);
+
+            return Json(new
+            {
+                success = true,
+                layouts = layouts.Select(l => new
+                {
+                    headerCode = l.HeaderCode,
+                    name = l.Name,
+                    isPublic = l.IsPublic,
+                    createdBy = l.CreatedBy,
+                    canEdit = l.CanEdit,
+                    lastModified = l.LastModified
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing Chart layouts for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to load layouts", layouts = Array.Empty<object>() });
+        }
+    }
+
+    public class SaveChartLayoutAsRequest
+    {
+        public string Name { get; set; } = string.Empty;
+        public bool IsPublic { get; set; }
+        public Dictionary<string, string> Parameters { get; set; } = new();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveChartLayoutAs([FromBody] SaveChartLayoutAsRequest req)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (req == null || string.IsNullOrWhiteSpace(req.Name))
+            return Json(new { success = false, message = "Layout name is required" });
+        if (req.Parameters == null || req.Parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var headerCode = await repo.SaveNamedLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCharts,
+                ModuleConstants.IniDescriptionCharts,
+                userCode,
+                req.Name,
+                req.IsPublic,
+                req.Parameters);
+
+            return Json(new { success = true, headerCode, message = "Layout saved" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving Chart named layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> LoadChartLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
+
+            if (parms.Count == 0)
+                return Json(new { success = false, message = "Layout not found or not visible" });
+
+            return Json(new { success = true, parameters = parms });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Chart layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to load layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteChartLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
+
+            return Json(new
+            {
+                success = deleted,
+                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting Chart layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to delete layout" });
         }
     }
 
@@ -4108,6 +5208,22 @@ public class ReportsController : Controller
         ViewBag.StoresJson = System.Text.Json.JsonSerializer.Serialize(
             stores.Select(s => new { code = s.StoreCode, name = s.StoreName }));
         ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+
+        bool hasSavedLayout = false;
+        Dictionary<string, string>? savedLayout = null;
+        try
+        {
+            var iniRepo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            savedLayout = await iniRepo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCancelLog,
+                GetUserCode());
+            hasSavedLayout = savedLayout.Count > 0;
+        }
+        catch { /* first time — no layout */ }
+
+        ViewBag.HasSavedLayout = hasSavedLayout;
+        ViewBag.SavedLayout = savedLayout;
         return View();
     }
 
@@ -4245,6 +5361,179 @@ public class ReportsController : Controller
         catch { return Json(Array.Empty<object>()); }
     }
 
+    // ==================== CancelLog Layout (per-user saved defaults) ====================
+
+    [HttpPost]
+    public async Task<IActionResult> SaveCancelLogLayout([FromBody] Dictionary<string, string> parameters)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (parameters == null || parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            await repo.SaveLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCancelLog,
+                ModuleConstants.IniDescriptionCancelLog,
+                GetUserCode(),
+                parameters);
+            return Json(new { success = true, message = "Layout saved" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving CancelLog layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ResetCancelLogLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var deleted = await repo.DeleteLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCancelLog,
+                GetUserCode());
+            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting CancelLog layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to reset layout" });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ListCancelLogLayouts()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var layouts = await repo.ListLayoutsAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCancelLog,
+                GetUserCode());
+            return Json(new
+            {
+                success = true,
+                layouts = layouts.Select(l => new
+                {
+                    headerCode = l.HeaderCode, name = l.Name, isPublic = l.IsPublic,
+                    createdBy = l.CreatedBy, canEdit = l.CanEdit, lastModified = l.LastModified
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing CancelLog layouts for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
+        }
+    }
+
+    public class SaveCancelLogLayoutAsRequest
+    {
+        public string Name { get; set; } = string.Empty;
+        public bool IsPublic { get; set; }
+        public Dictionary<string, string> Parameters { get; set; } = new();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveCancelLogLayoutAs([FromBody] SaveCancelLogLayoutAsRequest req)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (req == null || string.IsNullOrWhiteSpace(req.Name))
+            return Json(new { success = false, message = "Layout name is required" });
+        if (req.Parameters == null || req.Parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var headerCode = await repo.SaveNamedLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCancelLog,
+                ModuleConstants.IniDescriptionCancelLog,
+                GetUserCode(),
+                req.Name, req.IsPublic, req.Parameters);
+            return Json(new { success = true, headerCode, message = "Layout saved" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving named CancelLog layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> LoadCancelLogLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
+            if (parms.Count == 0)
+                return Json(new { success = false, message = "Layout not found or not visible" });
+            return Json(new { success = true, parameters = parms });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading CancelLog layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to load layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteCancelLogLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
+            return Json(new
+            {
+                success = deleted,
+                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting CancelLog layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to delete layout" });
+        }
+    }
+
     // ==================== CancelLog Export / Email / AI ====================
 
     private async Task<(List<CancelLogDetailedRow>? detailed, List<CancelLogSummaryRow>? summary, CancelLogFilter filter)?> RunCancelLogQuery(
@@ -4365,6 +5654,46 @@ public class ReportsController : Controller
         var service = new PdfExportService();
         var bytes = service.GenerateCancelLogPdf(result.Value.detailed, result.Value.summary, result.Value.filter);
         return File(bytes, "application/pdf", $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> CancelLogPrintPreview(
+        DateTime dateFrom, DateTime dateTo,
+        bool reportByDateTime = false,
+        string actionType = "All",
+        string reportType = "Detailed",
+        string primaryGroup = "NONE",
+        string secondaryGroup = "NONE",
+        int timezoneOffsetMinutes = 0,
+        int maxRecords = 50000,
+        string sortColumn = "SessionDateTime",
+        string sortDirection = "ASC",
+        string? itemsSelectionJson = null)
+    {
+        var result = await RunCancelLogQuery(dateFrom, dateTo, reportByDateTime, actionType, reportType,
+            primaryGroup, secondaryGroup, timezoneOffsetMinutes, maxRecords,
+            sortColumn, sortDirection, itemsSelectionJson);
+        if (result == null) return RedirectToAction("CancelLog");
+
+        var model = new ViewModels.CancelLogViewModel
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            ReportByDateTime = reportByDateTime,
+            ActionType = actionType,
+            ReportType = reportType,
+            PrimaryGroup = primaryGroup,
+            SecondaryGroup = secondaryGroup,
+            TimezoneOffsetMinutes = timezoneOffsetMinutes,
+            SortColumn = sortColumn,
+            SortDirection = sortDirection,
+            ConnectedDatabase = GetConnectedDatabaseName(),
+            DetailedRows = result.Value.detailed ?? new(),
+            SummaryRows = result.Value.summary ?? new(),
+            TotalCount = (result.Value.detailed?.Count ?? 0) + (result.Value.summary?.Count ?? 0)
+        };
+
+        return View(model);
     }
 
     [HttpPost]

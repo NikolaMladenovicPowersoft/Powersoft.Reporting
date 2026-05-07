@@ -35,6 +35,10 @@ public static class ModuleConstants
     public const int ActionSchedulePurchasesSales = 6028;
     public const int ActionViewCatalogue = 6029;
     public const int ActionScheduleCatalogue = 6030;
+    public const int ActionViewPareto = 6031;
+    public const int ActionSchedulePareto = 6032;
+    public const int ActionViewCharts = 6033;
+    public const int ActionScheduleCharts = 6034;
 
     /// <summary>
     /// Ranking threshold for DB filtering. Users with Ranking below this value (1, 5, 10)
@@ -55,6 +59,12 @@ public static class ModuleConstants
     public const string IniDescriptionPurchasesSales = "Purchases vs Sales Report Layout";
     public const string IniHeaderCatalogue = "CATALOGUE";
     public const string IniDescriptionCatalogue = "Power Reports Catalogue Layout";
+    public const string IniHeaderPareto = "PARETO8020";
+    public const string IniDescriptionPareto = "Pareto 80/20 Report Layout";
+    public const string IniHeaderCharts = "CHARTS";
+    public const string IniDescriptionCharts = "Charts & Dashboards Layout";
+    public const string IniHeaderCancelLog = "CANCELLOG";
+    public const string IniDescriptionCancelLog = "Cancellation Logging Report Layout";
 
     // INI settings constants (DB-level settings, userCode = "ALL")
     public const string IniHeaderDbSettings = "DBSETTINGS";

@@ -23,6 +23,17 @@ public class ScheduleParameters
     public bool ShowStock { get; set; }
     public string? ReportType { get; set; }
 
+    // Pareto 80/20 specific
+    public string? ParetoDimension { get; set; }
+    public string? ParetoMetric { get; set; }
+    public int ProfitBasis { get; set; }
+    public bool ExcludeNegativeAmounts { get; set; } = true;
+    public decimal ClassAThreshold { get; set; } = 80;
+    public decimal ClassBThreshold { get; set; } = 95;
+    public decimal PriceInterval { get; set; } = 10;
+    public int PriceOnIndex { get; set; }
+    public int TimezoneOffsetMinutes { get; set; }
+
     // Shared
     public bool IncludeVat { get; set; }
     public List<string>? StoreCodes { get; set; }

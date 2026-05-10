@@ -1,0 +1,153 @@
+@using Powersoft.Reporting.Core.Models
+@{
+    Layout = null;
+    var rows = ViewBag.Rows as List<ProspectClientsRow> ?? new List<ProspectClientsRow>();
+    var filter = ViewBag.Filter as ProspectClientsFilter ?? new ProspectClientsFilter();
+    var db = ViewBag.ConnectedDatabase as string ?? "Unknown";
+    var now = DateTime.Now;
+    bool hasL1 = filter.PrimaryGroup != "NONE";
+    bool hasL2 = filter.SecondaryGroup != "NONE";
+    bool inclHistory = filter.IncludeHistory;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Prospect Clients - Print Preview</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Segoe UI',system-ui,sans-serif;background:#525659;color:#1e293b;}
+        .toolbar{position:fixed;top:0;left:0;right:0;z-index:100;background:#2c3e50;color:white;padding:6px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.3);font-size:13px;}
+        .toolbar .title{font-weight:600;margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .toolbar button{background:none;border:1px solid rgba(255,255,255,.25);color:white;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;}
+        .toolbar button:hover{background:rgba(255,255,255,.1);}
+        .zoom-controls{display:flex;align-items:center;gap:4px;}
+        .zoom-controls button{padding:5px 8px;}
+        .zoom-level{min-width:42px;text-align:center;font-size:12px;color:rgba(255,255,255,.8);}
+        .paper-container{margin:56px auto 40px;padding:20px;}
+        .paper{background:white;margin:0 auto;padding:48px 56px;box-shadow:0 2px 12px rgba(0,0,0,.3);transform-origin:top center;transition:transform .2s;max-width:1400px;}
+        .report-header{text-align:center;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #1e293b;}
+        .report-header .company-name{font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+        .report-header .report-title{font-size:15px;font-weight:600;color:#475569;margin-top:2px;}
+        .report-meta{display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:16px;}
+        .report-meta .meta-right{text-align:right;}
+        .report-table{width:100%;border-collapse:collapse;font-size:10px;}
+        .report-table thead th{background:#e2e8f0;padding:4px 6px;text-align:left;font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.3px;color:#334155;border-bottom:2px solid #94a3b8;white-space:nowrap;}
+        .report-table tbody td{padding:3px 6px;border-bottom:1px solid #f1f5f9;color:#334155;}
+        .report-table tbody tr:hover td{background:#fafbfd;}
+        .status-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;border:1px solid rgba(0,0,0,.15);}
+        .report-footer{text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;}
+        .group-header td{background:#f8fafc!important;padding:6px!important;font-weight:700;font-size:11px;border-top:1px solid #94a3b8;}
+        .grand-total td{font-weight:700;border-top:3px double #1e293b;padding:6px 8px;background:#f1f5f9;}
+        @@media print{body{background:white;}.toolbar{display:none!important;}.paper-container{margin:0;padding:0;}.paper{box-shadow:none;padding:20px;transform:none!important;}}
+    </style>
+</head>
+<body>
+<div class="toolbar">
+    <span class="title"><i class="bi bi-people me-1"></i>Prospect Clients — @db</span>
+    <div class="zoom-controls">
+        <button onclick="zoomOut()"><i class="bi bi-zoom-out"></i></button>
+        <span class="zoom-level" id="zoomLabel">100%</span>
+        <button onclick="zoomIn()"><i class="bi bi-zoom-in"></i></button>
+        <button onclick="setZoom(100)" style="font-size:11px;">Fit</button>
+    </div>
+    <button onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+</div>
+
+<div class="paper-container">
+    <div class="paper" id="paper">
+        <div class="report-header">
+            <div class="company-name">@db</div>
+            <div class="report-title">Prospect Clients Report</div>
+        </div>
+        <div class="report-meta">
+            <div>
+                <strong>Printed:</strong> @now.ToString("dd/MM/yyyy HH:mm")<br/>
+                <strong>Records:</strong> @rows.Count.ToString("N0")
+            </div>
+            <div class="meta-right">
+                <strong>Period:</strong> @filter.DateFrom.ToString("dd/MM/yyyy") — @filter.DateTo.ToString("dd/MM/yyyy")
+                <strong>| Field:</strong> @filter.DateField
+                @if(filter.StatusFilter != "All"){<span><strong>| Status:</strong> @filter.StatusFilter</span>}
+                @if(filter.PriorityFilter != "All"){<span><strong>| Priority:</strong> @filter.PriorityFilter</span>}
+                @if(hasL1){<span><strong>| Group:</strong> @filter.PrimaryGroup</span>}
+                @if(hasL2){<span><strong>></strong> @filter.SecondaryGroup</span>}
+            </div>
+        </div>
+        <table class="report-table">
+            <thead>
+                <tr>
+                    @if(hasL1){<th>Group 1</th>}
+                    @if(hasL2){<th>Group 2</th>}
+                    <th>Lead No</th><th>Company / Name</th><th>Contact</th>
+                    <th>Status</th><th>Priority</th><th>Reg. Date</th>
+                    <th>Phone</th><th>Mobile</th><th>Email</th><th>Town</th>
+                    <th>Followed By</th><th>Recommended By</th>
+                    <th>Offers</th><th>Emails</th><th>SMS</th>
+                    @if(inclHistory){<th>Source</th>}
+                </tr>
+            </thead>
+            <tbody>
+                @foreach(var r in rows)
+                {
+                    <tr>
+                        @if(hasL1){<td>@r.Level1Descr</td>}
+                        @if(hasL2){<td>@r.Level2Descr</td>}
+                        <td>@r.LeadNo</td>
+                        <td>@r.CompanyName</td>
+                        <td>@r.ContactPerson</td>
+                        <td><span class="status-badge" style="@BadgeStyle(r.StatusColor)">@r.StatusName</span></td>
+                        <td>@r.PriorityName</td>
+                        <td>@(r.RegistrationDate?.ToString("dd/MM/yyyy") ?? "")</td>
+                        <td>@r.Tel1</td>
+                        <td>@r.Mobile</td>
+                        <td>@r.Email</td>
+                        <td>@r.Town</td>
+                        <td>@r.FollowedBy</td>
+                        <td>@r.RecommendedBy</td>
+                        <td style="text-align:right">@r.OfferCount</td>
+                        <td style="text-align:right">@r.EmailsSent</td>
+                        <td style="text-align:right">@r.SmsSent</td>
+                        @if(inclHistory){<td>@r.Source</td>}
+                    </tr>
+                }
+                <tr class="grand-total">
+                    <td colspan="@(3 + (hasL1?1:0) + (hasL2?1:0))">Grand Total (@rows.Count rows)</td>
+                    <td colspan="9"></td>
+                    <td style="text-align:right">@rows.Sum(r=>r.OfferCount)</td>
+                    <td style="text-align:right">@rows.Sum(r=>r.EmailsSent)</td>
+                    <td style="text-align:right">@rows.Sum(r=>r.SmsSent)</td>
+                    @if(inclHistory){<td></td>}
+                </tr>
+            </tbody>
+        </table>
+        <div class="report-footer">End of Report<br/>&copy; @now.Year Power Soft Ltd.</div>
+    </div>
+</div>
+
+<script>
+var currentZoom=100,paper=document.getElementById('paper');
+function setZoom(v){currentZoom=Math.max(50,Math.min(250,v));paper.style.transform='scale('+(currentZoom/100)+')';document.getElementById('zoomLabel').textContent=currentZoom+'%';}
+function zoomIn(){setZoom(currentZoom+10);}function zoomOut(){setZoom(currentZoom-10);}
+document.addEventListener('keydown',function(e){if(e.ctrlKey&&e.key==='p'){e.preventDefault();window.print();}if(e.ctrlKey&&e.key==='+'){e.preventDefault();zoomIn();}if(e.ctrlKey&&e.key==='-'){e.preventDefault();zoomOut();}});
+</script>
+</body>
+</html>
+
+@functions {
+    static string BadgeStyle(string? hex)
+    {
+        hex = (hex ?? "#999").TrimStart('#');
+        if (hex.Length == 3) hex = $"{hex[0]}{hex[0]}{hex[1]}{hex[1]}{hex[2]}{hex[2]}";
+        if (hex.Length < 6) hex = "999999";
+        int r = Convert.ToInt32(hex[..2], 16);
+        int g = Convert.ToInt32(hex[2..4], 16);
+        int b = Convert.ToInt32(hex[4..6], 16);
+        double lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+        var bg = $"background:#{hex};";
+        if (lum > 0.85) return bg + "color:#1e293b;border-color:rgba(0,0,0,.25);";
+        if (lum > 0.6) return bg + "color:#1e293b;";
+        return bg + "color:#fff;";
+    }
+}

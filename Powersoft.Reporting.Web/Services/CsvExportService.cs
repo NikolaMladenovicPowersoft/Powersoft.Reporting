@@ -534,6 +534,131 @@ public class CsvExportService
         return new UTF8Encoding(true).GetBytes(sb.ToString());
     }
 
+    public byte[] GenerateProspectClientsCsv(
+        List<ProspectClientsRow> rows, ProspectClientsFilter filter)
+    {
+        bool hasL1 = filter.PrimaryGroup != "NONE";
+        bool hasL2 = filter.SecondaryGroup != "NONE";
+
+        var sb = new StringBuilder();
+
+        var headers = new List<string>();
+        if (hasL1) headers.Add("Group 1");
+        if (hasL2) headers.Add("Group 2");
+        headers.AddRange(new[]
+        {
+            "Lead No", "Company/Name", "Contact Person", "Status", "Priority",
+            "Registration Date", "Last Modified", "Next Communication",
+            "Phone", "Mobile", "Email", "Town",
+            "Followed By", "Recommended By", "Linked Customer",
+            "Category 1", "Category 2", "Notes",
+            "Offers", "Offer Value", "Emails Sent", "SMS Sent"
+        });
+        if (filter.IncludeHistory) headers.Add("Source");
+        sb.AppendLine(string.Join(",", headers.Select(Escape)));
+
+        foreach (var row in rows)
+        {
+            var vals = new List<string>();
+            if (hasL1) vals.Add(row.Level1Descr);
+            if (hasL2) vals.Add(row.Level2Descr);
+            vals.Add(row.LeadNo);
+            vals.Add(row.CompanyName);
+            vals.Add(row.ContactPerson);
+            vals.Add(row.StatusName);
+            vals.Add(row.PriorityName);
+            vals.Add(row.RegistrationDate?.ToString("yyyy-MM-dd") ?? "");
+            vals.Add(row.LastModification?.ToString("yyyy-MM-dd") ?? "");
+            vals.Add(row.NextCommunicationDate?.ToString("yyyy-MM-dd") ?? "");
+            vals.Add(row.Tel1);
+            vals.Add(row.Mobile);
+            vals.Add(row.Email);
+            vals.Add(row.Town);
+            vals.Add(row.FollowedBy);
+            vals.Add(row.RecommendedBy);
+            vals.Add(row.LinkedCustomer);
+            vals.Add(row.Category1);
+            vals.Add(row.Category2);
+            vals.Add(row.Notes);
+            vals.Add(row.OfferCount.ToString());
+            vals.Add(row.TotalOfferValue.ToString("F2"));
+            vals.Add(row.EmailsSent.ToString());
+            vals.Add(row.SmsSent.ToString());
+            if (filter.IncludeHistory) vals.Add(row.Source);
+            sb.AppendLine(string.Join(",", vals.Select(Escape)));
+        }
+
+        return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+    }
+
+    public string GenerateProspectClientsCsvString(
+        List<ProspectClientsRow> rows, ProspectClientsFilter filter)
+    {
+        var bytes = GenerateProspectClientsCsv(rows, filter);
+        return Encoding.UTF8.GetString(bytes);
+    }
+
+    public byte[] GenerateOffersReportCsv(
+        List<OffersReportRow> rows, OffersReportFilter filter)
+    {
+        bool hasL1 = filter.PrimaryGroup != "NONE";
+        bool hasL2 = filter.SecondaryGroup != "NONE";
+
+        var sb = new StringBuilder();
+
+        var headers = new List<string>();
+        if (hasL1) headers.Add("Group 1");
+        if (hasL2) headers.Add("Group 2");
+        headers.AddRange(new[]
+        {
+            "Offer No", "Date", "Valid Until", "Status",
+            "Customer", "Store", "Agent",
+            "Items", "Qty", "Subtotal", "Discount", "Disc %",
+            "VAT", "Grand Total", "Cost", "Order %",
+            "Lead", "Printed", "Emailed", "Comments", "Internal Notes", "Source"
+        });
+        sb.AppendLine(string.Join(",", headers.Select(Escape)));
+
+        foreach (var row in rows)
+        {
+            var vals = new List<string>();
+            if (hasL1) vals.Add(row.Level1Descr);
+            if (hasL2) vals.Add(row.Level2Descr);
+            vals.Add(row.OfferNo);
+            vals.Add(row.DateTrans?.ToString("yyyy-MM-dd") ?? "");
+            vals.Add(row.ValidUntil?.ToString("yyyy-MM-dd") ?? "");
+            vals.Add(row.StatusName);
+            vals.Add(row.CustomerName);
+            vals.Add(row.StoreName);
+            vals.Add(row.AgentName);
+            vals.Add(row.ItemCount.ToString());
+            vals.Add(row.TotalQuantity.ToString("F2"));
+            vals.Add(row.InvoiceTotal.ToString("F2"));
+            vals.Add(row.InvoiceTotalDiscount.ToString("F2"));
+            vals.Add(row.InvoiceDiscountPerc.ToString("F2"));
+            vals.Add(row.InvoiceVat.ToString("F2"));
+            vals.Add(row.InvoiceGrandTotal.ToString("F2"));
+            vals.Add(row.TotalItemCost.ToString("F2"));
+            vals.Add(row.OrderPercentage.ToString("F2"));
+            vals.Add(row.LinkedLead);
+            vals.Add(row.Printed ? "Yes" : "");
+            vals.Add(row.SentByEmail ? "Yes" : "");
+            vals.Add(row.Comments);
+            vals.Add(row.InternalNotes);
+            vals.Add(row.Source);
+            sb.AppendLine(string.Join(",", vals.Select(Escape)));
+        }
+
+        return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+    }
+
+    public string GenerateOffersReportCsvString(
+        List<OffersReportRow> rows, OffersReportFilter filter)
+    {
+        var bytes = GenerateOffersReportCsv(rows, filter);
+        return Encoding.UTF8.GetString(bytes);
+    }
+
     private static string Escape(string value)
     {
         if (string.IsNullOrEmpty(value)) return "";

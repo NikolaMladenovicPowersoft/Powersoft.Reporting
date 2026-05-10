@@ -796,5 +796,217 @@ public class ExcelExportService
         range.Style.Fill.BackgroundColor = XLColor.FromHtml("#f1f5f9");
         return dataRow + 1;
     }
+
+    public byte[] GenerateProspectClientsExcel(
+        List<ProspectClientsRow> rows, ProspectClientsFilter filter)
+    {
+        bool hasL1 = filter.PrimaryGroup != "NONE";
+        bool hasL2 = filter.SecondaryGroup != "NONE";
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Prospect Clients");
+
+        ws.Cell(1, 1).Value = "Prospect Clients Report";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(selRow++, 1).Value = $"Date Field: {filter.DateField}";
+        if (filter.StatusFilter != "All") ws.Cell(selRow++, 1).Value = $"Status: {filter.StatusFilter}";
+        if (filter.PriorityFilter != "All") ws.Cell(selRow++, 1).Value = $"Priority: {filter.PriorityFilter}";
+        if (hasL1) ws.Cell(selRow++, 1).Value = $"Primary Group: {filter.PrimaryGroup}";
+        if (hasL2) ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.SecondaryGroup}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        int headerRow = selRow + 1;
+        int col = 1;
+
+        if (hasL1) ws.Cell(headerRow, col++).Value = "Group 1";
+        if (hasL2) ws.Cell(headerRow, col++).Value = "Group 2";
+        ws.Cell(headerRow, col++).Value = "Lead No";
+        ws.Cell(headerRow, col++).Value = "Company/Name";
+        ws.Cell(headerRow, col++).Value = "Contact Person";
+        ws.Cell(headerRow, col++).Value = "Status";
+        ws.Cell(headerRow, col++).Value = "Priority";
+        ws.Cell(headerRow, col++).Value = "Registration Date";
+        ws.Cell(headerRow, col++).Value = "Last Modified";
+        ws.Cell(headerRow, col++).Value = "Next Communication";
+        ws.Cell(headerRow, col++).Value = "Phone";
+        ws.Cell(headerRow, col++).Value = "Mobile";
+        ws.Cell(headerRow, col++).Value = "Email";
+        ws.Cell(headerRow, col++).Value = "Town";
+        ws.Cell(headerRow, col++).Value = "Followed By";
+        ws.Cell(headerRow, col++).Value = "Recommended By";
+        ws.Cell(headerRow, col++).Value = "Linked Customer";
+        ws.Cell(headerRow, col++).Value = "Category 1";
+        ws.Cell(headerRow, col++).Value = "Category 2";
+        ws.Cell(headerRow, col++).Value = "Notes";
+        ws.Cell(headerRow, col++).Value = "Offers";
+        ws.Cell(headerRow, col++).Value = "Offer Value";
+        ws.Cell(headerRow, col++).Value = "Emails Sent";
+        ws.Cell(headerRow, col++).Value = "SMS Sent";
+        if (filter.IncludeHistory) ws.Cell(headerRow, col++).Value = "Source";
+
+        int totalCols = col - 1;
+        var headerRange = ws.Range(headerRow, 1, headerRow, totalCols);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+        foreach (var row in rows)
+        {
+            col = 1;
+            if (hasL1) ws.Cell(dataRow, col++).Value = row.Level1Descr;
+            if (hasL2) ws.Cell(dataRow, col++).Value = row.Level2Descr;
+            ws.Cell(dataRow, col++).Value = row.LeadNo;
+            ws.Cell(dataRow, col++).Value = row.CompanyName;
+            ws.Cell(dataRow, col++).Value = row.ContactPerson;
+            ws.Cell(dataRow, col++).Value = row.StatusName;
+            ws.Cell(dataRow, col++).Value = row.PriorityName;
+            if (row.RegistrationDate.HasValue) ws.Cell(dataRow, col).Value = row.RegistrationDate.Value;
+            ws.Cell(dataRow, col++).Style.DateFormat.Format = "yyyy-MM-dd";
+            if (row.LastModification.HasValue) ws.Cell(dataRow, col).Value = row.LastModification.Value;
+            ws.Cell(dataRow, col++).Style.DateFormat.Format = "yyyy-MM-dd";
+            if (row.NextCommunicationDate.HasValue) ws.Cell(dataRow, col).Value = row.NextCommunicationDate.Value;
+            ws.Cell(dataRow, col++).Style.DateFormat.Format = "yyyy-MM-dd";
+            ws.Cell(dataRow, col++).Value = row.Tel1;
+            ws.Cell(dataRow, col++).Value = row.Mobile;
+            ws.Cell(dataRow, col++).Value = row.Email;
+            ws.Cell(dataRow, col++).Value = row.Town;
+            ws.Cell(dataRow, col++).Value = row.FollowedBy;
+            ws.Cell(dataRow, col++).Value = row.RecommendedBy;
+            ws.Cell(dataRow, col++).Value = row.LinkedCustomer;
+            ws.Cell(dataRow, col++).Value = row.Category1;
+            ws.Cell(dataRow, col++).Value = row.Category2;
+            ws.Cell(dataRow, col++).Value = row.Notes;
+            ws.Cell(dataRow, col++).Value = row.OfferCount;
+            ws.Cell(dataRow, col).Value = row.TotalOfferValue;
+            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col++).Value = row.EmailsSent;
+            ws.Cell(dataRow, col++).Value = row.SmsSent;
+            if (filter.IncludeHistory) ws.Cell(dataRow, col++).Value = row.Source;
+            dataRow++;
+        }
+
+        ws.Columns().AdjustToContents(1, 80);
+        ws.SheetView.FreezeRows(headerRow);
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    public byte[] GenerateOffersReportExcel(
+        List<OffersReportRow> rows, OffersReportFilter filter)
+    {
+        bool hasL1 = filter.PrimaryGroup != "NONE";
+        bool hasL2 = filter.SecondaryGroup != "NONE";
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Offers Report");
+
+        ws.Cell(1, 1).Value = "Offers Report";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(selRow++, 1).Value = $"Date Field: {filter.DateField}";
+        if (filter.StatusFilter != "All") ws.Cell(selRow++, 1).Value = $"Status: {filter.StatusFilter}";
+        if (filter.StoreFilter != "All") ws.Cell(selRow++, 1).Value = $"Store: {filter.StoreFilter}";
+        if (hasL1) ws.Cell(selRow++, 1).Value = $"Primary Group: {filter.PrimaryGroup}";
+        if (hasL2) ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.SecondaryGroup}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        int headerRow = selRow + 1;
+        int col = 1;
+
+        if (hasL1) ws.Cell(headerRow, col++).Value = "Group 1";
+        if (hasL2) ws.Cell(headerRow, col++).Value = "Group 2";
+        ws.Cell(headerRow, col++).Value = "Offer No";
+        ws.Cell(headerRow, col++).Value = "Date";
+        ws.Cell(headerRow, col++).Value = "Valid Until";
+        ws.Cell(headerRow, col++).Value = "Status";
+        ws.Cell(headerRow, col++).Value = "Customer";
+        ws.Cell(headerRow, col++).Value = "Store";
+        ws.Cell(headerRow, col++).Value = "Agent";
+        ws.Cell(headerRow, col++).Value = "Items";
+        ws.Cell(headerRow, col++).Value = "Qty";
+        ws.Cell(headerRow, col++).Value = "Subtotal";
+        ws.Cell(headerRow, col++).Value = "Discount";
+        ws.Cell(headerRow, col++).Value = "Disc %";
+        ws.Cell(headerRow, col++).Value = "VAT";
+        ws.Cell(headerRow, col++).Value = "Grand Total";
+        ws.Cell(headerRow, col++).Value = "Cost";
+        ws.Cell(headerRow, col++).Value = "Order %";
+        ws.Cell(headerRow, col++).Value = "Lead";
+        ws.Cell(headerRow, col++).Value = "Printed";
+        ws.Cell(headerRow, col++).Value = "Emailed";
+        ws.Cell(headerRow, col++).Value = "Comments";
+        ws.Cell(headerRow, col++).Value = "Internal Notes";
+        ws.Cell(headerRow, col++).Value = "Source";
+
+        int totalCols = col - 1;
+        var headerRange = ws.Range(headerRow, 1, headerRow, totalCols);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#7c3aed");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+        foreach (var row in rows)
+        {
+            col = 1;
+            if (hasL1) ws.Cell(dataRow, col++).Value = row.Level1Descr;
+            if (hasL2) ws.Cell(dataRow, col++).Value = row.Level2Descr;
+            ws.Cell(dataRow, col++).Value = row.OfferNo;
+            if (row.DateTrans.HasValue) ws.Cell(dataRow, col).Value = row.DateTrans.Value;
+            ws.Cell(dataRow, col++).Style.DateFormat.Format = "yyyy-MM-dd";
+            if (row.ValidUntil.HasValue) ws.Cell(dataRow, col).Value = row.ValidUntil.Value;
+            ws.Cell(dataRow, col++).Style.DateFormat.Format = "yyyy-MM-dd";
+            ws.Cell(dataRow, col++).Value = row.StatusName;
+            ws.Cell(dataRow, col++).Value = row.CustomerName;
+            ws.Cell(dataRow, col++).Value = row.StoreName;
+            ws.Cell(dataRow, col++).Value = row.AgentName;
+            ws.Cell(dataRow, col++).Value = row.ItemCount;
+            ws.Cell(dataRow, col).Value = row.TotalQuantity;
+            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col).Value = row.InvoiceTotal;
+            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col).Value = row.InvoiceTotalDiscount;
+            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col).Value = row.InvoiceDiscountPerc;
+            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col).Value = row.InvoiceVat;
+            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col).Value = row.InvoiceGrandTotal;
+            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col).Value = row.TotalItemCost;
+            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col).Value = row.OrderPercentage;
+            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col++).Value = row.LinkedLead;
+            ws.Cell(dataRow, col++).Value = row.Printed ? "Yes" : "";
+            ws.Cell(dataRow, col++).Value = row.SentByEmail ? "Yes" : "";
+            ws.Cell(dataRow, col++).Value = row.Comments;
+            ws.Cell(dataRow, col++).Value = row.InternalNotes;
+            ws.Cell(dataRow, col++).Value = row.Source;
+            dataRow++;
+        }
+
+        ws.Columns().AdjustToContents(1, 80);
+        ws.SheetView.FreezeRows(headerRow);
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
 }
 

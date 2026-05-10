@@ -14,6 +14,8 @@ public static class ReportTypeConstants
     public const string CancelLog = "CancelLog";
     public const string Pareto = "Pareto";
     public const string Charts = "Charts";
+    public const string ProspectClients = "ProspectClients";
+    public const string OffersReport = "OffersReport";
 
     /// <summary>
     /// The set of report types that can be scheduled.
@@ -27,7 +29,9 @@ public static class ReportTypeConstants
         Catalogue,
         CancelLog,
         Pareto,
-        Charts
+        Charts,
+        ProspectClients,
+        OffersReport
     };
 
     public static bool IsSchedulable(string reportType) =>

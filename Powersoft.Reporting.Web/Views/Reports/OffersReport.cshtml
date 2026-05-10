@@ -1,0 +1,1375 @@
+@{
+    ViewData["Title"] = "Offers Report";
+    var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
+    var canSchedule = true;
+    var hasSavedLayout = (bool)(ViewBag.HasSavedLayout ?? false);
+    var savedLayout = ViewBag.SavedLayout as Dictionary<string, string>;
+}
+
+<style>
+    .stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+    .stat-value{font-size:1.5rem;font-weight:700;color:#1e293b;}
+    .stat-label{font-size:.8rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:4px;}
+    .group-header-row td{background:#f1f5f9!important;font-weight:600;border-top:2px solid #cbd5e1;}
+    .group-header-row.l2 td{background:#e8f0fe!important;font-weight:600;border-top:1px solid #93c5fd;}
+    .status-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:600;border:1px solid rgba(0,0,0,.15);}
+    th.sortable{cursor:pointer;user-select:none;white-space:nowrap;}
+    th.sortable:hover{background:#e2e8f0;}
+    th.sortable .sort-icon{font-size:.65rem;opacity:.4;margin-left:4px;}
+    th.sortable.sort-asc .sort-icon,th.sortable.sort-desc .sort-icon{opacity:1;color:#7c3aed;}
+</style>
+
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-start">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">CRM</a></li>
+                    <li class="breadcrumb-item active">Offers Report</li>
+                </ol>
+            </nav>
+            <h2 class="mb-0">
+                <i class="bi bi-file-earmark-text me-2" style="color:#7c3aed;"></i>Offers Report
+            </h2>
+            <p class="text-muted mb-0">Sales offers by status, customer, store and agent analysis</p>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-funnel me-2"></i>Report Parameters</div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-12">
+                <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                <div class="date-presets btn-group flex-wrap" role="group">
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetYesterday" value="yesterday" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetYesterday">Yesterday</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLast7" value="last7" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLast7">Last 7 Days</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                </div>
+            </div>
+        </div>
+        <hr class="my-3">
+        <div class="row g-3 mb-3 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Date From <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="dateFrom" onchange="clearPreset()">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Date To <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="dateTo" onchange="clearPreset()">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Date Field</label>
+                <select class="form-select" id="dateField">
+                    <option value="DateTrans" selected>Transaction Date</option>
+                    <option value="ValidUntil">Valid Until</option>
+                    <option value="SessionDateTime">Session Date</option>
+                    <option value="DeliveryDate">Delivery Date</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Status</label>
+                <select class="form-select" id="statusFilter">
+                    <option value="All" selected>All Statuses</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Store</label>
+                <select class="form-select" id="storeFilter">
+                    <option value="All" selected>All Stores</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Max Records</label>
+                <input type="number" class="form-control" id="maxRecords" value="50000" min="100" max="200000">
+            </div>
+        </div>
+        <div class="row g-3 mb-3 align-items-end">
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Agent</label>
+                <select class="form-select" id="agentFilter">
+                    <option value="All" selected>All Agents</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Offer Type</label>
+                <select class="form-select" id="offerTypeFilter">
+                    <option value="All" selected>All Types</option>
+                    <option value="Offers">Offers Only</option>
+                    <option value="Standard">Standard Offers</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2 d-flex align-items-end">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="includeHistory">
+                    <label class="form-check-label fw-semibold" for="includeHistory">Include History</label>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Primary Group</label>
+                <select class="form-select" id="primaryGroup">
+                    <option value="NONE" selected>None</option>
+                    <option value="STATUS">Status</option>
+                    <option value="STORE">Store</option>
+                    <option value="CUSTOMER">Customer</option>
+                    <option value="AGENT">Agent</option>
+                    <option value="MONTH">Month</option>
+                    <option value="YEAR">Year</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold">Secondary Group</label>
+                <select class="form-select" id="secondaryGroup">
+                    <option value="NONE" selected>None</option>
+                    <option value="STATUS">Status</option>
+                    <option value="STORE">Store</option>
+                    <option value="CUSTOMER">Customer</option>
+                    <option value="AGENT">Agent</option>
+                    <option value="MONTH">Month</option>
+                    <option value="YEAR">Year</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
+            <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
+                <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
+                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            </button>
+            @if (canSchedule)
+            {
+                <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                    <i class="bi bi-clock-history me-2"></i>Schedule
+                </button>
+            }
+            <div class="btn-group ms-auto">
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"
+                            title="Saved report layouts" id="layoutsDropdownBtn">
+                        <i class="bi bi-bookmark me-1"></i><span id="layoutsCurrentName">Layouts</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" id="layoutsDropdownMenu" style="min-width: 320px;">
+                        <li><h6 class="dropdown-header">Loading...</h6></li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Overwrite your default layout with current parameters">
+                    <i class="bi bi-save me-1"></i>Save
+                </button>
+                <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveLayoutAsModal"
+                        title="Save current parameters as a new named layout">
+                    <i class="bi bi-bookmark-plus me-1"></i>Save as...
+                </button>
+                @if (hasSavedLayout)
+                {
+                    <button type="button" class="btn btn-outline-secondary" onclick="resetSavedLayout()" title="Discard your saved default layout and restore factory defaults">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Default
+                    </button>
+                }
+            </div>
+            <button type="button" class="btn btn-outline-secondary" onclick="resetFilters()" title="Clear all filters and reset to defaults">
+                <i class="bi bi-funnel me-1"></i>Clear Filters
+            </button>
+        </div>
+        @if (hasSavedLayout)
+        {
+            <div class="mt-2"><small class="text-info"><i class="bi bi-check-circle me-1"></i>Saved layout loaded</small></div>
+        }
+    </div>
+</div>
+
+<div id="reportAlert" style="display:none;"></div>
+
+<div id="reportLoading" style="display:none;" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2 text-muted">Loading offers data...</p>
+</div>
+
+<div id="kpiCards" class="row mb-4 g-3" style="display:none;"></div>
+
+<div id="reportResults" style="display:none;">
+    <div class="card" id="results">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>
+                <i class="bi bi-table me-2"></i>Results: <span id="rowCountInfo">0</span> rows
+                <span id="groupBadges"></span>
+            </span>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()" id="previewToggleBtn" title="Toggle document preview">
+                    <i class="bi bi-eye me-1"></i>Preview
+                </button>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-success" onclick="exportServerCsv()" title="Export CSV">
+                        <i class="bi bi-filetype-csv me-1"></i>CSV
+                    </button>
+                    <button class="btn btn-outline-success" onclick="exportServerExcel()" title="Export Excel">
+                        <i class="bi bi-filetype-xlsx me-1"></i>Excel
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="exportServerPdf()" title="Export PDF">
+                        <i class="bi bi-filetype-pdf me-1"></i>PDF
+                    </button>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
+                    <i class="bi bi-envelope me-1"></i>Send to Email
+                </button>
+                <button class="btn btn-sm btn-outline-info" onclick="analyzeReport()" title="AI-powered report analysis" id="btnAnalyze">
+                    <i class="bi bi-stars me-1"></i>AI Analyze
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0" id="reportTable">
+                    <thead class="table-light" id="reportHead"></thead>
+                    <tbody id="reportBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="previewPanel" style="display:none;" class="mt-3">
+    <div class="card border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+            <span><i class="bi bi-file-earmark-text me-2"></i>Document Preview</span>
+            <button class="btn btn-sm btn-outline-light" onclick="togglePreview()" title="Close preview">
+                <i class="bi bi-x-lg me-1"></i>Back to Grid
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <iframe id="previewFrame" style="width:100%; border:none; min-height:700px; background:#525659;"></iframe>
+        </div>
+    </div>
+</div>
+
+<!-- Schedule Modal -->
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-clock-history me-2 text-warning"></i>Schedule Report</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="existingSchedules" class="mb-4"><p class="text-muted">Loading schedules...</p></div>
+                <hr>
+                <h6><i class="bi bi-plus-circle me-1"></i>New / Edit Schedule</h6>
+                <input type="hidden" id="schedId" value="">
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Schedule Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="schedName" placeholder="e.g. Weekly Offers Summary"></div>
+                    <div class="col-md-6"><label class="form-label">Recipients <span class="text-danger">*</span></label><input type="text" class="form-control" id="schedRecipients" placeholder="email1@@co.com, email2@@co.com"></div>
+                    <div class="col-md-3"><label class="form-label">Recurrence</label><select class="form-select" id="schedRecurrence"><option>Daily</option><option>Weekly</option><option>Monthly</option></select></div>
+                    <div class="col-md-3"><label class="form-label">Time</label><input type="time" class="form-control" id="schedTime" value="08:00"></div>
+                    <div class="col-md-3"><label class="form-label">Format</label><select class="form-select" id="schedFormat"><option>CSV</option><option>Excel</option><option>PDF</option></select></div>
+                    <div class="col-md-3 d-flex align-items-end gap-3">
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="schedSkipIfEmpty" checked><label class="form-check-label" for="schedSkipIfEmpty">Skip if empty</label></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="schedIncludeAi"><label class="form-check-label" for="schedIncludeAi">AI</label></div>
+                    </div>
+                </div>
+                <div id="scheduleAlert" class="mt-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="resetScheduleForm()">Clear</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-warning" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Send Email Modal -->
+<div class="modal fade" id="sendEmailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-envelope-at me-2 text-primary"></i>Send Report via Email</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="sendEmailRecipients" placeholder="email@@example.com, ...">
+                        <div class="invalid-feedback" id="sendEmailRecipientsError"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Template</label>
+                        <select class="form-select" id="sendEmailTemplate" onchange="onEmailTemplateChange()">
+                            <option value="">-- No template (default) --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">CC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailCC" placeholder="cc@@example.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">BCC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailBCC" placeholder="bcc@@example.com">
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">Subject</label>
+                        <input type="text" class="form-control" id="sendEmailSubject" value="Offers Report">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Format</label>
+                        <select class="form-select" id="sendEmailFormat">
+                            <option value="Excel" selected>Excel (.xlsx)</option>
+                            <option value="PDF">PDF</option>
+                            <option value="CSV">CSV</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email Message</label>
+                        <div class="border rounded" style="max-height:250px;overflow-y:auto;padding:12px;font-family:Arial,sans-serif;font-size:13px;background:#fafafa;" id="sendEmailBodyPreview">
+                            <em class="text-muted">Select a template to preview the email body, or the default body will be used.</em>
+                        </div>
+                    </div>
+                </div>
+                <div id="sendEmailAlert" class="mt-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <a asp-controller="Settings" asp-action="EmailTemplates" class="btn btn-outline-secondary me-auto" title="Manage email templates">
+                    <i class="bi bi-gear me-1"></i>Manage Templates
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="sendEmailBtn" onclick="sendReportEmail()">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="sendEmailSpinner"></span>
+                    <i class="bi bi-send me-1" id="sendEmailIcon"></i>Send
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Analysis Modal -->
+<div class="modal fade" id="aiAnalysisModal" tabindex="-1" aria-labelledby="aiAnalysisModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header" style="background:linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%);color:white;">
+                <h5 class="modal-title" id="aiAnalysisModalLabel"><i class="bi bi-stars me-2"></i>AI Business Intelligence</h5>
+                <div class="ms-auto me-3 d-flex align-items-center gap-2">
+                    <select id="aiPromptTemplateSelect" class="form-select form-select-sm" style="width:auto;min-width:140px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" title="AI Prompt Template" onchange="this.setAttribute('data-user-picked','1')">
+                        <option value="0" style="color:#333;">Default Prompt</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="togglePromptEditor()" title="Manage AI prompt templates" style="border-color:rgba(255,255,255,0.3);">
+                        <i class="bi bi-gear"></i>
+                    </button>
+                    <label class="me-1 mb-0 small opacity-75" for="aiLangSelect"><i class="bi bi-translate"></i></label>
+                    <select id="aiLangSelect" class="form-select form-select-sm" style="width:auto;min-width:120px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" onchange="saveAiLang(this.value)">
+                        <option value="el" style="color:#333;">Ελληνικά</option>
+                        <option value="en" style="color:#333;">English</option>
+                        <option value="sr" style="color:#333;">Srpski</option>
+                        <option value="de" style="color:#333;">Deutsch</option>
+                        <option value="fr" style="color:#333;">Français</option>
+                    </select>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="aiLoading" class="text-center py-5">
+                    <div class="spinner-grow text-primary mb-2" style="width:3rem;height:3rem;"></div>
+                    <h6 class="mt-3 text-muted">AI is analyzing your offers data...</h6>
+                    <p class="text-muted small">Identifying patterns, conversion rates, and actionable insights</p>
+                    <div class="progress mx-auto" style="width:200px;height:4px;"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%;background:#7c3aed;"></div></div>
+                </div>
+                <div id="aiError" class="d-none p-4"><div class="alert alert-danger" id="aiErrorMsg"></div></div>
+                <div id="aiPromptEditor" class="d-none border-bottom" style="background:#f8fafc;">
+                    <div class="p-4">
+                        <h6 class="mb-3"><i class="bi bi-pencil-square me-1"></i>AI Prompt Templates</h6>
+                        <div class="row g-3">
+                            <div class="col-md-5"><label class="form-label small fw-semibold">Template Name</label><input type="text" class="form-control form-control-sm" id="aiPromptName" placeholder="e.g. Focus on conversion"></div>
+                            <div class="col-md-4"><label class="form-label small fw-semibold">Applies to</label><select class="form-select form-select-sm" id="aiPromptReportType"><option value="">All Reports</option><option value="OffersReport" selected>Offers Report</option></select></div>
+                            <div class="col-md-3 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="aiPromptIsDefault"><label class="form-check-label small" for="aiPromptIsDefault">Set as default</label></div></div>
+                            <div class="col-12"><label class="form-label small fw-semibold">System Prompt</label><textarea class="form-control form-control-sm" id="aiPromptText" rows="6" placeholder="You are a senior sales analyst..."></textarea><small class="text-muted">This prompt will be sent to the AI as the system instruction.</small></div>
+                            <div class="col-12 d-flex gap-2"><button class="btn btn-sm btn-primary" onclick="saveAiPromptTemplate()"><i class="bi bi-save me-1"></i>Save Template</button><button class="btn btn-sm btn-outline-secondary" onclick="clearPromptEditor()">Clear</button><div id="aiPromptAlert" class="ms-2 small align-self-center"></div></div>
+                        </div>
+                        <hr class="my-3">
+                        <div id="aiPromptTemplatesList" class="small text-muted">Loading templates...</div>
+                    </div>
+                </div>
+                <div id="aiResults" class="d-none">
+                    <div id="aiHealthBanner" class="px-4 py-3 d-flex align-items-center justify-content-between" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+                        <div class="d-flex align-items-center gap-3">
+                            <div id="aiHealthBadge" class="d-flex flex-column align-items-center justify-content-center rounded-circle" style="width:64px;height:64px;font-weight:700;font-size:1.2rem;"></div>
+                            <div><div class="fw-bold" id="aiHealthLabel" style="font-size:1.1rem;"></div><div class="text-muted small" id="aiTrendDesc"></div></div>
+                        </div>
+                        <div id="aiTrendBadge" class="badge fs-6 px-3 py-2"></div>
+                    </div>
+                    <div class="p-4">
+                        <div class="alert border-start border-4 border-primary bg-primary bg-opacity-10 mb-4" id="aiExecSummary" style="font-size:0.95rem;"></div>
+                        <div class="row g-2 mb-4" id="aiKpis"></div>
+                        <div class="row g-4">
+                            <div class="col-md-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Key Findings</h6></div><div class="card-body pt-2" id="aiKeyFindings"></div></div></div>
+                            <div class="col-md-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-check2-circle text-success me-2"></i>Recommendations</h6></div><div class="card-body pt-2" id="aiRecs"></div></div></div>
+                        </div>
+                        <div class="row g-4 mt-1">
+                            <div class="col-md-6" id="aiTopSection"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-trophy-fill text-warning me-2"></i>Top Performers</h6></div><div class="card-body pt-2" id="aiTopPerformers"></div></div></div>
+                            <div class="col-md-6" id="aiBottomSection"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Needs Attention</h6></div><div class="card-body pt-2" id="aiBottomPerformers"></div></div></div>
+                        </div>
+                        <div id="aiAlertsSection" class="mt-4"></div>
+                    </div>
+                    <div class="px-4 py-2 d-flex justify-content-between align-items-center" style="background:#f8fafc;border-top:1px solid #e2e8f0;">
+                        <span class="text-muted small"><i class="bi bi-cpu me-1"></i><span id="aiModel"></span></span>
+                        <span class="text-muted small"><i class="bi bi-currency-dollar me-1"></i><span id="aiTokens"></span></span>
+                        <span class="text-muted small"><i class="bi bi-clock me-1"></i><span id="aiTime"></span></span>
+                    </div>
+                    <div class="border-top" style="background:#f8fafc;">
+                        <div class="px-4 py-2"><h6 class="mb-2 text-muted"><i class="bi bi-chat-dots me-1"></i>Follow-up Questions</h6></div>
+                        <div id="aiChatMessages" class="px-4" style="max-height:300px;overflow-y:auto;"></div>
+                        <div class="px-4 py-3">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="aiChatInput" placeholder="Ask a follow-up question about this report..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendAiChat();}">
+                                <button class="btn btn-primary" type="button" onclick="sendAiChat()" id="btnSendChat"><i class="bi bi-send"></i></button>
+                            </div>
+                            <div id="aiChatTokenInfo" class="text-muted small mt-1" style="display:none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn text-white" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);" onclick="analyzeReport()" id="btnReanalyze" style="display:none;"><i class="bi bi-arrow-clockwise me-1"></i>Re-analyze</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Save Layout As Modal -->
+<div class="modal fade" id="saveLayoutAsModal" tabindex="-1" aria-labelledby="saveLayoutAsLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="saveLayoutAsLabel"><i class="bi bi-bookmark-plus me-2"></i>Save Layout As</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="saveLayoutAsName" class="form-label">Layout name <span class="text-danger">*</span></label>
+                    <input type="text" id="saveLayoutAsName" class="form-control" maxlength="100" placeholder="e.g. Approved Offers Only" autocomplete="off" />
+                    <div class="form-text">Used to identify the layout. You can have multiple named layouts.</div>
+                </div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="saveLayoutAsPublic" />
+                    <label class="form-check-label" for="saveLayoutAsPublic">Share with all users (public layout)</label>
+                    <div class="form-text">Public layouts are visible to everyone but can only be edited or deleted by you.</div>
+                </div>
+                <div id="saveLayoutAsAlert" class="alert d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveLayoutAsConfirmBtn" onclick="saveLayoutAsConfirm()">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="saveLayoutAsSpinner"></span>
+                    <i class="bi bi-save me-1"></i>Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var _sortCol = 'DateTrans';
+var _sortDir = 'DESC';
+var _lastData = [];
+var _lastTotalRecords = 0;
+var _aiConversation = [];
+var _aiTotalChatTokens = { input: 0, output: 0 };
+var _emailTemplatesCache = [];
+var _statusLookup = {};
+
+(function init() {
+    var today = new Date();
+    var y = today.getFullYear();
+    document.getElementById('dateFrom').value = y+'-01-01';
+    document.getElementById('dateTo').value = fmtDate(today);
+    document.querySelectorAll('input[name="DatePreset"]').forEach(function(r) {
+        r.addEventListener('change', function() { applyPresetDates(this.value); });
+    });
+    document.getElementById('scheduleModal').addEventListener('show.bs.modal', function() { loadSchedules(); });
+    fetch('/Reports/GetAiStatus').then(r=>r.json()).then(d=>{
+        if(!d.configured){var btn=document.getElementById('btnAnalyze');if(btn){btn.title='AI not configured';btn.classList.add('disabled');}}
+    }).catch(()=>{});
+    loadFilterDropdowns();
+})();
+
+function loadFilterDropdowns() {
+    fetch('@Url.Action("GetOffersReportLookups","Reports")', { credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.statuses) {
+                var sel = document.getElementById('statusFilter');
+                d.statuses.forEach(function(s) {
+                    var opt = document.createElement('option');
+                    opt.value = s.code; opt.textContent = s.name;
+                    sel.appendChild(opt);
+                    _statusLookup[s.code] = s.color;
+                    _statusLookup[s.name] = s.color;
+                });
+            }
+            if (d.stores) {
+                var selSt = document.getElementById('storeFilter');
+                d.stores.forEach(function(s) {
+                    var opt = document.createElement('option');
+                    opt.value = s.id; opt.textContent = s.name;
+                    selSt.appendChild(opt);
+                });
+            }
+            if (d.agents) {
+                var selAg = document.getElementById('agentFilter');
+                d.agents.forEach(function(a) {
+                    var opt = document.createElement('option');
+                    opt.value = a.id; opt.textContent = a.name;
+                    selAg.appendChild(opt);
+                });
+            }
+            @if (hasSavedLayout && savedLayout != null) {
+                <text>applyLayoutParameters(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(savedLayout)));</text>
+            }
+        }).catch(function(){});
+}
+
+function escapeHtml(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function statusBadgeStyle(hex) {
+    hex = (hex||'#999').replace('#','');
+    if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+    var r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+    var lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+    if (lum > 0.85) return 'background:'+('#'+hex)+';color:#1e293b;border-color:rgba(0,0,0,.25);';
+    if (lum > 0.6) return 'background:'+('#'+hex)+';color:#1e293b;';
+    return 'background:'+('#'+hex)+';color:#fff;';
+}
+function fmtDate(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtInt(v) { if (v==null) return '0'; return Number(v).toLocaleString(undefined,{maximumFractionDigits:0}); }
+function formatNumber(v) { if (v === 0) return '0.00'; return Number(v).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+function clearPreset() { document.querySelectorAll('input[name="DatePreset"]').forEach(r=>r.checked=false); }
+
+function resetFilters() {
+    var today = new Date(), y = today.getFullYear();
+    document.getElementById('dateFrom').value = y+'-01-01';
+    document.getElementById('dateTo').value = fmtDate(today);
+    document.getElementById('dateField').value = 'DateTrans';
+    document.getElementById('statusFilter').value = 'All';
+    document.getElementById('storeFilter').value = 'All';
+    document.getElementById('agentFilter').value = 'All';
+    document.getElementById('offerTypeFilter').value = 'All';
+    document.getElementById('includeHistory').checked = false;
+    document.getElementById('primaryGroup').value = 'NONE';
+    document.getElementById('secondaryGroup').value = 'NONE';
+    document.getElementById('maxRecords').value = '50000';
+    clearPreset();
+    _sortCol = 'DateTrans'; _sortDir = 'DESC';
+    document.getElementById('reportResults').style.display = 'none';
+    document.getElementById('kpiCards').style.display = 'none';
+    document.getElementById('reportAlert').style.display = 'none';
+    _lastData = [];
+    document.getElementById('layoutsCurrentName').textContent = 'Layouts';
+}
+
+function applyPresetDates(preset) {
+    var today = new Date(), y = today.getFullYear(), m = today.getMonth(), d = today.getDate();
+    var from, to;
+    switch(preset) {
+        case 'today': from = to = today; break;
+        case 'yesterday': from = to = new Date(y,m,d-1); break;
+        case 'last7': from = new Date(y,m,d-7); to = today; break;
+        case 'last30': from = new Date(y,m,d-30); to = today; break;
+        case 'thisMonth': from = new Date(y,m,1); to = today; break;
+        case 'lastMonth': from = new Date(y,m-1,1); to = new Date(y,m,0); break;
+        case 'ytd': from = new Date(y,0,1); to = today; break;
+        case 'lastYear': from = new Date(y-1,0,1); to = new Date(y-1,11,31); break;
+        default: return;
+    }
+    document.getElementById('dateFrom').value = fmtDate(from);
+    document.getElementById('dateTo').value = fmtDate(to);
+}
+
+function showAlert(id, type, msg) {
+    var el = document.getElementById(id);
+    el.innerHTML = '<div class="alert alert-'+type+' alert-dismissible fade show"><i class="bi bi-info-circle me-2"></i>'+escapeHtml(msg)+'<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    el.style.display = '';
+}
+
+function getFilterParams() {
+    return {
+        dateFrom: document.getElementById('dateFrom').value,
+        dateTo: document.getElementById('dateTo').value,
+        dateField: document.getElementById('dateField').value,
+        statusFilter: document.getElementById('statusFilter').value,
+        storeFilter: document.getElementById('storeFilter').value,
+        agentFilter: document.getElementById('agentFilter').value,
+        primaryGroup: document.getElementById('primaryGroup').value,
+        secondaryGroup: document.getElementById('secondaryGroup').value,
+        maxRecords: document.getElementById('maxRecords').value,
+        sortColumn: _sortCol,
+        sortDirection: _sortDir,
+        offerType: document.getElementById('offerTypeFilter').value,
+        includeHistory: document.getElementById('includeHistory').checked
+    };
+}
+
+function buildExportUrl(action) {
+    var p = getFilterParams();
+    var qs = 'dateFrom='+p.dateFrom+'&dateTo='+p.dateTo+'&dateField='+p.dateField
+        +'&statusFilter='+encodeURIComponent(p.statusFilter)+'&storeFilter='+encodeURIComponent(p.storeFilter)
+        +'&agentFilter='+encodeURIComponent(p.agentFilter)
+        +'&primaryGroup='+p.primaryGroup+'&secondaryGroup='+p.secondaryGroup
+        +'&maxRecords='+p.maxRecords+'&sortColumn='+p.sortColumn+'&sortDirection='+p.sortDirection
+        +'&offerType='+encodeURIComponent(p.offerType)+'&includeHistory='+p.includeHistory;
+    return '/Reports/' + action + '?' + qs;
+}
+
+function exportServerCsv() { if(!_lastData.length){alert('Generate a report first.');return;} window.location.href=buildExportUrl('ExportOffersReportCsv'); }
+function exportServerExcel() { if(!_lastData.length){alert('Generate a report first.');return;} window.location.href=buildExportUrl('ExportOffersReportExcel'); }
+function exportServerPdf() { if(!_lastData.length){alert('Generate a report first.');return;} window.location.href=buildExportUrl('ExportOffersReportPdf'); }
+
+var previewOpen = false;
+function togglePreview() {
+    if (!_lastData.length) { alert('Generate a report first.'); return; }
+    var panel = document.getElementById('previewPanel');
+    var gridCard = document.getElementById('results');
+    var btn = document.getElementById('previewToggleBtn');
+    previewOpen = !previewOpen;
+    if (previewOpen) {
+        gridCard.style.display = 'none';
+        panel.style.display = 'block';
+        btn.innerHTML = '<i class="bi bi-table me-1"></i>Grid';
+        btn.classList.remove('btn-outline-primary'); btn.classList.add('btn-outline-warning');
+        var frame = document.getElementById('previewFrame');
+        frame.src = buildExportUrl('OffersReportPrintPreview');
+        frame.onload = function() { try { var h = frame.contentDocument.body.scrollHeight+80; frame.style.height=Math.max(h,700)+'px'; } catch(e){frame.style.height='900px';} };
+    } else {
+        panel.style.display = 'none'; gridCard.style.display = '';
+        btn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+        btn.classList.remove('btn-outline-warning'); btn.classList.add('btn-outline-primary');
+    }
+}
+
+function generateReport() {
+    var dateFrom = document.getElementById('dateFrom').value;
+    var dateTo = document.getElementById('dateTo').value;
+    if (!dateFrom || !dateTo) { showAlert('reportAlert','danger','Please select both From and To dates.'); return; }
+    if (dateFrom > dateTo) { showAlert('reportAlert','danger','Date From cannot be after Date To.'); return; }
+    var pg = document.getElementById('primaryGroup').value;
+    var sg = document.getElementById('secondaryGroup').value;
+    if (pg !== 'NONE' && sg !== 'NONE' && pg === sg) { showAlert('reportAlert','danger','Primary and Secondary groups must be different.'); return; }
+
+    document.getElementById('reportAlert').style.display = 'none';
+    document.getElementById('reportResults').style.display = 'none';
+    document.getElementById('kpiCards').style.display = 'none';
+    document.getElementById('reportLoading').style.display = '';
+
+    var btn = document.getElementById('generateBtn');
+    btn.querySelector('.btn-text').classList.add('d-none');
+    btn.querySelector('.spinner-border').classList.remove('d-none');
+    btn.disabled = true;
+
+    var fd = new FormData();
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+
+    fetch('@Url.Action("GetOffersReportData","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            if (!d.success) { showAlert('reportAlert','danger',d.message); return; }
+            _lastData = d.data || [];
+            _lastTotalRecords = d.totalRecords || _lastData.length;
+            renderKpis(_lastData);
+            renderTable(_lastData);
+            var info = _lastData.length + ' row(s)';
+            if (_lastTotalRecords > _lastData.length) info += ' (limited from ' + fmtInt(_lastTotalRecords) + ')';
+            document.getElementById('rowCountInfo').textContent = info;
+            var badges = '';
+            if (pg !== 'NONE') badges += '<span class="badge bg-secondary ms-2">Grouped by '+pg+'</span>';
+            if (sg !== 'NONE') badges += '<span class="badge bg-secondary ms-1">then '+sg+'</span>';
+            document.getElementById('groupBadges').innerHTML = badges;
+            document.getElementById('reportResults').style.display = '';
+            if (_lastData.length === 0) showAlert('reportAlert','info','No offers found for the selected criteria.');
+        })
+        .catch(function(e) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            showAlert('reportAlert','danger','Request failed: '+e.message);
+        });
+}
+
+function renderKpis(data) {
+    var cards = document.getElementById('kpiCards');
+    if (!data.length) { cards.style.display = 'none'; return; }
+
+    var totalGrand = 0, totalDisc = 0, totalVat = 0, totalCost = 0, totalItems = 0;
+    var statusCounts = {};
+    data.forEach(function(r) {
+        totalGrand += (r.invoiceGrandTotal||0);
+        totalDisc += (r.invoiceTotalDiscount||0);
+        totalVat += (r.invoiceVat||0);
+        totalCost += (r.totalItemCost||0);
+        totalItems += (r.itemCount||0);
+        var s = r.statusName || 'Unknown';
+        statusCounts[s] = (statusCounts[s]||0) + 1;
+    });
+
+    var html = '<div class="col-6 col-md-2"><div class="stat-card text-center"><div class="stat-value" style="color:#7c3aed;">'+fmtInt(data.length)+'</div><div class="stat-label">Total Offers</div></div></div>';
+    html += '<div class="col-6 col-md-2"><div class="stat-card text-center"><div class="stat-value text-success">'+formatNumber(totalGrand)+'</div><div class="stat-label">Grand Total</div></div></div>';
+    html += '<div class="col-6 col-md-2"><div class="stat-card text-center"><div class="stat-value text-warning">'+formatNumber(totalDisc)+'</div><div class="stat-label">Total Discount</div></div></div>';
+    html += '<div class="col-6 col-md-2"><div class="stat-card text-center"><div class="stat-value text-info">'+formatNumber(totalVat)+'</div><div class="stat-label">Total VAT</div></div></div>';
+    html += '<div class="col-6 col-md-2"><div class="stat-card text-center"><div class="stat-value text-danger">'+formatNumber(totalCost)+'</div><div class="stat-label">Total Cost</div></div></div>';
+    html += '<div class="col-6 col-md-2"><div class="stat-card text-center"><div class="stat-value text-primary">'+fmtInt(totalItems)+'</div><div class="stat-label">Total Items</div></div></div>';
+
+    Object.keys(statusCounts).forEach(function(s) {
+        var color = _statusLookup[s] || '#64748b';
+        html += '<div class="col-6 col-md-2"><div class="stat-card text-center"><div class="stat-value" style="color:'+color+'">'+fmtInt(statusCounts[s])+'</div><div class="stat-label">'+escapeHtml(s)+'</div></div></div>';
+    });
+
+    cards.innerHTML = html;
+    cards.style.display = '';
+}
+
+function renderTable(data) {
+    var thead = document.getElementById('reportHead');
+    var tbody = document.getElementById('reportBody');
+    var hasPrimary = document.getElementById('primaryGroup').value !== 'NONE';
+    var hasSecondary = document.getElementById('secondaryGroup').value !== 'NONE';
+    var pgLabel = document.getElementById('primaryGroup').selectedOptions[0].textContent;
+    var sgLabel = document.getElementById('secondaryGroup').selectedOptions[0].textContent;
+
+    function sth(label, col, align) {
+        var cls = 'sortable' + (align ? ' text-end' : '');
+        if (_sortCol === col) cls += _sortDir === 'ASC' ? ' sort-asc' : ' sort-desc';
+        var icon = _sortCol === col ? (_sortDir === 'ASC' ? 'bi-caret-up-fill' : 'bi-caret-down-fill') : 'bi-caret-up-fill';
+        return '<th class="'+cls+'" onclick="sortBy(\''+col+'\')">'+label+'<i class="bi '+icon+' sort-icon"></i></th>';
+    }
+    var hdr = '<tr>';
+    if (hasPrimary) hdr += sth(escapeHtml(pgLabel), 'level1Descr');
+    if (hasSecondary) hdr += sth(escapeHtml(sgLabel), 'level2Descr');
+    hdr += sth('Offer No','offerNo') + sth('Date','dateTrans') + sth('Valid Until','validUntil');
+    hdr += sth('Status','statusName') + sth('Customer','customerName') + sth('Store','storeName') + sth('Agent','agentName');
+    hdr += sth('Items','itemCount',true) + sth('Qty','totalQuantity',true);
+    hdr += sth('Subtotal','invoiceTotal',true) + sth('Discount','invoiceTotalDiscount',true);
+    hdr += sth('VAT','invoiceVat',true) + sth('Grand Total','invoiceGrandTotal',true);
+    hdr += sth('Cost','totalItemCost',true) + sth('Order %','orderPercentage',true);
+    hdr += '<th>Lead</th><th>Comments</th><th>Internal Notes</th>';
+    hdr += sth('Source','source');
+    hdr += '</tr>';
+    thead.innerHTML = hdr;
+
+    if (hasPrimary) {
+        tbody.innerHTML = renderGroupedRows(data, hasPrimary, hasSecondary, pgLabel, sgLabel);
+    } else {
+        tbody.innerHTML = renderRows(data, hasPrimary, hasSecondary);
+    }
+}
+
+function renderGroupedRows(data, hasPrimary, hasSecondary, pgLabel, sgLabel) {
+    var colCount = 20 + (hasPrimary?1:0) + (hasSecondary?1:0);
+    var groups = groupBy(data, 'level1Descr');
+    var html = '';
+    groups.forEach(function(g) {
+        html += '<tr class="group-header-row"><td colspan="'+colCount+'"><i class="bi bi-diagram-3 me-2"></i><strong>'+escapeHtml(pgLabel)+':</strong> '+escapeHtml(g.key)+' <span class="badge bg-secondary">'+g.items.length+'</span></td></tr>';
+        if (hasSecondary) {
+            var subGroups = groupBy(g.items, 'level2Descr');
+            subGroups.forEach(function(sg2) {
+                html += '<tr class="group-header-row l2"><td colspan="'+colCount+'" class="ps-4"><i class="bi bi-chevron-right me-1"></i><strong>'+escapeHtml(sgLabel)+':</strong> '+escapeHtml(sg2.key)+' <span class="badge bg-info">'+sg2.items.length+'</span></td></tr>';
+                html += renderRows(sg2.items, hasPrimary, hasSecondary);
+            });
+        } else {
+            html += renderRows(g.items, hasPrimary, hasSecondary);
+        }
+    });
+    return html;
+}
+
+function renderRows(items, hasPrimary, hasSecondary) {
+    var html = '';
+    for (var i = 0; i < items.length; i++) {
+        var r = items[i];
+        var dateTr = r.dateTrans ? new Date(r.dateTrans).toLocaleDateString() : '';
+        var validUntil = r.validUntil ? new Date(r.validUntil).toLocaleDateString() : '';
+        html += '<tr>';
+        if (hasPrimary) html += '<td class="text-info fw-semibold">'+escapeHtml(r.level1Descr)+'</td>';
+        if (hasSecondary) html += '<td class="text-info">'+escapeHtml(r.level2Descr)+'</td>';
+        html += '<td class="text-nowrap">'+escapeHtml(r.offerNo)+'</td>';
+        html += '<td class="text-nowrap">'+escapeHtml(dateTr)+'</td>';
+        html += '<td class="text-nowrap">'+escapeHtml(validUntil)+'</td>';
+        html += '<td><span class="status-badge" style="'+statusBadgeStyle(r.statusColor)+'">'+escapeHtml(r.statusName)+'</span></td>';
+        html += '<td>'+escapeHtml(r.customerName)+'</td>';
+        html += '<td>'+escapeHtml(r.storeName)+'</td>';
+        html += '<td>'+escapeHtml(r.agentName)+'</td>';
+        html += '<td class="text-end">'+(r.itemCount||0)+'</td>';
+        html += '<td class="text-end">'+formatNumber(r.totalQuantity||0)+'</td>';
+        html += '<td class="text-end">'+formatNumber(r.invoiceTotal||0)+'</td>';
+        html += '<td class="text-end">'+formatNumber(r.invoiceTotalDiscount||0)+'</td>';
+        html += '<td class="text-end">'+formatNumber(r.invoiceVat||0)+'</td>';
+        html += '<td class="text-end fw-semibold">'+formatNumber(r.invoiceGrandTotal||0)+'</td>';
+        html += '<td class="text-end">'+formatNumber(r.totalItemCost||0)+'</td>';
+        html += '<td class="text-end">'+(r.orderPercentage||0).toFixed(1)+'%</td>';
+        html += '<td>'+escapeHtml(r.linkedLead||'')+'</td>';
+        html += '<td style="white-space:normal;word-break:break-word;">'+escapeHtml(r.comments||'')+'</td>';
+        html += '<td style="white-space:normal;word-break:break-word;">'+escapeHtml(r.internalNotes||'')+'</td>';
+        var srcCls = r.source === 'History' ? 'bg-secondary' : (r.source === 'Standard Offer' ? 'bg-info text-dark' : 'bg-primary');
+        html += '<td><span class="badge '+srcCls+'">'+escapeHtml(r.source||'Offer')+'</span></td>';
+        html += '</tr>';
+    }
+    return html;
+}
+
+function sortBy(col) {
+    if (_sortCol === col) { _sortDir = _sortDir === 'ASC' ? 'DESC' : 'ASC'; }
+    else { _sortCol = col; _sortDir = 'ASC'; }
+    var dateFields = { dateTrans:1, validUntil:1, deliveryDate:1 };
+    var numFields = { itemCount:1, totalQuantity:1, invoiceTotal:1, invoiceTotalDiscount:1, invoiceVat:1, invoiceGrandTotal:1, totalItemCost:1, orderPercentage:1, invoiceDiscountPerc:1 };
+    _lastData.sort(function(a, b) {
+        var va = a[col], vb = b[col];
+        if (va == null) va = ''; if (vb == null) vb = '';
+        var cmp;
+        if (dateFields[col]) { cmp = new Date(va||0) - new Date(vb||0); }
+        else if (numFields[col]) { cmp = Number(va) - Number(vb); }
+        else { cmp = String(va).localeCompare(String(vb)); }
+        return _sortDir === 'ASC' ? cmp : -cmp;
+    });
+    renderTable(_lastData);
+}
+
+function groupBy(arr, key) {
+    var map = {}, order = [];
+    arr.forEach(function(item) {
+        var k = item[key] || '';
+        if (!map[k]) { map[k] = []; order.push(k); }
+        map[k].push(item);
+    });
+    return order.map(function(k) { return { key: k, items: map[k] }; });
+}
+
+// ========== SCHEDULE ==========
+function loadSchedules() {
+    fetch('@Url.Action("GetOffersReportSchedules","Reports")', { credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            var container = document.getElementById('existingSchedules');
+            var list = d.schedules || [];
+            if (!list.length) { container.innerHTML = '<p class="text-muted">No schedules configured yet.</p>'; return; }
+            var html = '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>Name</th><th>Recurrence</th><th>Time</th><th>Format</th><th>Next Run</th><th></th></tr></thead><tbody>';
+            for (var i = 0; i < list.length; i++) {
+                var s = list[i];
+                html += '<tr><td>'+escapeHtml(s.scheduleName)+'</td><td>'+escapeHtml(s.recurrenceType)+'</td><td>'+escapeHtml(s.scheduleTime)+'</td><td>'+escapeHtml(s.exportFormat)+'</td><td>'+escapeHtml(s.nextRun||'-')+'</td>';
+                html += '<td class="text-nowrap"><button class="btn btn-sm btn-outline-primary me-1" onclick="loadScheduleIntoForm('+s.scheduleId+')"><i class="bi bi-pencil"></i></button>';
+                html += '<button class="btn btn-sm btn-outline-danger" onclick="deleteSchedule('+s.scheduleId+')"><i class="bi bi-trash"></i></button></td></tr>';
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }).catch(function() { document.getElementById('existingSchedules').innerHTML = '<p class="text-danger">Failed to load schedules.</p>'; });
+}
+function resetScheduleForm() {
+    document.getElementById('schedId').value = '';
+    document.getElementById('schedName').value = '';
+    document.getElementById('schedRecipients').value = '';
+    document.getElementById('schedRecurrence').value = 'Daily';
+    document.getElementById('schedTime').value = '08:00';
+    document.getElementById('schedFormat').value = 'CSV';
+    document.getElementById('schedSkipIfEmpty').checked = true;
+    document.getElementById('schedIncludeAi').checked = false;
+    document.getElementById('scheduleAlert').style.display = 'none';
+}
+function saveSchedule() {
+    var name = document.getElementById('schedName').value.trim();
+    var recipients = document.getElementById('schedRecipients').value.trim();
+    if (!name) { showAlert('scheduleAlert','danger','Schedule name is required.'); return; }
+    if (!recipients) { showAlert('scheduleAlert','danger','At least one recipient is required.'); return; }
+    var fd = new FormData();
+    fd.append('scheduleName',name);
+    fd.append('recurrenceType',document.getElementById('schedRecurrence').value);
+    fd.append('exportFormat',document.getElementById('schedFormat').value);
+    fd.append('scheduleTime',document.getElementById('schedTime').value);
+    fd.append('recipients',recipients);
+    fd.append('skipIfEmpty',document.getElementById('schedSkipIfEmpty').checked);
+    fd.append('includeAiAnalysis',document.getElementById('schedIncludeAi').checked);
+    var sid = document.getElementById('schedId').value;
+    if (sid) fd.append('scheduleId', sid);
+    var filterData = JSON.stringify(getFilterParams());
+    fd.append('filterJson', filterData);
+    fetch('@Url.Action("SaveOffersReportSchedule","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d.success) { showAlert('scheduleAlert','danger',d.message); return; }
+            showAlert('scheduleAlert','success','Schedule saved.');
+            resetScheduleForm(); loadSchedules();
+        }).catch(function(e) { showAlert('scheduleAlert','danger','Save failed: '+e.message); });
+}
+function loadScheduleIntoForm(id) {
+    fetch('@Url.Action("GetScheduleById","Reports")?scheduleId='+id, { credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(s) {
+            if (!s || s.error) return;
+            document.getElementById('schedId').value = s.scheduleId;
+            document.getElementById('schedName').value = s.scheduleName||'';
+            document.getElementById('schedRecipients').value = s.recipients||'';
+            document.getElementById('schedRecurrence').value = s.recurrenceType||'Daily';
+            document.getElementById('schedTime').value = s.scheduleTime||'08:00';
+            document.getElementById('schedFormat').value = s.exportFormat||'CSV';
+            document.getElementById('schedSkipIfEmpty').checked = s.skipIfEmpty !== false;
+            showAlert('scheduleAlert','info','Editing: '+escapeHtml(s.scheduleName));
+        });
+}
+function deleteSchedule(id) {
+    if (!confirm('Delete this schedule?')) return;
+    fetch('@Url.Action("DeleteSchedule","Reports")?scheduleId='+id, { method:'POST', credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d.success) { loadSchedules(); resetScheduleForm(); } else showAlert('scheduleAlert','danger',d.message||'Delete failed.'); });
+}
+
+// ========== SEND EMAIL ==========
+function validateEmailList(input) {
+    if(!input||!input.trim()) return {valid:false,errors:['Enter at least one email.']};
+    var emails = input.split(/[,;]/).map(function(e){return e.trim();}).filter(function(e){return e.length>0;});
+    var re = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
+    var invalid = emails.filter(function(e){return !re.test(e);});
+    if(invalid.length>0) return {valid:false,errors:invalid.map(function(e){return 'Invalid: '+e;})};
+    return {valid:true,emails:emails,errors:[]};
+}
+function openSendEmailModal() {
+    if (!_lastData.length) { alert('Generate a report first.'); return; }
+    document.getElementById('sendEmailRecipients').value = '';
+    document.getElementById('sendEmailAlert').style.display = 'none';
+    document.getElementById('sendEmailRecipients').classList.remove('is-invalid');
+    document.getElementById('sendEmailSubject').value = 'Offers Report \u2014 '+document.getElementById('dateFrom').value+' to '+document.getElementById('dateTo').value;
+    loadEmailTemplates();
+    var m = new bootstrap.Modal(document.getElementById('sendEmailModal')); m.show();
+}
+function loadEmailTemplates() {
+    fetch('@Url.Action("GetEmailTemplates","Reports")?reportType=OffersReport').then(r=>r.json()).then(function(data) {
+        _emailTemplatesCache = data||[];
+        var sel = document.getElementById('sendEmailTemplate');
+        sel.innerHTML = '<option value="">-- No template (default) --</option>';
+        data.forEach(function(t) {
+            var opt = document.createElement('option'); opt.value=t.templateId; opt.textContent=t.templateName+(t.isDefault?' (default)':'');
+            if(t.isDefault) opt.selected=true; sel.appendChild(opt);
+        });
+        onEmailTemplateChange();
+    }).catch(function(){});
+}
+function onEmailTemplateChange() {
+    var sel = document.getElementById('sendEmailTemplate');
+    var id = parseInt(sel.value,10);
+    var preview = document.getElementById('sendEmailBodyPreview');
+    if(isNaN(id)||!id) { preview.innerHTML='<em class="text-muted">Default email body will be used.</em>'; return; }
+    var tmpl = _emailTemplatesCache.find(function(t){return t.templateId===id;});
+    if(!tmpl) return;
+    if(tmpl.emailSubject) document.getElementById('sendEmailSubject').value = tmpl.emailSubject;
+    if(tmpl.emailBodyHtml) preview.innerHTML = tmpl.emailBodyHtml;
+}
+function sendReportEmail() {
+    var ri = document.getElementById('sendEmailRecipients');
+    var ad = document.getElementById('sendEmailAlert');
+    var v = validateEmailList(ri.value);
+    if(!v.valid) { ri.classList.add('is-invalid'); document.getElementById('sendEmailRecipientsError').textContent=v.errors.join('; '); return; }
+    ri.classList.remove('is-invalid');
+    var btn = document.getElementById('sendEmailBtn');
+    var sp = document.getElementById('sendEmailSpinner');
+    var ic = document.getElementById('sendEmailIcon');
+    btn.disabled=true; sp.classList.remove('d-none'); ic.classList.add('d-none');
+    var fd = new FormData();
+    fd.append('recipients',ri.value.trim());
+    fd.append('cc',(document.getElementById('sendEmailCC').value||'').trim());
+    fd.append('bcc',(document.getElementById('sendEmailBCC').value||'').trim());
+    fd.append('emailSubject',document.getElementById('sendEmailSubject').value);
+    fd.append('exportFormat',document.getElementById('sendEmailFormat').value);
+    fd.append('templateId',document.getElementById('sendEmailTemplate').value||'');
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+    fetch('@Url.Action("SendOffersReportEmail","Reports")', { method:'POST', body:fd })
+        .then(r=>r.json())
+        .then(function(d) {
+            btn.disabled=false; sp.classList.add('d-none'); ic.classList.remove('d-none');
+            ad.innerHTML='<div class="alert alert-'+(d.success?'success':'danger')+' mb-0">'+(d.success?'<i class="bi bi-check-circle me-1"></i>':'<i class="bi bi-exclamation-triangle me-1"></i>')+escapeHtml(d.message)+'</div>';
+            ad.style.display='';
+        }).catch(function() {
+            btn.disabled=false; sp.classList.add('d-none'); ic.classList.remove('d-none');
+            ad.innerHTML='<div class="alert alert-danger mb-0">Network error.</div>'; ad.style.display='';
+        });
+}
+
+// ========== AI ANALYSIS ==========
+function saveAiLang(v) { localStorage.setItem('or_ai_lang', v); }
+function getAiLang() { return localStorage.getItem('or_ai_lang') || 'el'; }
+(function() { var s = document.getElementById('aiLangSelect'); if (s) s.value = getAiLang(); })();
+
+function analyzeReport() {
+    if (!_lastData.length) { alert('Generate a report first.'); return; }
+    var modalEl = document.getElementById('aiAnalysisModal');
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    document.getElementById('aiLoading').classList.remove('d-none');
+    document.getElementById('aiError').classList.add('d-none');
+    document.getElementById('aiResults').classList.add('d-none');
+    document.getElementById('aiPromptEditor').classList.add('d-none');
+    document.getElementById('btnReanalyze').style.display = 'none';
+    modal.show();
+    var fd = new FormData();
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+    fd.append('locale', getAiLang());
+    var promptTplId = document.getElementById('aiPromptTemplateSelect').value;
+    if (promptTplId && promptTplId !== '0') fd.append('promptTemplateId', promptTplId);
+    fetch('@Url.Action("AnalyzeOffersReport","Reports")', { method:'POST', body:fd })
+        .then(r=>r.json())
+        .then(function(data) {
+            document.getElementById('aiLoading').classList.add('d-none');
+            if (!data.success) {
+                document.getElementById('aiError').classList.remove('d-none');
+                document.getElementById('aiErrorMsg').textContent = data.message;
+                document.getElementById('btnReanalyze').style.display = 'inline-block';
+                return;
+            }
+            renderAiAnalysis(data.analysis);
+            initAiConversation(data.analysis, data.csvPreview);
+            document.getElementById('aiResults').classList.remove('d-none');
+            document.getElementById('btnReanalyze').style.display = 'inline-block';
+        }).catch(function(err) {
+            document.getElementById('aiLoading').classList.add('d-none');
+            document.getElementById('aiError').classList.remove('d-none');
+            document.getElementById('aiErrorMsg').textContent = 'Network error: '+err.message;
+            document.getElementById('btnReanalyze').style.display = 'inline-block';
+        });
+}
+
+function renderAiAnalysis(a) {
+    if (a.healthScore != null) {
+        var badge = document.getElementById('aiHealthBadge');
+        var color = a.healthScore >= 80 ? '#22c55e' : a.healthScore >= 60 ? '#eab308' : '#ef4444';
+        badge.style.background = color; badge.style.color = '#fff'; badge.textContent = a.healthScore;
+        document.getElementById('aiHealthLabel').textContent = a.healthLabel || '';
+        document.getElementById('aiTrendDesc').textContent = a.trendDescription || '';
+        var tb = document.getElementById('aiTrendBadge');
+        if (a.trend === 'up') { tb.className='badge fs-6 px-3 py-2 bg-success'; tb.textContent='\u2191 Improving'; }
+        else if (a.trend === 'down') { tb.className='badge fs-6 px-3 py-2 bg-danger'; tb.textContent='\u2193 Declining'; }
+        else { tb.className='badge fs-6 px-3 py-2 bg-secondary'; tb.textContent='\u2192 Stable'; }
+        document.getElementById('aiHealthBanner').style.display = '';
+    } else { document.getElementById('aiHealthBanner').style.display = 'none'; }
+    document.getElementById('aiExecSummary').innerHTML = a.executiveSummary || '';
+    var kpiHtml = '';
+    if (a.kpis && a.kpis.length) { a.kpis.forEach(function(k){ kpiHtml += '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value">'+escapeHtml(k.value)+'</div><div class="stat-label">'+escapeHtml(k.label)+'</div></div></div>'; }); }
+    document.getElementById('aiKpis').innerHTML = kpiHtml;
+    document.getElementById('aiKeyFindings').innerHTML = renderList(a.keyFindings);
+    document.getElementById('aiRecs').innerHTML = renderList(a.recommendations);
+    document.getElementById('aiTopPerformers').innerHTML = renderList(a.topPerformers);
+    document.getElementById('aiBottomPerformers').innerHTML = renderList(a.bottomPerformers);
+    if (a.alerts && a.alerts.length) {
+        var ah = '<div class="card border-0 shadow-sm"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-bell-fill text-danger me-2"></i>Alerts</h6></div><div class="card-body pt-2">'+renderList(a.alerts)+'</div></div>';
+        document.getElementById('aiAlertsSection').innerHTML = ah;
+    } else { document.getElementById('aiAlertsSection').innerHTML = ''; }
+    document.getElementById('aiModel').textContent = a.model || '';
+    document.getElementById('aiTokens').textContent = a.inputTokens ? ('In: '+a.inputTokens+' Out: '+a.outputTokens) : '';
+    document.getElementById('aiTime').textContent = a.durationMs ? ((a.durationMs/1000).toFixed(1)+'s') : '';
+}
+function renderList(arr) {
+    if (!arr || !arr.length) return '<p class="text-muted small">None</p>';
+    return '<ul class="mb-0">'+arr.map(function(item){return '<li>'+escapeHtml(typeof item === 'string' ? item : item.text || JSON.stringify(item))+'</li>';}).join('')+'</ul>';
+}
+function estimateAiCost(inp,out) { return '$'+((inp*0.000003+out*0.000015).toFixed(4)); }
+
+function initAiConversation(analysisJson, csvData) {
+    _aiConversation = [{role:'system',content:'You are a sales analyst. The user received an AI analysis of their offers report. Raw CSV data is below. Be concise, cite specific values. Respond in the same language as the analysis.'}];
+    if(csvData) _aiConversation.push({role:'user',content:'Here is the raw report data:\n'+csvData});
+    _aiConversation.push({role:'assistant',content:JSON.stringify(analysisJson)});
+}
+
+function sendAiChat() {
+    var input = document.getElementById('aiChatInput');
+    var msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    appendChatBubble('user', msg);
+    var btn = document.getElementById('btnSendChat'); btn.disabled=true; input.disabled=true;
+    var thinkingId = 'thinking_'+Date.now();
+    appendChatBubble('thinking', 'Thinking...', thinkingId);
+    fetch('/Reports/AiChatFollowup', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({history:_aiConversation,message:msg}) })
+        .then(function(r){return r.json();})
+        .then(function(data) {
+            removeChatBubble(thinkingId); btn.disabled=false; input.disabled=false; input.focus();
+            if(!data.success){appendChatBubble('error',data.message||'Failed.');return;}
+            _aiConversation.push({role:'user',content:msg});
+            _aiConversation.push({role:'assistant',content:data.content});
+            appendChatBubble('assistant',data.content);
+            _aiTotalChatTokens.input += (data.inputTokens||0);
+            _aiTotalChatTokens.output += (data.outputTokens||0);
+            var info = document.getElementById('aiChatTokenInfo');
+            info.style.display=''; info.innerHTML='<i class="bi bi-currency-dollar me-1"></i>Chat: '+estimateAiCost(_aiTotalChatTokens.input,_aiTotalChatTokens.output);
+        }).catch(function(err) {
+            removeChatBubble(thinkingId); btn.disabled=false; input.disabled=false;
+            appendChatBubble('error','Network error: '+err.message);
+        });
+}
+
+function appendChatBubble(role, content, id) {
+    var container = document.getElementById('aiChatMessages');
+    var div = document.createElement('div');
+    if(id) div.id = id;
+    div.className = 'mb-2 p-2 rounded small';
+    if(role==='user') { div.style.cssText='background:#ede9fe;margin-left:20%;'; div.innerHTML='<strong>You:</strong> '+escapeHtml(content); }
+    else if(role==='assistant') { div.style.cssText='background:#f0fdf4;margin-right:20%;'; div.innerHTML='<strong>AI:</strong> '+escapeHtml(content); }
+    else if(role==='thinking') { div.style.cssText='background:#fefce8;'; div.innerHTML='<span class="spinner-border spinner-border-sm me-2"></span>'+escapeHtml(content); }
+    else { div.style.cssText='background:#fef2f2;'; div.innerHTML='<i class="bi bi-exclamation-triangle me-1"></i>'+escapeHtml(content); }
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+function removeChatBubble(id) { var el = document.getElementById(id); if(el) el.remove(); }
+
+function togglePromptEditor() { document.getElementById('aiPromptEditor').classList.toggle('d-none'); if(!document.getElementById('aiPromptEditor').classList.contains('d-none')) loadAiPromptTemplates(); }
+function clearPromptEditor() { document.getElementById('aiPromptName').value=''; document.getElementById('aiPromptText').value=''; document.getElementById('aiPromptIsDefault').checked=false; }
+function loadAiPromptTemplates() {
+    fetch('/Reports/GetAiPromptTemplates?reportType=OffersReport').then(r=>r.json()).then(function(data) {
+        var sel = document.getElementById('aiPromptTemplateSelect');
+        sel.innerHTML='<option value="0" style="color:#333;">Default Prompt</option>';
+        var listHtml = '';
+        (data||[]).forEach(function(t) {
+            var opt = document.createElement('option'); opt.value=t.templateId; opt.textContent=t.templateName; opt.style.color='#333'; sel.appendChild(opt);
+            listHtml += '<div class="d-flex justify-content-between align-items-center border-bottom py-1"><span>'+escapeHtml(t.templateName)+(t.isDefault?' <span class="badge bg-primary">default</span>':'')+'</span>'
+                +'<div><button class="btn btn-sm btn-link p-0 me-2" onclick="editAiPrompt('+t.templateId+')">Edit</button><button class="btn btn-sm btn-link text-danger p-0" onclick="deleteAiPrompt('+t.templateId+')">Del</button></div></div>';
+        });
+        document.getElementById('aiPromptTemplatesList').innerHTML = listHtml || '<em>No templates yet.</em>';
+    }).catch(function(){});
+}
+function saveAiPromptTemplate() {
+    var fd = new FormData();
+    fd.append('templateName',document.getElementById('aiPromptName').value);
+    fd.append('systemPrompt',document.getElementById('aiPromptText').value);
+    fd.append('reportType',document.getElementById('aiPromptReportType').value);
+    fd.append('isDefault',document.getElementById('aiPromptIsDefault').checked);
+    fetch('/Reports/SaveAiPromptTemplate',{method:'POST',body:fd}).then(r=>r.json()).then(function(d){
+        document.getElementById('aiPromptAlert').innerHTML=d.success?'<span class="text-success">Saved!</span>':'<span class="text-danger">'+escapeHtml(d.message)+'</span>';
+        if(d.success){clearPromptEditor();loadAiPromptTemplates();}
+    }).catch(function(){});
+}
+function deleteAiPrompt(id){if(!confirm('Delete?'))return;fetch('/Reports/DeleteAiPromptTemplate?id='+id,{method:'DELETE'}).then(r=>r.json()).then(function(){loadAiPromptTemplates();});}
+function editAiPrompt(id){fetch('/Reports/GetAiPromptTemplate?id='+id).then(r=>r.json()).then(function(t){if(!t)return;document.getElementById('aiPromptName').value=t.templateName||'';document.getElementById('aiPromptText').value=t.systemPrompt||'';document.getElementById('aiPromptIsDefault').checked=!!t.isDefault;}).catch(function(){});}
+
+// ==================== Save / Reset Layout ====================
+
+function collectCurrentLayout() {
+    function v(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    var p = {};
+    p['DateField'] = v('dateField');
+    p['StatusFilter'] = v('statusFilter');
+    p['StoreFilter'] = v('storeFilter');
+    p['AgentFilter'] = v('agentFilter');
+    p['OfferType'] = v('offerTypeFilter');
+    p['IncludeHistory'] = document.getElementById('includeHistory').checked ? 'true' : 'false';
+    p['PrimaryGroup'] = v('primaryGroup');
+    p['SecondaryGroup'] = v('secondaryGroup');
+    p['MaxRecords'] = v('maxRecords');
+    var preset = document.querySelector('input[name="DatePreset"]:checked');
+    if (preset) p['DatePreset'] = preset.value;
+    return p;
+}
+
+function saveCurrentLayout() {
+    var parms = collectCurrentLayout();
+    fetch('@Url.Action("SaveOffersReportLayout", "Reports")', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parms)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) showLayoutToast('Layout saved successfully', 'success');
+        else showLayoutToast(data.message || 'Failed to save layout', 'danger');
+    })
+    .catch(function() { showLayoutToast('Network error saving layout', 'danger'); });
+}
+
+function resetSavedLayout() {
+    if (!confirm('Reset your saved layout to factory defaults?')) return;
+    fetch('@Url.Action("ResetOffersReportLayout", "Reports")', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            showLayoutToast('Layout reset \u2014 reloading...', 'success');
+            setTimeout(function() { window.location.href = '@Url.Action("OffersReport")'; }, 800);
+        } else {
+            showLayoutToast(data.message || 'Failed to reset layout', 'danger');
+        }
+    })
+    .catch(function() { showLayoutToast('Network error', 'danger'); });
+}
+
+var __layoutsCache = null;
+
+function isAuthRedirect(response) {
+    if (!response) return false;
+    if (response.status === 401 || response.status === 403) return true;
+    if (response.redirected && /\/Account\/Login/i.test(response.url || '')) return true;
+    var ct = response.headers && response.headers.get ? response.headers.get('content-type') : '';
+    if (ct && ct.indexOf('text/html') !== -1) return true;
+    return false;
+}
+function showSessionExpiredToast() { showLayoutToast('Session expired \u2014 please reload the page and sign in again.', 'warning'); }
+
+function loadLayoutsList() {
+    var menu = document.getElementById('layoutsDropdownMenu');
+    if (menu) menu.innerHTML = '<li><h6 class="dropdown-header">Loading...</h6></li>';
+    return fetch('@Url.Action("ListOffersReportLayouts", "Reports")', { method: 'GET', credentials: 'same-origin' })
+        .then(function(r) {
+            if (isAuthRedirect(r)) { if (menu) menu.innerHTML = '<li><h6 class="dropdown-header text-danger">Session expired</h6></li>'; showSessionExpiredToast(); return null; }
+            return r.json();
+        })
+        .then(function(data) {
+            if (data == null) return;
+            __layoutsCache = data && data.layouts ? data.layouts : [];
+            renderLayoutsDropdown(__layoutsCache);
+        })
+        .catch(function() { if (menu) menu.innerHTML = '<li><h6 class="dropdown-header text-danger">Failed to load</h6></li>'; });
+}
+
+function renderLayoutsDropdown(layouts) {
+    var menu = document.getElementById('layoutsDropdownMenu');
+    if (!menu) return;
+    if (!layouts || layouts.length === 0) {
+        menu.innerHTML = '<li><h6 class="dropdown-header">No saved layouts</h6></li><li><span class="dropdown-item-text small text-muted">Use "Save as..." to create one.</span></li>';
+        return;
+    }
+    var own = layouts.filter(function(l) { return !l.isPublic; });
+    var pub = layouts.filter(function(l) { return  l.isPublic; });
+    var html = '';
+    function renderGroup(label, items) {
+        if (!items.length) return;
+        html += '<li><h6 class="dropdown-header">' + label + '</h6></li>';
+        items.forEach(function(l) {
+            var safeName = String(l.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            var publicBadge = l.isPublic ? '<span class="badge bg-secondary ms-2" title="Visible to all users">Public</span>' : '';
+            var editorBadge = l.isPublic && l.createdBy ? '<span class="text-muted small ms-2">by ' + String(l.createdBy).replace(/</g,'&lt;') + '</span>' : '';
+            html += '<li class="d-flex align-items-center px-2 py-1"><a href="#" class="flex-grow-1 text-decoration-none text-body" onclick="loadNamedLayout(\''+String(l.headerCode).replace(/'/g,"\\'")+'\'); return false;"><i class="bi bi-bookmark me-1"></i>'+safeName+publicBadge+editorBadge+'</a>';
+            if (l.canEdit) html += '<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2" title="Delete" onclick="deleteNamedLayout(\''+String(l.headerCode).replace(/'/g,"\\'")+'\', \''+safeName.replace(/'/g,"\\'")+'\'); return false;"><i class="bi bi-trash"></i></button>';
+            html += '</li>';
+        });
+    }
+    renderGroup('Your layouts', own);
+    renderGroup('Public layouts', pub);
+    menu.innerHTML = html;
+}
+
+function loadNamedLayout(headerCode) {
+    if (!headerCode) return;
+    fetch('@Url.Action("LoadOffersReportLayout", "Reports")?headerCode=' + encodeURIComponent(headerCode), { method: 'POST', credentials: 'same-origin' })
+        .then(function(r) { if (isAuthRedirect(r)) { showSessionExpiredToast(); return null; } return r.json(); })
+        .then(function(data) {
+            if (data == null) return;
+            if (!data.success) { showLayoutToast(data.message || 'Failed to load layout', 'danger'); return; }
+            applyLayoutParameters(data.parameters || {});
+            var label = document.getElementById('layoutsCurrentName');
+            if (label && __layoutsCache) {
+                var match = __layoutsCache.find(function(l) { return l.headerCode === headerCode; });
+                if (match) label.textContent = match.name;
+            }
+            showLayoutToast('Layout loaded \u2014 click Generate to run.', 'success');
+        })
+        .catch(function() { showLayoutToast('Network error loading layout', 'danger'); });
+}
+
+function applyLayoutParameters(parms) {
+    function setVal(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
+    setVal('dateField',       parms.DateField);
+    setVal('statusFilter',    parms.StatusFilter);
+    setVal('storeFilter',     parms.StoreFilter);
+    setVal('agentFilter',     parms.AgentFilter);
+    setVal('offerTypeFilter', parms.OfferType);
+    setVal('primaryGroup',    parms.PrimaryGroup);
+    setVal('secondaryGroup',  parms.SecondaryGroup);
+    setVal('maxRecords',      parms.MaxRecords);
+    if (parms.IncludeHistory != null) document.getElementById('includeHistory').checked = parms.IncludeHistory === 'true' || parms.IncludeHistory === true;
+    if (parms.DatePreset) {
+        var r = document.querySelector('input[name="DatePreset"][value="'+parms.DatePreset+'"]');
+        if (r) { r.checked = true; applyPresetDates(parms.DatePreset); }
+    }
+}
+
+function saveLayoutAsConfirm() {
+    var nameEl = document.getElementById('saveLayoutAsName');
+    var pubEl = document.getElementById('saveLayoutAsPublic');
+    var alertEl = document.getElementById('saveLayoutAsAlert');
+    var btn = document.getElementById('saveLayoutAsConfirmBtn');
+    var spinner = document.getElementById('saveLayoutAsSpinner');
+    if (alertEl) { alertEl.classList.add('d-none'); alertEl.textContent = ''; }
+    var name = (nameEl.value || '').trim();
+    if (!name) { alertEl.textContent = 'Layout name is required.'; alertEl.className = 'alert alert-warning'; return; }
+    btn.disabled = true; spinner.classList.remove('d-none');
+    var parms = collectCurrentLayout();
+    fetch('@Url.Action("SaveOffersReportLayoutAs", "Reports")', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, isPublic: !!(pubEl && pubEl.checked), parameters: parms })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false; spinner.classList.add('d-none');
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('saveLayoutAsModal')).hide();
+            showLayoutToast('Layout saved', 'success');
+            loadLayoutsList();
+            var label = document.getElementById('layoutsCurrentName');
+            if (label) label.textContent = name;
+        } else { alertEl.textContent = data.message || 'Failed to save'; alertEl.className = 'alert alert-danger'; }
+    })
+    .catch(function() { btn.disabled = false; spinner.classList.add('d-none'); alertEl.textContent = 'Network error.'; alertEl.className = 'alert alert-danger'; });
+}
+
+function deleteNamedLayout(headerCode, displayName) {
+    if (!confirm('Delete layout "' + displayName + '"?')) return;
+    fetch('@Url.Action("DeleteOffersReportLayout", "Reports")?headerCode=' + encodeURIComponent(headerCode), { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) { showLayoutToast('Layout deleted', 'success'); loadLayoutsList(); }
+            else showLayoutToast(data.message || 'Failed to delete', 'danger');
+        })
+        .catch(function() { showLayoutToast('Network error', 'danger'); });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var btn = document.getElementById('layoutsDropdownBtn');
+    if (!btn) return;
+    var loadedOnce = false;
+    btn.addEventListener('show.bs.dropdown', function() {
+        if (!loadedOnce) { loadedOnce = true; loadLayoutsList(); }
+    });
+    var modalEl = document.getElementById('saveLayoutAsModal');
+    if (modalEl) {
+        modalEl.addEventListener('show.bs.modal', function() {
+            document.getElementById('saveLayoutAsName').value = '';
+            document.getElementById('saveLayoutAsPublic').checked = false;
+            var alertEl = document.getElementById('saveLayoutAsAlert');
+            if (alertEl) { alertEl.classList.add('d-none'); alertEl.textContent = ''; }
+        });
+    }
+});
+
+function showLayoutToast(message, type) {
+    var existing = document.getElementById('layoutToast');
+    if (existing) existing.remove();
+    var div = document.createElement('div');
+    div.id = 'layoutToast';
+    div.className = 'alert alert-' + type + ' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';
+    div.style.zIndex = '9999';
+    div.innerHTML = '<i class="bi bi-' + (type === 'success' ? 'check-circle' : 'exclamation-triangle') + ' me-1"></i>' + message +
+        '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+    document.body.appendChild(div);
+    setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
+}
+
+</script>

@@ -629,4 +629,174 @@ public class PdfExportService
         };
         table.AddCell(cell);
     }
+
+    public byte[] GenerateProspectClientsPdf(
+        List<ProspectClientsRow> rows, ProspectClientsFilter filter)
+    {
+        bool hasL1 = filter.PrimaryGroup != "NONE";
+        bool hasL2 = filter.SecondaryGroup != "NONE";
+        int colCount = 22 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (filter.IncludeHistory ? 1 : 0);
+
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Prospect Clients Report", TitleFont));
+        document.Add(new Paragraph(
+            $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd} | Date Field: {filter.DateField}" +
+            (filter.StatusFilter != "All" ? $" | Status: {filter.StatusFilter}" : "") +
+            (filter.PriorityFilter != "All" ? $" | Priority: {filter.PriorityFilter}" : ""),
+            SubtitleFont));
+        document.Add(new Paragraph($"Total Records: {rows.Count} | Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var table = new PdfPTable(colCount)
+        {
+            WidthPercentage = 100,
+            SpacingBefore = 10
+        };
+
+        var headers = new List<string>();
+        if (hasL1) headers.Add("Group 1");
+        if (hasL2) headers.Add("Group 2");
+        headers.AddRange(new[] { "Lead No", "Company/Name", "Contact", "Status", "Priority",
+            "Reg. Date", "Last Modified", "Next Comm.", "Phone", "Mobile", "Email", "Town",
+            "Followed By", "Recommended By", "Customer",
+            "Cat 1", "Cat 2", "Notes",
+            "Offers", "Offer Value", "Emails", "SMS" });
+        if (filter.IncludeHistory) headers.Add("Source");
+
+        foreach (var h in headers)
+        {
+            var cell = new PdfPCell(new Phrase(h, HeaderFont))
+            {
+                BackgroundColor = HeaderBg,
+                HorizontalAlignment = Element.ALIGN_CENTER,
+                Padding = 4f
+            };
+            table.AddCell(cell);
+        }
+
+        bool alternate = false;
+        foreach (var row in rows)
+        {
+            var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+            if (hasL1) AddDataCell(table, row.Level1Descr, bg);
+            if (hasL2) AddDataCell(table, row.Level2Descr, bg);
+            AddDataCell(table, row.LeadNo, bg);
+            AddDataCell(table, row.CompanyName, bg);
+            AddDataCell(table, row.ContactPerson, bg);
+            AddDataCell(table, row.StatusName, bg);
+            AddDataCell(table, row.PriorityName, bg);
+            AddDataCell(table, row.RegistrationDate?.ToString("yyyy-MM-dd") ?? "", bg);
+            AddDataCell(table, row.LastModification?.ToString("yyyy-MM-dd") ?? "", bg);
+            AddDataCell(table, row.NextCommunicationDate?.ToString("yyyy-MM-dd") ?? "", bg);
+            AddDataCell(table, row.Tel1, bg);
+            AddDataCell(table, row.Mobile, bg);
+            AddDataCell(table, row.Email, bg);
+            AddDataCell(table, row.Town, bg);
+            AddDataCell(table, row.FollowedBy, bg);
+            AddDataCell(table, row.RecommendedBy, bg);
+            AddDataCell(table, row.LinkedCustomer, bg);
+            AddDataCell(table, row.Category1, bg);
+            AddDataCell(table, row.Category2, bg);
+            AddDataCell(table, row.Notes, bg);
+            AddDataCell(table, row.OfferCount.ToString(), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.TotalOfferValue.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.EmailsSent.ToString(), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.SmsSent.ToString(), bg, Element.ALIGN_RIGHT);
+            if (filter.IncludeHistory) AddDataCell(table, row.Source, bg);
+            alternate = !alternate;
+        }
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
+
+    public byte[] GenerateOffersReportPdf(
+        List<OffersReportRow> rows, OffersReportFilter filter)
+    {
+        bool hasL1 = filter.PrimaryGroup != "NONE";
+        bool hasL2 = filter.SecondaryGroup != "NONE";
+        int colCount = 22 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Offers Report", TitleFont));
+        document.Add(new Paragraph(
+            $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd} | Date Field: {filter.DateField}" +
+            (filter.StatusFilter != "All" ? $" | Status: {filter.StatusFilter}" : "") +
+            (filter.StoreFilter != "All" ? $" | Store: {filter.StoreFilter}" : ""),
+            SubtitleFont));
+        document.Add(new Paragraph($"Total Records: {rows.Count} | Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var table = new PdfPTable(colCount)
+        {
+            WidthPercentage = 100,
+            SpacingBefore = 10
+        };
+
+        var headers = new List<string>();
+        if (hasL1) headers.Add("Group 1");
+        if (hasL2) headers.Add("Group 2");
+        headers.AddRange(new[] {
+            "Offer No", "Date", "Valid Until", "Status",
+            "Customer", "Store", "Agent",
+            "Items", "Qty", "Subtotal", "Disc.",
+            "VAT", "Grand Total", "Cost", "Order %",
+            "Lead", "Printed", "Emailed", "Std Offer", "Comments", "Internal Notes", "Source"
+        });
+
+        foreach (var h in headers)
+        {
+            var cell = new PdfPCell(new Phrase(h, HeaderFont))
+            {
+                BackgroundColor = new BaseColor(124, 58, 237),
+                HorizontalAlignment = Element.ALIGN_CENTER,
+                Padding = 4f
+            };
+            table.AddCell(cell);
+        }
+
+        bool alternate = false;
+        foreach (var row in rows)
+        {
+            var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+            if (hasL1) AddDataCell(table, row.Level1Descr, bg);
+            if (hasL2) AddDataCell(table, row.Level2Descr, bg);
+            AddDataCell(table, row.OfferNo, bg);
+            AddDataCell(table, row.DateTrans?.ToString("yyyy-MM-dd") ?? "", bg);
+            AddDataCell(table, row.ValidUntil?.ToString("yyyy-MM-dd") ?? "", bg);
+            AddDataCell(table, row.StatusName, bg);
+            AddDataCell(table, row.CustomerName, bg);
+            AddDataCell(table, row.StoreName, bg);
+            AddDataCell(table, row.AgentName, bg);
+            AddDataCell(table, row.ItemCount.ToString(), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.TotalQuantity.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.InvoiceTotal.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.InvoiceTotalDiscount.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.InvoiceVat.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.InvoiceGrandTotal.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.TotalItemCost.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.OrderPercentage.ToString("N1") + "%", bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.LinkedLead, bg);
+            AddDataCell(table, row.Printed ? "Yes" : "", bg);
+            AddDataCell(table, row.SentByEmail ? "Yes" : "", bg);
+            AddDataCell(table, row.IsStandardOffer ? row.StandardOfferName : "", bg);
+            AddDataCell(table, row.Comments, bg);
+            AddDataCell(table, row.InternalNotes, bg);
+            AddDataCell(table, row.Source, bg);
+            alternate = !alternate;
+        }
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
 }

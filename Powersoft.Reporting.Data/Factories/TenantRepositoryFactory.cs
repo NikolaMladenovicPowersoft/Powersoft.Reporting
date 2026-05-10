@@ -100,4 +100,20 @@ public class TenantRepositoryFactory : ITenantRepositoryFactory
 
         return new CancelLogRepository(connectionString);
     }
+
+    public IProspectClientsRepository CreateProspectClientsRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+
+        return new ProspectClientsRepository(connectionString);
+    }
+
+    public IOffersReportRepository CreateOffersReportRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+
+        return new OffersReportRepository(connectionString);
+    }
 }

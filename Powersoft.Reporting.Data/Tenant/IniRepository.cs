@@ -172,15 +172,24 @@ public class IniRepository : IIniRepository
 
     // ==================== Named / public layouts (multi per user) ====================
 
+    private const int MaxHeaderCodeLength = 20;
+
     /// <summary>
     /// Header code shape for named layouts: "{prefix}:{slug}".
     /// Plain "{prefix}" (no colon) is reserved for the legacy single default layout.
+    /// Truncates to fit within the IniHeaderCode column (nvarchar(20)).
     /// </summary>
-    private static string BuildNamedHeaderCode(string prefix, string slug) => $"{prefix}:{slug}";
+    private static string BuildNamedHeaderCode(string prefix, string slug)
+    {
+        var maxSlug = MaxHeaderCodeLength - prefix.Length - 1;
+        if (maxSlug < 1) maxSlug = 1;
+        if (slug.Length > maxSlug) slug = slug.Substring(0, maxSlug).TrimEnd('-');
+        return $"{prefix}:{slug}";
+    }
 
     /// <summary>
     /// Slugifies a user-visible layout name into a stable short id used inside the header code.
-    /// Lowercase ASCII alphanumeric + hyphen; collapses other characters; truncates at 60 chars.
+    /// Lowercase ASCII alphanumeric + hyphen; collapses other characters.
     /// Empty/whitespace -> "layout".
     /// </summary>
     internal static string SlugifyLayoutName(string name)
@@ -203,7 +212,6 @@ public class IniRepository : IIniRepository
         }
         var slug = sb.ToString().Trim('-');
         if (slug.Length == 0) slug = "layout";
-        if (slug.Length > 60) slug = slug.Substring(0, 60).TrimEnd('-');
         return slug;
     }
 

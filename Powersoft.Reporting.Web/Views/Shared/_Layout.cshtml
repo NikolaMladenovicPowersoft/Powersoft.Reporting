@@ -36,6 +36,15 @@
                             <i class="bi bi-pie-chart me-1"></i> Charts
                         </a>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-people me-1"></i> CRM
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" asp-controller="Reports" asp-action="ProspectClients"><i class="bi bi-person-lines-fill me-2"></i>Prospect Clients</a></li>
+                            <li><a class="dropdown-item" asp-controller="Reports" asp-action="OffersReport"><i class="bi bi-file-earmark-text me-2"></i>Offers Report</a></li>
+                        </ul>
+                    </li>
                     @{
                         var rankingStr = Context.Session.GetInt32("Ranking");
                         var showSettings = rankingStr.HasValue && rankingStr.Value <= 15;

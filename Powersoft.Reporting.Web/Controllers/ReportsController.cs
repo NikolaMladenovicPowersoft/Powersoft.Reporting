@@ -317,7 +317,8 @@ public class ReportsController : Controller
         
         var filter = model.ToReportFilter();
         filter.ItemsSelection = ParseItemsSelection(model.ItemsSelectionJson);
-        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter
+            && filter.ItemsSelection.Stores.Mode == FilterMode.Include)
         {
             filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
         }
@@ -750,6 +751,145 @@ public class ReportsController : Controller
         {
             _logger.LogError(ex, "Error resetting layout for user {User}", GetUserCode());
             return Json(new { success = false, message = "Failed to reset layout" });
+        }
+    }
+
+    // ==================== Average Basket Named Layouts ====================
+
+    [HttpGet]
+    public async Task<IActionResult> ListAbLayouts()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var layouts = await repo.ListLayoutsAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderAvgBasket,
+                userCode);
+
+            return Json(new
+            {
+                success = true,
+                layouts = layouts.Select(l => new
+                {
+                    headerCode = l.HeaderCode,
+                    name = l.Name,
+                    isPublic = l.IsPublic,
+                    createdBy = l.CreatedBy,
+                    canEdit = l.CanEdit,
+                    lastModified = l.LastModified
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing AB layouts for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
+        }
+    }
+
+    public class SaveAbLayoutAsRequest
+    {
+        public string Name { get; set; } = string.Empty;
+        public bool IsPublic { get; set; }
+        public Dictionary<string, string> Parameters { get; set; } = new();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveAbLayoutAs([FromBody] SaveAbLayoutAsRequest req)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        if (req == null || string.IsNullOrWhiteSpace(req.Name))
+            return Json(new { success = false, message = "Layout name is required" });
+        if (req.Parameters == null || req.Parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var headerCode = await repo.SaveNamedLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderAvgBasket,
+                ModuleConstants.IniDescriptionAvgBasket,
+                userCode,
+                req.Name,
+                req.IsPublic,
+                req.Parameters);
+
+            return Json(new { success = true, headerCode, message = "Layout saved" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving named AB layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> LoadAbLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
+
+            if (parms.Count == 0)
+                return Json(new { success = false, message = "Layout not found or not visible" });
+
+            return Json(new { success = true, parameters = parms });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading AB layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to load layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteAbLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var userCode = GetUserCode();
+            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
+
+            return Json(new
+            {
+                success = deleted,
+                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting AB layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to delete layout" });
         }
     }
 
@@ -1316,6 +1456,8 @@ public class ReportsController : Controller
                 model.ReportLayout = rlt;
             if (parms.TryGetValue("ShowTotalQty", out var stq))
                 model.ShowTotalQty = stq == "1";
+            if (parms.TryGetValue("DatePreset", out var dp) && !string.IsNullOrEmpty(dp))
+                model.DatePreset = dp;
         }
         catch (Exception ex)
         {
@@ -1445,7 +1587,8 @@ public class ReportsController : Controller
 
         var filter = model.ToPurchasesSalesFilter();
         filter.ItemsSelection = ParseItemsSelection(model.ItemsSelectionJson);
-        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter
+            && filter.ItemsSelection.Stores.Mode == FilterMode.Include)
         {
             filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
         }
@@ -4349,7 +4492,8 @@ public class ReportsController : Controller
 
         var filter = model.ToCatalogueFilter();
         filter.ItemsSelection = ParseItemsSelection(model.ItemsSelectionJson);
-        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter
+            && filter.ItemsSelection.Stores.Mode == FilterMode.Include)
         {
             filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
         }
@@ -4508,7 +4652,8 @@ public class ReportsController : Controller
         if (filter.SecondaryGroup == CatalogueGroupBy.None)
             filter.ThirdGroup = CatalogueGroupBy.None;
 
-        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter)
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter
+            && filter.ItemsSelection.Stores.Mode == FilterMode.Include)
             filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
 
         ApplyColumnFiltersFromJson(filter, columnFilters);
@@ -5925,6 +6070,1365 @@ public class ReportsController : Controller
             _logger.LogError(ex, "Error analyzing Cancel Log report with AI");
             return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
         }
+    }
+
+    // ==================== Prospect Clients ====================
+
+    public async Task<IActionResult> ProspectClients()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewProspectClients))
+        {
+            _logger.LogWarning("User {User} denied access to Prospect Clients (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewProspectClients);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+
+        bool hasSavedLayout = false;
+        Dictionary<string, string>? savedLayout = null;
+        try
+        {
+            var iniRepo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            savedLayout = await iniRepo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderProspectClients,
+                GetUserCode());
+            hasSavedLayout = savedLayout.Count > 0;
+        }
+        catch { }
+
+        ViewBag.HasSavedLayout = hasSavedLayout;
+        ViewBag.SavedLayout = savedLayout;
+        return View();
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetProspectClientsLookups()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { agents = Array.Empty<object>(), categories1 = Array.Empty<object>(), categories2 = Array.Empty<object>() });
+
+        try
+        {
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(tenantConnString);
+            await conn.OpenAsync();
+
+            var agents = new List<object>();
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+                "SELECT DISTINCT a.pk_SystemNo, ISNULL(a.FirstName,'') + ' ' + ISNULL(a.LastName,'') AS AgentName " +
+                "FROM tbl_Agent a INNER JOIN tbl_Lead t ON t.fk_FollowedById = a.pk_SystemNo " +
+                "ORDER BY AgentName", conn))
+            {
+                using var rdr = await cmd.ExecuteReaderAsync();
+                while (await rdr.ReadAsync())
+                    agents.Add(new { id = rdr.GetInt64(0).ToString(), name = rdr.GetString(1).Trim() });
+            }
+
+            var categories1 = new List<object>();
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+                "SELECT DISTINCT c.pk_CategoryID, c.CategoryDescr " +
+                "FROM tbl_CustCategory c INNER JOIN tbl_Lead t ON t.fk_Category1 = c.pk_CategoryID " +
+                "ORDER BY c.CategoryDescr", conn))
+            {
+                using var rdr = await cmd.ExecuteReaderAsync();
+                while (await rdr.ReadAsync())
+                    categories1.Add(new { id = rdr.GetInt64(0).ToString(), name = (rdr.IsDBNull(1) ? "" : rdr.GetString(1)).Trim() });
+            }
+
+            var categories2 = new List<object>();
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+                "SELECT DISTINCT c.pk_CategoryID, c.CategoryDescr " +
+                "FROM tbl_CustCategory c INNER JOIN tbl_Lead t ON t.fk_Category2 = c.pk_CategoryID " +
+                "ORDER BY c.CategoryDescr", conn))
+            {
+                using var rdr = await cmd.ExecuteReaderAsync();
+                while (await rdr.ReadAsync())
+                    categories2.Add(new { id = rdr.GetInt64(0).ToString(), name = (rdr.IsDBNull(1) ? "" : rdr.GetString(1)).Trim() });
+            }
+
+            return Json(new { agents, categories1, categories2 });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading prospect clients lookups");
+            return Json(new { agents = Array.Empty<object>(), categories1 = Array.Empty<object>(), categories2 = Array.Empty<object>() });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetProspectClientsData(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "RegistrationDate",
+        string statusFilter = "All",
+        string priorityFilter = "All",
+        string primaryGroup = "NONE",
+        string secondaryGroup = "NONE",
+        int maxRecords = 50000,
+        string sortColumn = "RegistrationDate",
+        string sortDirection = "DESC",
+        bool includeHistory = false,
+        string followedByFilter = "All",
+        string category1Filter = "All",
+        string category2Filter = "All")
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        try
+        {
+            var filter = new ProspectClientsFilter
+            {
+                DateFrom = dateFrom,
+                DateTo = dateTo,
+                DateField = dateField,
+                StatusFilter = statusFilter,
+                PriorityFilter = priorityFilter,
+                PrimaryGroup = primaryGroup ?? "NONE",
+                SecondaryGroup = secondaryGroup ?? "NONE",
+                MaxRecords = maxRecords,
+                SortColumn = sortColumn,
+                SortDirection = sortDirection,
+                IncludeHistory = includeHistory,
+                FollowedByFilter = followedByFilter,
+                Category1Filter = category1Filter,
+                Category2Filter = category2Filter
+            };
+
+            var repo = _repositoryFactory.CreateProspectClientsRepository(tenantConnString);
+            var (rows, totalRecords) = await repo.GetDataAsync(filter);
+            return Json(new { success = true, data = rows, totalRows = rows.Count, totalRecords });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading prospect clients data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    // --- Prospect Clients Layout CRUD ---
+
+    [HttpPost]
+    public async Task<IActionResult> SaveProspectClientsLayout([FromBody] Dictionary<string, string> parameters)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (parameters == null || parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            await repo.SaveLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderProspectClients,
+                ModuleConstants.IniDescriptionProspectClients,
+                GetUserCode(),
+                parameters);
+            return Json(new { success = true, message = "Layout saved" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving ProspectClients layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ResetProspectClientsLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var deleted = await repo.DeleteLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderProspectClients,
+                GetUserCode());
+            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting ProspectClients layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to reset layout" });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ListProspectClientsLayouts()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var layouts = await repo.ListLayoutsAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderProspectClients,
+                GetUserCode());
+            return Json(new
+            {
+                success = true,
+                layouts = layouts.Select(l => new
+                {
+                    headerCode = l.HeaderCode, name = l.Name, isPublic = l.IsPublic,
+                    createdBy = l.CreatedBy, canEdit = l.CanEdit, lastModified = l.LastModified
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing ProspectClients layouts for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
+        }
+    }
+
+    public class SaveProspectClientsLayoutAsRequest
+    {
+        public string Name { get; set; } = string.Empty;
+        public bool IsPublic { get; set; }
+        public Dictionary<string, string> Parameters { get; set; } = new();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveProspectClientsLayoutAs([FromBody] SaveProspectClientsLayoutAsRequest req)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (req == null || string.IsNullOrWhiteSpace(req.Name))
+            return Json(new { success = false, message = "Layout name is required" });
+        if (req.Parameters == null || req.Parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var headerCode = await repo.SaveNamedLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderProspectClients,
+                ModuleConstants.IniDescriptionProspectClients,
+                GetUserCode(),
+                req.Name, req.IsPublic, req.Parameters);
+            return Json(new { success = true, headerCode, message = "Layout saved" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving named ProspectClients layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> LoadProspectClientsLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
+            if (parms.Count == 0)
+                return Json(new { success = false, message = "Layout not found or not visible" });
+            return Json(new { success = true, parameters = parms });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading ProspectClients layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to load layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteProspectClientsLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
+            return Json(new
+            {
+                success = deleted,
+                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting ProspectClients layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to delete layout" });
+        }
+    }
+
+    // --- Prospect Clients Export / Email / AI ---
+
+    private async Task<(List<ProspectClientsRow> rows, ProspectClientsFilter filter)?> RunProspectClientsQuery(
+        DateTime dateFrom, DateTime dateTo, string dateField, string statusFilter, string priorityFilter,
+        string primaryGroup, string secondaryGroup, int maxRecords,
+        string sortColumn, string sortDirection, bool includeHistory = false,
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var filter = new ProspectClientsFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            DateField = dateField,
+            StatusFilter = statusFilter,
+            PriorityFilter = priorityFilter,
+            PrimaryGroup = primaryGroup ?? "NONE",
+            SecondaryGroup = secondaryGroup ?? "NONE",
+            MaxRecords = maxRecords,
+            SortColumn = sortColumn,
+            SortDirection = sortDirection,
+            IncludeHistory = includeHistory,
+            FollowedByFilter = followedByFilter,
+            Category1Filter = category1Filter,
+            Category2Filter = category2Filter
+        };
+
+        try
+        {
+            var repo = _repositoryFactory.CreateProspectClientsRepository(tenantConnString);
+            var (rows, _) = await repo.GetDataAsync(filter);
+            return (rows, filter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error running ProspectClients query");
+            return null;
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportProspectClientsCsv(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "RegistrationDate",
+        string statusFilter = "All", string priorityFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
+        bool includeHistory = false,
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+    {
+        var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
+            primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
+            followedByFilter, category1Filter, category2Filter);
+        if (result == null) return RedirectToAction("ProspectClients");
+
+        var bytes = new CsvExportService().GenerateProspectClientsCsv(result.Value.rows, result.Value.filter);
+        return File(bytes, "text/csv", $"ProspectClients_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportProspectClientsExcel(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "RegistrationDate",
+        string statusFilter = "All", string priorityFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
+        bool includeHistory = false,
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+    {
+        var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
+            primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
+            followedByFilter, category1Filter, category2Filter);
+        if (result == null) return RedirectToAction("ProspectClients");
+
+        var bytes = new ExcelExportService().GenerateProspectClientsExcel(result.Value.rows, result.Value.filter);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"ProspectClients_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportProspectClientsPdf(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "RegistrationDate",
+        string statusFilter = "All", string priorityFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
+        bool includeHistory = false,
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+    {
+        var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
+            primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
+            followedByFilter, category1Filter, category2Filter);
+        if (result == null) return RedirectToAction("ProspectClients");
+
+        var bytes = new PdfExportService().GenerateProspectClientsPdf(result.Value.rows, result.Value.filter);
+        return File(bytes, "application/pdf",
+            $"ProspectClients_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ProspectClientsPrintPreview(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "RegistrationDate",
+        string statusFilter = "All", string priorityFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
+        bool includeHistory = false,
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+    {
+        var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
+            primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
+            followedByFilter, category1Filter, category2Filter);
+        if (result == null) return RedirectToAction("ProspectClients");
+
+        ViewBag.Rows = result.Value.rows;
+        ViewBag.Filter = result.Value.filter;
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+        return View("ProspectClientsPrintPreview");
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendProspectClientsReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat,
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "RegistrationDate",
+        string statusFilter = "All", string priorityFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
+        bool includeHistory = false,
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Please enter at least one email address." });
+
+        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        if (invalidEmails.Length > 0)
+            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
+
+        var ccList = ParseAndValidateEmailList(cc);
+        var bccList = ParseAndValidateEmailList(bcc);
+        if (ccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
+        if (bccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
+
+        var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
+            primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
+            followedByFilter, category1Filter, category2Filter);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateProspectClientsPdf(result.Value.rows, result.Value.filter);
+                fileName = $"ProspectClients_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateProspectClientsCsv(result.Value.rows, result.Value.filter);
+                fileName = $"ProspectClients_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateProspectClientsExcel(result.Value.rows, result.Value.filter);
+                fileName = $"ProspectClients_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        var rowCount = result.Value.rows.Count;
+
+        var subject = !string.IsNullOrWhiteSpace(emailSubject) ? emailSubject
+            : $"Prospect Clients Report — {period} ({dbName})";
+
+        var htmlBody = $@"
+            <div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto'>
+                <h2 style='color:#1e293b'>Prospect Clients Report</h2>
+                <p>Attached is the Prospect Clients report for <strong>{period}</strong>.</p>
+                <table style='border-collapse:collapse;width:100%;margin:16px 0'>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Database</td><td style='padding:8px;border:1px solid #e2e8f0'>{dbName}</td></tr>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Period</td><td style='padding:8px;border:1px solid #e2e8f0'>{period}</td></tr>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Status</td><td style='padding:8px;border:1px solid #e2e8f0'>{result.Value.filter.StatusFilter}</td></tr>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Total Records</td><td style='padding:8px;border:1px solid #e2e8f0'>{rowCount:N0}</td></tr>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Sent By</td><td style='padding:8px;border:1px solid #e2e8f0'>{userName}</td></tr>
+                </table>
+                <p style='color:#64748b;font-size:12px'>Generated by Powersoft Reporting Engine</p>
+            </div>";
+
+        var attachments = new List<EmailAttachment>
+        {
+            new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType }
+        };
+
+        var ccJoined = ccList.valid.Length > 0 ? string.Join(",", ccList.valid) : null;
+        var bccJoined = bccList.valid.Length > 0 ? string.Join(",", bccList.valid) : null;
+
+        int sentCount = 0;
+        var errors = new List<string>();
+        foreach (var email in emails)
+        {
+            try
+            {
+                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, "", attachments);
+                sentCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send Prospect Clients email to {Email}", email);
+                errors.Add($"{email}: {ex.Message}");
+            }
+        }
+
+        if (sentCount > 0)
+        {
+            _logger.LogInformation("Prospect Clients report emailed to {Count}/{Total} by {User}", sentCount, emails.Length, userName);
+            var msg = $"Report sent to {sentCount} recipient(s)";
+            if (errors.Count > 0) msg += $" ({errors.Count} failed)";
+            return Json(new { success = true, message = msg });
+        }
+
+        return Json(new { success = false, message = $"Failed to send: {string.Join("; ", errors)}" });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeProspectClientsReport(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "RegistrationDate",
+        string statusFilter = "All", string priorityFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
+        bool includeHistory = false,
+        string? locale = "en", int? promptTemplateId = null,
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+    {
+        var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
+            primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
+            followedByFilter, category1Filter, category2Filter);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        try
+        {
+            var csvData = new CsvExportService().GenerateProspectClientsCsvString(result.Value.rows, result.Value.filter);
+            var rowCount = result.Value.rows.Count;
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { }
+                }
+            }
+
+            _logger.LogInformation(
+                "AI analysis [ProspectClients]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
+                rowCount, csvData.Length, locale, User.Identity?.Name);
+
+            var analyzer = _analyzerFactory.Create();
+            var analysis = await analyzer.AnalyzeAsync(csvData, "ProspectClients", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Prospect Clients report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveProspectClientsSchedule(
+        string scheduleName, string recurrenceType, string exportFormat,
+        string scheduleTime, string recipients, string? filterJson = null,
+        bool includeAiAnalysis = false, bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected." });
+
+        try
+        {
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.ProspectClients,
+                ScheduleName = scheduleName,
+                RecurrenceType = recurrenceType,
+                ExportFormat = exportFormat,
+                ScheduleTime = TimeSpan.Parse(scheduleTime),
+                Recipients = recipients,
+                ParametersJson = filterJson ?? "{}",
+                IncludeAiAnalysis = includeAiAnalysis,
+                SkipIfEmpty = skipIfEmpty,
+                IsActive = true,
+                CreatedBy = User.Identity?.Name ?? "unknown"
+            };
+
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.ProspectClients);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            schedule.CreatedBy = User.Identity?.Name ?? "unknown";
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving ProspectClients schedule");
+            return Json(new { success = false, message = "Failed to save schedule. The schedule tables may not exist yet." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetProspectClientsSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(Array.Empty<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.ProspectClients);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                s.SkipIfEmpty
+            }));
+        }
+        catch { return Json(Array.Empty<object>()); }
+    }
+
+    // ===================== OFFERS REPORT =====================
+
+    public async Task<IActionResult> OffersReport()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewOffersReport))
+        {
+            _logger.LogWarning("User {User} denied access to Offers Report (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewOffersReport);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+
+        bool hasSavedLayout = false;
+        Dictionary<string, string>? savedLayout = null;
+        try
+        {
+            var iniRepo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            savedLayout = await iniRepo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderOffersReport,
+                GetUserCode());
+            hasSavedLayout = savedLayout.Count > 0;
+        }
+        catch { }
+
+        ViewBag.HasSavedLayout = hasSavedLayout;
+        ViewBag.SavedLayout = savedLayout;
+        return View();
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetOffersReportLookups()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { stores = Array.Empty<object>(), agents = Array.Empty<object>(), statuses = Array.Empty<object>() });
+
+        try
+        {
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(tenantConnString);
+            await conn.OpenAsync();
+
+            var stores = new List<object>();
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+                "SELECT DISTINCT st.pk_StoreCode, st.StoreName " +
+                "FROM tbl_Store st INNER JOIN tbl_OfferHeader h ON h.fk_StoreCode = st.pk_StoreCode " +
+                "ORDER BY st.StoreName", conn))
+            {
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                    stores.Add(new { id = reader.GetString(0).Trim(), name = reader.GetString(1).Trim() });
+            }
+
+            var agents = new List<object>();
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+                "SELECT DISTINCT a.pk_SystemNo, ISNULL(a.FirstName,'') + ' ' + ISNULL(a.LastName,'') AS AgentName " +
+                "FROM tbl_Agent a INNER JOIN tbl_OfferHeader h ON h.fk_AgentID = a.pk_SystemNo " +
+                "ORDER BY AgentName", conn))
+            {
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                    agents.Add(new { id = reader.GetInt64(0), name = reader.GetString(1).Trim() });
+            }
+
+            var statuses = new List<object>();
+            using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+                "SELECT pk_OrderStatusID, OrderStatusCode, OrderStatusName, OrderStatusHTML " +
+                "FROM tbl_OrderStatus WHERE TableName = 'tbl_Offer' ORDER BY pk_OrderStatusID", conn))
+            {
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                    statuses.Add(new
+                    {
+                        id = reader.GetInt64(0),
+                        code = reader.GetString(1).Trim(),
+                        name = reader.GetString(2).Trim(),
+                        color = reader.IsDBNull(3) ? "#999999" : reader.GetString(3).Trim()
+                    });
+            }
+
+            return Json(new { stores, agents, statuses });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading OffersReport lookups");
+            return Json(new { stores = Array.Empty<object>(), agents = Array.Empty<object>(), statuses = Array.Empty<object>() });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetOffersReportData(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "DateTrans",
+        string statusFilter = "All",
+        string storeFilter = "All",
+        string agentFilter = "All",
+        string primaryGroup = "NONE",
+        string secondaryGroup = "NONE",
+        int maxRecords = 50000,
+        string sortColumn = "DateTrans",
+        string sortDirection = "DESC",
+        string offerType = "All",
+        bool includeHistory = false)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        try
+        {
+            var filter = new OffersReportFilter
+            {
+                DateFrom = dateFrom,
+                DateTo = dateTo,
+                DateField = dateField,
+                StatusFilter = statusFilter,
+                StoreFilter = storeFilter,
+                AgentFilter = agentFilter,
+                PrimaryGroup = primaryGroup ?? "NONE",
+                SecondaryGroup = secondaryGroup ?? "NONE",
+                MaxRecords = maxRecords,
+                SortColumn = sortColumn,
+                SortDirection = sortDirection,
+                OfferType = offerType ?? "All",
+                IncludeHistory = includeHistory
+            };
+
+            var repo = _repositoryFactory.CreateOffersReportRepository(tenantConnString);
+            var (rows, totalRecords) = await repo.GetDataAsync(filter);
+            return Json(new { success = true, data = rows, totalRows = rows.Count, totalRecords });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading offers report data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    // --- Offers Report Layout CRUD ---
+
+    [HttpPost]
+    public async Task<IActionResult> SaveOffersReportLayout([FromBody] Dictionary<string, string> parameters)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (parameters == null || parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            await repo.SaveLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderOffersReport,
+                ModuleConstants.IniDescriptionOffersReport,
+                GetUserCode(),
+                parameters);
+            return Json(new { success = true, message = "Layout saved" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving OffersReport layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ResetOffersReportLayout()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var deleted = await repo.DeleteLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderOffersReport,
+                GetUserCode());
+            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting OffersReport layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to reset layout" });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ListOffersReportLayouts()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var layouts = await repo.ListLayoutsAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderOffersReport,
+                GetUserCode());
+            return Json(new
+            {
+                success = true,
+                layouts = layouts.Select(l => new
+                {
+                    headerCode = l.HeaderCode, name = l.Name, isPublic = l.IsPublic,
+                    createdBy = l.CreatedBy, canEdit = l.CanEdit, lastModified = l.LastModified
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error listing OffersReport layouts for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
+        }
+    }
+
+    public class SaveOffersReportLayoutAsRequest
+    {
+        public string Name { get; set; } = string.Empty;
+        public bool IsPublic { get; set; }
+        public Dictionary<string, string> Parameters { get; set; } = new();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveOffersReportLayoutAs([FromBody] SaveOffersReportLayoutAsRequest req)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (req == null || string.IsNullOrWhiteSpace(req.Name))
+            return Json(new { success = false, message = "Layout name is required" });
+        if (req.Parameters == null || req.Parameters.Count == 0)
+            return Json(new { success = false, message = "No parameters to save" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var headerCode = await repo.SaveNamedLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderOffersReport,
+                ModuleConstants.IniDescriptionOffersReport,
+                GetUserCode(),
+                req.Name, req.IsPublic, req.Parameters);
+            return Json(new { success = true, headerCode, message = "Layout saved" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Json(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving named OffersReport layout for user {User}", GetUserCode());
+            return Json(new { success = false, message = "Failed to save layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> LoadOffersReportLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
+            if (parms.Count == 0)
+                return Json(new { success = false, message = "Layout not found or not visible" });
+            return Json(new { success = true, parameters = parms });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading OffersReport layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to load layout" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteOffersReportLayout([FromQuery] string headerCode)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected" });
+        if (string.IsNullOrWhiteSpace(headerCode))
+            return Json(new { success = false, message = "headerCode is required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
+            return Json(new
+            {
+                success = deleted,
+                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting OffersReport layout {Header} for user {User}", headerCode, GetUserCode());
+            return Json(new { success = false, message = "Failed to delete layout" });
+        }
+    }
+
+    // --- Offers Report Export / Email / AI ---
+
+    private async Task<(List<OffersReportRow> rows, OffersReportFilter filter)?> RunOffersReportQuery(
+        DateTime dateFrom, DateTime dateTo, string dateField, string statusFilter,
+        string storeFilter, string agentFilter,
+        string primaryGroup, string secondaryGroup, int maxRecords,
+        string sortColumn, string sortDirection,
+        string offerType = "All", bool includeHistory = false)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var filter = new OffersReportFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            DateField = dateField,
+            StatusFilter = statusFilter,
+            StoreFilter = storeFilter,
+            AgentFilter = agentFilter,
+            PrimaryGroup = primaryGroup ?? "NONE",
+            SecondaryGroup = secondaryGroup ?? "NONE",
+            MaxRecords = maxRecords,
+            SortColumn = sortColumn,
+            SortDirection = sortDirection,
+            OfferType = offerType ?? "All",
+            IncludeHistory = includeHistory
+        };
+
+        try
+        {
+            var repo = _repositoryFactory.CreateOffersReportRepository(tenantConnString);
+            var (rows, _) = await repo.GetDataAsync(filter);
+            return (rows, filter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error running OffersReport query");
+            return null;
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportOffersReportCsv(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "DateTrans",
+        string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
+        string offerType = "All", bool includeHistory = false)
+    {
+        var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
+            storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
+            offerType, includeHistory);
+        if (result == null) return RedirectToAction("OffersReport");
+
+        var bytes = new CsvExportService().GenerateOffersReportCsv(result.Value.rows, result.Value.filter);
+        return File(bytes, "text/csv", $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportOffersReportExcel(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "DateTrans",
+        string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
+        string offerType = "All", bool includeHistory = false)
+    {
+        var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
+            storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
+            offerType, includeHistory);
+        if (result == null) return RedirectToAction("OffersReport");
+
+        var bytes = new ExcelExportService().GenerateOffersReportExcel(result.Value.rows, result.Value.filter);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportOffersReportPdf(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "DateTrans",
+        string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
+        string offerType = "All", bool includeHistory = false)
+    {
+        var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
+            storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
+            offerType, includeHistory);
+        if (result == null) return RedirectToAction("OffersReport");
+
+        var bytes = new PdfExportService().GenerateOffersReportPdf(result.Value.rows, result.Value.filter);
+        return File(bytes, "application/pdf",
+            $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> OffersReportPrintPreview(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "DateTrans",
+        string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
+        string offerType = "All", bool includeHistory = false)
+    {
+        var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
+            storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
+            offerType, includeHistory);
+        if (result == null) return RedirectToAction("OffersReport");
+
+        ViewBag.Rows = result.Value.rows;
+        ViewBag.Filter = result.Value.filter;
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+        return View("OffersReportPrintPreview");
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendOffersReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat,
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "DateTrans",
+        string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
+        string offerType = "All", bool includeHistory = false)
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Please enter at least one email address." });
+
+        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        if (invalidEmails.Length > 0)
+            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
+
+        var ccList = ParseAndValidateEmailList(cc);
+        var bccList = ParseAndValidateEmailList(bcc);
+        if (ccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
+        if (bccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
+
+        var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
+            storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
+            offerType, includeHistory);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateOffersReportPdf(result.Value.rows, result.Value.filter);
+                fileName = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateOffersReportCsv(result.Value.rows, result.Value.filter);
+                fileName = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateOffersReportExcel(result.Value.rows, result.Value.filter);
+                fileName = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        var rowCount = result.Value.rows.Count;
+
+        var subject = !string.IsNullOrWhiteSpace(emailSubject) ? emailSubject
+            : $"Offers Report \u2014 {period} ({dbName})";
+
+        var htmlBody = $@"
+            <div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto'>
+                <h2 style='color:#1e293b'>Offers Report</h2>
+                <p>Attached is the Offers report for <strong>{period}</strong>.</p>
+                <table style='border-collapse:collapse;width:100%;margin:16px 0'>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Database</td><td style='padding:8px;border:1px solid #e2e8f0'>{dbName}</td></tr>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Period</td><td style='padding:8px;border:1px solid #e2e8f0'>{period}</td></tr>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Status</td><td style='padding:8px;border:1px solid #e2e8f0'>{result.Value.filter.StatusFilter}</td></tr>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Total Records</td><td style='padding:8px;border:1px solid #e2e8f0'>{rowCount:N0}</td></tr>
+                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Sent By</td><td style='padding:8px;border:1px solid #e2e8f0'>{userName}</td></tr>
+                </table>
+                <p style='color:#64748b;font-size:12px'>Generated by Powersoft Reporting Engine</p>
+            </div>";
+
+        var attachments = new List<EmailAttachment>
+        {
+            new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType }
+        };
+
+        var ccJoined = ccList.valid.Length > 0 ? string.Join(",", ccList.valid) : null;
+        var bccJoined = bccList.valid.Length > 0 ? string.Join(",", bccList.valid) : null;
+
+        int sentCount = 0;
+        var errors = new List<string>();
+        foreach (var email in emails)
+        {
+            try
+            {
+                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, "", attachments);
+                sentCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send Offers report email to {Email}", email);
+                errors.Add($"{email}: {ex.Message}");
+            }
+        }
+
+        if (sentCount > 0)
+        {
+            _logger.LogInformation("Offers report emailed to {Count}/{Total} by {User}", sentCount, emails.Length, userName);
+            var msg = $"Report sent to {sentCount} recipient(s)";
+            if (errors.Count > 0) msg += $" ({errors.Count} failed)";
+            return Json(new { success = true, message = msg });
+        }
+
+        return Json(new { success = false, message = $"Failed to send: {string.Join("; ", errors)}" });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeOffersReport(
+        DateTime dateFrom, DateTime dateTo,
+        string dateField = "DateTrans",
+        string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
+        string primaryGroup = "NONE", string secondaryGroup = "NONE",
+        int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
+        string? locale = "en", int? promptTemplateId = null,
+        string offerType = "All", bool includeHistory = false)
+    {
+        var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
+            storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
+            offerType, includeHistory);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        try
+        {
+            var csvData = new CsvExportService().GenerateOffersReportCsvString(result.Value.rows, result.Value.filter);
+            var rowCount = result.Value.rows.Count;
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { }
+                }
+            }
+
+            _logger.LogInformation(
+                "AI analysis [OffersReport]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
+                rowCount, csvData.Length, locale, User.Identity?.Name);
+
+            var analyzer = _analyzerFactory.Create();
+            var analysis = await analyzer.AnalyzeAsync(csvData, "OffersReport", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Offers report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveOffersReportSchedule(
+        string scheduleName, string recurrenceType, string exportFormat,
+        string scheduleTime, string recipients, string? filterJson = null,
+        bool includeAiAnalysis = false, bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected." });
+
+        try
+        {
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.OffersReport,
+                ScheduleName = scheduleName,
+                RecurrenceType = recurrenceType,
+                ExportFormat = exportFormat,
+                ScheduleTime = TimeSpan.Parse(scheduleTime),
+                Recipients = recipients,
+                ParametersJson = filterJson ?? "{}",
+                IncludeAiAnalysis = includeAiAnalysis,
+                SkipIfEmpty = skipIfEmpty,
+                IsActive = true,
+                CreatedBy = User.Identity?.Name ?? "unknown"
+            };
+
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.OffersReport);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            schedule.CreatedBy = User.Identity?.Name ?? "unknown";
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving OffersReport schedule");
+            return Json(new { success = false, message = "Failed to save schedule. The schedule tables may not exist yet." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetOffersReportSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(Array.Empty<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.OffersReport);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                s.SkipIfEmpty
+            }));
+        }
+        catch { return Json(Array.Empty<object>()); }
     }
 
 }

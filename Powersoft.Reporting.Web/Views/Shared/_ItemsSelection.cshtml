@@ -534,12 +534,12 @@
     };
 
     window.getItemsSelectionStoreCodes = function () {
-        if (_modes['store'] === 'all' || _selected['store'].size === 0) return '';
+        if (_modes['store'] !== 'include' || _selected['store'].size === 0) return '';
         return Array.from(_selected['store']).join(',');
     };
 
     window.getItemsSelectionItemIds = function () {
-        if (_modes['item'] === 'all' || !_selected['item'] || _selected['item'].size === 0) return '';
+        if (_modes['item'] !== 'include' || !_selected['item'] || _selected['item'].size === 0) return '';
         return Array.from(_selected['item']).join(',');
     };
 })();

@@ -41,12 +41,27 @@ public class IniRepositorySlugTests
     }
 
     [Fact]
-    public void Slugify_TruncatesAt60Chars_AndDoesNotEndWithHyphen()
+    public void Slugify_LongInput_ProducesValidSlug()
     {
         var longName = new string('a', 200);
         var slug = Slug(longName);
-        slug.Length.Should().BeLessThanOrEqualTo(60);
+        slug.Should().NotBeNullOrEmpty();
         slug.Should().NotEndWith("-");
+    }
+
+    [Fact]
+    public void BuildNamedHeaderCode_FitsWithin20Chars()
+    {
+        var longName = new string('a', 200);
+        var slug = Slug(longName);
+        var m = typeof(IniRepository).GetMethod("BuildNamedHeaderCode",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+            ?? throw new InvalidOperationException("BuildNamedHeaderCode not found");
+        var headerCode = (string)m.Invoke(null, new object[] { "AVGBASKET", slug })!;
+        headerCode.Length.Should().BeLessThanOrEqualTo(20,
+            because: "IniHeaderCode column is nvarchar(20)");
+        headerCode.Should().StartWith("AVGBASKET:");
+        headerCode.Should().NotEndWith("-");
     }
 
     [Fact]

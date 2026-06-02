@@ -21,6 +21,10 @@ public class ScheduleParameters
     public PsGroupBy ThirdGroup { get; set; } = PsGroupBy.None;
     public bool ShowProfit { get; set; } = true;
     public bool ShowStock { get; set; }
+    public bool ShowOnOrder { get; set; }
+    public bool ShowReservation { get; set; }
+    public bool ShowAvailable { get; set; }
+    public bool IncludeAdditionalCharges { get; set; } = true;
     public string? ReportType { get; set; }
 
     // Pareto 80/20 specific
@@ -38,6 +42,12 @@ public class ScheduleParameters
     public bool IncludeVat { get; set; }
     public List<string>? StoreCodes { get; set; }
     public List<int>? ItemIds { get; set; }
+
+    /// <summary>
+    /// Full dimension filter JSON from _ItemsSelection.cshtml.
+    /// Parsed at execution time via <see cref="Helpers.ItemsSelectionParser"/>.
+    /// </summary>
+    public string? ItemsSelectionJson { get; set; }
 
     /// <summary>
     /// Relative date range resolved at execution time.

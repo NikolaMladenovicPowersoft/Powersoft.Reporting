@@ -68,12 +68,17 @@ public class ItemsSelectionFilter
     public StockFilter Stock { get; set; } = StockFilter.All;
     public bool? ECommerceOnly { get; set; }
     public DateTime? ModifiedAfter { get; set; }
+    public DateTime? ModifiedBefore { get; set; }
     public DateTime? CreatedAfter { get; set; }
+    public DateTime? CreatedBefore { get; set; }
     public DateTime? ReleasedAfter { get; set; }
+    public DateTime? ReleasedBefore { get; set; }
 
     public bool HasPropertyFilters =>
         Stock != StockFilter.All || ECommerceOnly.HasValue
-        || ModifiedAfter.HasValue || CreatedAfter.HasValue || ReleasedAfter.HasValue;
+        || ModifiedAfter.HasValue || ModifiedBefore.HasValue
+        || CreatedAfter.HasValue || CreatedBefore.HasValue
+        || ReleasedAfter.HasValue || ReleasedBefore.HasValue;
 }
 
 public class ItemsSelectionConfig
@@ -103,4 +108,5 @@ public class ItemsSelectionConfig
     public bool ShowModifiedDate { get; set; } = true;
     public string StoresJson { get; set; } = "[]";
     public string SavedFilterJson { get; set; } = "";
+    public string ReportType { get; set; } = "";
 }

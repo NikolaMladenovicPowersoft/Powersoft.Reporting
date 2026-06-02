@@ -377,12 +377,19 @@ public class ScheduleExecutionService
             IncludeVat = parameters.IncludeVat,
             ShowProfit = parameters.ShowProfit,
             ShowStock = parameters.ShowStock,
+            ShowOnOrder = parameters.ShowOnOrder,
+            ShowReservation = parameters.ShowReservation,
+            ShowAvailable = parameters.ShowAvailable,
+            IncludeAdditionalCharges = parameters.IncludeAdditionalCharges,
             StoreCodes = parameters.StoreCodes ?? new(),
             ItemIds = parameters.ItemIds ?? new(),
+            ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
             SortColumn = parameters.SortColumn ?? "ItemCode",
             SortDirection = parameters.SortDirection ?? "ASC",
             PageSize = int.MaxValue
         };
+        if (filter.ItemsSelection?.Stores is { HasFilter: true, Mode: FilterMode.Include })
+            filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
 
         var repo = _repositoryFactory.CreatePurchasesSalesRepository(connString);
         var result = await repo.GetPurchasesSalesDataAsync(filter);
@@ -484,12 +491,19 @@ public class ScheduleExecutionService
                     IncludeVat = parameters.IncludeVat,
                     ShowProfit = parameters.ShowProfit,
                     ShowStock = parameters.ShowStock,
+                    ShowOnOrder = parameters.ShowOnOrder,
+                    ShowReservation = parameters.ShowReservation,
+                    ShowAvailable = parameters.ShowAvailable,
+                    IncludeAdditionalCharges = parameters.IncludeAdditionalCharges,
                     StoreCodes = parameters.StoreCodes ?? new(),
                     ItemIds = parameters.ItemIds ?? new(),
+                    ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
                     SortColumn = parameters.SortColumn ?? "ItemCode",
                     SortDirection = parameters.SortDirection ?? "ASC",
                     PageSize = int.MaxValue
                 };
+                if (filter.ItemsSelection?.Stores is { HasFilter: true, Mode: FilterMode.Include })
+                    filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
                 var repo = _repositoryFactory.CreatePurchasesSalesRepository(connString);
                 var result = await repo.GetPurchasesSalesDataAsync(filter);
                 csvBytes = new CsvExportService().GeneratePurchasesSalesCsv(result.Items, result.PsTotals, filter);
@@ -791,6 +805,14 @@ Time: {(analysis.DurationMs / 1000.0):F1}s</p>");
                 p.ShowProfit = sp.ValueKind == JsonValueKind.True;
             if (root.TryGetProperty("showStock", out var ss))
                 p.ShowStock = ss.ValueKind == JsonValueKind.True;
+            if (root.TryGetProperty("showOnOrder", out var soo))
+                p.ShowOnOrder = soo.ValueKind == JsonValueKind.True;
+            if (root.TryGetProperty("showReservation", out var sres))
+                p.ShowReservation = sres.ValueKind == JsonValueKind.True;
+            if (root.TryGetProperty("showAvailable", out var sav))
+                p.ShowAvailable = sav.ValueKind == JsonValueKind.True;
+            if (root.TryGetProperty("includeAdditionalCharges", out var iac))
+                p.IncludeAdditionalCharges = iac.ValueKind != JsonValueKind.False;
 
             // reportDateRange (frontend format) or DateRange (code format)
             if (root.TryGetProperty("reportDateRange", out var rdr) || root.TryGetProperty("DateRange", out rdr))

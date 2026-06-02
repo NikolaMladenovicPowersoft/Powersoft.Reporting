@@ -181,7 +181,9 @@ public class PdfExportService
         bool hasItem = !filter.IsSummary || (!hasL1 && !hasL2 && !hasL3);
 
         int colCount = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
-                     + (hasItem ? 2 : 0) + 7 + (filter.ShowStock ? 1 : 0);
+                     + (hasItem ? 2 : 0) + 7 + (filter.ShowStock ? 1 : 0)
+                     + (filter.ShowOnOrder ? 1 : 0) + (filter.ShowReservation ? 1 : 0)
+                     + (filter.ShowAvailable ? 1 : 0);
 
         using var ms = new MemoryStream();
         var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
@@ -196,7 +198,11 @@ public class PdfExportService
             (hasL3 ? $" | Third: {filter.ThirdGroup}" : ""), SubtitleFont));
         document.Add(new Paragraph($"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}" +
             (filter.ShowProfit ? " | Profit: Yes" : "") +
-            (filter.ShowStock ? " | Stock: Yes" : ""), SubtitleFont));
+            (filter.ShowStock ? " | Stock: Yes" : "") +
+            (filter.ShowOnOrder ? " | On Order: Yes" : "") +
+            (filter.ShowReservation ? " | Reserved: Yes" : "") +
+            (filter.ShowAvailable ? " | Available: Yes" : "") +
+            (!filter.IncludeAdditionalCharges ? " | Cost: Wholesale only" : ""), SubtitleFont));
         if (filter.StoreCodes != null && filter.StoreCodes.Any())
             document.Add(new Paragraph($"Stores: {string.Join(", ", filter.StoreCodes)}", SubtitleFont));
         document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
@@ -216,6 +222,9 @@ public class PdfExportService
         AddHeaderCell(table, "Qty %");
         AddHeaderCell(table, "Val %");
         if (filter.ShowStock) AddHeaderCell(table, "Stock");
+        if (filter.ShowOnOrder) AddHeaderCell(table, "On Order");
+        if (filter.ShowReservation) AddHeaderCell(table, "Reserved");
+        if (filter.ShowAvailable) AddHeaderCell(table, "Available");
 
         bool alternate = false;
         string? prevL1 = null, prevL2 = null, prevL3 = null;
@@ -256,6 +265,9 @@ public class PdfExportService
             AddDataCell(table, $"{row.QtyPercent:N1}%", bg, Element.ALIGN_RIGHT);
             AddDataCell(table, $"{row.ValPercent:N1}%", bg, Element.ALIGN_RIGHT);
             if (filter.ShowStock) AddDataCell(table, row.TotalStockQty.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            if (filter.ShowOnOrder) AddDataCell(table, row.QtyOnOrder.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            if (filter.ShowReservation) AddDataCell(table, row.QtyReserved.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            if (filter.ShowAvailable) AddDataCell(table, row.QtyAvailable.ToString("N0"), bg, Element.ALIGN_RIGHT);
             alternate = !alternate;
         }
 
@@ -279,6 +291,9 @@ public class PdfExportService
             AddTotalCell(table, $"{totals.QtyPercent:N1}%", Element.ALIGN_RIGHT);
             AddTotalCell(table, $"{totals.ValPercent:N1}%", Element.ALIGN_RIGHT);
             if (filter.ShowStock) AddTotalCell(table, totals.TotalStockQty.ToString("N0"), Element.ALIGN_RIGHT);
+            if (filter.ShowOnOrder) AddTotalCell(table, totals.TotalQtyOnOrder.ToString("N0"), Element.ALIGN_RIGHT);
+            if (filter.ShowReservation) AddTotalCell(table, totals.TotalQtyReserved.ToString("N0"), Element.ALIGN_RIGHT);
+            if (filter.ShowAvailable) AddTotalCell(table, totals.TotalQtyAvailable.ToString("N0"), Element.ALIGN_RIGHT);
         }
 
         document.Add(table);
@@ -615,6 +630,9 @@ public class PdfExportService
         AddSubtotalCell(table, $"{agg.QtyPct:N1}%", subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
         AddSubtotalCell(table, $"{agg.ValPct:N1}%", subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
         if (filter.ShowStock) AddSubtotalCell(table, agg.StockQty.ToString("N0"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        if (filter.ShowOnOrder) AddSubtotalCell(table, agg.OnOrderQty.ToString("N0"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        if (filter.ShowReservation) AddSubtotalCell(table, agg.ReservedQty.ToString("N0"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
+        if (filter.ShowAvailable) AddSubtotalCell(table, agg.AvailableQty.ToString("N0"), subtotalBg, subtotalFont, Element.ALIGN_RIGHT);
     }
 
     private void AddSubtotalCell(PdfPTable table, string text, BaseColor bg, Font font, int align = Element.ALIGN_LEFT)

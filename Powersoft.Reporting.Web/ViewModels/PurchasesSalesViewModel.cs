@@ -33,6 +33,18 @@ public class PurchasesSalesViewModel
     [Display(Name = "Show Stock")]
     public bool ShowStock { get; set; }
 
+    [Display(Name = "Show On Order")]
+    public bool ShowOnOrder { get; set; }
+
+    [Display(Name = "Show Reservation")]
+    public bool ShowReservation { get; set; }
+
+    [Display(Name = "Show Available")]
+    public bool ShowAvailable { get; set; }
+
+    [Display(Name = "Include Additional Charges")]
+    public bool IncludeAdditionalCharges { get; set; } = true;
+
     public string? DatePreset { get; set; }
     public string SortColumn { get; set; } = "ItemCode";
     public string SortDirection { get; set; } = "ASC";
@@ -91,6 +103,9 @@ public class PurchasesSalesViewModel
     public decimal TotalSoldNet => Totals?.TotalNetSold ?? Results.Sum(r => r.NetSoldValue);
     public decimal TotalSoldGross => Totals?.TotalGrossSold ?? Results.Sum(r => r.GrossSoldValue);
     public decimal TotalProfit => Totals != null ? Totals.TotalProfit : Results.Sum(r => r.Profit);
+    public decimal TotalOnOrder => Totals?.TotalQtyOnOrder ?? Results.Sum(r => r.QtyOnOrder);
+    public decimal TotalReserved => Totals?.TotalQtyReserved ?? Results.Sum(r => r.QtyReserved);
+    public decimal TotalAvailable => Totals?.TotalQtyAvailable ?? Results.Sum(r => r.QtyAvailable);
 
     public decimal MonthlyTotalPurchased => MonthlyResults.Sum(r => r.TotalPurchased);
     public decimal MonthlyTotalSold => MonthlyResults.Sum(r => r.TotalSold);
@@ -111,6 +126,10 @@ public class PurchasesSalesViewModel
             IncludeVat = IncludeVat,
             ShowProfit = ShowProfit,
             ShowStock = ShowStock,
+            ShowOnOrder = ShowOnOrder,
+            ShowReservation = ShowReservation,
+            ShowAvailable = ShowAvailable,
+            IncludeAdditionalCharges = IncludeAdditionalCharges,
             StoreCodes = SelectedStoreCodes,
             ItemIds = SelectedItemIds,
             PageNumber = PageNumber,

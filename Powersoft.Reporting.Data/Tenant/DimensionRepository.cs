@@ -56,12 +56,20 @@ public class DimensionRepository : IDimensionRepository
     public async Task<List<DimensionItem>> GetSuppliersAsync(string? search = null, int maxResults = 500)
     {
         var hasSearch = !string.IsNullOrWhiteSpace(search);
+        // tbl_Supplier has no single "SupplierName" column; display name is built the same way
+        // as everywhere else in the codebase (PurchasesSales/Catalogue/Chart repos):
+        // Company=1 -> LastCompanyName, otherwise FirstName + LastCompanyName.
         var sql = $@"
-            SELECT TOP (@MaxResults) pk_SupplierNo, pk_SupplierNo, SupplierName
+            SELECT TOP (@MaxResults)
+                   pk_SupplierNo AS Id,
+                   pk_SupplierNo AS Code,
+                   CASE WHEN ISNULL(Company,0) = 1 THEN ISNULL(LastCompanyName,'')
+                        ELSE ISNULL(FirstName,'') + ' ' + ISNULL(LastCompanyName,'') END AS Name
             FROM tbl_Supplier
             WHERE (@Search IS NULL
                 OR pk_SupplierNo LIKE @Search
-                OR ISNULL(SupplierName,'') LIKE @Search)
+                OR ISNULL(LastCompanyName,'') LIKE @Search
+                OR ISNULL(FirstName,'') LIKE @Search)
             ORDER BY pk_SupplierNo";
 
         var searchTerm = hasSearch ? $"%{search!.Trim()}%" : null;
@@ -78,12 +86,18 @@ public class DimensionRepository : IDimensionRepository
     public async Task<List<DimensionItem>> GetCustomersAsync(string? search = null, int maxResults = 500)
     {
         var hasSearch = !string.IsNullOrWhiteSpace(search);
+        // tbl_Customer has no single "CustomerName" column; mirror the codebase-wide display-name expression.
         var sql = $@"
-            SELECT TOP (@MaxResults) pk_CustomerNo, pk_CustomerNo, ISNULL(CustomerName, pk_CustomerNo)
+            SELECT TOP (@MaxResults)
+                   pk_CustomerNo AS Id,
+                   pk_CustomerNo AS Code,
+                   CASE WHEN ISNULL(Company,0) = 1 THEN ISNULL(LastCompanyName,'')
+                        ELSE ISNULL(FirstName,'') + ' ' + ISNULL(LastCompanyName,'') END AS Name
             FROM tbl_Customer
             WHERE (@Search IS NULL
                 OR pk_CustomerNo LIKE @Search
-                OR ISNULL(CustomerName,'') LIKE @Search)
+                OR ISNULL(LastCompanyName,'') LIKE @Search
+                OR ISNULL(FirstName,'') LIKE @Search)
             ORDER BY pk_CustomerNo";
 
         var searchTerm = hasSearch ? $"%{search!.Trim()}%" : null;

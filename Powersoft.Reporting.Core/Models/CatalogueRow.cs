@@ -57,6 +57,16 @@ public class CatalogueRow
     public string? EntityID { get; set; }
     public string? Sundry { get; set; }
 
+    // Entity contact details (optional display columns from tbl_Customer / tbl_Supplier)
+    public string? EntityTel1 { get; set; }
+    public string? EntityTel2 { get; set; }
+    public string? EntityMobile { get; set; }
+    public string? EntityFax { get; set; }
+    public string? EntityEmail { get; set; }
+    public string? EntityContactName { get; set; }
+    public string? EntityVatRegNo { get; set; }
+    public DateTime? EntityDOB { get; set; }
+
     // Invoice
     public string? InvoiceNumber { get; set; }
     public string? InvoiceType { get; set; }

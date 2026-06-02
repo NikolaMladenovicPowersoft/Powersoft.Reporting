@@ -76,24 +76,27 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
     {
         var dateWhere = "WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo";
         var selCond = itemFilters.WhereClause;
+        var saleOnlyCond = itemFilters.SaleOnlyWhereClause;
 
         var sb = new StringBuilder();
 
         sb.AppendLine("SELECT t2.ItemCode, t2.ItemNamePrimary");
         AppendHeaderFields(sb, filter);
         sb.AppendLine(",SUM(t1.Quantity) AS QuantityPurchased");
-        sb.AppendLine(",SUM(t1.Amount - (ISNULL(t1.Discount,0) + ISNULL(t1.ExtraDiscount,0)) + (ISNULL(cost.CostAmount,0)*ISNULL(cost.Quantity,0))) AS NetPurchasedValue");
+        sb.AppendLine($",SUM(t1.Amount - (ISNULL(t1.Discount,0) + ISNULL(t1.ExtraDiscount,0)){CostTermExpr(filter)}) AS NetPurchasedValue");
         sb.AppendLine(",SUM(t1.Amount - (ISNULL(t1.Discount,0) + ISNULL(t1.ExtraDiscount,0)) + ISNULL(t1.VatAmount,0)) AS GrossPurchasedValue");
         sb.AppendLine(",0.00 AS QuantitySold, 0.00 AS NetSoldValue, 0.00 AS GrossSoldValue");
         sb.AppendLine($",{GetStockColumn(filter)} AS TotalStockQty");
+        sb.AppendLine(",t2.QtyOrdered AS QtyOnOrder, t2.QtyReserved AS QtyReserved");
         sb.AppendLine("FROM tbl_PurchInvoiceDetails t1");
         sb.AppendLine("INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID");
         sb.AppendLine("INNER JOIN tbl_PurchInvoiceHeader t3 ON t1.fk_PurchInvoiceID = t3.pk_PurchInvoiceID");
-        sb.AppendLine("LEFT JOIN tbl_CostingDetails cost ON t1.pk_ID = cost.fk_ID");
+        if (filter.IncludeAdditionalCharges)
+            sb.AppendLine("LEFT JOIN tbl_CostingDetails cost ON t1.pk_ID = cost.fk_ID");
         AppendModelSupplierJoins(sb);
         AppendStoreStockJoin(sb, filter);
         sb.AppendLine($"{dateWhere}{selCond}");
-        sb.AppendLine($"GROUP BY t2.ItemCode, t2.ItemNamePrimary, {GetStockColumn(filter)}{AppendHeaderGroupBy(filter)}");
+        sb.AppendLine($"GROUP BY t2.ItemCode, t2.ItemNamePrimary, {GetStockColumn(filter)}, t2.QtyOrdered, t2.QtyReserved{AppendHeaderGroupBy(filter)}");
 
         sb.AppendLine("UNION ALL");
 
@@ -104,13 +107,14 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
         sb.AppendLine(",SUM((t1.Amount - (ISNULL(t1.Discount,0) + ISNULL(t1.ExtraDiscount,0)) + ISNULL(t1.VatAmount,0)) * (-1)) AS GrossPurchasedValue");
         sb.AppendLine(",0.00 AS QuantitySold, 0.00 AS NetSoldValue, 0.00 AS GrossSoldValue");
         sb.AppendLine($",{GetStockColumn(filter)} AS TotalStockQty");
+        sb.AppendLine(",t2.QtyOrdered AS QtyOnOrder, t2.QtyReserved AS QtyReserved");
         sb.AppendLine("FROM tbl_PurchReturnDetails t1");
         sb.AppendLine("INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID");
         sb.AppendLine("INNER JOIN tbl_PurchReturnHeader t3 ON t1.fk_PurchReturnID = t3.pk_PurchReturnID");
         AppendModelSupplierJoins(sb);
         AppendStoreStockJoin(sb, filter);
         sb.AppendLine($"{dateWhere}{selCond}");
-        sb.AppendLine($"GROUP BY t2.ItemCode, t2.ItemNamePrimary, {GetStockColumn(filter)}{AppendHeaderGroupBy(filter)}");
+        sb.AppendLine($"GROUP BY t2.ItemCode, t2.ItemNamePrimary, {GetStockColumn(filter)}, t2.QtyOrdered, t2.QtyReserved{AppendHeaderGroupBy(filter)}");
 
         sb.AppendLine("UNION ALL");
 
@@ -121,13 +125,14 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
         sb.AppendLine(",SUM(t1.Amount - (ISNULL(t1.Discount,0) + ISNULL(t1.ExtraDiscount,0))) AS NetSoldValue");
         sb.AppendLine(",SUM(t1.Amount - (ISNULL(t1.Discount,0) + ISNULL(t1.ExtraDiscount,0)) + ISNULL(t1.VatAmount,0)) AS GrossSoldValue");
         sb.AppendLine($",{GetStockColumn(filter)} AS TotalStockQty");
+        sb.AppendLine(",t2.QtyOrdered AS QtyOnOrder, t2.QtyReserved AS QtyReserved");
         sb.AppendLine("FROM tbl_InvoiceDetails t1");
         sb.AppendLine("INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID");
         sb.AppendLine("INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice = t3.pk_InvoiceID");
         AppendModelSupplierJoins(sb);
         AppendStoreStockJoin(sb, filter);
-        sb.AppendLine($"{dateWhere}{selCond}");
-        sb.AppendLine($"GROUP BY t2.ItemCode, t2.ItemNamePrimary, {GetStockColumn(filter)}{AppendHeaderGroupBy(filter)}");
+        sb.AppendLine($"{dateWhere}{selCond}{saleOnlyCond}");
+        sb.AppendLine($"GROUP BY t2.ItemCode, t2.ItemNamePrimary, {GetStockColumn(filter)}, t2.QtyOrdered, t2.QtyReserved{AppendHeaderGroupBy(filter)}");
 
         sb.AppendLine("UNION ALL");
 
@@ -138,13 +143,14 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
         sb.AppendLine(",SUM((t1.Amount - (ISNULL(t1.Discount,0) + ISNULL(t1.ExtraDiscount,0))) * (-1)) AS NetSoldValue");
         sb.AppendLine(",SUM((t1.Amount - (ISNULL(t1.Discount,0) + ISNULL(t1.ExtraDiscount,0)) + ISNULL(t1.VatAmount,0)) * (-1)) AS GrossSoldValue");
         sb.AppendLine($",{GetStockColumn(filter)} AS TotalStockQty");
+        sb.AppendLine(",t2.QtyOrdered AS QtyOnOrder, t2.QtyReserved AS QtyReserved");
         sb.AppendLine("FROM tbl_CreditDetails t1");
         sb.AppendLine("INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID");
         sb.AppendLine("INNER JOIN tbl_CreditHeader t3 ON t1.fk_Credit = t3.pk_CreditID");
         AppendModelSupplierJoins(sb);
         AppendStoreStockJoin(sb, filter);
-        sb.AppendLine($"{dateWhere}{selCond}");
-        sb.AppendLine($"GROUP BY t2.ItemCode, t2.ItemNamePrimary, {GetStockColumn(filter)}{AppendHeaderGroupBy(filter)}");
+        sb.AppendLine($"{dateWhere}{selCond}{saleOnlyCond}");
+        sb.AppendLine($"GROUP BY t2.ItemCode, t2.ItemNamePrimary, {GetStockColumn(filter)}, t2.QtyOrdered, t2.QtyReserved{AppendHeaderGroupBy(filter)}");
 
         return sb.ToString();
     }
@@ -179,6 +185,15 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
 
     private string GetStockColumn(PurchasesSalesFilter filter) =>
         NeedsStoreJoin(filter) ? "ISNULL(stk.Stock, 0)" : "t2.TotalStockQty";
+
+    // Wholesale-only cost: when IncludeAdditionalCharges is false, omit the allocated
+    // landed-cost term (tbl_CostingDetails). Legacy parity keeps it (default true).
+    private static string CostTermExpr(PurchasesSalesFilter filter) =>
+        filter.IncludeAdditionalCharges ? " + (ISNULL(cost.CostAmount,0)*ISNULL(cost.Quantity,0))" : "";
+
+    // Available = Stock - Reserved, plus On Order only when Show On Order is enabled (per George spec).
+    private static string AvailableExpr(PurchasesSalesFilter filter, string stock, string reserved, string onOrder) =>
+        filter.ShowOnOrder ? $"({stock} - {reserved} + {onOrder})" : $"({stock} - {reserved})";
 
     private void AppendStoreStockJoin(StringBuilder sb, PurchasesSalesFilter filter)
     {
@@ -229,7 +244,9 @@ SELECT COUNT(*) FROM Data d{colFilterWhere}";
   SUM(QuantitySold) AS QuantitySold,
   SUM(NetSoldValue) AS NetSoldValue,
   SUM(GrossSoldValue) AS GrossSoldValue,
-  MAX(TotalStockQty) AS TotalStockQty
+  MAX(TotalStockQty) AS TotalStockQty,
+  MAX(QtyOnOrder) AS QtyOnOrder,
+  MAX(QtyReserved) AS QtyReserved
 FROM ({innerUnion}) raw
 GROUP BY ItemCode, ItemNamePrimary{extraGroupByCols}";
 
@@ -263,10 +280,21 @@ GROUP BY ItemCode, ItemNamePrimary{extraGroupByCols}";
         sb.AppendLine("  SUM(tf.GrossSoldValue) AS GrossSoldValue,");
         sb.AppendLine("  SUM(tf.NetSoldValue - tf.NetPurchasedValue) AS Profit,");
 
+        var availExpr = AvailableExpr(filter, "tf.TotalStockQty", "tf.QtyReserved", "tf.QtyOnOrder");
         if (isSummary && !allNone)
-            sb.AppendLine("  SUM(tf.TotalStockQty) AS TotalStockQty");
+        {
+            sb.AppendLine("  SUM(tf.TotalStockQty) AS TotalStockQty,");
+            sb.AppendLine("  SUM(tf.QtyOnOrder) AS QtyOnOrder,");
+            sb.AppendLine("  SUM(tf.QtyReserved) AS QtyReserved,");
+            sb.AppendLine($"  SUM({availExpr}) AS QtyAvailable");
+        }
         else
-            sb.AppendLine("  tf.TotalStockQty");
+        {
+            sb.AppendLine("  tf.TotalStockQty,");
+            sb.AppendLine("  tf.QtyOnOrder,");
+            sb.AppendLine("  tf.QtyReserved,");
+            sb.AppendLine($"  {availExpr} AS QtyAvailable");
+        }
 
         sb.AppendLine($"FROM ({perItemSql}) tf");
 
@@ -291,7 +319,11 @@ GROUP BY ItemCode, ItemNamePrimary{extraGroupByCols}";
         }
 
         if (!(isSummary && !allNone))
+        {
             groupByCols.Add("tf.TotalStockQty");
+            groupByCols.Add("tf.QtyOnOrder");
+            groupByCols.Add("tf.QtyReserved");
+        }
 
         if (needsStore)
             groupByCols.Add("tf.fk_StoreCode");
@@ -310,6 +342,16 @@ GROUP BY ItemCode, ItemNamePrimary{extraGroupByCols}";
     {
         var dateWhere = "WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo";
         var selCond = itemFilters.WhereClause;
+        var saleOnlyCond = itemFilters.SaleOnlyWhereClause;
+        var costTerm = CostTermExpr(filter);
+        var costJoin = filter.IncludeAdditionalCharges
+            ? "LEFT JOIN tbl_CostingDetails cost ON t1.pk_ID=cost.fk_ID"
+            : "";
+        // Snapshot fields (stock/on-order/reserved/available) come from one tbl_Item row per
+        // distinct item, independent of which legs had activity. This fixes the bug where
+        // sales-only / return-only items contributed 0 to the totals (their snapshot was only
+        // loaded on the purchase-invoice leg).
+        var availExpr = AvailableExpr(filter, "ISNULL(it.TotalStockQty,0)", "ISNULL(it.QtyReserved,0)", "ISNULL(it.QtyOrdered,0)");
 
         return $@"
 SELECT
@@ -319,58 +361,72 @@ SELECT
   SUM(sub.QuantitySold) AS TotalQtySold,
   SUM(sub.NetSoldValue) AS TotalNetSold,
   SUM(sub.GrossSoldValue) AS TotalGrossSold,
-  SUM(sub.TotalStockQty) AS TotalStockQty
+  SUM(ISNULL(it.TotalStockQty,0)) AS TotalStockQty,
+  SUM(ISNULL(it.QtyOrdered,0)) AS TotalQtyOnOrder,
+  SUM(ISNULL(it.QtyReserved,0)) AS TotalQtyReserved,
+  SUM({availExpr}) AS TotalQtyAvailable
 FROM (
-  SELECT t2.ItemCode,
-         SUM(t1.Quantity) AS QuantityPurchased,
-         SUM(t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+(ISNULL(cost.CostAmount,0)*ISNULL(cost.Quantity,0))) AS NetPurchasedValue,
-         SUM(t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+ISNULL(t1.VatAmount,0)) AS GrossPurchasedValue,
-         0.00 AS QuantitySold, 0.00 AS NetSoldValue, 0.00 AS GrossSoldValue, MAX(t2.TotalStockQty) AS TotalStockQty
-  FROM tbl_PurchInvoiceDetails t1
-  INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
-  INNER JOIN tbl_PurchInvoiceHeader t3 ON t1.fk_PurchInvoiceID=t3.pk_PurchInvoiceID
-  LEFT JOIN tbl_CostingDetails cost ON t1.pk_ID=cost.fk_ID
-  LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
-  LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
-  {dateWhere}{selCond}
-  GROUP BY t2.ItemCode
-  UNION ALL
-  SELECT t2.ItemCode,
-         SUM(t1.Quantity*(-1)),SUM((t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0)))*(-1)),
-         SUM((t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+ISNULL(t1.VatAmount,0))*(-1)),
-         0.00,0.00,0.00,0.00
-  FROM tbl_PurchReturnDetails t1
-  INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
-  INNER JOIN tbl_PurchReturnHeader t3 ON t1.fk_PurchReturnID=t3.pk_PurchReturnID
-  LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
-  LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
-  {dateWhere}{selCond}
-  GROUP BY t2.ItemCode
-  UNION ALL
-  SELECT t2.ItemCode,
-         0.00,0.00,0.00,SUM(t1.Quantity),
-         SUM(t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))),
-         SUM(t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+ISNULL(t1.VatAmount,0)),0.00
-  FROM tbl_InvoiceDetails t1
-  INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
-  INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice=t3.pk_InvoiceID
-  LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
-  LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
-  {dateWhere}{selCond}
-  GROUP BY t2.ItemCode
-  UNION ALL
-  SELECT t2.ItemCode,
-         0.00,0.00,0.00,SUM(t1.Quantity*(-1)),
-         SUM((t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0)))*(-1)),
-         SUM((t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+ISNULL(t1.VatAmount,0))*(-1)),0.00
-  FROM tbl_CreditDetails t1
-  INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
-  INNER JOIN tbl_CreditHeader t3 ON t1.fk_Credit=t3.pk_CreditID
-  LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
-  LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
-  {dateWhere}{selCond}
-  GROUP BY t2.ItemCode
-) sub";
+  SELECT raw.ItemCode,
+         SUM(raw.QuantityPurchased) AS QuantityPurchased,
+         SUM(raw.NetPurchasedValue) AS NetPurchasedValue,
+         SUM(raw.GrossPurchasedValue) AS GrossPurchasedValue,
+         SUM(raw.QuantitySold) AS QuantitySold,
+         SUM(raw.NetSoldValue) AS NetSoldValue,
+         SUM(raw.GrossSoldValue) AS GrossSoldValue
+  FROM (
+    SELECT t2.ItemCode,
+           SUM(t1.Quantity) AS QuantityPurchased,
+           SUM(t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0)){costTerm}) AS NetPurchasedValue,
+           SUM(t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+ISNULL(t1.VatAmount,0)) AS GrossPurchasedValue,
+           0.00 AS QuantitySold, 0.00 AS NetSoldValue, 0.00 AS GrossSoldValue
+    FROM tbl_PurchInvoiceDetails t1
+    INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
+    INNER JOIN tbl_PurchInvoiceHeader t3 ON t1.fk_PurchInvoiceID=t3.pk_PurchInvoiceID
+    {costJoin}
+    LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
+    LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
+    {dateWhere}{selCond}
+    GROUP BY t2.ItemCode
+    UNION ALL
+    SELECT t2.ItemCode,
+           SUM(t1.Quantity*(-1)),SUM((t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0)))*(-1)),
+           SUM((t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+ISNULL(t1.VatAmount,0))*(-1)),
+           0.00,0.00,0.00
+    FROM tbl_PurchReturnDetails t1
+    INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
+    INNER JOIN tbl_PurchReturnHeader t3 ON t1.fk_PurchReturnID=t3.pk_PurchReturnID
+    LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
+    LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
+    {dateWhere}{selCond}
+    GROUP BY t2.ItemCode
+    UNION ALL
+    SELECT t2.ItemCode,
+           0.00,0.00,0.00,SUM(t1.Quantity),
+           SUM(t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))),
+           SUM(t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+ISNULL(t1.VatAmount,0))
+    FROM tbl_InvoiceDetails t1
+    INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
+    INNER JOIN tbl_InvoiceHeader t3 ON t1.fk_Invoice=t3.pk_InvoiceID
+    LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
+    LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
+    {dateWhere}{selCond}{saleOnlyCond}
+    GROUP BY t2.ItemCode
+    UNION ALL
+    SELECT t2.ItemCode,
+           0.00,0.00,0.00,SUM(t1.Quantity*(-1)),
+           SUM((t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0)))*(-1)),
+           SUM((t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+ISNULL(t1.VatAmount,0))*(-1))
+    FROM tbl_CreditDetails t1
+    INNER JOIN tbl_Item t2 ON t1.fk_ItemID=t2.pk_ItemID
+    INNER JOIN tbl_CreditHeader t3 ON t1.fk_Credit=t3.pk_CreditID
+    LEFT JOIN tbl_Model t5 ON t2.fk_ModelID=t5.pk_ModelID
+    LEFT JOIN tbl_RelItemSuppliers t4 ON t2.pk_ItemID=t4.fk_ItemID AND ISNULL(t4.PrimarySupplier,0)=1
+    {dateWhere}{selCond}{saleOnlyCond}
+    GROUP BY t2.ItemCode
+  ) raw
+  GROUP BY raw.ItemCode
+) sub
+INNER JOIN tbl_Item it ON sub.ItemCode = it.ItemCode";
     }
 
     public async Task<List<PurchasesSalesMonthlyRow>> GetPurchasesSalesMonthlyAsync(PurchasesSalesFilter filter)
@@ -424,6 +480,7 @@ FROM (
     {
         var dateWhere = "WHERE CONVERT(DATE, t3.DateTrans) BETWEEN @DateFrom AND @DateTo";
         var selCond = itemFilters.WhereClause;
+        var saleOnlyCond = itemFilters.SaleOnlyWhereClause;
         bool useGross = filter.IncludeVat;
         string valExpr = useGross
             ? "t1.Amount - (ISNULL(t1.Discount,0) + ISNULL(t1.ExtraDiscount,0)) + ISNULL(t1.VatAmount,0)"
@@ -435,9 +492,10 @@ FROM (
 
         void AppendPurchLeg(string detailTbl, string headerTbl, string headerJoin, string sign, bool hasCost)
         {
+            var withCost = hasCost && filter.IncludeAdditionalCharges;
             sb.AppendLine($"SELECT t2.ItemCode, t2.ItemNamePrimary, YEAR(t3.DateTrans) AS transYear");
             if (NeedsStoreJoin(filter)) sb.AppendLine(",t3.fk_StoreCode");
-            var costAdd = hasCost ? "+(ISNULL(cost.CostAmount,0)*ISNULL(cost.Quantity,0))" : "";
+            var costAdd = withCost ? "+(ISNULL(cost.CostAmount,0)*ISNULL(cost.Quantity,0))" : "";
             var vExpr = useGross ? $"t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0))+ISNULL(t1.VatAmount,0){costAdd}" 
                                  : $"t1.Amount-(ISNULL(t1.Discount,0)+ISNULL(t1.ExtraDiscount,0)){costAdd}";
             for (int m = 1; m <= 12; m++)
@@ -449,7 +507,7 @@ FROM (
             sb.AppendLine($"FROM {detailTbl} t1");
             sb.AppendLine($"INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID");
             sb.AppendLine($"INNER JOIN {headerTbl} t3 ON {headerJoin}");
-            if (hasCost) sb.AppendLine("LEFT JOIN tbl_CostingDetails cost ON t1.pk_ID = cost.fk_ID");
+            if (withCost) sb.AppendLine("LEFT JOIN tbl_CostingDetails cost ON t1.pk_ID = cost.fk_ID");
             AppendModelSupplierJoins(sb);
             sb.AppendLine($"{dateWhere}{selCond}");
             var sg = NeedsStoreJoin(filter) ? ", t3.fk_StoreCode" : "";
@@ -470,7 +528,7 @@ FROM (
             sb.AppendLine($"INNER JOIN tbl_Item t2 ON t1.fk_ItemID = t2.pk_ItemID");
             sb.AppendLine($"INNER JOIN {headerTbl} t3 ON {headerJoin}");
             AppendModelSupplierJoins(sb);
-            sb.AppendLine($"{dateWhere}{selCond}");
+            sb.AppendLine($"{dateWhere}{selCond}{saleOnlyCond}");
             var sg = NeedsStoreJoin(filter) ? ", t3.fk_StoreCode" : "";
             sb.AppendLine($"GROUP BY t2.ItemCode, t2.ItemNamePrimary, YEAR(t3.DateTrans){sg}");
         }
@@ -681,7 +739,9 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
 
     #region Item Filters
 
-    private record ItemFilterInfo(string WhereClause, List<SqlParameter> Parameters);
+    private record ItemFilterInfo(
+        string WhereClause, List<SqlParameter> Parameters,
+        string SaleOnlyWhereClause = "", List<SqlParameter>? SaleOnlyParameters = null);
 
     private ItemFilterInfo BuildItemFilters(PurchasesSalesFilter filter)
     {
@@ -689,7 +749,9 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
         var parms = new List<SqlParameter>();
         int idx = 0;
 
-        if (filter.HasStoreFilter)
+        var useLegacyFlatLists = filter.ItemsSelection == null;
+
+        if (useLegacyFlatLists && filter.HasStoreFilter)
         {
             var names = new List<string>();
             foreach (var s in filter.StoreCodes)
@@ -701,7 +763,7 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             sb.Append($" AND t3.fk_StoreCode IN ({string.Join(",", names)})");
         }
 
-        if (filter.HasItemFilter)
+        if (useLegacyFlatLists && filter.HasItemFilter)
         {
             var names = new List<string>();
             foreach (var id in filter.ItemIds)
@@ -713,7 +775,7 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             sb.Append($" AND t1.fk_ItemID IN ({string.Join(",", names)})");
         }
 
-        if (filter.HasCategoryFilter)
+        if (useLegacyFlatLists && filter.HasCategoryFilter)
         {
             var names = new List<string>();
             foreach (var c in filter.CategoryIds)
@@ -725,7 +787,7 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             sb.Append($" AND t2.fk_CategoryID IN ({string.Join(",", names)})");
         }
 
-        if (filter.HasDepartmentFilter)
+        if (useLegacyFlatLists && filter.HasDepartmentFilter)
         {
             var names = new List<string>();
             foreach (var d in filter.DepartmentIds)
@@ -737,7 +799,7 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             sb.Append($" AND t2.fk_DepartmentID IN ({string.Join(",", names)})");
         }
 
-        if (filter.HasSupplierFilter)
+        if (useLegacyFlatLists && filter.HasSupplierFilter)
         {
             var names = new List<string>();
             foreach (var s in filter.SupplierIds)
@@ -749,7 +811,7 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             sb.Append($" AND t4.fk_SupplierNo IN ({string.Join(",", names)})");
         }
 
-        if (filter.HasBrandFilter)
+        if (useLegacyFlatLists && filter.HasBrandFilter)
         {
             var names = new List<string>();
             foreach (var b in filter.BrandIds)
@@ -761,7 +823,7 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             sb.Append($" AND t2.fk_BrandID IN ({string.Join(",", names)})");
         }
 
-        if (filter.HasSeasonFilter)
+        if (useLegacyFlatLists && filter.HasSeasonFilter)
         {
             var names = new List<string>();
             foreach (var s in filter.SeasonIds)
@@ -773,7 +835,7 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             sb.Append($" AND t2.fk_SeasonID IN ({string.Join(",", names)})");
         }
 
-        if (filter.HasUserFilter)
+        if (useLegacyFlatLists && filter.HasUserFilter)
         {
             var names = new List<string>();
             foreach (var u in filter.UserCodes)
@@ -785,7 +847,7 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             sb.Append($" AND t3.fk_UserCode IN ({string.Join(",", names)})");
         }
 
-        if (filter.HasPaymentTypeFilter)
+        if (useLegacyFlatLists && filter.HasPaymentTypeFilter)
         {
             var names = new List<string>();
             foreach (var pt in filter.PaymentTypeCodes)
@@ -805,6 +867,9 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             parms.Add(new SqlParameter("@relDateTo", filter.ReleaseDateTo.Value));
         }
 
+        var saleOnlySb = new StringBuilder();
+        var saleOnlyParms = new List<SqlParameter>();
+
         if (filter.ItemsSelection != null)
         {
             var psDimCols = new DimensionFilterBuilder.ColumnMap(
@@ -814,13 +879,34 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
                 Season: "t2.fk_SeasonID",
                 Item: "t1.fk_ItemID",
                 Store: "t3.fk_StoreCode",
-                Supplier: "t4.fk_SupplierNo");
+                Supplier: "t4.fk_SupplierNo",
+                Model: "t2.fk_ModelID",
+                Colour: "t2.fk_ColourID",
+                Size: "t2.fk_SizeID",
+                Fabric: "t5.fk_FabricID",
+                Attr1: "t2.fk_AttrID1",
+                Attr2: "t2.fk_AttrID2",
+                Attr3: "t2.fk_AttrID3",
+                Attr4: "t2.fk_AttrID4",
+                Attr5: "t2.fk_AttrID5",
+                Attr6: "t2.fk_AttrID6",
+                ItemTableAlias: "t2");
             var (dimWhere, dimParms) = DimensionFilterBuilder.Build(filter.ItemsSelection, psDimCols, idx);
             sb.Append(dimWhere);
             parms.AddRange(dimParms);
+            idx += dimParms.Count;
+
+            var (soWhere, soParms) = DimensionFilterBuilder.BuildSaleOnly(
+                filter.ItemsSelection,
+                customerColumn: "t3.fk_CustomerCode",
+                agentColumn: "",
+                postalCodeColumn: "",
+                startIdx: idx);
+            saleOnlySb.Append(soWhere);
+            saleOnlyParms.AddRange(soParms);
         }
 
-        return new ItemFilterInfo(sb.ToString(), parms);
+        return new ItemFilterInfo(sb.ToString(), parms, saleOnlySb.ToString(), saleOnlyParms);
     }
 
     #endregion
@@ -844,7 +930,10 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
         ["NetSoldValue"] = "d.NetSoldValue",
         ["GrossSoldValue"] = "d.GrossSoldValue",
         ["Profit"] = "d.Profit",
-        ["TotalStockQty"] = "d.TotalStockQty"
+        ["TotalStockQty"] = "d.TotalStockQty",
+        ["QtyOnOrder"] = "d.QtyOnOrder",
+        ["QtyReserved"] = "d.QtyReserved",
+        ["QtyAvailable"] = "d.QtyAvailable"
     };
 
     private static readonly HashSet<string> TextColumns = new(StringComparer.OrdinalIgnoreCase)
@@ -952,6 +1041,8 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             new("@DateTo", filter.DateTo.Date)
         };
         parms.AddRange(itemFilters.Parameters);
+        if (itemFilters.SaleOnlyParameters is { Count: > 0 })
+            parms.AddRange(itemFilters.SaleOnlyParameters);
         return parms;
     }
 
@@ -1004,6 +1095,9 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
                     case "GrossSoldValue": row.GrossSoldValue = reader.GetDecimal(i); break;
                     case "Profit": row.Profit = reader.GetDecimal(i); break;
                     case "TotalStockQty": row.TotalStockQty = reader.GetDecimal(i); break;
+                    case "QtyOnOrder": row.QtyOnOrder = reader.GetDecimal(i); break;
+                    case "QtyReserved": row.QtyReserved = reader.GetDecimal(i); break;
+                    case "QtyAvailable": row.QtyAvailable = reader.GetDecimal(i); break;
                 }
             }
             items.Add(row);
@@ -1031,6 +1125,9 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
             totals.TotalNetSold = reader.IsDBNull(4) ? 0 : reader.GetDecimal(4);
             totals.TotalGrossSold = reader.IsDBNull(5) ? 0 : reader.GetDecimal(5);
             totals.TotalStockQty = reader.IsDBNull(6) ? 0 : reader.GetDecimal(6);
+            totals.TotalQtyOnOrder = reader.IsDBNull(7) ? 0 : reader.GetDecimal(7);
+            totals.TotalQtyReserved = reader.IsDBNull(8) ? 0 : reader.GetDecimal(8);
+            totals.TotalQtyAvailable = reader.IsDBNull(9) ? 0 : reader.GetDecimal(9);
         }
         return totals;
     }

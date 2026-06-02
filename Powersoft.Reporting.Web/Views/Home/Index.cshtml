@@ -58,14 +58,14 @@
                             }
                             else if (Model.Companies.Count == 1)
                             {
-                                <option value="@Model.Companies[0].CompanyCode" selected>@Model.Companies[0].CompanyName</option>
+                                <option value="@Model.Companies[0].CompanyCode" selected>@Model.Companies[0].CompanyCode - @Model.Companies[0].CompanyName</option>
                             }
                             else
                             {
                                 <option value="">Select a company...</option>
                                 @foreach (var company in Model.Companies)
                                 {
-                                    <option value="@company.CompanyCode">@company.CompanyName</option>
+                                    <option value="@company.CompanyCode">@company.CompanyCode - @company.CompanyName</option>
                                 }
                             }
                         </select>
@@ -107,7 +107,7 @@
 <script>
     // Pre-loaded accessible databases (already filtered server-side by ranking + module + user-DB link)
     const accessibleDatabases = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
-        Model.AccessibleDatabases.Select(d => new { value = d.DBCode, text = d.DBFriendlyName, company = d.CompanyCode })));
+        Model.AccessibleDatabases.Select(d => new { value = d.DBCode, text = $"{d.DBCode} - {d.DBFriendlyName}", company = d.CompanyCode })));
 
     const companySelect = document.getElementById('companySelect');
     const dbSelect = document.getElementById('databaseSelect');

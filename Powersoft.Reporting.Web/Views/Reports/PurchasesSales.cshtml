@@ -141,6 +141,30 @@
                         <label asp-for="ShowStock" class="form-check-label">Show Stock</label>
                     </div>
                 </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="ShowOnOrder" class="form-check-input" id="showOnOrderCheck" />
+                        <label asp-for="ShowOnOrder" class="form-check-label">Show On Order</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="ShowReservation" class="form-check-input" id="showReservationCheck" />
+                        <label asp-for="ShowReservation" class="form-check-label">Show Reserved</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="ShowAvailable" class="form-check-input" id="showAvailableCheck" />
+                        <label asp-for="ShowAvailable" class="form-check-label">Show Available</label>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="form-check">
+                        <input type="checkbox" asp-for="IncludeAdditionalCharges" class="form-check-input" id="includeAdditionalChargesCheck" />
+                        <label asp-for="IncludeAdditionalCharges" class="form-check-label" title="When off, purchase cost is invoice (wholesale) only, without allocated landed/additional charges">Include Additional Charges</label>
+                    </div>
+                </div>
                 <div class="col-auto ms-md-auto">
                     <label class="form-label fw-semibold small text-muted mb-1">Rows per page</label>
                     <select asp-for="PageSize" class="form-select form-select-sm w-auto">
@@ -203,7 +227,8 @@
     ShowStores = true,
     ShowItems = true,
     StoresJson = storesJson,
-    SavedFilterJson = Model.ItemsSelectionJson ?? ""
+    SavedFilterJson = Model.ItemsSelectionJson ?? "",
+    ReportType = "PurchasesSales"
 })
 
 @if (!string.IsNullOrEmpty(Model.ErrorMessage))
@@ -290,33 +315,15 @@
                     <i class="bi bi-eye me-1"></i>Preview
                 </button>
                 <div class="btn-group btn-group-sm">
-                    <a class="btn btn-outline-success" asp-action="ExportPsCsv"
-                       asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")" asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")"
-                       asp-route-reportMode="@Model.ReportMode" asp-route-primaryGroup="@Model.PrimaryGroup"
-                       asp-route-secondaryGroup="@Model.SecondaryGroup" asp-route-thirdGroup="@Model.ThirdGroup"
-                       asp-route-includeVat="@Model.IncludeVat" asp-route-showProfit="@Model.ShowProfit" asp-route-showStock="@Model.ShowStock"
-                       asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-itemIds="@Model.SelectedItemIdsString"
-                       asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                    <button type="button" class="btn btn-outline-success" onclick="exportPsReport('csv')">
                         <i class="bi bi-filetype-csv me-1"></i>CSV
-                    </a>
-                    <a class="btn btn-outline-success" asp-action="ExportPsExcel"
-                       asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")" asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")"
-                       asp-route-reportMode="@Model.ReportMode" asp-route-primaryGroup="@Model.PrimaryGroup"
-                       asp-route-secondaryGroup="@Model.SecondaryGroup" asp-route-thirdGroup="@Model.ThirdGroup"
-                       asp-route-includeVat="@Model.IncludeVat" asp-route-showProfit="@Model.ShowProfit" asp-route-showStock="@Model.ShowStock"
-                       asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-itemIds="@Model.SelectedItemIdsString"
-                       asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                    </button>
+                    <button type="button" class="btn btn-outline-success" onclick="exportPsReport('excel')">
                         <i class="bi bi-filetype-xlsx me-1"></i>Excel
-                    </a>
-                    <a class="btn btn-outline-danger" asp-action="ExportPsPdf"
-                       asp-route-dateFrom="@Model.DateFrom.ToString("yyyy-MM-dd")" asp-route-dateTo="@Model.DateTo.ToString("yyyy-MM-dd")"
-                       asp-route-reportMode="@Model.ReportMode" asp-route-primaryGroup="@Model.PrimaryGroup"
-                       asp-route-secondaryGroup="@Model.SecondaryGroup" asp-route-thirdGroup="@Model.ThirdGroup"
-                       asp-route-includeVat="@Model.IncludeVat" asp-route-showProfit="@Model.ShowProfit" asp-route-showStock="@Model.ShowStock"
-                       asp-route-storeCodes="@Model.SelectedStoreCodesString" asp-route-itemIds="@Model.SelectedItemIdsString"
-                       asp-route-sortColumn="@Model.SortColumn" asp-route-sortDirection="@Model.SortDirection">
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" onclick="exportPsReport('pdf')">
                         <i class="bi bi-filetype-pdf me-1"></i>PDF
-                    </a>
+                    </button>
                 </div>
                 <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
                     <i class="bi bi-envelope me-1"></i>Send to Email
@@ -468,10 +475,13 @@
                             <th class="text-end">Qty %</th>
                             <th class="text-end">Val %</th>
                             @if (Model.ShowStock) { <th data-col="TotalStockQty" class="text-end @SortClass("TotalStockQty")" onclick="sortBy('TotalStockQty')">Stock<i class="bi @SortIcon("TotalStockQty") sort-icon"></i></th> }
+                            @if (Model.ShowOnOrder) { <th data-col="QtyOnOrder" class="text-end @SortClass("QtyOnOrder")" onclick="sortBy('QtyOnOrder')">On Order<i class="bi @SortIcon("QtyOnOrder") sort-icon"></i></th> }
+                            @if (Model.ShowReservation) { <th data-col="QtyReserved" class="text-end @SortClass("QtyReserved")" onclick="sortBy('QtyReserved')">Reserved<i class="bi @SortIcon("QtyReserved") sort-icon"></i></th> }
+                            @if (Model.ShowAvailable) { <th data-col="QtyAvailable" class="text-end @SortClass("QtyAvailable")" onclick="sortBy('QtyAvailable')">Available<i class="bi @SortIcon("QtyAvailable") sort-icon"></i></th> }
                         </tr>
                     </thead>
                     @{
-                        int totalColumns = (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0)+(showItem?2:0)+4+(Model.ShowProfit?1:0)+2+(Model.ShowStock?1:0);
+                        int totalColumns = (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0)+(showItem?2:0)+4+(Model.ShowProfit?1:0)+2+(Model.ShowStock?1:0)+(Model.ShowOnOrder?1:0)+(Model.ShowReservation?1:0)+(Model.ShowAvailable?1:0);
                     }
                     <tbody>
                         @if (hasL1)
@@ -518,6 +528,9 @@
                                                         <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
                                                         <td class="text-end">@row.ValPercent.ToString("N1")%</td>
                                                         @if (Model.ShowStock) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
+                                                        @if (Model.ShowOnOrder) { <td class="text-end">@row.QtyOnOrder.ToString("N0")</td> }
+                                                        @if (Model.ShowReservation) { <td class="text-end">@row.QtyReserved.ToString("N0")</td> }
+                                                        @if (Model.ShowAvailable) { <td class="text-end">@row.QtyAvailable.ToString("N0")</td> }
                                                     </tr>
                                                 }
                                                 var l3QP = l3Rows.Sum(r => r.QuantityPurchased);
@@ -535,6 +548,9 @@
                                                     @if (Model.ShowProfit) { <td class="text-end fw-semibold">@l3Profit.ToString("N2")</td> }
                                                     <td class="text-end">-</td><td class="text-end">-</td>
                                                     @if (Model.ShowStock) { <td></td> }
+                                                    @if (Model.ShowOnOrder) { <td></td> }
+                                                    @if (Model.ShowReservation) { <td></td> }
+                                                    @if (Model.ShowAvailable) { <td></td> }
                                                 </tr>
                                             }
                                         }
@@ -554,6 +570,9 @@
                                                     <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
                                                     <td class="text-end">@row.ValPercent.ToString("N1")%</td>
                                                     @if (Model.ShowStock) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
+                                                    @if (Model.ShowOnOrder) { <td class="text-end">@row.QtyOnOrder.ToString("N0")</td> }
+                                                    @if (Model.ShowReservation) { <td class="text-end">@row.QtyReserved.ToString("N0")</td> }
+                                                        @if (Model.ShowAvailable) { <td class="text-end">@row.QtyAvailable.ToString("N0")</td> }
                                                 </tr>
                                             }
                                         }
@@ -572,6 +591,9 @@
                                             @if (Model.ShowProfit) { <td class="text-end fw-semibold">@l2Profit.ToString("N2")</td> }
                                             <td class="text-end">-</td><td class="text-end">-</td>
                                             @if (Model.ShowStock) { <td></td> }
+                                            @if (Model.ShowOnOrder) { <td></td> }
+                                            @if (Model.ShowReservation) { <td></td> }
+                                                    @if (Model.ShowAvailable) { <td></td> }
                                         </tr>
                                     }
                                 }
@@ -590,6 +612,9 @@
                                             <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
                                             <td class="text-end">@row.ValPercent.ToString("N1")%</td>
                                             @if (Model.ShowStock) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
+                                            @if (Model.ShowOnOrder) { <td class="text-end">@row.QtyOnOrder.ToString("N0")</td> }
+                                            @if (Model.ShowReservation) { <td class="text-end">@row.QtyReserved.ToString("N0")</td> }
+                                                        @if (Model.ShowAvailable) { <td class="text-end">@row.QtyAvailable.ToString("N0")</td> }
                                         </tr>
                                     }
                                 }
@@ -610,6 +635,9 @@
                                     <td class="text-end fw-semibold">-</td>
                                     <td class="text-end fw-semibold">-</td>
                                     @if (Model.ShowStock) { <td></td> }
+                                    @if (Model.ShowOnOrder) { <td></td> }
+                                    @if (Model.ShowReservation) { <td></td> }
+                                                    @if (Model.ShowAvailable) { <td></td> }
                                 </tr>
                             }
                         }
@@ -627,6 +655,9 @@
                                     <td class="text-end">@row.QtyPercent.ToString("N1")%</td>
                                     <td class="text-end">@row.ValPercent.ToString("N1")%</td>
                                     @if (Model.ShowStock) { <td class="text-end">@row.TotalStockQty.ToString("N0")</td> }
+                                    @if (Model.ShowOnOrder) { <td class="text-end">@row.QtyOnOrder.ToString("N0")</td> }
+                                    @if (Model.ShowReservation) { <td class="text-end">@row.QtyReserved.ToString("N0")</td> }
+                                                        @if (Model.ShowAvailable) { <td class="text-end">@row.QtyAvailable.ToString("N0")</td> }
                                 </tr>
                             }
                         }
@@ -644,6 +675,9 @@
                             <td class="text-end">-</td>
                             <td class="text-end">-</td>
                             @if (Model.ShowStock) { <td class="text-end">-</td> }
+                            @if (Model.ShowOnOrder) { <td class="text-end fw-semibold">@Model.TotalOnOrder.ToString("N0")</td> }
+                            @if (Model.ShowReservation) { <td class="text-end fw-semibold">@Model.TotalReserved.ToString("N0")</td> }
+                            @if (Model.ShowAvailable) { <td class="text-end fw-semibold">@Model.TotalAvailable.ToString("N0")</td> }
                         </tr>
                     </tfoot>
                 </table>
@@ -682,7 +716,7 @@
                 <button class="btn btn-sm btn-outline-light" onclick="togglePreview()"><i class="bi bi-x-lg me-1"></i>Back to Grid</button>
             </div>
             <div class="card-body p-0">
-                <iframe id="previewFrame" style="width:100%;border:none;min-height:700px;background:#525659;"></iframe>
+                <iframe id="previewFrame" name="previewFrame" style="width:100%;border:none;min-height:700px;background:#525659;"></iframe>
             </div>
         </div>
     </div>
@@ -1236,6 +1270,9 @@ var previewOpen = false;
         var isM = rm && rm.value === '2';
         if (document.getElementById('showProfitCheck')) document.getElementById('showProfitCheck').disabled = isM;
         if (document.getElementById('showStockCheck')) document.getElementById('showStockCheck').disabled = isM;
+        if (document.getElementById('showOnOrderCheck')) document.getElementById('showOnOrderCheck').disabled = isM;
+        if (document.getElementById('showReservationCheck')) document.getElementById('showReservationCheck').disabled = isM;
+        if (document.getElementById('showAvailableCheck')) document.getElementById('showAvailableCheck').disabled = isM;
         if (isM) { tg.value = none; tg.disabled = true; }
     }
 
@@ -1252,14 +1289,73 @@ function populateItemsSelectionHidden() {
     if (typeof getItemsSelectionStoreCodes === 'function') {
         document.getElementById('selectedStoreCodesHidden').value = getItemsSelectionStoreCodes();
     }
+    if (typeof getItemsSelectionItemIds === 'function') {
+        document.getElementById('selectedItemIdsHidden').value = getItemsSelectionItemIds();
+    }
 }
 
 function clearPreset(){document.querySelectorAll('input[name="DatePreset"]').forEach(r=>r.checked=false);}
-function submitToResults(){var form=document.getElementById('reportForm');var action=form.getAttribute('action')||'';if(action.indexOf('#')>-1)action=action.substring(0,action.indexOf('#'));form.setAttribute('action',action+'#results');form.submit();}
+function submitToResults(){populateItemsSelectionHidden();var form=document.getElementById('reportForm');var action=form.getAttribute('action')||'';if(action.indexOf('#')>-1)action=action.substring(0,action.indexOf('#'));form.setAttribute('action',action+'#results');form.submit();}
 function goToPage(p){document.getElementById('pageNumberHidden').value=p;submitToResults();}
 function sortBy(col){var curCol=document.getElementById('sortColumnHidden').value;var curDir=document.getElementById('sortDirectionHidden').value;document.getElementById('sortColumnHidden').value=col;document.getElementById('sortDirectionHidden').value=(col===curCol&&curDir==='ASC')?'DESC':'ASC';document.getElementById('pageNumberHidden').value=1;submitToResults();}
 
-function togglePreview(){var panel=document.getElementById('previewPanel');var grid=document.getElementById('results');var btn=document.getElementById('previewToggleBtn');previewOpen=!previewOpen;if(previewOpen){grid.style.display='none';panel.style.display='block';btn.innerHTML='<i class="bi bi-table me-1"></i>Grid';btn.classList.remove('btn-outline-primary');btn.classList.add('btn-outline-warning');var f=document.getElementById('previewFrame');if(!f.src||f.src==='about:blank'){f.src='@Url.Action("PrintPsPreview")?dateFrom=@Model.DateFrom.ToString("yyyy-MM-dd")&dateTo=@Model.DateTo.ToString("yyyy-MM-dd")&reportMode=@Model.ReportMode&primaryGroup=@Model.PrimaryGroup&secondaryGroup=@Model.SecondaryGroup&thirdGroup=@Model.ThirdGroup&includeVat=@Model.IncludeVat&showProfit=@Model.ShowProfit&showStock=@Model.ShowStock&storeCodes=@(Model.SelectedStoreCodesString??"")&sortColumn=@Model.SortColumn&sortDirection=@Model.SortDirection';}f.onload=function(){try{f.style.height=Math.max(f.contentDocument.body.scrollHeight+80,700)+'px';}catch(e){f.style.height='900px';}};}else{panel.style.display='none';grid.style.display='';btn.innerHTML='<i class="bi bi-eye me-1"></i>Preview';btn.classList.remove('btn-outline-warning');btn.classList.add('btn-outline-primary');}}
+function getItemsSelectionJsonValue(){populateItemsSelectionHidden();return document.getElementById('itemsSelectionJsonHidden').value||'';}
+function exportPsReport(format){var actions={csv:'@Url.Action("ExportPsCsv")',excel:'@Url.Action("ExportPsExcel")',pdf:'@Url.Action("ExportPsPdf")'};var url=actions[format];if(!url)return;var f=document.createElement('form');f.method='POST';f.action=url;f.style.display='none';var fields={dateFrom:'@Model.DateFrom.ToString("yyyy-MM-dd")',dateTo:'@Model.DateTo.ToString("yyyy-MM-dd")',reportMode:'@Model.ReportMode',primaryGroup:'@Model.PrimaryGroup',secondaryGroup:'@Model.SecondaryGroup',thirdGroup:'@Model.ThirdGroup',includeVat:'@Model.IncludeVat',showProfit:'@Model.ShowProfit',showStock:'@Model.ShowStock',showOnOrder:'@Model.ShowOnOrder',showReservation:'@Model.ShowReservation',showAvailable:'@Model.ShowAvailable',includeAdditionalCharges:'@Model.IncludeAdditionalCharges',storeCodes:'@(Model.SelectedStoreCodesString??"")',itemIds:'@(Model.SelectedItemIdsString??"")',sortColumn:'@Model.SortColumn',sortDirection:'@Model.SortDirection',ItemsSelectionJson:getItemsSelectionJsonValue()};Object.keys(fields).forEach(function(k){var inp=document.createElement('input');inp.type='hidden';inp.name=k;inp.value=fields[k];f.appendChild(inp);});document.body.appendChild(f);f.submit();document.body.removeChild(f);}
+
+function togglePreview(){
+    var panel=document.getElementById('previewPanel');
+    var grid=document.getElementById('results');
+    var btn=document.getElementById('previewToggleBtn');
+    previewOpen=!previewOpen;
+    if(previewOpen){
+        grid.style.display='none';
+        panel.style.display='block';
+        btn.innerHTML='<i class="bi bi-table me-1"></i>Grid';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-outline-warning');
+        var f=document.getElementById('previewFrame');
+        var form=document.createElement('form');
+        form.method='POST';
+        form.action='@Url.Action("PrintPsPreview")';
+        form.target='previewFrame';
+        form.style.display='none';
+        var fields={
+            dateFrom:'@Model.DateFrom.ToString("yyyy-MM-dd")',
+            dateTo:'@Model.DateTo.ToString("yyyy-MM-dd")',
+            reportMode:'@Model.ReportMode',
+            primaryGroup:'@Model.PrimaryGroup',
+            secondaryGroup:'@Model.SecondaryGroup',
+            thirdGroup:'@Model.ThirdGroup',
+            includeVat:'@Model.IncludeVat',
+            showProfit:'@Model.ShowProfit',
+            showStock:'@Model.ShowStock',
+            showOnOrder:'@Model.ShowOnOrder',
+            showReservation:'@Model.ShowReservation',
+            showAvailable:'@Model.ShowAvailable',
+            includeAdditionalCharges:'@Model.IncludeAdditionalCharges',
+            storeCodes:getItemsSelectionStoreCodes()||'@(Model.SelectedStoreCodesString??"")',
+            itemIds:getItemsSelectionItemIds()||'@(Model.SelectedItemIdsString??"")',
+            sortColumn:'@Model.SortColumn',
+            sortDirection:'@Model.SortDirection',
+            ItemsSelectionJson:getItemsSelectionJsonValue()
+        };
+        Object.keys(fields).forEach(function(k){
+            var inp=document.createElement('input');
+            inp.type='hidden';inp.name=k;inp.value=fields[k]||'';
+            form.appendChild(inp);
+        });
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+        f.onload=function(){try{f.style.height=Math.max(f.contentDocument.body.scrollHeight+80,700)+'px';}catch(e){f.style.height='900px';}};
+    }else{
+        panel.style.display='none';
+        grid.style.display='';
+        btn.innerHTML='<i class="bi bi-eye me-1"></i>Preview';
+        btn.classList.remove('btn-outline-warning');
+        btn.classList.add('btn-outline-primary');
+    }
+}
 
 function clearAllFilters(){@foreach(var c in filterCols){<text>document.getElementById('fv_@c').value='';document.getElementById('fo_@c').value='';</text>}document.getElementById('pageNumberHidden').value=1;submitToResults();}
 
@@ -1274,7 +1370,7 @@ function onEmailTemplateChange(){var sel=document.getElementById('sendEmailTempl
 
 function replaceMergeFieldsPreview(text){return text.replace(/\u00ABReportName\u00BB/g,'Purchases vs Sales').replace(/\u00ABDatabaseName\u00BB/g,'@(Model.ConnectedDatabase??"Unknown")').replace(/\u00ABPeriod\u00BB/g,'@Model.DateFrom.ToString("yyyy-MM-dd") to @Model.DateTo.ToString("yyyy-MM-dd")').replace(/\u00ABRowCount\u00BB/g,'@(Model.Results?.Count??0)').replace(/\u00ABExportFormat\u00BB/g,document.getElementById('sendEmailFormat').value).replace(/\u00ABGeneratedDate\u00BB/g,new Date().toLocaleString()).replace(/\u00ABUserName\u00BB/g,'@(User.Identity?.Name??"Unknown")').replace(/\u00ABCompanyName\u00BB/g,'@(Model.ConnectedDatabase??"")').replace(/\u00AB/g,'').replace(/\u00BB/g,'');}
 
-function sendReportEmail(){var ri=document.getElementById('sendEmailRecipients');var ad=document.getElementById('sendEmailAlert');var v=validateEmailList(ri.value);if(!v.valid){ri.classList.add('is-invalid');document.getElementById('sendEmailRecipientsError').textContent=v.errors.join('; ');return;}ri.classList.remove('is-invalid');var btn=document.getElementById('sendEmailBtn');var sp=document.getElementById('sendEmailSpinner');var ic=document.getElementById('sendEmailIcon');btn.disabled=true;sp.classList.remove('d-none');ic.classList.add('d-none');var fd=new FormData();fd.append('recipients',ri.value.trim());fd.append('cc',(document.getElementById('sendEmailCC').value||'').trim());fd.append('bcc',(document.getElementById('sendEmailBCC').value||'').trim());fd.append('emailSubject',document.getElementById('sendEmailSubject').value);fd.append('exportFormat',document.getElementById('sendEmailFormat').value);fd.append('templateId',document.getElementById('sendEmailTemplate').value||'');fd.append('dateFrom','@Model.DateFrom.ToString("yyyy-MM-dd")');fd.append('dateTo','@Model.DateTo.ToString("yyyy-MM-dd")');fd.append('reportMode','@Model.ReportMode');fd.append('primaryGroup','@Model.PrimaryGroup');fd.append('secondaryGroup','@Model.SecondaryGroup');fd.append('thirdGroup','@Model.ThirdGroup');fd.append('includeVat','@Model.IncludeVat');fd.append('showProfit','@Model.ShowProfit');fd.append('showStock','@Model.ShowStock');fd.append('storeCodes',typeof getItemsSelectionStoreCodes==='function'?getItemsSelectionStoreCodes():'');fd.append('sortColumn','@Model.SortColumn');fd.append('sortDirection','@Model.SortDirection');fetch('@Url.Action("SendPsReportEmail","Reports")',{method:'POST',body:fd}).then(r=>r.json()).then(function(d){btn.disabled=false;sp.classList.add('d-none');ic.classList.remove('d-none');ad.innerHTML='<div class="alert alert-'+(d.success?'success':'danger')+' mb-0">'+(d.success?'<i class="bi bi-check-circle me-1"></i>':'<i class="bi bi-exclamation-triangle me-1"></i>')+d.message+'</div>';ad.style.display='';}).catch(function(){btn.disabled=false;sp.classList.add('d-none');ic.classList.remove('d-none');ad.innerHTML='<div class="alert alert-danger mb-0">Network error.</div>';ad.style.display='';});}
+function sendReportEmail(){var ri=document.getElementById('sendEmailRecipients');var ad=document.getElementById('sendEmailAlert');var v=validateEmailList(ri.value);if(!v.valid){ri.classList.add('is-invalid');document.getElementById('sendEmailRecipientsError').textContent=v.errors.join('; ');return;}ri.classList.remove('is-invalid');var btn=document.getElementById('sendEmailBtn');var sp=document.getElementById('sendEmailSpinner');var ic=document.getElementById('sendEmailIcon');btn.disabled=true;sp.classList.remove('d-none');ic.classList.add('d-none');var fd=new FormData();fd.append('recipients',ri.value.trim());fd.append('cc',(document.getElementById('sendEmailCC').value||'').trim());fd.append('bcc',(document.getElementById('sendEmailBCC').value||'').trim());fd.append('emailSubject',document.getElementById('sendEmailSubject').value);fd.append('exportFormat',document.getElementById('sendEmailFormat').value);fd.append('templateId',document.getElementById('sendEmailTemplate').value||'');fd.append('dateFrom','@Model.DateFrom.ToString("yyyy-MM-dd")');fd.append('dateTo','@Model.DateTo.ToString("yyyy-MM-dd")');fd.append('reportMode','@Model.ReportMode');fd.append('primaryGroup','@Model.PrimaryGroup');fd.append('secondaryGroup','@Model.SecondaryGroup');fd.append('thirdGroup','@Model.ThirdGroup');fd.append('includeVat','@Model.IncludeVat');fd.append('showProfit','@Model.ShowProfit');fd.append('showStock','@Model.ShowStock');fd.append('showOnOrder','@Model.ShowOnOrder');fd.append('showReservation','@Model.ShowReservation');fd.append('storeCodes',typeof getItemsSelectionStoreCodes==='function'?getItemsSelectionStoreCodes():'');fd.append('sortColumn','@Model.SortColumn');fd.append('sortDirection','@Model.SortDirection');fd.append('ItemsSelectionJson',getItemsSelectionJsonValue());fetch('@Url.Action("SendPsReportEmail","Reports")',{method:'POST',body:fd}).then(r=>r.json()).then(function(d){btn.disabled=false;sp.classList.add('d-none');ic.classList.remove('d-none');ad.innerHTML='<div class="alert alert-'+(d.success?'success':'danger')+' mb-0">'+(d.success?'<i class="bi bi-check-circle me-1"></i>':'<i class="bi bi-exclamation-triangle me-1"></i>')+d.message+'</div>';ad.style.display='';}).catch(function(){btn.disabled=false;sp.classList.add('d-none');ic.classList.remove('d-none');ad.innerHTML='<div class="alert alert-danger mb-0">Network error.</div>';ad.style.display='';});}
 
 function filterColumnList(){var el=document.getElementById('colSearchInput');if(!el)return;var s=el.value.toLowerCase().trim();document.querySelectorAll('#colToggleList label').forEach(function(lbl){if(!s){lbl.classList.remove('d-none');return;}var name=(lbl.getAttribute('data-col-name')||'').toLowerCase();var text=lbl.querySelector('span')?lbl.querySelector('span').textContent.toLowerCase():'';var match=name.indexOf(s)!==-1||text.indexOf(s)!==-1;if(match)lbl.classList.remove('d-none');else lbl.classList.add('d-none');});}
 function toggleAllColumns(chk){document.querySelectorAll('.col-toggle').forEach(function(cb){cb.checked=chk;});applyColumnVisibility();updateColVisibleCount();}
@@ -1286,7 +1382,7 @@ function autoSelectScheduleDateRange(){var preset=document.querySelector('input[
 function onSchedDateRangeTypeChange(){var sel=document.getElementById('schedDateRangeType');var opt=sel.options[sel.selectedIndex];var isCustom=(opt.value==='Custom');document.getElementById('schedCustomDateFromWrap').style.display=isCustom?'':'none';document.getElementById('schedCustomDateToWrap').style.display=isCustom?'':'none';}
 function onSchedAiToggle(){document.getElementById('schedAiDetails').style.display=document.getElementById('schedIncludeAi').checked?'':'none';}
 function onRecurrenceChange(){var t=document.getElementById('schedRecurrence').value;document.getElementById('schedWeeklyDaysContainer').style.display=t==='Weekly'?'':'none';document.getElementById('schedMonthDayContainer').style.display=t==='Monthly'?'':'none';}
-function saveSchedule(){var name=document.getElementById('schedName').value.trim();var recipients=document.getElementById('schedRecipients').value.trim();var alertDiv=document.getElementById('scheduleAlert');if(!name||!recipients){alertDiv.innerHTML='<div class="alert alert-warning mb-0">Please fill in schedule name and recipients.</div>';alertDiv.style.display='';return;}var ev=validateEmailList(recipients);if(!ev.valid){alertDiv.innerHTML='<div class="alert alert-warning mb-0">Invalid email(s): '+ev.errors.join('; ')+'</div>';alertDiv.style.display='';return;}var recurrence=document.getElementById('schedRecurrence').value;if(recurrence==='Once'){var sd=document.getElementById('schedStartDate').value;var today=new Date().toISOString().slice(0,10);if(!sd||sd<today){alertDiv.innerHTML='<div class="alert alert-warning mb-0">Start date must be today or later.</div>';alertDiv.style.display='';return;}}var day=(recurrence==='Monthly')?parseInt(document.getElementById('schedMonthDay').value,10):null;var fd=new FormData();fd.append('scheduleName',name);fd.append('recurrenceType',recurrence);if(day!==null&&!isNaN(day))fd.append('recurrenceDay',day);fd.append('scheduleTime',document.getElementById('schedTime').value);fd.append('exportFormat',document.getElementById('schedFormat').value);fd.append('recipients',recipients);fd.append('emailSubject',document.getElementById('schedSubject').value);fd.append('includeAiAnalysis',document.getElementById('schedIncludeAi').checked);fd.append('aiLocale',document.getElementById('schedAiLocale').value);fd.append('skipIfEmpty',document.getElementById('schedSkipIfEmpty').checked);var dateRangeSel=document.getElementById('schedDateRangeType');var dateRangeOpt=dateRangeSel.options[dateRangeSel.selectedIndex];var reportDateRange={type:dateRangeOpt.value};if(reportDateRange.type==='LastNDays'){reportDateRange.value=parseInt(dateRangeOpt.getAttribute('data-value')||'7',10);}else if(reportDateRange.type==='Custom'){reportDateRange.dateFrom=document.getElementById('schedDateFrom').value;reportDateRange.dateTo=document.getElementById('schedDateTo').value;}var params={reportDateRange:reportDateRange,dateFrom:document.getElementById('DateFrom').value,dateTo:document.getElementById('DateTo').value,reportMode:document.getElementById('ReportMode').value,primaryGroup:document.getElementById('PrimaryGroup').value,secondaryGroup:document.getElementById('SecondaryGroup').value,thirdGroup:document.getElementById('ThirdGroup').value,includeVat:document.getElementById('includeVatCheck').checked,showProfit:document.getElementById('showProfitCheck').checked,showStock:document.getElementById('showStockCheck').checked,storeCodes:typeof getItemsSelectionStoreCodes==='function'?getItemsSelectionStoreCodes():'',itemIds:document.getElementById('selectedItemIdsHidden').value||'',sortColumn:document.getElementById('sortColumnHidden').value||'ItemCode',sortDirection:document.getElementById('sortDirectionHidden').value||'ASC',reportType:'PurchasesSales'};fd.append('parametersJson',JSON.stringify(params));var startDate=document.getElementById('schedStartDate').value||new Date().toISOString().slice(0,10);var recurrenceJson={type:recurrence,time:document.getElementById('schedTime').value,range:{startDate:startDate,noEndDate:true}};if(recurrence==='Weekly'){var days=[];document.querySelectorAll('.sched-dow:checked').forEach(function(cb){days.push(parseInt(cb.value,10));});recurrenceJson.pattern={interval:1,daysOfWeek:days.length?days:[1]};}else if(recurrence==='Monthly'){recurrenceJson.pattern={dayOfMonth:day!==null?day:1};}fd.append('recurrenceJson',JSON.stringify(recurrenceJson));var sid=document.getElementById('schedId').value;if(sid)fd.append('scheduleId',sid);var saveBtn=document.querySelector('#scheduleModal .btn-primary[onclick="saveSchedule()"]');if(saveBtn)saveBtn.disabled=true;fetch('@Url.Action("SavePsSchedule","Reports")',{method:'POST',body:fd}).then(r=>r.json()).then(function(d){if(saveBtn)saveBtn.disabled=false;if(d.success){alertDiv.innerHTML='<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>'+d.message+'</div>';alertDiv.style.display='';loadExistingSchedules();if(d.updated){showScheduleToast('Schedule updated','success');}else{setTimeout(function(){resetScheduleForm();showScheduleToast('Schedule saved successfully','success');},700);}}else{alertDiv.innerHTML='<div class="alert alert-danger mb-0">'+d.message+'</div>';alertDiv.style.display='';}}).catch(function(){if(saveBtn)saveBtn.disabled=false;alertDiv.innerHTML='<div class="alert alert-danger mb-0">Network error.</div>';alertDiv.style.display='';});}
+function saveSchedule(){var name=document.getElementById('schedName').value.trim();var recipients=document.getElementById('schedRecipients').value.trim();var alertDiv=document.getElementById('scheduleAlert');if(!name||!recipients){alertDiv.innerHTML='<div class="alert alert-warning mb-0">Please fill in schedule name and recipients.</div>';alertDiv.style.display='';return;}var ev=validateEmailList(recipients);if(!ev.valid){alertDiv.innerHTML='<div class="alert alert-warning mb-0">Invalid email(s): '+ev.errors.join('; ')+'</div>';alertDiv.style.display='';return;}var recurrence=document.getElementById('schedRecurrence').value;if(recurrence==='Once'){var sd=document.getElementById('schedStartDate').value;var today=new Date().toISOString().slice(0,10);if(!sd||sd<today){alertDiv.innerHTML='<div class="alert alert-warning mb-0">Start date must be today or later.</div>';alertDiv.style.display='';return;}}var day=(recurrence==='Monthly')?parseInt(document.getElementById('schedMonthDay').value,10):null;var fd=new FormData();fd.append('scheduleName',name);fd.append('recurrenceType',recurrence);if(day!==null&&!isNaN(day))fd.append('recurrenceDay',day);fd.append('scheduleTime',document.getElementById('schedTime').value);fd.append('exportFormat',document.getElementById('schedFormat').value);fd.append('recipients',recipients);fd.append('emailSubject',document.getElementById('schedSubject').value);fd.append('includeAiAnalysis',document.getElementById('schedIncludeAi').checked);fd.append('aiLocale',document.getElementById('schedAiLocale').value);fd.append('skipIfEmpty',document.getElementById('schedSkipIfEmpty').checked);var dateRangeSel=document.getElementById('schedDateRangeType');var dateRangeOpt=dateRangeSel.options[dateRangeSel.selectedIndex];var reportDateRange={type:dateRangeOpt.value};if(reportDateRange.type==='LastNDays'){reportDateRange.value=parseInt(dateRangeOpt.getAttribute('data-value')||'7',10);}else if(reportDateRange.type==='Custom'){reportDateRange.dateFrom=document.getElementById('schedDateFrom').value;reportDateRange.dateTo=document.getElementById('schedDateTo').value;}var params={reportDateRange:reportDateRange,dateFrom:document.getElementById('DateFrom').value,dateTo:document.getElementById('DateTo').value,reportMode:document.getElementById('ReportMode').value,primaryGroup:document.getElementById('PrimaryGroup').value,secondaryGroup:document.getElementById('SecondaryGroup').value,thirdGroup:document.getElementById('ThirdGroup').value,includeVat:document.getElementById('includeVatCheck').checked,showProfit:document.getElementById('showProfitCheck').checked,showStock:document.getElementById('showStockCheck').checked,showOnOrder:document.getElementById('showOnOrderCheck').checked,showReservation:document.getElementById('showReservationCheck').checked,showAvailable:document.getElementById('showAvailableCheck').checked,includeAdditionalCharges:document.getElementById('includeAdditionalChargesCheck').checked,storeCodes:typeof getItemsSelectionStoreCodes==='function'?getItemsSelectionStoreCodes():'',itemIds:document.getElementById('selectedItemIdsHidden').value||'',itemsSelectionJson:typeof getItemsSelectionFilter==='function'?JSON.stringify(getItemsSelectionFilter()):'',sortColumn:document.getElementById('sortColumnHidden').value||'ItemCode',sortDirection:document.getElementById('sortDirectionHidden').value||'ASC',reportType:'PurchasesSales'};fd.append('parametersJson',JSON.stringify(params));var startDate=document.getElementById('schedStartDate').value||new Date().toISOString().slice(0,10);var recurrenceJson={type:recurrence,time:document.getElementById('schedTime').value,range:{startDate:startDate,noEndDate:true}};if(recurrence==='Weekly'){var days=[];document.querySelectorAll('.sched-dow:checked').forEach(function(cb){days.push(parseInt(cb.value,10));});recurrenceJson.pattern={interval:1,daysOfWeek:days.length?days:[1]};}else if(recurrence==='Monthly'){recurrenceJson.pattern={dayOfMonth:day!==null?day:1};}fd.append('recurrenceJson',JSON.stringify(recurrenceJson));var sid=document.getElementById('schedId').value;if(sid)fd.append('scheduleId',sid);var saveBtn=document.querySelector('#scheduleModal .btn-primary[onclick="saveSchedule()"]');if(saveBtn)saveBtn.disabled=true;fetch('@Url.Action("SavePsSchedule","Reports")',{method:'POST',body:fd}).then(r=>r.json()).then(function(d){if(saveBtn)saveBtn.disabled=false;if(d.success){alertDiv.innerHTML='<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>'+d.message+'</div>';alertDiv.style.display='';loadExistingSchedules();if(d.updated){showScheduleToast('Schedule updated','success');}else{setTimeout(function(){resetScheduleForm();showScheduleToast('Schedule saved successfully','success');},700);}}else{alertDiv.innerHTML='<div class="alert alert-danger mb-0">'+d.message+'</div>';alertDiv.style.display='';}}).catch(function(){if(saveBtn)saveBtn.disabled=false;alertDiv.innerHTML='<div class="alert alert-danger mb-0">Network error.</div>';alertDiv.style.display='';});}
 function showScheduleToast(message,type){var existing=document.getElementById('schedToast');if(existing)existing.remove();var div=document.createElement('div');div.id='schedToast';div.className='alert alert-'+type+' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';div.style.zIndex='11000';div.innerHTML='<i class="bi bi-'+(type==='success'?'check-circle':'exclamation-triangle')+' me-1"></i>'+message+'<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';document.body.appendChild(div);setTimeout(function(){if(div.parentNode)div.remove();},4000);}
 function deleteScheduleRow(scheduleId,scheduleName){if(!confirm('Delete schedule "'+scheduleName+'"?\nThis cannot be undone.'))return;var fd=new FormData();fd.append('scheduleId',scheduleId);fetch('@Url.Action("DeleteSchedule","Reports")',{method:'POST',body:fd}).then(r=>r.json()).then(function(d){if(d.success){showScheduleToast('Schedule deleted','success');loadExistingSchedules();resetScheduleForm();}else{showScheduleToast(d.message||'Failed to delete schedule','danger');}}).catch(function(){showScheduleToast('Network error','danger');});}
 function loadExistingSchedules(){fetch('@Url.Action("GetPsSchedules","Reports")').then(r=>r.json()).then(function(data){var c=document.getElementById('existingSchedules');if(!data||data.length===0){c.innerHTML='<em>No schedules configured yet.</em>';return;}var h='<table class="table table-sm mb-0 align-middle"><thead><tr><th>Name</th><th>Report</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th class="text-end">Actions</th></tr></thead><tbody>';data.forEach(function(s){var safeName=(s.scheduleName||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');h+='<tr data-schedule-id="'+s.scheduleId+'" style="cursor:pointer;" title="Click to load this schedule"><td>'+escapeHtml(s.scheduleName||'')+'</td><td><span class="badge bg-primary">Purchases/Sales</span></td><td>'+s.recurrenceType+'</td><td>'+s.exportFormat+'</td><td>'+s.scheduleTime+'</td><td>'+(s.nextRun||'-')+'</td><td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary me-1" title="Load into form" onclick="event.stopPropagation(); loadScheduleIntoForm('+s.scheduleId+')"><i class="bi bi-pencil"></i></button><button type="button" class="btn btn-sm btn-outline-danger" title="Delete schedule" onclick="event.stopPropagation(); deleteScheduleRow('+s.scheduleId+', \''+safeName+'\')"><i class="bi bi-trash"></i></button></td></tr>';});h+='</tbody></table>';c.innerHTML=h;c.querySelectorAll('tr[data-schedule-id]').forEach(function(tr){tr.addEventListener('click',function(){loadScheduleIntoForm(parseInt(tr.getAttribute('data-schedule-id'),10));});});}).catch(function(){document.getElementById('existingSchedules').innerHTML='<em>Could not load schedules.</em>';});}
@@ -1296,7 +1392,7 @@ function resetScheduleForm(){document.getElementById('schedId').value='';documen
 
 function loadScheduleIntoForm(scheduleId){fetch('@Url.Action("GetScheduleById","Reports")?scheduleId='+scheduleId).then(function(r){return r.json();}).then(function(data){if(!data||!data.success||!data.schedule){showScheduleToast((data&&data.message)||'Could not load schedule','danger');return;}var s=data.schedule;document.getElementById('schedId').value=scheduleId;document.getElementById('schedName').value=s.scheduleName||'';document.getElementById('schedRecipients').value=s.recipients||'';document.getElementById('schedSubject').value=s.emailSubject||'';document.getElementById('schedFormat').value=s.exportFormat||'Excel';document.getElementById('schedRecurrence').value=s.recurrenceType||'Daily';document.getElementById('schedTime').value=s.scheduleTime||'08:00';onRecurrenceChange();if(s.recurrenceJson){try{var rec=typeof s.recurrenceJson==='string'?JSON.parse(s.recurrenceJson):s.recurrenceJson;if(rec&&rec.range&&rec.range.startDate){var sd=document.getElementById('schedStartDate');if(sd)sd.value=rec.range.startDate;}if(rec&&rec.pattern){if(rec.type==='Weekly'&&Array.isArray(rec.pattern.daysOfWeek)){document.querySelectorAll('.sched-dow').forEach(function(cb){cb.checked=rec.pattern.daysOfWeek.indexOf(parseInt(cb.value,10))!==-1;});}else if(rec.type==='Monthly'&&rec.pattern.dayOfMonth){var md=document.getElementById('schedMonthDay');if(md)md.value=String(rec.pattern.dayOfMonth);}}}catch(e){}}var skip=document.getElementById('schedSkipIfEmpty');if(skip)skip.checked=!!s.skipIfEmpty;var ai=document.getElementById('schedIncludeAi');if(ai)ai.checked=!!s.includeAiAnalysis;var al=document.getElementById('schedAiLocale');if(al&&s.aiLocale)al.value=s.aiLocale;onSchedAiToggle();if(s.parametersJson){try{var p=typeof s.parametersJson==='string'?JSON.parse(s.parametersJson):s.parametersJson;var rdrType=document.getElementById('schedDateRangeType');if(rdrType&&p.reportDateRange&&p.reportDateRange.type){var v=p.reportDateRange.value;var targetVal=p.reportDateRange.type;for(var i=0;i<rdrType.options.length;i++){var opt=rdrType.options[i];if(opt.value===targetVal&&(targetVal!=='LastNDays'||String(opt.getAttribute('data-value'))===String(v))){rdrType.selectedIndex=i;break;}}if(p.reportDateRange.type==='Custom'){if(p.reportDateRange.dateFrom)document.getElementById('schedDateFrom').value=p.reportDateRange.dateFrom;if(p.reportDateRange.dateTo)document.getElementById('schedDateTo').value=p.reportDateRange.dateTo;}}onSchedDateRangeTypeChange();}catch(e){}}var a=document.getElementById('scheduleAlert');if(a){a.innerHTML='<div class="alert alert-info mb-0 py-2"><i class="bi bi-pencil-square me-1"></i>Editing <strong>'+escapeHtml(s.scheduleName||'')+'</strong>. Saving will update this schedule in place &mdash; click <em>Reset</em> to start a new one instead.</div>';a.style.display='';}}).catch(function(){showScheduleToast('Network error loading schedule','danger');});}
 
-function collectCurrentLayout(){var p={};var vat=document.getElementById('includeVatCheck');if(vat)p['IncludeVat']=vat.checked?'1':'0';var sp=document.getElementById('showProfitCheck');if(sp)p['ShowProfit']=sp.checked?'1':'0';var ss=document.getElementById('showStockCheck');if(ss)p['ShowStock']=ss.checked?'1':'0';var rm=document.getElementById('ReportMode');if(rm)p['ReportMode']=rm.options[rm.selectedIndex].text;var pg=document.getElementById('PrimaryGroup');if(pg)p['PrimaryGroup']=pg.options[pg.selectedIndex].text;var sg=document.getElementById('SecondaryGroup');if(sg)p['SecondaryGroup']=sg.options[sg.selectedIndex].text;var tg=document.getElementById('ThirdGroup');if(tg)p['ThirdGroup']=tg.options[tg.selectedIndex].text;var ps=document.getElementById('PageSize');if(ps)p['PageSize']=ps.value;var hidden=[];document.querySelectorAll('.col-toggle').forEach(function(cb){if(!cb.checked)hidden.push(cb.value);});p['HiddenColumns']=hidden.join(',');if(typeof getItemsSelectionFilter==='function')p['ItemsSelectionJson']=JSON.stringify(getItemsSelectionFilter());return p;}
+function collectCurrentLayout(){var p={};var vat=document.getElementById('includeVatCheck');if(vat)p['IncludeVat']=vat.checked?'1':'0';var sp=document.getElementById('showProfitCheck');if(sp)p['ShowProfit']=sp.checked?'1':'0';var ss=document.getElementById('showStockCheck');if(ss)p['ShowStock']=ss.checked?'1':'0';var soo=document.getElementById('showOnOrderCheck');if(soo)p['ShowOnOrder']=soo.checked?'1':'0';var sr=document.getElementById('showReservationCheck');if(sr)p['ShowReservation']=sr.checked?'1':'0';var sav=document.getElementById('showAvailableCheck');if(sav)p['ShowAvailable']=sav.checked?'1':'0';var iac=document.getElementById('includeAdditionalChargesCheck');if(iac)p['IncludeAdditionalCharges']=iac.checked?'1':'0';var rm=document.getElementById('ReportMode');if(rm)p['ReportMode']=rm.options[rm.selectedIndex].text;var pg=document.getElementById('PrimaryGroup');if(pg)p['PrimaryGroup']=pg.options[pg.selectedIndex].text;var sg=document.getElementById('SecondaryGroup');if(sg)p['SecondaryGroup']=sg.options[sg.selectedIndex].text;var tg=document.getElementById('ThirdGroup');if(tg)p['ThirdGroup']=tg.options[tg.selectedIndex].text;var ps=document.getElementById('PageSize');if(ps)p['PageSize']=ps.value;var hidden=[];document.querySelectorAll('.col-toggle').forEach(function(cb){if(!cb.checked)hidden.push(cb.value);});p['HiddenColumns']=hidden.join(',');if(typeof getItemsSelectionFilter==='function')p['ItemsSelectionJson']=JSON.stringify(getItemsSelectionFilter());return p;}
 
 // Guards against 302-to-login on expired cookie (otherwise we'd try to parse the login HTML as JSON and silently fail).
 function isAuthRedirect(r){if(!r)return false;if(r.status===401||r.status===403)return true;if(r.redirected&&/\/Account\/Login/i.test(r.url||''))return true;var ct=r.headers&&r.headers.get?r.headers.get('content-type'):'';if(ct&&ct.indexOf('text/html')!==-1)return true;return false;}
@@ -1314,7 +1410,7 @@ function applyPresetDates(preset){var today=new Date();var from,to;switch(preset
 function resetPage(){document.getElementById('pageNumberHidden').value=1;}
 function showLoading(){var btn=document.getElementById('generateBtn');btn.querySelector('.btn-text').classList.add('d-none');btn.querySelector('.spinner-border').classList.remove('d-none');btn.disabled=true;}
 document.addEventListener('DOMContentLoaded',function(){initColumnVisibilityFromServer();updateColVisibleCount();var colSearch=document.getElementById('colSearchInput');if(colSearch){colSearch.addEventListener('input',filterColumnList);colSearch.addEventListener('keyup',filterColumnList);}var savedPreset='@(Model.DatePreset??"")';if(savedPreset){var pr=document.querySelector('input[name="DatePreset"][value="'+savedPreset+'"]');if(pr)pr.checked=true;}document.querySelectorAll('input[name="DatePreset"]').forEach(function(r){r.addEventListener('change',function(){applyPresetDates(this.value);});});var form=document.getElementById('reportForm');form.addEventListener('submit',function(){populateItemsSelectionHidden();showLoading();});document.getElementById('generateBtn').addEventListener('click',function(){resetPage();});var schedModal=document.getElementById('scheduleModal');if(schedModal){schedModal.addEventListener('show.bs.modal',function(){resetScheduleForm();loadExistingSchedules();autoSelectScheduleDateRange();onSchedDateRangeTypeChange();});}
-    fetch('/Reports/GetAiStatus').then(r=>r.json()).then(d=>{if(!d.configured){var btn=document.getElementById('btnAnalyzePs');if(btn){btn.title='AI not configured — set API key in Settings';btn.classList.add('disabled');}var schedAi=document.getElementById('schedIncludeAi');if(schedAi){schedAi.disabled=true;schedAi.parentElement.title='AI not configured — set API key in Settings';}}}).catch(()=>{});
+    fetch('@Url.Action("GetAiStatus","Reports")').then(r=>r.json()).then(d=>{if(!d.configured){var btn=document.getElementById('btnAnalyzePs');if(btn){btn.title='AI not configured — set API key in Settings';btn.classList.add('disabled');}var schedAi=document.getElementById('schedIncludeAi');if(schedAi){schedAi.disabled=true;schedAi.parentElement.title='AI not configured — set API key in Settings';}}}).catch(()=>{});
 });
 
 var _expandedRows = {};
@@ -1443,17 +1539,18 @@ function analyzePsReport() {
     document.getElementById('btnReanalyze').style.display = 'none';
     modal.show();
 
+    populateItemsSelectionHidden();
     var form = document.getElementById('reportForm');
     var formData = new FormData(form);
     formData.append('storeCodes', typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : '');
-    formData.append('itemIds', '@(Model.SelectedItemIdsString ?? "")');
+    formData.append('itemIds', typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : '');
     formData.append('sortColumn', '@Model.SortColumn');
     formData.append('sortDirection', '@Model.SortDirection');
     formData.append('locale', getAiLang());
     var promptTplId = document.getElementById('aiPromptTemplateSelect').value;
     if (promptTplId && promptTplId !== '0') formData.append('promptTemplateId', promptTplId);
 
-    fetch('/Reports/AnalyzePsReport', { method: 'POST', body: formData })
+    fetch('@Url.Action("AnalyzePsReport","Reports")', { method: 'POST', body: formData })
         .then(r => r.json())
         .then(data => {
             document.getElementById('aiLoading').classList.add('d-none');
@@ -1760,9 +1857,9 @@ function removeChatBubble(id) { var el = document.getElementById(id); if (el) el
 
 var _editingPromptId = 0;
 var _currentReportType = 'PurchasesSales';
-function togglePromptEditor() { var el = document.getElementById('aiPromptEditor'); if (el.classList.contains('d-none')) { el.classList.remove('d-none'); loadAiPromptTemplates(); var sid=parseInt(document.getElementById('aiPromptTemplateSelect').value); if(sid>0){editAiPromptTemplate(sid);}else{clearPromptEditor();} } else { el.classList.add('d-none'); } }
+function togglePromptEditor() { var el = document.getElementById('aiPromptEditor'); if (el.classList.contains('d-none')) { el.classList.remove('d-none'); loadAiPromptTemplates(); clearPromptEditor(); } else { el.classList.add('d-none'); } }
 function loadAiPromptTemplates() {
-    fetch('/Reports/GetAiPromptTemplates?reportType=' + encodeURIComponent(_currentReportType)).then(function(r){return r.json();}).then(function(data) {
+    fetch('@Url.Action("GetAiPromptTemplates","Reports")?reportType=' + encodeURIComponent(_currentReportType)).then(function(r){return r.json();}).then(function(data) {
         var sel = document.getElementById('aiPromptTemplateSelect');
         var userPicked = sel.getAttribute('data-user-picked') === '1';
         var sv = userPicked ? sel.value : null;
@@ -1782,13 +1879,13 @@ function loadAiPromptTemplates() {
 function saveAiPromptTemplate() {
     var n=document.getElementById('aiPromptName').value.trim(),p=document.getElementById('aiPromptText').value.trim(),al=document.getElementById('aiPromptAlert');
     if(!n||!p){al.innerHTML='<span class="text-danger">Name and prompt required.</span>';return;}
-    fetch('/Reports/SaveAiPromptTemplate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({templateId:_editingPromptId,templateName:n,reportType:document.getElementById('aiPromptReportType').value||null,systemPrompt:p,isDefault:document.getElementById('aiPromptIsDefault').checked})})
+    fetch('@Url.Action("SaveAiPromptTemplate","Reports")',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({templateId:_editingPromptId,templateName:n,reportType:document.getElementById('aiPromptReportType').value||null,systemPrompt:p,isDefault:document.getElementById('aiPromptIsDefault').checked})})
     .then(function(r){return r.json();}).then(function(d){if(d.success){al.innerHTML='<span class="text-success"><i class="bi bi-check-circle me-1"></i>'+d.message+'</span>';clearPromptEditor();loadAiPromptTemplates();}else{al.innerHTML='<span class="text-danger">'+d.message+'</span>';}}).catch(function(){al.innerHTML='<span class="text-danger">Network error.</span>';});
 }
 function editAiPromptTemplate(id) {
-    fetch('/Reports/GetAiPromptTemplates?reportType=' + encodeURIComponent(_currentReportType)).then(function(r){return r.json();}).then(function(data){var t=(data||[]).find(function(x){return x.templateId===id;});if(!t)return;_editingPromptId=t.templateId;document.getElementById('aiPromptName').value=t.templateName;document.getElementById('aiPromptReportType').value=t.reportType||'';document.getElementById('aiPromptText').value=t.systemPrompt;document.getElementById('aiPromptIsDefault').checked=t.isDefault;document.getElementById('aiPromptAlert').innerHTML='<span class="text-info">Editing: '+escapeHtml(t.templateName)+'</span>';});
+    fetch('@Url.Action("GetAiPromptTemplates","Reports")?reportType=' + encodeURIComponent(_currentReportType)).then(function(r){return r.json();}).then(function(data){var t=(data||[]).find(function(x){return x.templateId===id;});if(!t)return;_editingPromptId=t.templateId;document.getElementById('aiPromptName').value=t.templateName;document.getElementById('aiPromptReportType').value=t.reportType||'';document.getElementById('aiPromptText').value=t.systemPrompt;document.getElementById('aiPromptIsDefault').checked=t.isDefault;document.getElementById('aiPromptAlert').innerHTML='<span class="text-info">Editing: '+escapeHtml(t.templateName)+'</span>';});
 }
-function deleteAiPromptTemplate(id) { if(!confirm('Delete this template?'))return;fetch('/Reports/DeleteAiPromptTemplate',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'templateId='+id}).then(function(r){return r.json();}).then(function(){loadAiPromptTemplates();}); }
+function deleteAiPromptTemplate(id) { if(!confirm('Delete this template?'))return;fetch('@Url.Action("DeleteAiPromptTemplate","Reports")',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'templateId='+id}).then(function(r){return r.json();}).then(function(){loadAiPromptTemplates();}); }
 function clearPromptEditor() { _editingPromptId=0;document.getElementById('aiPromptName').value='';document.getElementById('aiPromptText').value='';document.getElementById('aiPromptReportType').value='';document.getElementById('aiPromptIsDefault').checked=false;document.getElementById('aiPromptAlert').innerHTML=''; }
 function escapeHtml(s) { var d=document.createElement('div');d.textContent=s;return d.innerHTML; }
 (function(){var m=document.getElementById('aiAnalysisModal');if(m)m.addEventListener('show.bs.modal',function(){loadAiPromptTemplates();});})();

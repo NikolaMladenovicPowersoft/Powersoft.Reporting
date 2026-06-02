@@ -181,6 +181,9 @@
                     </button>
                 }
             </div>
+            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#columnSettingsModal" title="Choose which columns to show/hide">
+                <i class="bi bi-layout-three-columns me-1"></i>Columns
+            </button>
             <button type="button" class="btn btn-outline-secondary" onclick="resetFilters()" title="Clear all filters and reset to defaults">
                 <i class="bi bi-funnel me-1"></i>Clear Filters
             </button>
@@ -252,6 +255,59 @@
         </div>
         <div class="card-body p-0">
             <iframe id="previewFrame" style="width:100%; border:none; min-height:700px; background:#525659;"></iframe>
+        </div>
+    </div>
+</div>
+
+<!-- Column Settings Modal -->
+<div class="modal fade" id="columnSettingsModal" tabindex="-1" aria-labelledby="columnSettingsLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="columnSettingsLabel">
+                    <i class="bi bi-layout-three-columns me-2"></i>Column Visibility
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">Search and toggle which columns are visible. Changes apply immediately.</p>
+                <div class="input-group mb-3">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="colSearchInput" placeholder="Search columns..." oninput="filterColumnList()">
+                </div>
+                <div class="border rounded" style="max-height: 400px; overflow-y: auto;">
+                    <div class="list-group list-group-flush" id="colToggleList">
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="offer no number"><input class="form-check-input col-toggle me-2" type="checkbox" value="OfferNo" checked onchange="applyColumnVisibility()"><span>Offer No</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="date transaction"><input class="form-check-input col-toggle me-2" type="checkbox" value="DateTrans" checked onchange="applyColumnVisibility()"><span>Date</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="valid until expiry"><input class="form-check-input col-toggle me-2" type="checkbox" value="ValidUntil" checked onchange="applyColumnVisibility()"><span>Valid Until</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="status"><input class="form-check-input col-toggle me-2" type="checkbox" value="StatusName" checked onchange="applyColumnVisibility()"><span>Status</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="customer name"><input class="form-check-input col-toggle me-2" type="checkbox" value="CustomerName" checked onchange="applyColumnVisibility()"><span>Customer</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="store shop"><input class="form-check-input col-toggle me-2" type="checkbox" value="StoreName" checked onchange="applyColumnVisibility()"><span>Store</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="agent salesperson"><input class="form-check-input col-toggle me-2" type="checkbox" value="AgentName" checked onchange="applyColumnVisibility()"><span>Agent</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="items count"><input class="form-check-input col-toggle me-2" type="checkbox" value="ItemCount" checked onchange="applyColumnVisibility()"><span>Items</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="quantity qty"><input class="form-check-input col-toggle me-2" type="checkbox" value="TotalQuantity" checked onchange="applyColumnVisibility()"><span>Qty</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="subtotal invoice total"><input class="form-check-input col-toggle me-2" type="checkbox" value="InvoiceTotal" checked onchange="applyColumnVisibility()"><span>Subtotal</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="discount"><input class="form-check-input col-toggle me-2" type="checkbox" value="InvoiceTotalDiscount" checked onchange="applyColumnVisibility()"><span>Discount</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="vat tax"><input class="form-check-input col-toggle me-2" type="checkbox" value="InvoiceVat" checked onchange="applyColumnVisibility()"><span>VAT</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="grand total"><input class="form-check-input col-toggle me-2" type="checkbox" value="InvoiceGrandTotal" checked onchange="applyColumnVisibility()"><span>Grand Total</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="cost"><input class="form-check-input col-toggle me-2" type="checkbox" value="TotalItemCost" checked onchange="applyColumnVisibility()"><span>Cost</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="order percentage"><input class="form-check-input col-toggle me-2" type="checkbox" value="OrderPercentage" checked onchange="applyColumnVisibility()"><span>Order %</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="lead linked"><input class="form-check-input col-toggle me-2" type="checkbox" value="LinkedLead" checked onchange="applyColumnVisibility()"><span>Lead</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="comments"><input class="form-check-input col-toggle me-2" type="checkbox" value="Comments" checked onchange="applyColumnVisibility()"><span>Comments</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="internal notes"><input class="form-check-input col-toggle me-2" type="checkbox" value="InternalNotes" checked onchange="applyColumnVisibility()"><span>Internal Notes</span></label>
+                        <label class="list-group-item list-group-item-action d-flex align-items-center" data-col-name="source"><input class="form-check-input col-toggle me-2" type="checkbox" value="Source" checked onchange="applyColumnVisibility()"><span>Source</span></label>
+                    </div>
+                </div>
+                <div class="mt-2 d-flex justify-content-between small text-muted">
+                    <span><span id="colVisibleCount">19</span> of <span id="colTotalCount">19</span> columns visible</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllColumns(true)">Select All</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllColumns(false)">Deselect All</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="resetColumnVisibility()">Show All</button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
+            </div>
         </div>
     </div>
 </div>
@@ -577,6 +633,7 @@ function resetFilters() {
     document.getElementById('reportAlert').style.display = 'none';
     _lastData = [];
     document.getElementById('layoutsCurrentName').textContent = 'Layouts';
+    resetColumnVisibility();
 }
 
 function applyPresetDates(preset) {
@@ -752,25 +809,27 @@ function renderTable(data) {
     var pgLabel = document.getElementById('primaryGroup').selectedOptions[0].textContent;
     var sgLabel = document.getElementById('secondaryGroup').selectedOptions[0].textContent;
 
-    function sth(label, col, align) {
+    function sth(label, col, align, dataCol) {
+        var dc = dataCol || col;
         var cls = 'sortable' + (align ? ' text-end' : '');
         if (_sortCol === col) cls += _sortDir === 'ASC' ? ' sort-asc' : ' sort-desc';
         var icon = _sortCol === col ? (_sortDir === 'ASC' ? 'bi-caret-up-fill' : 'bi-caret-down-fill') : 'bi-caret-up-fill';
-        return '<th class="'+cls+'" onclick="sortBy(\''+col+'\')">'+label+'<i class="bi '+icon+' sort-icon"></i></th>';
+        return '<th data-col="'+dc+'" class="'+cls+'" onclick="sortBy(\''+col+'\')">'+label+'<i class="bi '+icon+' sort-icon"></i></th>';
     }
     var hdr = '<tr>';
     if (hasPrimary) hdr += sth(escapeHtml(pgLabel), 'level1Descr');
     if (hasSecondary) hdr += sth(escapeHtml(sgLabel), 'level2Descr');
-    hdr += sth('Offer No','offerNo') + sth('Date','dateTrans') + sth('Valid Until','validUntil');
-    hdr += sth('Status','statusName') + sth('Customer','customerName') + sth('Store','storeName') + sth('Agent','agentName');
-    hdr += sth('Items','itemCount',true) + sth('Qty','totalQuantity',true);
-    hdr += sth('Subtotal','invoiceTotal',true) + sth('Discount','invoiceTotalDiscount',true);
-    hdr += sth('VAT','invoiceVat',true) + sth('Grand Total','invoiceGrandTotal',true);
-    hdr += sth('Cost','totalItemCost',true) + sth('Order %','orderPercentage',true);
-    hdr += '<th>Lead</th><th>Comments</th><th>Internal Notes</th>';
-    hdr += sth('Source','source');
+    hdr += sth('Offer No','offerNo','','OfferNo') + sth('Date','dateTrans','','DateTrans') + sth('Valid Until','validUntil','','ValidUntil');
+    hdr += sth('Status','statusName','','StatusName') + sth('Customer','customerName','','CustomerName') + sth('Store','storeName','','StoreName') + sth('Agent','agentName','','AgentName');
+    hdr += sth('Items','itemCount',true,'ItemCount') + sth('Qty','totalQuantity',true,'TotalQuantity');
+    hdr += sth('Subtotal','invoiceTotal',true,'InvoiceTotal') + sth('Discount','invoiceTotalDiscount',true,'InvoiceTotalDiscount');
+    hdr += sth('VAT','invoiceVat',true,'InvoiceVat') + sth('Grand Total','invoiceGrandTotal',true,'InvoiceGrandTotal');
+    hdr += sth('Cost','totalItemCost',true,'TotalItemCost') + sth('Order %','orderPercentage',true,'OrderPercentage');
+    hdr += '<th data-col="LinkedLead">Lead</th><th data-col="Comments">Comments</th><th data-col="InternalNotes">Internal Notes</th>';
+    hdr += sth('Source','source','','Source');
     hdr += '</tr>';
     thead.innerHTML = hdr;
+    applyColumnVisibility();
 
     if (hasPrimary) {
         tbody.innerHTML = renderGroupedRows(data, hasPrimary, hasSecondary, pgLabel, sgLabel);
@@ -1175,6 +1234,9 @@ function collectCurrentLayout() {
     p['PrimaryGroup'] = v('primaryGroup');
     p['SecondaryGroup'] = v('secondaryGroup');
     p['MaxRecords'] = v('maxRecords');
+    var hidden = [];
+    document.querySelectorAll('.col-toggle').forEach(function(cb) { if (!cb.checked) hidden.push(cb.value); });
+    p['HiddenColumns'] = hidden.join(',');
     var preset = document.querySelector('input[name="DatePreset"]:checked');
     if (preset) p['DatePreset'] = preset.value;
     return p;
@@ -1294,6 +1356,11 @@ function applyLayoutParameters(parms) {
     setVal('secondaryGroup',  parms.SecondaryGroup);
     setVal('maxRecords',      parms.MaxRecords);
     if (parms.IncludeHistory != null) document.getElementById('includeHistory').checked = parms.IncludeHistory === 'true' || parms.IncludeHistory === true;
+    if (parms.HiddenColumns != null) {
+        var cols = parms.HiddenColumns ? parms.HiddenColumns.split(',') : [];
+        document.querySelectorAll('.col-toggle').forEach(function(cb) { cb.checked = cols.indexOf(cb.value) === -1; });
+        applyColumnVisibility();
+    }
     if (parms.DatePreset) {
         var r = document.querySelector('input[name="DatePreset"][value="'+parms.DatePreset+'"]');
         if (r) { r.checked = true; applyPresetDates(parms.DatePreset); }
@@ -1371,5 +1438,83 @@ function showLayoutToast(message, type) {
     document.body.appendChild(div);
     setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
 }
+
+// ==================== Column Visibility ====================
+
+function applyColumnVisibility() {
+    var styleEl = document.getElementById('colVisibilityStyle');
+    if (!styleEl) { styleEl = document.createElement('style'); styleEl.id = 'colVisibilityStyle'; document.head.appendChild(styleEl); }
+    var table = document.getElementById('reportTable');
+    if (!table) return;
+    var rules = [];
+    document.querySelectorAll('.col-toggle').forEach(function(cb) {
+        if (!cb.checked) {
+            var headers = table.querySelectorAll('thead tr:first-child th');
+            for (var i = 0; i < headers.length; i++) {
+                if (headers[i].getAttribute('data-col') === cb.value) {
+                    var colIdx = i + 1;
+                    rules.push('#reportTable th:nth-child(' + colIdx + '), #reportTable td:nth-child(' + colIdx + ') { display: none; }');
+                    break;
+                }
+            }
+        }
+    });
+    styleEl.textContent = rules.join('\n');
+    updateColVisibleCount();
+}
+
+function filterColumnList() {
+    var el = document.getElementById('colSearchInput');
+    if (!el) return;
+    var search = el.value.toLowerCase().trim();
+    document.querySelectorAll('#colToggleList label').forEach(function(label) {
+        if (!search) { label.classList.remove('d-none'); return; }
+        var name = (label.getAttribute('data-col-name') || '').toLowerCase();
+        var spanText = label.querySelector('span');
+        var text = spanText ? spanText.textContent.toLowerCase() : '';
+        label.classList.toggle('d-none', name.indexOf(search) === -1 && text.indexOf(search) === -1);
+    });
+}
+
+function updateColVisibleCount() {
+    var total = document.querySelectorAll('.col-toggle').length;
+    var visible = document.querySelectorAll('.col-toggle:checked').length;
+    var el = document.getElementById('colVisibleCount'); if (el) el.textContent = visible;
+    var totalEl = document.getElementById('colTotalCount'); if (totalEl) totalEl.textContent = total;
+}
+
+function toggleAllColumns(checked) {
+    document.querySelectorAll('.col-toggle').forEach(function(cb) { cb.checked = checked; });
+    applyColumnVisibility();
+}
+
+function resetColumnVisibility() {
+    document.querySelectorAll('.col-toggle').forEach(function(cb) { cb.checked = true; });
+    applyColumnVisibility();
+}
+
+function initColumnVisibilityFromLayout() {
+    @if(savedLayout != null && savedLayout.ContainsKey("HiddenColumns"))
+    {
+        <text>
+        var hiddenCols = '@savedLayout["HiddenColumns"]';
+        if (hiddenCols) {
+            var hidden = hiddenCols.split(',').filter(function(s) { return s.trim(); });
+            hidden.forEach(function(col) {
+                var cb = document.querySelector('.col-toggle[value="' + col.trim() + '"]');
+                if (cb) cb.checked = false;
+            });
+            applyColumnVisibility();
+        }
+        </text>
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initColumnVisibilityFromLayout();
+    updateColVisibleCount();
+    var colSearch = document.getElementById('colSearchInput');
+    if (colSearch) colSearch.addEventListener('input', filterColumnList);
+});
 
 </script>

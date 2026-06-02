@@ -123,6 +123,10 @@ public class CsvExportService
         sb.AppendLine($"# Include VAT: {(filter.IncludeVat ? "Yes" : "No")}");
         if (filter.ShowProfit) sb.AppendLine("# Show Profit: Yes");
         if (filter.ShowStock) sb.AppendLine("# Show Stock: Yes");
+        if (filter.ShowOnOrder) sb.AppendLine("# Show On Order: Yes");
+        if (filter.ShowReservation) sb.AppendLine("# Show Reservation: Yes");
+        if (filter.ShowAvailable) sb.AppendLine("# Show Available: Yes");
+        if (!filter.IncludeAdditionalCharges) sb.AppendLine("# Cost: Wholesale only (excl. additional charges)");
         if (filter.StoreCodes != null && filter.StoreCodes.Any())
             sb.AppendLine($"# Stores: {string.Join(", ", filter.StoreCodes)}");
         sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
@@ -140,6 +144,9 @@ public class CsvExportService
             "Profit", "Qty %", "Val %"
         });
         if (filter.ShowStock) headers.Add("Stock Qty");
+        if (filter.ShowOnOrder) headers.Add("On Order");
+        if (filter.ShowReservation) headers.Add("Reserved");
+        if (filter.ShowAvailable) headers.Add("Available");
         sb.AppendLine(string.Join(",", headers.Select(Escape)));
 
         string? prevL1 = null, prevL2 = null, prevL3 = null;
@@ -180,6 +187,9 @@ public class CsvExportService
             cells.Add(row.QtyPercent.ToString("F2", CultureInfo.InvariantCulture));
             cells.Add(row.ValPercent.ToString("F2", CultureInfo.InvariantCulture));
             if (filter.ShowStock) cells.Add(row.TotalStockQty.ToString(CultureInfo.InvariantCulture));
+            if (filter.ShowOnOrder) cells.Add(row.QtyOnOrder.ToString(CultureInfo.InvariantCulture));
+            if (filter.ShowReservation) cells.Add(row.QtyReserved.ToString(CultureInfo.InvariantCulture));
+            if (filter.ShowAvailable) cells.Add(row.QtyAvailable.ToString(CultureInfo.InvariantCulture));
             sb.AppendLine(string.Join(",", cells.Select(Escape)));
         }
 
@@ -204,6 +214,9 @@ public class CsvExportService
             cells.Add(totals.QtyPercent.ToString("F2", CultureInfo.InvariantCulture));
             cells.Add(totals.ValPercent.ToString("F2", CultureInfo.InvariantCulture));
             if (filter.ShowStock) cells.Add(totals.TotalStockQty.ToString(CultureInfo.InvariantCulture));
+            if (filter.ShowOnOrder) cells.Add(totals.TotalQtyOnOrder.ToString(CultureInfo.InvariantCulture));
+            if (filter.ShowReservation) cells.Add(totals.TotalQtyReserved.ToString(CultureInfo.InvariantCulture));
+            if (filter.ShowAvailable) cells.Add(totals.TotalQtyAvailable.ToString(CultureInfo.InvariantCulture));
             sb.AppendLine(string.Join(",", cells.Select(Escape)));
         }
 
@@ -225,6 +238,9 @@ public class CsvExportService
         cells.Add(agg.QtyPct.ToString("F2", CultureInfo.InvariantCulture));
         cells.Add(agg.ValPct.ToString("F2", CultureInfo.InvariantCulture));
         if (filter.ShowStock) cells.Add(agg.StockQty.ToString(CultureInfo.InvariantCulture));
+        if (filter.ShowOnOrder) cells.Add(agg.OnOrderQty.ToString(CultureInfo.InvariantCulture));
+        if (filter.ShowReservation) cells.Add(agg.ReservedQty.ToString(CultureInfo.InvariantCulture));
+        if (filter.ShowAvailable) cells.Add(agg.AvailableQty.ToString(CultureInfo.InvariantCulture));
         sb.AppendLine(string.Join(",", cells.Select(Escape)));
     }
 
@@ -275,6 +291,14 @@ public class CsvExportService
         if (dc("TotalStockValue")) cols.Add(("TotalStockValue", "Stock Value", true, r => r.TotalStockValue.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("EntityCode")) cols.Add(("EntityCode", "Entity Code", false, r => r.EntityCode ?? ""));
         if (dc("EntityName")) cols.Add(("EntityName", "Entity Name", false, r => r.EntityName ?? ""));
+        if (dc("EntityTel1")) cols.Add(("EntityTel1", "Phone", false, r => r.EntityTel1 ?? ""));
+        if (dc("EntityTel2")) cols.Add(("EntityTel2", "Phone 2", false, r => r.EntityTel2 ?? ""));
+        if (dc("EntityMobile")) cols.Add(("EntityMobile", "Mobile", false, r => r.EntityMobile ?? ""));
+        if (dc("EntityFax")) cols.Add(("EntityFax", "Fax", false, r => r.EntityFax ?? ""));
+        if (dc("EntityEmail")) cols.Add(("EntityEmail", "Email", false, r => r.EntityEmail ?? ""));
+        if (dc("EntityContactName")) cols.Add(("EntityContactName", "Contact", false, r => r.EntityContactName ?? ""));
+        if (dc("EntityVatRegNo")) cols.Add(("EntityVatRegNo", "VAT Reg No", false, r => r.EntityVatRegNo ?? ""));
+        if (dc("EntityDOB")) cols.Add(("EntityDOB", "Date of Birth", false, r => r.EntityDOB?.ToString("yyyy-MM-dd") ?? ""));
         if (dc("InvoiceNumber")) cols.Add(("InvoiceNumber", "Invoice No", false, r => r.InvoiceNumber ?? ""));
         if (dc("InvoiceType")) cols.Add(("InvoiceType", "Inv. Type", false, r => r.InvoiceType ?? ""));
         if (dc("StoreCode")) cols.Add(("StoreCode", "Store Code", false, r => r.StoreCode ?? ""));

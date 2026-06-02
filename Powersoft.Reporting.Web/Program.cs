@@ -5,6 +5,7 @@ using Powersoft.Reporting.Data.Auth;
 using Powersoft.Reporting.Data.Central;
 using Powersoft.Reporting.Data.Factories;
 using Powersoft.Reporting.Data.Helpers;
+using Powersoft.Reporting.Data.Tenant;
 using Powersoft.Reporting.Web.Options;
 using Powersoft.Reporting.Web.Services;
 using Powersoft.Reporting.Web.Services.AI;
@@ -48,6 +49,7 @@ if (!string.IsNullOrEmpty(centralConnString))
 }
 
 builder.Services.AddSingleton<ITenantRepositoryFactory, TenantRepositoryFactory>();
+builder.Services.AddSingleton<IFilterPresetRepository, FilterPresetRepository>();
 builder.Services.AddScoped<ScheduleExecutionService>();
 builder.Services.AddHostedService<ScheduleBackgroundService>();
 builder.Services.AddHostedService<RetentionCleanupService>();

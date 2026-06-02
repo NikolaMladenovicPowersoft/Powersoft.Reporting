@@ -134,6 +134,22 @@ IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'{SchemaNa
         ModifiedDate         DATETIME      NULL,
         ModifiedBy           NVARCHAR(100) NULL
     );
+
+-- 6. tbl_FilterPreset
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_FilterPreset') AND type = 'U')
+BEGIN
+    CREATE TABLE {SchemaName}.tbl_FilterPreset (
+        pk_PresetID      INT IDENTITY(1,1) PRIMARY KEY,
+        PresetName       NVARCHAR(200) NOT NULL,
+        ReportType       NVARCHAR(100) NULL,
+        FilterJson       NVARCHAR(MAX) NOT NULL,
+        CreatedBy        NVARCHAR(50)  NOT NULL,
+        CreatedDate      DATETIME      NOT NULL DEFAULT GETDATE(),
+        ModifiedDate     DATETIME      NULL,
+        IsShared         BIT           NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IX_FilterPreset_User ON {SchemaName}.tbl_FilterPreset(CreatedBy, ReportType);
+END
 ";
 
     public static async Task EnsureSchemaAsync(string connectionString)

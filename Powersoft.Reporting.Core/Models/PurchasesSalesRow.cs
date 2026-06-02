@@ -22,6 +22,9 @@ public class PurchasesSalesRow
 
     public decimal Profit { get; set; }
     public decimal TotalStockQty { get; set; }
+    public decimal QtyOnOrder { get; set; }
+    public decimal QtyReserved { get; set; }
+    public decimal QtyAvailable { get; set; }
 
     public decimal QtyPercent => QuantityPurchased != 0
         ? Math.Round(QuantitySold / QuantityPurchased * 100, 2)

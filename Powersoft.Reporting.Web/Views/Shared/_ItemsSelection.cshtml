@@ -1,13 +1,26 @@
 @using Powersoft.Reporting.Core.Models
 @model ItemsSelectionConfig
 
-<div class="card mb-3" id="itemsSelectionCard">
+<div class="card mb-3" id="itemsSelectionCard" data-report-type="@Model.ReportType">
     <div class="card-header bg-light py-2 d-flex align-items-center" style="cursor:pointer;"
          onclick="toggleItemsSelection()">
         <i class="bi bi-funnel me-2"></i>
         <strong class="small">Items Selection</strong>
         <span id="isActiveBadge" class="badge bg-primary ms-2 d-none">0 filters</span>
-        <span class="ms-auto small text-primary" id="isToggleText">
+        <span class="ms-2 me-auto" onclick="event.stopPropagation();">
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle py-0 px-2" data-bs-toggle="dropdown" id="presetDropdown" title="Filter Presets">
+                    <i class="bi bi-bookmark me-1"></i><span class="small">Presets</span>
+                </button>
+                <ul class="dropdown-menu" id="presetMenu" style="min-width:250px;">
+                    <li><span class="dropdown-item-text text-muted small">Loading...</span></li>
+                </ul>
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 ms-1" onclick="saveCurrentPreset()" title="Save current filters as preset">
+                <i class="bi bi-bookmark-plus"></i>
+            </button>
+        </span>
+        <span class="small text-primary" id="isToggleText">
             <i class="bi bi-eye me-1"></i>Show Filters
         </span>
     </div>
@@ -111,23 +124,29 @@
                 }
                 @if (Model.ShowModifiedDate)
                 {
-                    <div class="col-lg-2 col-md-3 col-sm-4">
-                        <label class="form-label fw-semibold mb-1 small">
-                            <i class="bi bi-pencil-square me-1"></i>Modified After
-                        </label>
-                        <input type="date" class="form-control form-control-sm" id="isPropModified" onchange="updatePropBadge()">
+                    <div class="col-lg-4 col-md-6 col-sm-12">
+                        <label class="form-label fw-semibold mb-1 small"><i class="bi bi-pencil-square me-1"></i>Modified</label>
+                        <div class="input-group input-group-sm">
+                            <input type="date" class="form-control form-control-sm" id="isPropModifiedFrom" onchange="updatePropBadge()" title="From">
+                            <span class="input-group-text px-1 small">to</span>
+                            <input type="date" class="form-control form-control-sm" id="isPropModifiedTo" onchange="updatePropBadge()" title="To">
+                        </div>
                     </div>
-                    <div class="col-lg-2 col-md-3 col-sm-4">
-                        <label class="form-label fw-semibold mb-1 small">
-                            <i class="bi bi-plus-circle me-1"></i>Created After
-                        </label>
-                        <input type="date" class="form-control form-control-sm" id="isPropCreated" onchange="updatePropBadge()">
+                    <div class="col-lg-4 col-md-6 col-sm-12">
+                        <label class="form-label fw-semibold mb-1 small"><i class="bi bi-plus-circle me-1"></i>Created</label>
+                        <div class="input-group input-group-sm">
+                            <input type="date" class="form-control form-control-sm" id="isPropCreatedFrom" onchange="updatePropBadge()" title="From">
+                            <span class="input-group-text px-1 small">to</span>
+                            <input type="date" class="form-control form-control-sm" id="isPropCreatedTo" onchange="updatePropBadge()" title="To">
+                        </div>
                     </div>
-                    <div class="col-lg-2 col-md-3 col-sm-4">
-                        <label class="form-label fw-semibold mb-1 small">
-                            <i class="bi bi-calendar-check me-1"></i>Released After
-                        </label>
-                        <input type="date" class="form-control form-control-sm" id="isPropReleased" onchange="updatePropBadge()">
+                    <div class="col-lg-4 col-md-6 col-sm-12">
+                        <label class="form-label fw-semibold mb-1 small"><i class="bi bi-calendar-check me-1"></i>Released</label>
+                        <div class="input-group input-group-sm">
+                            <input type="date" class="form-control form-control-sm" id="isPropReleasedFrom" onchange="updatePropBadge()" title="From">
+                            <span class="input-group-text px-1 small">to</span>
+                            <input type="date" class="form-control form-control-sm" id="isPropReleasedTo" onchange="updatePropBadge()" title="To">
+                        </div>
                     </div>
                 }
             </div>
@@ -243,13 +262,13 @@
                 if (modeBtn) {
                     var grp = modeBtn.closest('.btn-group');
                     grp.querySelectorAll('.btn').forEach(function (b) {
-                        b.classList.remove('active', 'btn-outline-secondary', 'btn-outline-success', 'btn-outline-danger',
-                            'btn-secondary', 'btn-success', 'btn-danger');
+                        b.classList.remove('active', 'btn-outline-success', 'btn-outline-danger',
+                            'btn-success', 'btn-danger');
                         var m = b.getAttribute('data-mode');
                         if (m === mode) {
                             b.classList.add('active', m === 'include' ? 'btn-success' : 'btn-danger');
                         } else {
-                            b.classList.add(m === 'all' ? 'btn-outline-secondary' : m === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
+                            b.classList.add(m === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
                         }
                     });
                 }
@@ -264,16 +283,28 @@
                 if (ecomEl) { ecomEl.checked = true; hasAny = true; }
             }
             if (saved.modifiedAfter) {
-                var modEl = document.getElementById('isPropModified');
-                if (modEl) { modEl.value = saved.modifiedAfter; hasAny = true; }
+                var mfEl = document.getElementById('isPropModifiedFrom');
+                if (mfEl) { mfEl.value = saved.modifiedAfter; hasAny = true; }
+            }
+            if (saved.modifiedBefore) {
+                var mtEl = document.getElementById('isPropModifiedTo');
+                if (mtEl) { mtEl.value = saved.modifiedBefore; hasAny = true; }
             }
             if (saved.createdAfter) {
-                var creEl = document.getElementById('isPropCreated');
-                if (creEl) { creEl.value = saved.createdAfter; hasAny = true; }
+                var cfEl = document.getElementById('isPropCreatedFrom');
+                if (cfEl) { cfEl.value = saved.createdAfter; hasAny = true; }
+            }
+            if (saved.createdBefore) {
+                var ctEl = document.getElementById('isPropCreatedTo');
+                if (ctEl) { ctEl.value = saved.createdBefore; hasAny = true; }
             }
             if (saved.releasedAfter) {
-                var relEl = document.getElementById('isPropReleased');
-                if (relEl) { relEl.value = saved.releasedAfter; hasAny = true; }
+                var rfEl = document.getElementById('isPropReleasedFrom');
+                if (rfEl) { rfEl.value = saved.releasedAfter; hasAny = true; }
+            }
+            if (saved.releasedBefore) {
+                var rtEl = document.getElementById('isPropReleasedTo');
+                if (rtEl) { rtEl.value = saved.releasedBefore; hasAny = true; }
             }
 
             if (hasAny) {
@@ -323,9 +354,9 @@
         grp.querySelectorAll('.btn').forEach(function (b) {
             var m = b.getAttribute('data-mode');
             if (m === mode) {
-                b.classList.add('active', m === 'all' ? 'btn-secondary' : m === 'include' ? 'btn-success' : 'btn-danger');
+                b.classList.add('active', m === 'include' ? 'btn-success' : 'btn-danger');
             } else {
-                b.classList.add(m === 'all' ? 'btn-outline-secondary' : m === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
+                b.classList.add(m === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
             }
         });
         if (mode === 'all') {
@@ -335,6 +366,20 @@
         } else if (mode === 'exclude') {
             _selected[dim] = new Set(_selExclude[dim]);
         }
+        updateTrigger(dim);
+        updateBadge();
+    };
+
+    window.clearDimFilter = function (dim) {
+        _modes[dim] = 'all';
+        _selected[dim] = new Set();
+        _selInclude[dim] = new Set();
+        _selExclude[dim] = new Set();
+        var grp = document.querySelector('[data-dim="' + dim + '"] .btn-group');
+        if (grp) grp.querySelectorAll('.btn').forEach(function (b) {
+            b.classList.remove('active', 'btn-success', 'btn-danger');
+            b.classList.add(b.getAttribute('data-mode') === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
+        });
         updateTrigger(dim);
         updateBadge();
     };
@@ -367,10 +412,24 @@
         loadDimData(dim).then(function () {
             renderModalList();
             updateModalCount();
+            var searchInput = document.getElementById('dimModalSearch');
+            if (searchInput) setTimeout(function () { searchInput.focus(); }, 100);
         });
     };
 
     var _naMarker = '__NA__';
+    var _PAGE_SIZE = 100;
+    var _filteredItems = [];
+    var _renderedCount = 0;
+
+    function buildItemHtml(item) {
+        var chk = _modalTempSelected.has(item.id) ? 'checked' : '';
+        return '<label class="list-group-item list-group-item-action d-flex align-items-center py-1 px-3" style="cursor:pointer">' +
+            '<input class="form-check-input me-3 flex-shrink-0" type="checkbox" value="' + item.id + '" ' + chk +
+            ' onchange="toggleDimModalItem(\'' + item.id + '\',this.checked)">' +
+            '<span class="text-muted small me-2" style="min-width:60px">' + (item.code || '') + '</span>' +
+            '<span class="small">' + (item.name || '') + '</span></label>';
+    }
 
     function renderModalList(filter) {
         var list = document.getElementById('dimModalList');
@@ -378,35 +437,79 @@
         if (filter) {
             var f = filter.toLowerCase();
             items = items.filter(function (i) {
+                if (i.id === _naMarker) return false;
                 return (i.code || '').toLowerCase().indexOf(f) >= 0 || (i.name || '').toLowerCase().indexOf(f) >= 0;
             });
+        } else {
+            items = items.filter(function (i) { return i.id !== _naMarker; });
         }
+        _filteredItems = items;
+        _renderedCount = 0;
+
         var html = '';
-        // Prepend "N/A" option (matches items with no value / NULL) unless filtered out
         if (!filter || 'n/a'.indexOf(filter.toLowerCase()) >= 0) {
             var naChk = _modalTempSelected.has(_naMarker) ? 'checked' : '';
-            html += '<label class="list-group-item list-group-item-action d-flex align-items-center py-2 px-3 border-bottom-2" style="cursor:pointer;background:#fefce8">' +
+            html += '<label class="list-group-item list-group-item-action d-flex align-items-center py-1 px-3 border-bottom-2" style="cursor:pointer;background:#fefce8">' +
                 '<input class="form-check-input me-3 flex-shrink-0" type="checkbox" value="' + _naMarker + '" ' + naChk +
                 ' onchange="toggleDimModalItem(\'' + _naMarker + '\',this.checked)">' +
                 '<span class="text-muted small me-2" style="min-width:60px"><i class="bi bi-dash-circle"></i></span>' +
-                '<span class="fst-italic text-secondary">N/A (no value)</span></label>';
+                '<span class="fst-italic text-secondary small">N/A (no value)</span></label>';
         }
         if (!items.length && !html) {
             list.innerHTML = '<div class="text-muted text-center py-4">No items found</div>';
             return;
         }
-        items.forEach(function (item) {
-            var chk = _modalTempSelected.has(item.id) ? 'checked' : '';
-            html += '<label class="list-group-item list-group-item-action d-flex align-items-center py-2 px-3" style="cursor:pointer">' +
-                '<input class="form-check-input me-3 flex-shrink-0" type="checkbox" value="' + item.id + '" ' + chk +
-                ' onchange="toggleDimModalItem(\'' + item.id + '\',this.checked)">' +
-                '<span class="text-muted small me-2" style="min-width:60px">' + (item.code || '') + '</span>' +
-                '<span>' + (item.name || '') + '</span></label>';
-        });
+
+        var end = Math.min(_PAGE_SIZE, items.length);
+        for (var i = 0; i < end; i++) {
+            html += buildItemHtml(items[i]);
+        }
+        _renderedCount = end;
         list.innerHTML = html;
+
+        if (_renderedCount < items.length) {
+            appendLoadMoreSentinel(list);
+        }
     }
 
-    window.filterDimModalList = function (val) { renderModalList(val); };
+    function appendLoadMoreSentinel(list) {
+        var sentinel = document.createElement('div');
+        sentinel.id = 'dimModalSentinel';
+        sentinel.className = 'text-center py-2 text-muted small';
+        sentinel.textContent = (_filteredItems.length - _renderedCount) + ' more — scroll to load';
+        list.appendChild(sentinel);
+        var obs = new IntersectionObserver(function (entries) {
+            if (entries[0].isIntersecting) {
+                obs.disconnect();
+                loadMoreItems();
+            }
+        }, { root: list });
+        obs.observe(sentinel);
+    }
+
+    function loadMoreItems() {
+        var list = document.getElementById('dimModalList');
+        var sentinel = document.getElementById('dimModalSentinel');
+        if (sentinel) sentinel.remove();
+        var end = Math.min(_renderedCount + _PAGE_SIZE, _filteredItems.length);
+        var frag = document.createDocumentFragment();
+        for (var i = _renderedCount; i < end; i++) {
+            var tmp = document.createElement('div');
+            tmp.innerHTML = buildItemHtml(_filteredItems[i]);
+            frag.appendChild(tmp.firstChild);
+        }
+        _renderedCount = end;
+        list.appendChild(frag);
+        if (_renderedCount < _filteredItems.length) {
+            appendLoadMoreSentinel(list);
+        }
+    }
+
+    var _searchDebounce = null;
+    window.filterDimModalList = function (val) {
+        clearTimeout(_searchDebounce);
+        _searchDebounce = setTimeout(function () { renderModalList(val); }, 150);
+    };
 
     window.toggleDimModalItem = function (id, on) {
         if (on) _modalTempSelected.add(id); else _modalTempSelected.delete(id);
@@ -416,19 +519,23 @@
     window.selectAllDimModal = function () {
         _modalTempSelected.add(_naMarker);
         (_dims[_modalDim] || []).forEach(function (i) { _modalTempSelected.add(i.id); });
-        renderModalList(document.getElementById('dimModalSearch').value);
+        var list = document.getElementById('dimModalList');
+        list.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
         updateModalCount();
     };
 
     window.selectNoneDimModal = function () {
         _modalTempSelected.clear();
-        renderModalList(document.getElementById('dimModalSearch').value);
+        var list = document.getElementById('dimModalList');
+        list.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
         updateModalCount();
     };
 
     function updateModalCount() {
         var total = (_dims[_modalDim] || []).length;
-        document.getElementById('dimModalCount').textContent = total + ' item' + (total !== 1 ? 's' : '');
+        var showing = _filteredItems.length;
+        var countText = showing < total ? showing + ' / ' + total : total + ' item' + (total !== 1 ? 's' : '');
+        document.getElementById('dimModalCount').textContent = countText;
         var sel = _modalTempSelected.size;
         document.getElementById('dimModalSelected').textContent = sel + ' selected';
     }
@@ -436,6 +543,7 @@
     window.applyDimModal = function () {
         _selected[_modalDim] = new Set(_modalTempSelected);
         if (_modes[_modalDim] === 'all' && _selected[_modalDim].size > 0) {
+            _selInclude[_modalDim] = new Set(_selected[_modalDim]);
             var incBtn = document.querySelector('[data-dim="' + _modalDim + '"] .btn-group .btn[data-mode="include"]');
             if (incBtn) setDimMode(_modalDim, incBtn);
         }
@@ -447,22 +555,46 @@
         _bsModal.hide();
     };
 
+    function getDimLabel(dim) {
+        var el = document.querySelector('[data-dim="' + dim + '"] .dim-text');
+        if (!el) return dim;
+        var trigger = document.getElementById('dimTrigger_' + dim);
+        return trigger ? trigger.getAttribute('title').replace('Select ', '') : dim;
+    }
+
+    function getSelectedNames(dim, max) {
+        var items = _dims[dim] || [];
+        var sel = _selected[dim];
+        if (!sel || sel.size === 0) return '';
+        var names = [];
+        items.forEach(function (it) {
+            if (sel.has(it.id) && it.id !== '__NA__') names.push(it.name || it.code || it.id);
+        });
+        if (sel.has('__NA__')) names.unshift('N/A');
+        if (names.length <= max) return names.join(', ');
+        return names.slice(0, max).join(', ') + ' +' + (names.length - max);
+    }
+
     function updateTrigger(dim) {
         var txt = document.querySelector('#dimTrigger_' + dim + ' .dim-text');
         if (!txt) return;
         var cnt = _selected[dim].size;
         var mode = _modes[dim];
         var trigger = document.getElementById('dimTrigger_' + dim);
+        var clearBtn = document.getElementById('dimClear_' + dim);
         trigger.classList.remove('btn-outline-secondary', 'btn-outline-success', 'btn-outline-danger');
         if (mode === 'all' || cnt === 0) {
-            txt.textContent = 'All';
-            txt.className = 'dim-text text-muted';
+            txt.textContent = getDimLabel(dim);
+            txt.className = 'dim-text text-muted small';
             trigger.classList.add('btn-outline-secondary');
+            if (clearBtn) clearBtn.classList.add('d-none');
         } else {
-            var label = mode === 'include' ? 'included' : 'excluded';
-            txt.textContent = cnt + ' ' + label;
-            txt.className = 'dim-text fw-semibold ' + (mode === 'include' ? 'text-success' : 'text-danger');
+            var names = getSelectedNames(dim, 2);
+            var prefix = mode === 'include' ? '' : 'NOT ';
+            txt.textContent = names ? prefix + names : cnt + (mode === 'include' ? ' included' : ' excluded');
+            txt.className = 'dim-text fw-semibold small ' + (mode === 'include' ? 'text-success' : 'text-danger');
             trigger.classList.add(mode === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
+            if (clearBtn) clearBtn.classList.remove('d-none');
         }
     }
 
@@ -472,12 +604,9 @@
         if (stockEl && stockEl.value !== 'all') cnt++;
         var ecomEl = document.getElementById('isPropEcommerce');
         if (ecomEl && ecomEl.checked) cnt++;
-        var modEl = document.getElementById('isPropModified');
-        if (modEl && modEl.value) cnt++;
-        var creEl = document.getElementById('isPropCreated');
-        if (creEl && creEl.value) cnt++;
-        var relEl = document.getElementById('isPropReleased');
-        if (relEl && relEl.value) cnt++;
+        if ((document.getElementById('isPropModifiedFrom') || {}).value || (document.getElementById('isPropModifiedTo') || {}).value) cnt++;
+        if ((document.getElementById('isPropCreatedFrom') || {}).value || (document.getElementById('isPropCreatedTo') || {}).value) cnt++;
+        if ((document.getElementById('isPropReleasedFrom') || {}).value || (document.getElementById('isPropReleasedTo') || {}).value) cnt++;
         return cnt;
     }
 
@@ -523,12 +652,18 @@
         if (stockEl) filter.stock = stockEl.value;
         var ecomEl = document.getElementById('isPropEcommerce');
         if (ecomEl) filter.ecommerceOnly = ecomEl.checked;
-        var modEl = document.getElementById('isPropModified');
-        if (modEl && modEl.value) filter.modifiedAfter = modEl.value;
-        var creEl = document.getElementById('isPropCreated');
-        if (creEl && creEl.value) filter.createdAfter = creEl.value;
-        var relEl = document.getElementById('isPropReleased');
-        if (relEl && relEl.value) filter.releasedAfter = relEl.value;
+        var mf = document.getElementById('isPropModifiedFrom');
+        if (mf && mf.value) filter.modifiedAfter = mf.value;
+        var mt = document.getElementById('isPropModifiedTo');
+        if (mt && mt.value) filter.modifiedBefore = mt.value;
+        var cf = document.getElementById('isPropCreatedFrom');
+        if (cf && cf.value) filter.createdAfter = cf.value;
+        var ct = document.getElementById('isPropCreatedTo');
+        if (ct && ct.value) filter.createdBefore = ct.value;
+        var rf = document.getElementById('isPropReleasedFrom');
+        if (rf && rf.value) filter.releasedAfter = rf.value;
+        var rt = document.getElementById('isPropReleasedTo');
+        if (rt && rt.value) filter.releasedBefore = rt.value;
 
         return filter;
     };
@@ -541,6 +676,87 @@
     window.getItemsSelectionItemIds = function () {
         if (_modes['item'] !== 'include' || !_selected['item'] || _selected['item'].size === 0) return '';
         return Array.from(_selected['item']).join(',');
+    };
+
+    var _presetsLoaded = false;
+    var _presetCache = {};
+    window.loadFilterPresets = function () {
+        if (_presetsLoaded) return;
+        _presetsLoaded = true;
+        var reportType = document.getElementById('itemsSelectionCard')?.getAttribute('data-report-type') || '';
+        fetch('/Reports/GetFilterPresets?reportType=' + encodeURIComponent(reportType))
+            .then(function (r) { return r.json(); })
+            .then(function (presets) {
+                var menu = document.getElementById('presetMenu');
+                if (!presets.length) {
+                    menu.innerHTML = '<li><span class="dropdown-item-text text-muted small fst-italic">No saved presets</span></li>';
+                    return;
+                }
+                var html = '';
+                _presetCache = {};
+                presets.forEach(function (p) {
+                    _presetCache[p.presetId] = p.filterJson;
+                    html += '<li class="d-flex align-items-center px-2 py-1">' +
+                        '<a href="#" class="dropdown-item py-1 px-2 small flex-grow-1" onclick="loadFilterPreset(' + p.presetId + ');return false;">' +
+                        '<i class="bi bi-bookmark-fill me-1 text-primary"></i>' + p.presetName +
+                        (p.isShared ? ' <i class="bi bi-people-fill text-muted ms-1" title="Shared"></i>' : '') +
+                        '</a>' +
+                        (p.isOwner ? '<button class="btn btn-sm text-danger px-1 py-0" onclick="deleteFilterPreset(' + p.presetId + ');event.stopPropagation();" title="Delete"><i class="bi bi-trash3"></i></button>' : '') +
+                        '</li>';
+                });
+                menu.innerHTML = html;
+            })
+            .catch(function () { _presetsLoaded = false; });
+    };
+
+    var dd = document.getElementById('presetDropdown');
+    if (dd) dd.addEventListener('click', function () { loadFilterPresets(); });
+
+    window.saveCurrentPreset = function () {
+        var name = prompt('Preset name:');
+        if (!name || !name.trim()) return;
+        var reportType = document.getElementById('itemsSelectionCard')?.getAttribute('data-report-type') || '';
+        var filterJson = JSON.stringify(getItemsSelectionFilter());
+        fetch('/Reports/SaveFilterPreset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name.trim(), reportType: reportType, filterJson: filterJson, isShared: false })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (res.success) { _presetsLoaded = false; alert('Preset saved!'); }
+            else alert(res.message || 'Failed to save preset');
+        });
+    };
+
+    window.loadFilterPreset = function (id) {
+        try {
+            var json = _presetCache[id];
+            if (!json) return;
+            Object.keys(_modes).forEach(function (d) { clearDimFilter(d); });
+            var stockEl = document.getElementById('isPropStock');
+            if (stockEl) stockEl.value = 'all';
+            var ecomEl = document.getElementById('isPropEcommerce');
+            if (ecomEl) ecomEl.checked = false;
+            ['isPropModifiedFrom', 'isPropModifiedTo', 'isPropCreatedFrom', 'isPropCreatedTo', 'isPropReleasedFrom', 'isPropReleasedTo'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            restoreFromJson(json);
+        } catch (e) { }
+    };
+
+    window.deleteFilterPreset = function (id) {
+        if (!confirm('Delete this preset?')) return;
+        fetch('/Reports/DeleteFilterPreset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'presetId=' + id
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (res.success) { _presetsLoaded = false; loadFilterPresets(); }
+        });
     };
 })();
 </script>

@@ -175,11 +175,18 @@ public class ChartRepository : IChartRepository
             });
         }
 
-        if (filter.ShowOthers && allLabels.Count > filter.TopN)
+        if (filter.ShowOthers)
         {
+            // "Others" must aggregate the FULL tail of each series (everything not displayed),
+            // not just the leftover among the two TOP(N) result sets. Compute each series' grand
+            // total across all labels and subtract what is shown.
             var topLabels = allLabels.Take(filter.TopN).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var o1 = series1.Where(kv => !topLabels.Contains(kv.Key)).Sum(kv => kv.Value);
-            var o2 = series2.Where(kv => !topLabels.Contains(kv.Key)).Sum(kv => kv.Value);
+            var grand1 = await ExecuteSeriesGrandTotal(conn, filter, legType1, dimSelect, rawValueExpr, dimJoin1, storeWhere, dimWhere);
+            var grand2 = await ExecuteSeriesGrandTotal(conn, filter, legType2, dimSelect, rawValueExpr, dimJoin2, storeWhere, dimWhere);
+            var shown1 = series1.Where(kv => topLabels.Contains(kv.Key)).Sum(kv => kv.Value);
+            var shown2 = series2.Where(kv => topLabels.Contains(kv.Key)).Sum(kv => kv.Value);
+            var o1 = grand1 - shown1;
+            var o2 = grand2 - shown2;
             if (o1 != 0 || o2 != 0)
             {
                 results.Add(new ChartDataPoint
@@ -193,6 +200,23 @@ public class ChartRepository : IChartRepository
         }
 
         return results;
+    }
+
+    private async Task<decimal> ExecuteSeriesGrandTotal(
+        SqlConnection conn, ChartFilter filter, string legType,
+        string dimSelect, string rawValueExpr, string dimJoin, string storeWhere, string dimWhere)
+    {
+        var gsb = new StringBuilder();
+        gsb.AppendLine("SELECT ISNULL(SUM(Val), 0) FROM (");
+        AppendRawLeg(gsb, filter, legType, dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere);
+        gsb.AppendLine(") sub");
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = gsb.ToString();
+        cmd.CommandTimeout = 30;
+        AddParameters(cmd, filter);
+        var result = await cmd.ExecuteScalarAsync();
+        return result == null || result == DBNull.Value ? 0 : Convert.ToDecimal(result);
     }
 
     private void AppendTransactionLeg(StringBuilder sb, ChartFilter filter, string legType,

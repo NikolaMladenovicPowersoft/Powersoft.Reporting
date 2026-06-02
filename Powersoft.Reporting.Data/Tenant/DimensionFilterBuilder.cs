@@ -165,6 +165,12 @@ internal static class DimensionFilterBuilder
             sb.Append($" AND {alias}.LastModifiedDate >= {p}");
             parms.Add(new SqlParameter(p, sel.ModifiedAfter.Value));
         }
+        if (sel.ModifiedBefore.HasValue)
+        {
+            var p = $"@pModBefore{idx++}";
+            sb.Append($" AND {alias}.LastModifiedDate <= {p}");
+            parms.Add(new SqlParameter(p, sel.ModifiedBefore.Value));
+        }
 
         if (sel.CreatedAfter.HasValue)
         {
@@ -172,12 +178,24 @@ internal static class DimensionFilterBuilder
             sb.Append($" AND {alias}.CreationDate >= {p}");
             parms.Add(new SqlParameter(p, sel.CreatedAfter.Value));
         }
+        if (sel.CreatedBefore.HasValue)
+        {
+            var p = $"@pCreBefore{idx++}";
+            sb.Append($" AND {alias}.CreationDate <= {p}");
+            parms.Add(new SqlParameter(p, sel.CreatedBefore.Value));
+        }
 
         if (sel.ReleasedAfter.HasValue)
         {
             var p = $"@pRelAfter{idx++}";
             sb.Append($" AND {alias}.ReleaseDate >= {p}");
             parms.Add(new SqlParameter(p, sel.ReleasedAfter.Value));
+        }
+        if (sel.ReleasedBefore.HasValue)
+        {
+            var p = $"@pRelBefore{idx++}";
+            sb.Append($" AND {alias}.ReleaseDate <= {p}");
+            parms.Add(new SqlParameter(p, sel.ReleasedBefore.Value));
         }
     }
 

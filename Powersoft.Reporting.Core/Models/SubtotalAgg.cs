@@ -8,6 +8,9 @@ public class SubtotalAgg
     public decimal ValSold { get; private set; }
     public decimal Profit { get; private set; }
     public decimal StockQty { get; private set; }
+    public decimal OnOrderQty { get; private set; }
+    public decimal ReservedQty { get; private set; }
+    public decimal AvailableQty { get; private set; }
 
     public decimal QtyPct => QtyPurchased != 0 ? Math.Round(QtySold / QtyPurchased * 100, 2) : (QtySold != 0 ? 100 : 0);
     public decimal ValPct => ValPurchased != 0 ? Math.Round(ValSold / ValPurchased * 100, 2) : (ValSold != 0 ? 100 : 0);
@@ -20,5 +23,8 @@ public class SubtotalAgg
         ValSold += includeVat ? row.GrossSoldValue : row.NetSoldValue;
         Profit += row.Profit;
         StockQty += row.TotalStockQty;
+        OnOrderQty += row.QtyOnOrder;
+        ReservedQty += row.QtyReserved;
+        AvailableQty += row.QtyAvailable;
     }
 }

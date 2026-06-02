@@ -254,7 +254,8 @@
     ShowTowns = true,
     ShowUsers = true,
     StoresJson = storesJson,
-    SavedFilterJson = Model.ItemsSelectionJson ?? ""
+    SavedFilterJson = Model.ItemsSelectionJson ?? "",
+    ReportType = "Catalogue"
 })
 
 @if (!string.IsNullOrEmpty(Model.ErrorMessage))
@@ -369,6 +370,14 @@
                             @if (dc("EntityShortName")) { <th data-col="EntityShortName">Short Name</th> }
                             @if (dc("EntityID")) { <th data-col="EntityID">Entity ID</th> }
                             @if (dc("Sundry")) { <th data-col="Sundry">Sundry</th> }
+                            @if (dc("EntityTel1")) { <th data-col="EntityTel1">Phone</th> }
+                            @if (dc("EntityTel2")) { <th data-col="EntityTel2">Phone 2</th> }
+                            @if (dc("EntityMobile")) { <th data-col="EntityMobile">Mobile</th> }
+                            @if (dc("EntityFax")) { <th data-col="EntityFax">Fax</th> }
+                            @if (dc("EntityEmail")) { <th data-col="EntityEmail">Email</th> }
+                            @if (dc("EntityContactName")) { <th data-col="EntityContactName">Contact</th> }
+                            @if (dc("EntityVatRegNo")) { <th data-col="EntityVatRegNo">VAT Reg No</th> }
+                            @if (dc("EntityDOB")) { <th data-col="EntityDOB">Date of Birth</th> }
                             @if (dc("InvoiceNumber")) { <th data-col="InvoiceNumber">Invoice No</th> }
                             @if (dc("InvoiceType")) { <th data-col="InvoiceType">Inv. Type</th> }
                             @if (dc("StoreCode")) { <th data-col="StoreCode">Store Code</th> }
@@ -430,6 +439,8 @@
                             + (dc("Markup")?1:0)+(dc("Margin")?1:0)+(dc("Cost")?1:0)+(dc("TotalCost")?1:0)
                             + (dc("TotalStockQty")?1:0)+(dc("TotalStockValue")?1:0);
                         var dimColsForCount = new[] {"EntityCode","EntityName","EntityShortName","EntityID","Sundry",
+                            "EntityTel1","EntityTel2","EntityMobile","EntityFax",
+                            "EntityEmail","EntityContactName","EntityVatRegNo","EntityDOB",
                             "CustomerCategory1","CustomerCategory2","CustomerCategory3",
                             "InvoiceNumber","InvoiceType",
                             "StoreCode","StoreName","StationCode","DateTrans","UserCode","AgentName",
@@ -469,6 +480,14 @@
                             @if (dc("EntityShortName")) { <td class="small">@item.EntityShortName</td> }
                             @if (dc("EntityID")) { <td class="small">@item.EntityID</td> }
                             @if (dc("Sundry")) { <td class="small">@item.Sundry</td> }
+                            @if (dc("EntityTel1")) { <td class="small">@item.EntityTel1</td> }
+                            @if (dc("EntityTel2")) { <td class="small">@item.EntityTel2</td> }
+                            @if (dc("EntityMobile")) { <td class="small">@item.EntityMobile</td> }
+                            @if (dc("EntityFax")) { <td class="small">@item.EntityFax</td> }
+                            @if (dc("EntityEmail")) { <td class="small">@item.EntityEmail</td> }
+                            @if (dc("EntityContactName")) { <td class="small">@item.EntityContactName</td> }
+                            @if (dc("EntityVatRegNo")) { <td class="small">@item.EntityVatRegNo</td> }
+                            @if (dc("EntityDOB")) { <td class="small text-nowrap">@(item.EntityDOB?.ToString("dd/MM/yyyy") ?? "")</td> }
                             @if (dc("InvoiceNumber")) { <td class="small">@item.InvoiceNumber</td> }
                             @if (dc("InvoiceType")) { <td class="small">@item.InvoiceType</td> }
                             @if (dc("StoreCode")) { <td class="small">@item.StoreCode</td> }
@@ -646,6 +665,8 @@
                                 @if (dc("TotalStockValue")) { <td></td> }
                                 @{
                                     var dimCols = new[] {"EntityCode","EntityName","EntityShortName","EntityID","Sundry",
+                                        "EntityTel1","EntityTel2","EntityMobile","EntityFax",
+                                        "EntityEmail","EntityContactName","EntityVatRegNo","EntityDOB",
                                         "CustomerCategory1","CustomerCategory2","CustomerCategory3",
                                         "InvoiceNumber","InvoiceType",
                                         "StoreCode","StoreName","StationCode","DateTrans","UserCode","AgentName",
@@ -985,6 +1006,14 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                                 ("EntityShortName","Short Name","short name entity","EntityShortName", false, dc("EntityShortName"), true),
                                 ("EntityID","Entity ID","entity id customer supplier","EntityID", false, dc("EntityID"), true),
                                 ("Sundry","Sundry","sundry notes","Sundry", false, dc("Sundry"), true),
+                                ("EntityTel1","Phone","phone tel telephone","EntityTel1", false, dc("EntityTel1"), true),
+                                ("EntityTel2","Phone 2","phone 2 tel2 telephone","EntityTel2", false, dc("EntityTel2"), true),
+                                ("EntityMobile","Mobile","mobile cell","EntityMobile", false, dc("EntityMobile"), true),
+                                ("EntityFax","Fax","fax","EntityFax", false, dc("EntityFax"), true),
+                                ("EntityEmail","Email","email","EntityEmail", false, dc("EntityEmail"), true),
+                                ("EntityContactName","Contact","contact name person","EntityContactName", false, dc("EntityContactName"), true),
+                                ("EntityVatRegNo","VAT Reg No","vat registration number","EntityVatRegNo", false, dc("EntityVatRegNo"), true),
+                                ("EntityDOB","Date of Birth","date of birth dob","EntityDOB", false, dc("EntityDOB"), true),
                                 ("InvoiceNumber","Invoice No","invoice number no","InvoiceNumber", false, dc("InvoiceNumber"), true),
                                 ("InvoiceType","Inv. Type","invoice type","InvoiceType", false, dc("InvoiceType"), true),
                                 ("StoreCode","Store Code","store code","StoreCode", false, dc("StoreCode"), true),

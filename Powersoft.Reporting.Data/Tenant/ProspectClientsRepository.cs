@@ -104,7 +104,35 @@ public class ProspectClientsRepository : IProspectClientsRepository
                     OfferCount = GetInt(reader, "OfferCount"),
                     TotalOfferValue = GetDecimal(reader, "TotalOfferValue"),
                     EmailsSent = GetInt(reader, "EmailsSent"),
-                    SmsSent = GetInt(reader, "SmsSent")
+                    SmsSent = GetInt(reader, "SmsSent"),
+                    IntVal1 = GetNullableInt(reader, "IntVal1"), IntVal2 = GetNullableInt(reader, "IntVal2"),
+                    IntVal3 = GetNullableInt(reader, "IntVal3"), IntVal4 = GetNullableInt(reader, "IntVal4"),
+                    IntVal5 = GetNullableInt(reader, "IntVal5"), IntVal6 = GetNullableInt(reader, "IntVal6"),
+                    IntVal7 = GetNullableInt(reader, "IntVal7"), IntVal8 = GetNullableInt(reader, "IntVal8"),
+                    IntVal9 = GetNullableInt(reader, "IntVal9"), IntVal10 = GetNullableInt(reader, "IntVal10"),
+                    NumVal1 = GetNullableDecimal(reader, "NumVal1"), NumVal2 = GetNullableDecimal(reader, "NumVal2"),
+                    NumVal3 = GetNullableDecimal(reader, "NumVal3"), NumVal4 = GetNullableDecimal(reader, "NumVal4"),
+                    NumVal5 = GetNullableDecimal(reader, "NumVal5"), NumVal6 = GetNullableDecimal(reader, "NumVal6"),
+                    NumVal7 = GetNullableDecimal(reader, "NumVal7"), NumVal8 = GetNullableDecimal(reader, "NumVal8"),
+                    NumVal9 = GetNullableDecimal(reader, "NumVal9"), NumVal10 = GetNullableDecimal(reader, "NumVal10"),
+                    BoolVal1 = GetNullableBool(reader, "BoolVal1"), BoolVal2 = GetNullableBool(reader, "BoolVal2"),
+                    BoolVal3 = GetNullableBool(reader, "BoolVal3"), BoolVal4 = GetNullableBool(reader, "BoolVal4"),
+                    BoolVal5 = GetNullableBool(reader, "BoolVal5"), BoolVal6 = GetNullableBool(reader, "BoolVal6"),
+                    BoolVal7 = GetNullableBool(reader, "BoolVal7"), BoolVal8 = GetNullableBool(reader, "BoolVal8"),
+                    BoolVal9 = GetNullableBool(reader, "BoolVal9"), BoolVal10 = GetNullableBool(reader, "BoolVal10"),
+                    DateVal1 = GetNullableDateTime(reader, "DateVal1"), DateVal2 = GetNullableDateTime(reader, "DateVal2"),
+                    DateVal3 = GetNullableDateTime(reader, "DateVal3"), DateVal4 = GetNullableDateTime(reader, "DateVal4"),
+                    DateVal5 = GetNullableDateTime(reader, "DateVal5"), DateVal6 = GetNullableDateTime(reader, "DateVal6"),
+                    DateVal7 = GetNullableDateTime(reader, "DateVal7"), DateVal8 = GetNullableDateTime(reader, "DateVal8"),
+                    DateVal9 = GetNullableDateTime(reader, "DateVal9"), DateVal10 = GetNullableDateTime(reader, "DateVal10"),
+                    DateVal11 = GetNullableDateTime(reader, "DateVal11"), DateVal12 = GetNullableDateTime(reader, "DateVal12"),
+                    DateVal13 = GetNullableDateTime(reader, "DateVal13"), DateVal14 = GetNullableDateTime(reader, "DateVal14"),
+                    DateVal15 = GetNullableDateTime(reader, "DateVal15"),
+                    TextVal1 = GetStr(reader, "TextVal1"), TextVal2 = GetStr(reader, "TextVal2"),
+                    TextVal3 = GetStr(reader, "TextVal3"), TextVal4 = GetStr(reader, "TextVal4"),
+                    TextVal5 = GetStr(reader, "TextVal5"), TextVal6 = GetStr(reader, "TextVal6"),
+                    TextVal7 = GetStr(reader, "TextVal7"), TextVal8 = GetStr(reader, "TextVal8"),
+                    TextVal9 = GetStr(reader, "TextVal9"), TextVal10 = GetStr(reader, "TextVal10")
                 });
             }
         }
@@ -164,6 +192,15 @@ public class ProspectClientsRepository : IProspectClientsRepository
                 ,ISNULL(ofc.TotalOfferValue, 0) AS TotalOfferValue
                 ,ISNULL(emc.EmailsSent, 0) AS EmailsSent
                 ,ISNULL(smc.SmsSent, 0) AS SmsSent
+                ,att.IntVal1,att.IntVal2,att.IntVal3,att.IntVal4,att.IntVal5,att.IntVal6,att.IntVal7,att.IntVal8,att.IntVal9,att.IntVal10
+                ,att.NumVal1,att.NumVal2,att.NumVal3,att.NumVal4,att.NumVal5,att.NumVal6,att.NumVal7,att.NumVal8,att.NumVal9,att.NumVal10
+                ,att.BoolVal1,att.BoolVal2,att.BoolVal3,att.BoolVal4,att.BoolVal5,att.BoolVal6,att.BoolVal7,att.BoolVal8,att.BoolVal9,att.BoolVal10
+                ,att.DateVal1,att.DateVal2,att.DateVal3,att.DateVal4,att.DateVal5,att.DateVal6,att.DateVal7,att.DateVal8,att.DateVal9,att.DateVal10
+                ,att.DateVal11,att.DateVal12,att.DateVal13,att.DateVal14,att.DateVal15
+                ,ISNULL(att.TextVal1,'') AS TextVal1,ISNULL(att.TextVal2,'') AS TextVal2,ISNULL(att.TextVal3,'') AS TextVal3
+                ,ISNULL(att.TextVal4,'') AS TextVal4,ISNULL(att.TextVal5,'') AS TextVal5,ISNULL(att.TextVal6,'') AS TextVal6
+                ,ISNULL(att.TextVal7,'') AS TextVal7,ISNULL(att.TextVal8,'') AS TextVal8,ISNULL(att.TextVal9,'') AS TextVal9
+                ,ISNULL(att.TextVal10,'') AS TextVal10
             FROM dbo.tbl_Lead t
             LEFT JOIN tbl_OrderStatus s ON t.fk_StatusID = s.pk_OrderStatusID AND s.TableName = 'tbl_Leads'
             LEFT JOIN tbl_FieldDetail p ON t.fk_PriorityID = p.pk_FieldDetailID
@@ -260,6 +297,15 @@ public class ProspectClientsRepository : IProspectClientsRepository
                 ,ISNULL(hofc.TotalOfferValue, 0) AS TotalOfferValue
                 ,ISNULL(hemc.EmailsSent, 0) AS EmailsSent
                 ,ISNULL(hsmc.SmsSent, 0) AS SmsSent
+                ,hatt.IntVal1,hatt.IntVal2,hatt.IntVal3,hatt.IntVal4,hatt.IntVal5,hatt.IntVal6,hatt.IntVal7,hatt.IntVal8,hatt.IntVal9,hatt.IntVal10
+                ,hatt.NumVal1,hatt.NumVal2,hatt.NumVal3,hatt.NumVal4,hatt.NumVal5,hatt.NumVal6,hatt.NumVal7,hatt.NumVal8,hatt.NumVal9,hatt.NumVal10
+                ,hatt.BoolVal1,hatt.BoolVal2,hatt.BoolVal3,hatt.BoolVal4,hatt.BoolVal5,hatt.BoolVal6,hatt.BoolVal7,hatt.BoolVal8,hatt.BoolVal9,hatt.BoolVal10
+                ,hatt.DateVal1,hatt.DateVal2,hatt.DateVal3,hatt.DateVal4,hatt.DateVal5,hatt.DateVal6,hatt.DateVal7,hatt.DateVal8,hatt.DateVal9,hatt.DateVal10
+                ,hatt.DateVal11,hatt.DateVal12,hatt.DateVal13,hatt.DateVal14,hatt.DateVal15
+                ,ISNULL(hatt.TextVal1,'') AS TextVal1,ISNULL(hatt.TextVal2,'') AS TextVal2,ISNULL(hatt.TextVal3,'') AS TextVal3
+                ,ISNULL(hatt.TextVal4,'') AS TextVal4,ISNULL(hatt.TextVal5,'') AS TextVal5,ISNULL(hatt.TextVal6,'') AS TextVal6
+                ,ISNULL(hatt.TextVal7,'') AS TextVal7,ISNULL(hatt.TextVal8,'') AS TextVal8,ISNULL(hatt.TextVal9,'') AS TextVal9
+                ,ISNULL(hatt.TextVal10,'') AS TextVal10
             FROM dbo.tbl_LeadHistory h
             LEFT JOIN tbl_OrderStatus sh ON h.fk_StatusID = sh.pk_OrderStatusID AND sh.TableName = 'tbl_Leads'
             LEFT JOIN tbl_FieldDetail ph ON h.fk_PriorityID = ph.pk_FieldDetailID
@@ -431,5 +477,55 @@ public class ProspectClientsRepository : IProspectClientsRepository
     {
         var ord = reader.GetOrdinal(col);
         return reader.IsDBNull(ord) ? 0m : reader.GetDecimal(ord);
+    }
+
+    private static int? GetNullableInt(SqlDataReader reader, string col)
+    {
+        var ord = reader.GetOrdinal(col);
+        return reader.IsDBNull(ord) ? null : reader.GetInt32(ord);
+    }
+
+    private static decimal? GetNullableDecimal(SqlDataReader reader, string col)
+    {
+        var ord = reader.GetOrdinal(col);
+        return reader.IsDBNull(ord) ? null : reader.GetDecimal(ord);
+    }
+
+    private static bool? GetNullableBool(SqlDataReader reader, string col)
+    {
+        var ord = reader.GetOrdinal(col);
+        return reader.IsDBNull(ord) ? null : reader.GetBoolean(ord);
+    }
+
+    public async Task<Dictionary<string, string>> GetExtraFieldLabelsAsync()
+    {
+        var labels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync();
+            using var cmd = new SqlCommand(
+                "SELECT FieldName, FieldDesc FROM tbl_Field WHERE TableName = 'tbl_Leads' AND FieldDesc IS NOT NULL AND FieldDesc <> ''",
+                conn);
+            cmd.CommandTimeout = 15;
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var fieldName = reader.GetString(0).Trim();
+                var fieldDesc = reader.GetString(1).Trim();
+                if (!fieldName.StartsWith("Lead", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var colName = fieldName.Length > 4 && fieldName[4] != 's'
+                    ? fieldName.Substring(4)
+                    : fieldName;
+                if (!colName.StartsWith("IntVal") && !colName.StartsWith("NumVal") &&
+                    !colName.StartsWith("BoolVal") && !colName.StartsWith("DateVal") &&
+                    !colName.StartsWith("TextVal"))
+                    continue;
+                labels[colName] = fieldDesc;
+            }
+        }
+        catch { }
+        return labels;
     }
 }

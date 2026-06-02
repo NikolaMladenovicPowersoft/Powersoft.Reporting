@@ -213,6 +213,7 @@ ORDER BY s.pk_StoreCode;";
                 entityShortNameExpr: "ISNULL(e.ShortName,'')",
                 entityIdExpr: "ISNULL(e.CustomerId,'')",
                 sundryExpr: "LEFT(ISNULL(h.SundryCustomer,''),255)",
+                entityContactNameExpr: "ISNULL(e.ContactName,'')",
                 invoiceIdExpr: "h.pk_InvoiceID",
                 invoiceType: "I",
                 signMultiplier: 1,
@@ -231,6 +232,7 @@ ORDER BY s.pk_StoreCode;";
                 entityShortNameExpr: "ISNULL(e.ShortName,'')",
                 entityIdExpr: "ISNULL(e.CustomerId,'')",
                 sundryExpr: "LEFT(ISNULL(h.SundryCustomer,''),255)",
+                entityContactNameExpr: "ISNULL(e.ContactName,'')",
                 invoiceIdExpr: "h.pk_CreditID",
                 invoiceType: "C",
                 signMultiplier: -1,
@@ -256,6 +258,7 @@ ORDER BY s.pk_StoreCode;";
                 entityShortNameExpr: "ISNULL(e.ShortName,'')",
                 entityIdExpr: "ISNULL(e.SupplierId,'')",
                 sundryExpr: "''",
+                entityContactNameExpr: "ISNULL(e.ContactFirstName,'') + ' ' + ISNULL(e.ContactLastName,'')",
                 invoiceIdExpr: "h.pk_PurchInvoiceID",
                 invoiceType: "P",
                 signMultiplier: 1);
@@ -273,6 +276,7 @@ ORDER BY s.pk_StoreCode;";
                 entityShortNameExpr: "ISNULL(e.ShortName,'')",
                 entityIdExpr: "ISNULL(e.SupplierId,'')",
                 sundryExpr: "''",
+                entityContactNameExpr: "ISNULL(e.ContactFirstName,'') + ' ' + ISNULL(e.ContactLastName,'')",
                 invoiceIdExpr: "h.pk_PurchReturnID",
                 invoiceType: "E",
                 signMultiplier: -1);
@@ -341,6 +345,7 @@ ORDER BY s.pk_StoreCode;";
         string entityTable, string entityJoin,
         string entityCodeExpr, string entityNameExpr,
         string entityShortNameExpr, string entityIdExpr, string sundryExpr,
+        string entityContactNameExpr,
         string invoiceIdExpr, string invoiceType, int signMultiplier,
         string saleOnlyCond = "")
     {
@@ -396,6 +401,15 @@ ORDER BY s.pk_StoreCode;";
             sb.AppendLine($"  {entityShortNameExpr} AS EntityShortName,");
             sb.AppendLine($"  {entityIdExpr} AS EntityID,");
             sb.AppendLine($"  {sundryExpr} AS Sundry,");
+            // Entity contact details
+            sb.AppendLine("  ISNULL(e.Tel1,'') AS EntityTel1,");
+            sb.AppendLine("  ISNULL(e.Tel2,'') AS EntityTel2,");
+            sb.AppendLine("  ISNULL(e.Mobile,'') AS EntityMobile,");
+            sb.AppendLine("  ISNULL(e.Fax,'') AS EntityFax,");
+            sb.AppendLine("  ISNULL(e.Email,'') AS EntityEmail,");
+            sb.AppendLine($"  {entityContactNameExpr} AS EntityContactName,");
+            sb.AppendLine("  ISNULL(e.VAT_Registration_No,'') AS EntityVatRegNo,");
+            sb.AppendLine("  e.DOB AS EntityDOB,");
             // Invoice
             sb.AppendLine($"  CAST({invoiceIdExpr} AS NVARCHAR(50)) AS InvoiceNumber,");
             sb.AppendLine($"  '{invoiceType}' AS InvoiceType,");
@@ -482,6 +496,8 @@ ORDER BY s.pk_StoreCode;";
         else
         {
             sb.AppendLine("  '' AS EntityCode, '' AS EntityName, '' AS EntityShortName, '' AS EntityID, '' AS Sundry,");
+            sb.AppendLine("  '' AS EntityTel1, '' AS EntityTel2, '' AS EntityMobile, '' AS EntityFax,");
+            sb.AppendLine("  '' AS EntityEmail, '' AS EntityContactName, '' AS EntityVatRegNo, NULL AS EntityDOB,");
             sb.AppendLine("  '' AS InvoiceNumber, '' AS InvoiceType,");
             sb.AppendLine("  '' AS StoreCode, '' AS StoreName,");
             sb.AppendLine("  NULL AS DateTrans, '' AS UserCode,");
@@ -616,6 +632,8 @@ ORDER BY s.pk_StoreCode;";
         if (!isSummary || allNone)
         {
             sb.AppendLine("  r.EntityCode, r.EntityName, r.EntityShortName, r.EntityID, r.Sundry,");
+            sb.AppendLine("  r.EntityTel1, r.EntityTel2, r.EntityMobile, r.EntityFax,");
+            sb.AppendLine("  r.EntityEmail, r.EntityContactName, r.EntityVatRegNo, r.EntityDOB,");
             sb.AppendLine("  r.InvoiceNumber, r.InvoiceType,");
             sb.AppendLine("  r.StoreCode, r.StoreName,");
             sb.AppendLine("  r.DateTrans, r.UserCode,");
@@ -644,6 +662,8 @@ ORDER BY s.pk_StoreCode;";
         else
         {
             sb.AppendLine("  '' AS EntityCode, '' AS EntityName, '' AS EntityShortName, '' AS EntityID, '' AS Sundry,");
+            sb.AppendLine("  '' AS EntityTel1, '' AS EntityTel2, '' AS EntityMobile, '' AS EntityFax,");
+            sb.AppendLine("  '' AS EntityEmail, '' AS EntityContactName, '' AS EntityVatRegNo, NULL AS EntityDOB,");
             sb.AppendLine("  '' AS InvoiceNumber, '' AS InvoiceType,");
             sb.AppendLine("  '' AS StoreCode, '' AS StoreName,");
             sb.AppendLine("  NULL AS DateTrans, '' AS UserCode,");
@@ -686,6 +706,8 @@ ORDER BY s.pk_StoreCode;";
             {
                 "r.ItemCode", "r.MainBarcode", "r.ItemDescription", "r.ItemInvoiceDescription",
                 "r.EntityCode", "r.EntityName", "r.EntityShortName", "r.EntityID", "r.Sundry",
+                "r.EntityTel1", "r.EntityTel2", "r.EntityMobile", "r.EntityFax",
+                "r.EntityEmail", "r.EntityContactName", "r.EntityVatRegNo", "r.EntityDOB",
                 "r.InvoiceNumber", "r.InvoiceType",
                 "r.StoreCode", "r.StoreName",
                 "r.DateTrans", "r.UserCode",
@@ -1139,6 +1161,14 @@ ORDER BY s.pk_StoreCode;";
         ["EntityShortName"] = "d.EntityShortName",
         ["EntityID"] = "d.EntityID",
         ["Sundry"] = "d.Sundry",
+        ["EntityTel1"] = "d.EntityTel1",
+        ["EntityTel2"] = "d.EntityTel2",
+        ["EntityMobile"] = "d.EntityMobile",
+        ["EntityFax"] = "d.EntityFax",
+        ["EntityEmail"] = "d.EntityEmail",
+        ["EntityContactName"] = "d.EntityContactName",
+        ["EntityVatRegNo"] = "d.EntityVatRegNo",
+        ["EntityDOB"] = "d.EntityDOB",
         ["InvoiceNumber"] = "d.InvoiceNumber",
         ["InvoiceType"] = "d.InvoiceType",
         ["StoreCode"] = "d.StoreCode",
@@ -1166,6 +1196,8 @@ ORDER BY s.pk_StoreCode;";
         "Level1Code", "Level1Description",
         "Level2Code", "Level2Description", "Level3Code", "Level3Description",
         "EntityCode", "EntityName", "EntityShortName", "EntityID", "Sundry",
+        "EntityTel1", "EntityTel2", "EntityMobile", "EntityFax",
+        "EntityEmail", "EntityContactName", "EntityVatRegNo",
         "InvoiceNumber", "InvoiceType",
         "StoreCode", "StoreName", "StationCode", "UserCode", "AgentName",
         "ZReportNumber", "PaymentType",
@@ -1345,6 +1377,14 @@ ORDER BY s.pk_StoreCode;";
                     case "EntityShortName": row.EntityShortName = reader.GetString(i); break;
                     case "EntityID": row.EntityID = reader.GetString(i); break;
                     case "Sundry": row.Sundry = reader.GetString(i); break;
+                    case "EntityTel1": row.EntityTel1 = reader.GetString(i); break;
+                    case "EntityTel2": row.EntityTel2 = reader.GetString(i); break;
+                    case "EntityMobile": row.EntityMobile = reader.GetString(i); break;
+                    case "EntityFax": row.EntityFax = reader.GetString(i); break;
+                    case "EntityEmail": row.EntityEmail = reader.GetString(i); break;
+                    case "EntityContactName": row.EntityContactName = reader.GetString(i); break;
+                    case "EntityVatRegNo": row.EntityVatRegNo = reader.GetString(i); break;
+                    case "EntityDOB": row.EntityDOB = reader.GetDateTime(i); break;
                     case "InvoiceNumber": row.InvoiceNumber = reader.GetString(i); break;
                     case "InvoiceType": row.InvoiceType = reader.GetString(i); break;
                     case "StoreCode": row.StoreCode = reader.GetString(i); break;

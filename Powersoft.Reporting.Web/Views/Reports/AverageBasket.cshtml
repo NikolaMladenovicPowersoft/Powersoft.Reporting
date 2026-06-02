@@ -211,7 +211,8 @@
     ShowStores = true,
     ShowItems = true,
     StoresJson = storesJson,
-    SavedFilterJson = Model.ItemsSelectionJson ?? ""
+    SavedFilterJson = Model.ItemsSelectionJson ?? "",
+    ReportType = "AverageBasket"
 })
 
 @if (!string.IsNullOrEmpty(Model.ErrorMessage))

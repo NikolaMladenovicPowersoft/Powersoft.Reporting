@@ -166,6 +166,10 @@ public class ExcelExportService
         ws.Cell(selRow++, 1).Value = $"Include VAT: {(filter.IncludeVat ? "Yes" : "No")}";
         if (filter.ShowProfit) ws.Cell(selRow++, 1).Value = "Show Profit: Yes";
         if (filter.ShowStock) ws.Cell(selRow++, 1).Value = "Show Stock: Yes";
+        if (filter.ShowOnOrder) ws.Cell(selRow++, 1).Value = "Show On Order: Yes";
+        if (filter.ShowReservation) ws.Cell(selRow++, 1).Value = "Show Reservation: Yes";
+        if (filter.ShowAvailable) ws.Cell(selRow++, 1).Value = "Show Available: Yes";
+        if (!filter.IncludeAdditionalCharges) ws.Cell(selRow++, 1).Value = "Cost: Wholesale only (excl. additional charges)";
         if (filter.StoreCodes != null && filter.StoreCodes.Any())
             ws.Cell(selRow++, 1).Value = $"Stores: {string.Join(", ", filter.StoreCodes)}";
         ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
@@ -192,6 +196,9 @@ public class ExcelExportService
         ws.Cell(headerRow, col++).Value = "Qty %";
         ws.Cell(headerRow, col++).Value = "Val %";
         if (filter.ShowStock) ws.Cell(headerRow, col++).Value = "Stock Qty";
+        if (filter.ShowOnOrder) ws.Cell(headerRow, col++).Value = "On Order";
+        if (filter.ShowReservation) ws.Cell(headerRow, col++).Value = "Reserved";
+        if (filter.ShowAvailable) ws.Cell(headerRow, col++).Value = "Available";
 
         var headerRange = ws.Range(headerRow, 1, headerRow, col - 1);
         headerRange.Style.Font.Bold = true;
@@ -242,6 +249,9 @@ public class ExcelExportService
             ws.Cell(dataRow, col++).Value = row.QtyPercent;
             ws.Cell(dataRow, col++).Value = row.ValPercent;
             if (filter.ShowStock) ws.Cell(dataRow, col++).Value = row.TotalStockQty;
+            if (filter.ShowOnOrder) ws.Cell(dataRow, col++).Value = row.QtyOnOrder;
+            if (filter.ShowReservation) ws.Cell(dataRow, col++).Value = row.QtyReserved;
+            if (filter.ShowAvailable) ws.Cell(dataRow, col++).Value = row.QtyAvailable;
             dataRow++;
         }
 
@@ -267,6 +277,9 @@ public class ExcelExportService
             ws.Cell(dataRow, col++).Value = totals.QtyPercent;
             ws.Cell(dataRow, col++).Value = totals.ValPercent;
             if (filter.ShowStock) ws.Cell(dataRow, col++).Value = totals.TotalStockQty;
+            if (filter.ShowOnOrder) ws.Cell(dataRow, col++).Value = totals.TotalQtyOnOrder;
+            if (filter.ShowReservation) ws.Cell(dataRow, col++).Value = totals.TotalQtyReserved;
+            if (filter.ShowAvailable) ws.Cell(dataRow, col++).Value = totals.TotalQtyAvailable;
 
             var totalRange = ws.Range(dataRow, 1, dataRow, col - 1);
             totalRange.Style.Font.Bold = true;
@@ -339,6 +352,14 @@ public class ExcelExportService
         if (dc("TotalStockValue")) cols.Add(("TotalStockValue", "Stock Value", true, r => r.TotalStockValue));
         if (dc("EntityCode")) cols.Add(("EntityCode", "Entity Code", false, r => r.EntityCode));
         if (dc("EntityName")) cols.Add(("EntityName", "Entity Name", false, r => r.EntityName));
+        if (dc("EntityTel1")) cols.Add(("EntityTel1", "Phone", false, r => r.EntityTel1));
+        if (dc("EntityTel2")) cols.Add(("EntityTel2", "Phone 2", false, r => r.EntityTel2));
+        if (dc("EntityMobile")) cols.Add(("EntityMobile", "Mobile", false, r => r.EntityMobile));
+        if (dc("EntityFax")) cols.Add(("EntityFax", "Fax", false, r => r.EntityFax));
+        if (dc("EntityEmail")) cols.Add(("EntityEmail", "Email", false, r => r.EntityEmail));
+        if (dc("EntityContactName")) cols.Add(("EntityContactName", "Contact", false, r => r.EntityContactName));
+        if (dc("EntityVatRegNo")) cols.Add(("EntityVatRegNo", "VAT Reg No", false, r => r.EntityVatRegNo));
+        if (dc("EntityDOB")) cols.Add(("EntityDOB", "Date of Birth", false, r => r.EntityDOB?.ToString("yyyy-MM-dd") ?? ""));
         if (dc("InvoiceNumber")) cols.Add(("InvoiceNumber", "Invoice No", false, r => r.InvoiceNumber));
         if (dc("InvoiceType")) cols.Add(("InvoiceType", "Inv. Type", false, r => r.InvoiceType));
         if (dc("StoreCode")) cols.Add(("StoreCode", "Store Code", false, r => r.StoreCode));
@@ -789,6 +810,9 @@ public class ExcelExportService
         ws.Cell(dataRow, col++).Value = agg.QtyPct;
         ws.Cell(dataRow, col++).Value = agg.ValPct;
         if (filter.ShowStock) ws.Cell(dataRow, col++).Value = agg.StockQty;
+        if (filter.ShowOnOrder) ws.Cell(dataRow, col++).Value = agg.OnOrderQty;
+        if (filter.ShowReservation) ws.Cell(dataRow, col++).Value = agg.ReservedQty;
+        if (filter.ShowAvailable) ws.Cell(dataRow, col++).Value = agg.AvailableQty;
 
         var range = ws.Range(dataRow, 1, dataRow, totalCols);
         range.Style.Font.Bold = true;

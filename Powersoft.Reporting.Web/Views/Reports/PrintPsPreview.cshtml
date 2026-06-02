@@ -82,13 +82,13 @@
         <div class="export-wrap">
             <button class="dropdown-btn" onclick="toggleExportMenu(event)"><i class="bi bi-download"></i> Export <i class="bi bi-chevron-down" style="font-size:10px;"></i></button>
             <div class="export-menu" id="exportMenu">
-                <a href="@Url.Action("ExportPsPdf", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), reportMode = Model.ReportMode, primaryGroup = Model.PrimaryGroup, secondaryGroup = Model.SecondaryGroup, thirdGroup = Model.ThirdGroup, includeVat = Model.IncludeVat, showProfit = Model.ShowProfit, showStock = Model.ShowStock, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
+                <a href="@Url.Action("ExportPsPdf", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), reportMode = Model.ReportMode, primaryGroup = Model.PrimaryGroup, secondaryGroup = Model.SecondaryGroup, thirdGroup = Model.ThirdGroup, includeVat = Model.IncludeVat, showProfit = Model.ShowProfit, showStock = Model.ShowStock, showOnOrder = Model.ShowOnOrder, showReservation = Model.ShowReservation, showAvailable = Model.ShowAvailable, includeAdditionalCharges = Model.IncludeAdditionalCharges, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
                     <i class="bi bi-filetype-pdf"></i> PDF
                 </a>
-                <a href="@Url.Action("ExportPsExcel", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), reportMode = Model.ReportMode, primaryGroup = Model.PrimaryGroup, secondaryGroup = Model.SecondaryGroup, thirdGroup = Model.ThirdGroup, includeVat = Model.IncludeVat, showProfit = Model.ShowProfit, showStock = Model.ShowStock, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
+                <a href="@Url.Action("ExportPsExcel", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), reportMode = Model.ReportMode, primaryGroup = Model.PrimaryGroup, secondaryGroup = Model.SecondaryGroup, thirdGroup = Model.ThirdGroup, includeVat = Model.IncludeVat, showProfit = Model.ShowProfit, showStock = Model.ShowStock, showOnOrder = Model.ShowOnOrder, showReservation = Model.ShowReservation, showAvailable = Model.ShowAvailable, includeAdditionalCharges = Model.IncludeAdditionalCharges, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
                     <i class="bi bi-filetype-xlsx"></i> Excel
                 </a>
-                <a href="@Url.Action("ExportPsCsv", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), reportMode = Model.ReportMode, primaryGroup = Model.PrimaryGroup, secondaryGroup = Model.SecondaryGroup, thirdGroup = Model.ThirdGroup, includeVat = Model.IncludeVat, showProfit = Model.ShowProfit, showStock = Model.ShowStock, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
+                <a href="@Url.Action("ExportPsCsv", new { dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"), dateTo = Model.DateTo.ToString("yyyy-MM-dd"), reportMode = Model.ReportMode, primaryGroup = Model.PrimaryGroup, secondaryGroup = Model.SecondaryGroup, thirdGroup = Model.ThirdGroup, includeVat = Model.IncludeVat, showProfit = Model.ShowProfit, showStock = Model.ShowStock, showOnOrder = Model.ShowOnOrder, showReservation = Model.ShowReservation, showAvailable = Model.ShowAvailable, includeAdditionalCharges = Model.IncludeAdditionalCharges, storeCodes = Model.SelectedStoreCodesString, sortColumn = Model.SortColumn, sortDirection = Model.SortDirection })">
                     <i class="bi bi-filetype-csv"></i> CSV
                 </a>
             </div>
@@ -110,6 +110,10 @@
                     @if (Model.IncludeVat) { <span>| VAT &nbsp;</span> }
                     @if (Model.ShowProfit) { <span>| Profit &nbsp;</span> }
                     @if (Model.ShowStock) { <span>| Stock &nbsp;</span> }
+                    @if (Model.ShowOnOrder) { <span>| On Order &nbsp;</span> }
+                    @if (Model.ShowReservation) { <span>| Reserved &nbsp;</span> }
+                    @if (Model.ShowAvailable) { <span>| Available &nbsp;</span> }
+                    @if (!Model.IncludeAdditionalCharges) { <span>| Wholesale cost &nbsp;</span> }
                     @if (hasL1) { <br /><span><strong>Group:</strong> @Model.PrimaryGroup &nbsp;</span> }
                     @if (hasL2) { <span>> @Model.SecondaryGroup &nbsp;</span> }
                     @if (hasL3) { <span>> @Model.ThirdGroup</span> }
@@ -128,6 +132,9 @@
                         <th colspan="2" style="text-align:center;">Sales</th>
                         @if (Model.ShowProfit) { <th>Profit</th> }
                         @if (Model.ShowStock) { <th>Stock</th> }
+                        @if (Model.ShowOnOrder) { <th>On Order</th> }
+                        @if (Model.ShowReservation) { <th>Reserved</th> }
+                        @if (Model.ShowAvailable) { <th>Available</th> }
                     </tr>
                     <tr style="font-size:9px;background:#f1f5f9;">
                         @if (hasL1) { <th></th> }
@@ -140,6 +147,9 @@
                         <th>@(useGross?"Gross":"Net") Value</th>
                         @if (Model.ShowProfit) { <th></th> }
                         @if (Model.ShowStock) { <th></th> }
+                        @if (Model.ShowOnOrder) { <th></th> }
+                        @if (Model.ShowReservation) { <th></th> }
+                        @if (Model.ShowAvailable) { <th></th> }
                     </tr>
                 </thead>
                 <tbody>
@@ -148,7 +158,7 @@
                     @foreach (var group in grouped)
                     {
                         var groupRows = group.ToList();
-                        var colSpan = (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0)+(showItem?2:0)+4+(Model.ShowProfit?1:0)+(Model.ShowStock?1:0);
+                        var colSpan = (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0)+(showItem?2:0)+4+(Model.ShowProfit?1:0)+(Model.ShowStock?1:0)+(Model.ShowOnOrder?1:0)+(Model.ShowReservation?1:0)+(Model.ShowAvailable?1:0);
                         <tr class="group-header"><td colspan="@colSpan">@group.Key</td></tr>
                         @foreach (var row in groupRows)
                         {
@@ -163,6 +173,9 @@
                                 <td>@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</td>
                                 @if (Model.ShowProfit) { var pCls = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="@pCls">@row.Profit.ToString("N2")</td> }
                                 @if (Model.ShowStock) { <td>@row.TotalStockQty.ToString("N0")</td> }
+                                @if (Model.ShowOnOrder) { <td>@row.QtyOnOrder.ToString("N0")</td> }
+                                @if (Model.ShowReservation) { <td>@row.QtyReserved.ToString("N0")</td> }
+                                @if (Model.ShowAvailable) { <td>@row.QtyAvailable.ToString("N0")</td> }
                             </tr>
                         }
 
@@ -181,6 +194,9 @@
                             <td>@gQS.ToString("N2")</td><td>@gVS.ToString("N2")</td>
                             @if (Model.ShowProfit) { <td>@gProfit.ToString("N2")</td> }
                             @if (Model.ShowStock) { <td></td> }
+                            @if (Model.ShowOnOrder) { <td></td> }
+                            @if (Model.ShowReservation) { <td></td> }
+                            @if (Model.ShowAvailable) { <td></td> }
                         </tr>
                     }
                 }
@@ -199,6 +215,9 @@
                             <td>@((useGross ? row.GrossSoldValue : row.NetSoldValue).ToString("N2"))</td>
                             @if (Model.ShowProfit) { var pCls = row.Profit >= 0 ? "text-success" : "text-danger"; <td class="@pCls">@row.Profit.ToString("N2")</td> }
                             @if (Model.ShowStock) { <td>@row.TotalStockQty.ToString("N0")</td> }
+                            @if (Model.ShowOnOrder) { <td>@row.QtyOnOrder.ToString("N0")</td> }
+                            @if (Model.ShowReservation) { <td>@row.QtyReserved.ToString("N0")</td> }
+                            @if (Model.ShowAvailable) { <td>@row.QtyAvailable.ToString("N0")</td> }
                         </tr>
                     }
                 }
@@ -218,6 +237,9 @@
                     <td>@tQS.ToString("N2")</td><td>@tVS.ToString("N2")</td>
                     @if (Model.ShowProfit) { <td>@tProfit.ToString("N2")</td> }
                     @if (Model.ShowStock) { <td></td> }
+                    @if (Model.ShowOnOrder) { <td>@Model.TotalOnOrder.ToString("N0")</td> }
+                    @if (Model.ShowReservation) { <td>@Model.TotalReserved.ToString("N0")</td> }
+                    @if (Model.ShowAvailable) { <td>@Model.TotalAvailable.ToString("N0")</td> }
                 </tr>
                 </tbody>
             </table>

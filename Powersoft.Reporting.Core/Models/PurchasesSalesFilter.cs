@@ -20,6 +20,14 @@ public class PurchasesSalesFilter : IValidatableObject
     public bool IncludeVat { get; set; }
     public bool ShowProfit { get; set; }
     public bool ShowStock { get; set; }
+    public bool ShowOnOrder { get; set; }
+    public bool ShowReservation { get; set; }
+    public bool ShowAvailable { get; set; }
+
+    // When true (default), purchase cost includes allocated additional/landed charges
+    // (tbl_CostingDetails) like legacy Powersoft365. When false, cost = invoice net only
+    // (wholesale-only) per SPLASH TG LTD request.
+    public bool IncludeAdditionalCharges { get; set; } = true;
 
     public List<string> StoreCodes { get; set; } = new();
     public List<int> ItemIds { get; set; } = new();

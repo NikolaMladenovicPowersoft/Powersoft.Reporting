@@ -12,6 +12,9 @@ public class PurchasesSalesTotals
 
     public decimal TotalProfit => TotalNetSold - TotalNetPurchased;
     public decimal TotalStockQty { get; set; }
+    public decimal TotalQtyOnOrder { get; set; }
+    public decimal TotalQtyReserved { get; set; }
+    public decimal TotalQtyAvailable { get; set; }
 
     public decimal QtyPercent => TotalQtyPurchased != 0
         ? Math.Round(TotalQtySold / TotalQtyPurchased * 100, 2) : 100;

@@ -46,4 +46,61 @@ public class ProspectClientsRow
     public int EmailsSent { get; set; }
     public int SmsSent { get; set; }
     public int TotalCommunications => EmailsSent + SmsSent;
+
+    // Extra fields from tbl_RelLeadAttributes
+    public int? IntVal1 { get; set; }
+    public int? IntVal2 { get; set; }
+    public int? IntVal3 { get; set; }
+    public int? IntVal4 { get; set; }
+    public int? IntVal5 { get; set; }
+    public int? IntVal6 { get; set; }
+    public int? IntVal7 { get; set; }
+    public int? IntVal8 { get; set; }
+    public int? IntVal9 { get; set; }
+    public int? IntVal10 { get; set; }
+    public decimal? NumVal1 { get; set; }
+    public decimal? NumVal2 { get; set; }
+    public decimal? NumVal3 { get; set; }
+    public decimal? NumVal4 { get; set; }
+    public decimal? NumVal5 { get; set; }
+    public decimal? NumVal6 { get; set; }
+    public decimal? NumVal7 { get; set; }
+    public decimal? NumVal8 { get; set; }
+    public decimal? NumVal9 { get; set; }
+    public decimal? NumVal10 { get; set; }
+    public bool? BoolVal1 { get; set; }
+    public bool? BoolVal2 { get; set; }
+    public bool? BoolVal3 { get; set; }
+    public bool? BoolVal4 { get; set; }
+    public bool? BoolVal5 { get; set; }
+    public bool? BoolVal6 { get; set; }
+    public bool? BoolVal7 { get; set; }
+    public bool? BoolVal8 { get; set; }
+    public bool? BoolVal9 { get; set; }
+    public bool? BoolVal10 { get; set; }
+    public DateTime? DateVal1 { get; set; }
+    public DateTime? DateVal2 { get; set; }
+    public DateTime? DateVal3 { get; set; }
+    public DateTime? DateVal4 { get; set; }
+    public DateTime? DateVal5 { get; set; }
+    public DateTime? DateVal6 { get; set; }
+    public DateTime? DateVal7 { get; set; }
+    public DateTime? DateVal8 { get; set; }
+    public DateTime? DateVal9 { get; set; }
+    public DateTime? DateVal10 { get; set; }
+    public DateTime? DateVal11 { get; set; }
+    public DateTime? DateVal12 { get; set; }
+    public DateTime? DateVal13 { get; set; }
+    public DateTime? DateVal14 { get; set; }
+    public DateTime? DateVal15 { get; set; }
+    public string TextVal1 { get; set; } = "";
+    public string TextVal2 { get; set; } = "";
+    public string TextVal3 { get; set; } = "";
+    public string TextVal4 { get; set; } = "";
+    public string TextVal5 { get; set; } = "";
+    public string TextVal6 { get; set; } = "";
+    public string TextVal7 { get; set; } = "";
+    public string TextVal8 { get; set; } = "";
+    public string TextVal9 { get; set; } = "";
+    public string TextVal10 { get; set; } = "";
 }

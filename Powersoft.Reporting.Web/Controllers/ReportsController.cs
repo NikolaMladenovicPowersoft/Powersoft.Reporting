@@ -22,6 +22,7 @@ public class ReportsController : Controller
     private readonly ICentralRepository _centralRepository;
     private readonly IEmailSender _emailSender;
     private readonly ReportAnalyzerFactory _analyzerFactory;
+    private readonly IFilterPresetRepository _filterPresetRepo;
     private readonly ILogger<ReportsController> _logger;
 
     private static readonly Regex EmailRegex = new(
@@ -32,12 +33,14 @@ public class ReportsController : Controller
         ICentralRepository centralRepository,
         IEmailSender emailSender,
         ReportAnalyzerFactory analyzerFactory,
+        IFilterPresetRepository filterPresetRepo,
         ILogger<ReportsController> logger)
     {
         _repositoryFactory = repositoryFactory;
         _centralRepository = centralRepository;
         _emailSender = emailSender;
         _analyzerFactory = analyzerFactory;
+        _filterPresetRepo = filterPresetRepo;
         _logger = logger;
     }
     
@@ -90,101 +93,14 @@ public class ReportsController : Controller
         return 0;
     }
 
-    private static ItemsSelectionFilter? ParseItemsSelection(string? json)
+    private ItemsSelectionFilter? ParseItemsSelection(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json)) return null;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            var filter = new ItemsSelectionFilter();
-
-            ParseDimension(root, "categories", filter.Categories);
-            ParseDimension(root, "departments", filter.Departments);
-            ParseDimension(root, "brands", filter.Brands);
-            ParseDimension(root, "seasons", filter.Seasons);
-            ParseDimension(root, "suppliers", filter.Suppliers);
-            ParseDimension(root, "customers", filter.Customers);
-            ParseDimension(root, "agents", filter.Agents);
-            ParseDimension(root, "postalcodes", filter.PostalCodes);
-            ParseDimension(root, "paymenttypes", filter.PaymentTypes);
-            ParseDimension(root, "zreports", filter.ZReports);
-            ParseDimension(root, "towns", filter.Towns);
-            ParseDimension(root, "users", filter.Users);
-            ParseDimension(root, "stores", filter.Stores);
-            ParseDimension(root, "items", filter.Items);
-
-            if (root.TryGetProperty("stock", out var stockEl))
-            {
-                var sv = stockEl.GetString() ?? "all";
-                filter.Stock = sv switch
-                {
-                    "withStock" => StockFilter.WithStock,
-                    "withoutStock" => StockFilter.WithoutStock,
-                    _ => StockFilter.All
-                };
-            }
-
-            if (root.TryGetProperty("ecommerceOnly", out var ecomEl) && ecomEl.GetBoolean())
-                filter.ECommerceOnly = true;
-
-            if (root.TryGetProperty("modifiedAfter", out var modEl) && modEl.ValueKind == JsonValueKind.String)
-            {
-                if (DateTime.TryParse(modEl.GetString(), out var dt)) filter.ModifiedAfter = dt;
-            }
-
-            if (root.TryGetProperty("createdAfter", out var creEl) && creEl.ValueKind == JsonValueKind.String)
-            {
-                if (DateTime.TryParse(creEl.GetString(), out var dt)) filter.CreatedAfter = dt;
-            }
-
-            if (root.TryGetProperty("releasedAfter", out var relEl) && relEl.ValueKind == JsonValueKind.String)
-            {
-                if (DateTime.TryParse(relEl.GetString(), out var dt)) filter.ReleasedAfter = dt;
-            }
-
-            return filter;
-        }
-        catch
-        {
-            return null;
-        }
+        var result = ItemsSelectionParser.Parse(json);
+        if (result == null && !string.IsNullOrWhiteSpace(json))
+            _logger.LogWarning("ParseItemsSelection failed — selections ignored");
+        return result;
     }
 
-    private static void ParseDimension(JsonElement root, string key, DimensionFilter target)
-    {
-        if (!root.TryGetProperty(key, out var el)) return;
-        if (el.TryGetProperty("mode", out var modeEl))
-        {
-            if (modeEl.ValueKind == JsonValueKind.Number)
-            {
-                target.Mode = modeEl.GetInt32() switch
-                {
-                    1 => FilterMode.Include,
-                    2 => FilterMode.Exclude,
-                    _ => FilterMode.All
-                };
-            }
-            else
-            {
-                var modeStr = modeEl.GetString() ?? "all";
-                target.Mode = modeStr switch
-                {
-                    "include" => FilterMode.Include,
-                    "exclude" => FilterMode.Exclude,
-                    _ => FilterMode.All
-                };
-            }
-        }
-        if (el.TryGetProperty("ids", out var idsEl) && idsEl.ValueKind == JsonValueKind.Array)
-        {
-            target.Ids = idsEl.EnumerateArray()
-                .Select(e => e.ValueKind == JsonValueKind.Number ? e.GetInt32().ToString() : e.GetString() ?? "")
-                .Where(s => s.Length > 0)
-                .ToList();
-        }
-    }
 
     /// <summary>
     /// Reads MaxSchedulesPerReport from DB settings (tbl_Ini*), falling back to the compiled default.
@@ -411,8 +327,23 @@ public class ReportsController : Controller
 
         try
         {
+            var typeNorm = type?.ToLowerInvariant();
+            // Items modal uses this endpoint — must return rows from tbl_Item (was empty → Include Items never worked).
+            if (typeNorm is "item" or "items")
+            {
+                var itemRepo = _repositoryFactory.CreateItemRepository(tenantConnString);
+                var items = await itemRepo.SearchItemsAsync(search, includeInactive: false, maxResults: 300);
+                var dimItems = items.Select(i => new DimensionItem
+                {
+                    Id = i.ItemId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    Code = i.ItemCode,
+                    Name = string.IsNullOrWhiteSpace(i.ItemNamePrimary) ? i.ItemCode : i.ItemNamePrimary!
+                }).ToList();
+                return Json(dimItems);
+            }
+
             var repo = _repositoryFactory.CreateDimensionRepository(tenantConnString);
-            List<DimensionItem> results = type?.ToLowerInvariant() switch
+            List<DimensionItem> results = typeNorm switch
             {
                 "category" or "categories" => await repo.GetCategoriesAsync(),
                 "department" or "departments" => await repo.GetDepartmentsAsync(),
@@ -427,7 +358,6 @@ public class ReportsController : Controller
                 "town" or "towns" => await repo.GetTownsAsync(search),
                 "user" or "users" => await repo.GetUsersAsync(search),
                 "store" or "stores" => new List<DimensionItem>(),
-                "item" or "items" => new List<DimensionItem>(),
                 "model" or "models" => await repo.GetModelsAsync(),
                 "colour" or "colours" => await repo.GetColoursAsync(),
                 "size" or "sizes" => await repo.GetSizesAsync(),
@@ -473,8 +403,8 @@ public class ReportsController : Controller
                 ISNULL({(isCustomer ? "CustomerId" : "SupplierId")},'') AS EntityId,
                 ISNULL(Address1,'') AS Address1, ISNULL(Address2,'') AS Address2,
                 ISNULL(Town,'') AS Town, ISNULL(PostalCode,'') AS PostalCode,
-                ISNULL(Phone,'') AS Phone, ISNULL(Mobile,'') AS Mobile,
-                ISNULL(Email,'') AS Email, ISNULL(VatNo,'') AS VatNo,
+                ISNULL(Tel1,'') AS Phone, ISNULL(Mobile,'') AS Mobile,
+                ISNULL(Email,'') AS Email, ISNULL(VAT_Registration_No,'') AS VatNo,
                 CASE WHEN ISNULL(Active,0) = 1 THEN 'Active' ELSE 'Inactive' END AS Status
                 FROM {table} WHERE {pk} = @Code";
             cmd.Parameters.AddWithValue("@Code", code ?? "");
@@ -1593,6 +1523,18 @@ public class ReportsController : Controller
             filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
         }
 
+        if (filter.ItemsSelection?.Items.HasFilter == true
+            && filter.ItemsSelection.Items.Mode == FilterMode.Include)
+        {
+            model.SelectedItemIds = filter.ItemsSelection.Items.Ids
+                .Select(s => int.TryParse(s, System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : (int?)null)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+        }
+
         // Cascade: groups must be filled in order (Primary→Secondary→Third)
         if (filter.PrimaryGroup == PsGroupBy.None)
         {
@@ -1644,16 +1586,20 @@ public class ReportsController : Controller
         return View(model);
     }
 
-    [HttpGet]
+    [HttpGet, HttpPost]
     public async Task<IActionResult> ExportPsExcel(
         DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
         PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
         bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemIds,
-        string sortColumn = "ItemCode", string sortDirection = "ASC")
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        string? ItemsSelectionJson = null,
+        bool showOnOrder = false, bool showReservation = false,
+        bool showAvailable = false, bool includeAdditionalCharges = true)
     {
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
-            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
         if (result == null) return RedirectToAction("PurchasesSales");
 
         var service = new ExcelExportService();
@@ -1663,16 +1609,20 @@ public class ReportsController : Controller
             $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
     }
 
-    [HttpGet]
+    [HttpGet, HttpPost]
     public async Task<IActionResult> ExportPsPdf(
         DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
         PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
         bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemIds,
-        string sortColumn = "ItemCode", string sortDirection = "ASC")
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        string? ItemsSelectionJson = null,
+        bool showOnOrder = false, bool showReservation = false,
+        bool showAvailable = false, bool includeAdditionalCharges = true)
     {
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
-            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
         if (result == null) return RedirectToAction("PurchasesSales");
 
         var service = new PdfExportService();
@@ -1680,16 +1630,20 @@ public class ReportsController : Controller
         return File(bytes, "application/pdf", $"PurchasesSales_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf");
     }
 
-    [HttpGet]
+    [HttpGet, HttpPost]
     public async Task<IActionResult> ExportPsCsv(
         DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
         PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
         bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemIds,
-        string sortColumn = "ItemCode", string sortDirection = "ASC")
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        string? ItemsSelectionJson = null,
+        bool showOnOrder = false, bool showReservation = false,
+        bool showAvailable = false, bool includeAdditionalCharges = true)
     {
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
-            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
         if (result == null) return RedirectToAction("PurchasesSales");
 
         var service = new CsvExportService();
@@ -1705,7 +1659,10 @@ public class ReportsController : Controller
         PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
         bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemIds,
-        string sortColumn = "ItemCode", string sortDirection = "ASC")
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        string? ItemsSelectionJson = null,
+        bool showOnOrder = false, bool showReservation = false,
+        bool showAvailable = false, bool includeAdditionalCharges = true)
     {
         if (string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Please enter at least one email address." });
@@ -1723,7 +1680,8 @@ public class ReportsController : Controller
             return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
 
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
-            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
         if (result == null)
             return Json(new { success = false, message = "Failed to generate report data." });
 
@@ -1801,6 +1759,10 @@ public class ReportsController : Controller
         if (thirdGroup != PsGroupBy.None) selectionLines.Add($"Third Group: {thirdGroup}");
         if (showProfit) selectionLines.Add("Show Profit: Yes");
         if (showStock) selectionLines.Add("Show Stock: Yes");
+        if (showOnOrder) selectionLines.Add("Show On Order: Yes");
+        if (showReservation) selectionLines.Add("Show Reserved: Yes");
+        if (showAvailable) selectionLines.Add("Show Available: Yes");
+        if (!includeAdditionalCharges) selectionLines.Add("Cost: Wholesale only (excl. additional charges)");
         if (!string.IsNullOrWhiteSpace(storeCodes)) selectionLines.Add($"Stores: {storeCodes}");
 
         var selectionsHtml = string.Join("", selectionLines.Select(s =>
@@ -1862,7 +1824,10 @@ public class ReportsController : Controller
         PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
         bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemIds,
-        string sortColumn, string sortDirection)
+        string sortColumn, string sortDirection,
+        string? itemsSelectionJson = null,
+        bool showOnOrder = false, bool showReservation = false,
+        bool showAvailable = false, bool includeAdditionalCharges = true)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString)) return null;
@@ -1878,13 +1843,24 @@ public class ReportsController : Controller
             IncludeVat = includeVat,
             ShowProfit = showProfit,
             ShowStock = showStock,
+            ShowOnOrder = showOnOrder,
+            ShowReservation = showReservation,
+            ShowAvailable = showAvailable,
+            IncludeAdditionalCharges = includeAdditionalCharges,
             StoreCodes = string.IsNullOrEmpty(storeCodes) ? new() : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
             ItemIds = string.IsNullOrEmpty(itemIds) ? new() : itemIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Where(s => int.TryParse(s.Trim(), out _)).Select(s => int.Parse(s.Trim())).ToList(),
+            ItemsSelection = ParseItemsSelection(itemsSelectionJson),
             SortColumn = sortColumn,
             SortDirection = sortDirection,
             PageSize = int.MaxValue
         };
+
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter
+            && filter.ItemsSelection.Stores.Mode == FilterMode.Include)
+        {
+            filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+        }
 
         try
         {
@@ -1934,6 +1910,14 @@ public class ReportsController : Controller
                 model.ShowProfit = sp == "1";
             if (parms.TryGetValue("ShowStock", out var ss))
                 model.ShowStock = ss == "1";
+            if (parms.TryGetValue("ShowOnOrder", out var soo))
+                model.ShowOnOrder = soo == "1";
+            if (parms.TryGetValue("ShowReservation", out var sres))
+                model.ShowReservation = sres == "1";
+            if (parms.TryGetValue("ShowAvailable", out var sav))
+                model.ShowAvailable = sav == "1";
+            if (parms.TryGetValue("IncludeAdditionalCharges", out var iac))
+                model.IncludeAdditionalCharges = iac == "1";
             if (parms.TryGetValue("ReportMode", out var rm) && Enum.TryParse<PsReportMode>(rm, out var rmt))
                 model.ReportMode = rmt;
             if (parms.TryGetValue("PrimaryGroup", out var pg) && Enum.TryParse<PsGroupBy>(pg, out var pgt))
@@ -2314,13 +2298,17 @@ public class ReportsController : Controller
         bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemIds,
         string sortColumn = "ItemCode", string sortDirection = "ASC",
-        string? locale = "el", int? promptTemplateId = null)
+        string? locale = "el", int? promptTemplateId = null,
+        string? ItemsSelectionJson = null,
+        bool showOnOrder = false, bool showReservation = false,
+        bool showAvailable = false, bool includeAdditionalCharges = true)
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
 
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
-            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
         if (result == null)
             return Json(new { success = false, message = "Failed to generate report data for analysis." });
 
@@ -2620,16 +2608,20 @@ public class ReportsController : Controller
 
     // ==================== PS Print Preview ====================
 
-    [HttpGet]
+    [HttpGet, HttpPost]
     public async Task<IActionResult> PrintPsPreview(
         DateTime dateFrom, DateTime dateTo, PsReportMode reportMode,
         PsGroupBy primaryGroup, PsGroupBy secondaryGroup, PsGroupBy thirdGroup,
         bool includeVat, bool showProfit, bool showStock,
         string? storeCodes, string? itemIds,
-        string sortColumn = "ItemCode", string sortDirection = "ASC")
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        string? ItemsSelectionJson = null,
+        bool showOnOrder = false, bool showReservation = false,
+        bool showAvailable = false, bool includeAdditionalCharges = true)
     {
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
-            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection);
+            includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
         if (result == null) return RedirectToAction("PurchasesSales");
 
         var model = new PurchasesSalesViewModel
@@ -2643,6 +2635,10 @@ public class ReportsController : Controller
             IncludeVat = includeVat,
             ShowProfit = showProfit,
             ShowStock = showStock,
+            ShowOnOrder = showOnOrder,
+            ShowReservation = showReservation,
+            ShowAvailable = showAvailable,
+            IncludeAdditionalCharges = includeAdditionalCharges,
             ConnectedDatabase = GetConnectedDatabaseName(),
             Results = result.Value.rows,
             TotalCount = result.Value.rows.Count,
@@ -6104,6 +6100,16 @@ public class ReportsController : Controller
 
         ViewBag.HasSavedLayout = hasSavedLayout;
         ViewBag.SavedLayout = savedLayout;
+
+        var extraFieldLabels = new Dictionary<string, string>();
+        try
+        {
+            var repo = _repositoryFactory.CreateProspectClientsRepository(tenantConnString);
+            extraFieldLabels = await repo.GetExtraFieldLabelsAsync();
+        }
+        catch { }
+        ViewBag.ExtraFieldLabels = extraFieldLabels;
+
         return View();
     }
 
@@ -7430,5 +7436,71 @@ public class ReportsController : Controller
         }
         catch { return Json(Array.Empty<object>()); }
     }
+
+    #region Filter Presets
+
+    [HttpGet]
+    public async Task<IActionResult> GetFilterPresets(string? reportType)
+    {
+        var connStr = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(connStr))
+            return Json(Array.Empty<object>());
+
+        var userCode = HttpContext.Session.GetString(SessionKeys.UserCode) ?? "";
+        var presets = await _filterPresetRepo.GetPresetsAsync(connStr, userCode, reportType);
+        return Json(presets.Select(p => new
+        {
+            p.PresetId, p.PresetName, p.ReportType, p.FilterJson,
+            p.IsShared, isOwner = p.CreatedBy == userCode
+        }));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveFilterPreset([FromBody] SaveFilterPresetRequest request)
+    {
+        var connStr = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(connStr))
+            return Json(new { success = false, message = "No database connected" });
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return Json(new { success = false, message = "Preset name is required" });
+
+        var userCode = HttpContext.Session.GetString(SessionKeys.UserCode) ?? "";
+        var preset = new FilterPreset
+        {
+            PresetId = request.PresetId,
+            PresetName = request.Name.Trim(),
+            ReportType = request.ReportType,
+            FilterJson = request.FilterJson ?? "{}",
+            CreatedBy = userCode,
+            IsShared = request.IsShared
+        };
+
+        var id = await _filterPresetRepo.SavePresetAsync(connStr, preset);
+        return Json(new { success = true, presetId = id });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteFilterPreset(int presetId)
+    {
+        var connStr = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(connStr))
+            return Json(new { success = false });
+
+        var userCode = HttpContext.Session.GetString(SessionKeys.UserCode) ?? "";
+        var ok = await _filterPresetRepo.DeletePresetAsync(connStr, presetId, userCode);
+        return Json(new { success = ok });
+    }
+
+    public class SaveFilterPresetRequest
+    {
+        public int PresetId { get; set; }
+        public string Name { get; set; } = "";
+        public string? ReportType { get; set; }
+        public string? FilterJson { get; set; }
+        public bool IsShared { get; set; }
+    }
+
+    #endregion
 
 }

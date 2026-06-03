@@ -191,7 +191,7 @@ public class ReportsController : Controller
         return claim == null || !bool.TryParse(claim.Value, out var v) || v;
     }
 
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
         var connectedDb = GetConnectedDatabaseName();
         if (string.IsNullOrEmpty(connectedDb))
@@ -199,7 +199,51 @@ public class ReportsController : Controller
             TempData["Warning"] = "Please select and connect to a database first.";
             return RedirectToAction("Index", "Home");
         }
-        
+
+        // For Ranking > 20 (custom roles) — resolve per-report view permissions so
+        // the dashboard and sidebar can hide inaccessible reports.
+        // Ranking <= 20: all true (shortcut — no DB calls).
+        var ranking = GetRanking();
+        if (ranking <= ModuleConstants.RankingAllActionsAllowed)
+        {
+            ViewBag.CanViewAB         = true;
+            ViewBag.CanViewPS         = true;
+            ViewBag.CanViewPareto     = true;
+            ViewBag.CanViewCharts     = true;
+            ViewBag.CanViewCatalogue  = true;
+            ViewBag.CanViewBMS        = true;
+            ViewBag.CanViewCancelLog  = true;
+            ViewBag.CanViewPC         = true;
+            ViewBag.CanViewOffers     = true;
+        }
+        else
+        {
+            var roleId = GetRoleID();
+            // Run all 9 checks concurrently — single await at end
+            var t1  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewAvgBasket);
+            var t2  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewPurchasesSales);
+            var t3  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewPareto);
+            var t4  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewCharts);
+            var t5  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewCatalogue);
+            var t6  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewBelowMinStock);
+            var t7  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewCancelLog);
+            var t8  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewProspectClients);
+            var t9  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewOffersReport);
+            await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8, t9);
+
+            ViewBag.CanViewAB         = t1.Result;
+            ViewBag.CanViewPS         = t2.Result && CanViewCost();
+            ViewBag.CanViewPareto     = t3.Result;
+            ViewBag.CanViewCharts     = t4.Result;
+            ViewBag.CanViewCatalogue  = t5.Result;
+            ViewBag.CanViewBMS        = t6.Result;
+            ViewBag.CanViewCancelLog  = t7.Result;
+            ViewBag.CanViewPC         = t8.Result;
+            ViewBag.CanViewOffers     = t9.Result;
+        }
+
+        ViewBag.ViewCost     = CanViewCost();
+        ViewBag.ViewSupplier = CanViewSupplier();
         return View();
     }
 
@@ -547,7 +591,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                ParametersJson = parametersJson,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -2178,7 +2222,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                ParametersJson = parametersJson,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -3101,7 +3145,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                ParametersJson = parametersJson,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -3870,7 +3914,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                ParametersJson = parametersJson,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -5196,7 +5240,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                ParametersJson = parametersJson,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -5400,7 +5444,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                ParametersJson = parametersJson,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -5611,7 +5655,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                ParametersJson = parametersJson,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -6926,7 +6970,7 @@ public class ReportsController : Controller
                 ExportFormat   = exportFormat ?? "Excel",
                 Recipients     = recipients,
                 EmailSubject   = emailSubject,
-                ParametersJson = InjectPermissionsIntoParametersJson(paramsToStore),
+                ParametersJson = paramsToStore,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate    = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -7660,7 +7704,7 @@ public class ReportsController : Controller
                 ExportFormat   = exportFormat ?? "Excel",
                 Recipients     = recipients,
                 EmailSubject   = emailSubject,
-                ParametersJson = InjectPermissionsIntoParametersJson(paramsToStore),
+                ParametersJson = paramsToStore,
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate    = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,

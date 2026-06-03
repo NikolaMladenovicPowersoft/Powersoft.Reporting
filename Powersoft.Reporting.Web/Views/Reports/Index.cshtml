@@ -1,11 +1,16 @@
 @{
     ViewData["Title"] = "Reports";
     var connectedDb = Context.Session.GetString("ConnectedDatabase");
-    // Read permission flags from auth cookie claims (set at login)
-    var viewCostClaim = User.FindFirst("ps:viewcost")?.Value;
-    var viewCost     = viewCostClaim == null || viewCostClaim != "False";
-    var viewSupplierClaim = User.FindFirst("ps:viewsupplier")?.Value;
-    var viewSupplier = viewSupplierClaim == null || viewSupplierClaim != "False";
+    // Permission flags set by ReportsController.Index (async, resolved per-role)
+    bool canViewAB        = ViewBag.CanViewAB        ?? true;
+    bool canViewPS        = ViewBag.CanViewPS        ?? true;
+    bool canViewPareto    = ViewBag.CanViewPareto    ?? true;
+    bool canViewCharts    = ViewBag.CanViewCharts    ?? true;
+    bool canViewCatalogue = ViewBag.CanViewCatalogue ?? true;
+    bool canViewBMS       = ViewBag.CanViewBMS       ?? true;
+    bool canViewCancelLog = ViewBag.CanViewCancelLog ?? true;
+    bool canViewPC        = ViewBag.CanViewPC        ?? true;
+    bool canViewOffers    = ViewBag.CanViewOffers    ?? true;
 }
 
 <div class="row">
@@ -16,30 +21,41 @@
             </h6>
             <nav class="nav flex-column">
                 <h6 class="text-muted small px-3 mt-2 mb-2">Power Reports</h6>
+                @if (canViewAB) {
                 <a class="nav-link active" asp-action="AverageBasket">
                     <i class="bi bi-basket me-2"></i>Average Basket
                 </a>
-                @if (viewCost)
-                {
-                    <a class="nav-link" asp-action="PurchasesSales">
-                        <i class="bi bi-arrow-left-right me-2"></i>Purchases vs Sales
-                    </a>
                 }
+                @if (canViewPS) {
+                <a class="nav-link" asp-action="PurchasesSales">
+                    <i class="bi bi-arrow-left-right me-2"></i>Purchases vs Sales
+                </a>
+                }
+                @if (canViewCharts) {
                 <a class="nav-link" asp-action="Charts">
                     <i class="bi bi-pie-chart me-2"></i>Charts & Dashboards
                 </a>
+                }
+                @if (canViewPareto) {
                 <a class="nav-link" asp-action="Pareto">
                     <i class="bi bi-funnel me-2"></i>Pareto 80/20
                 </a>
+                }
+                @if (canViewCatalogue) {
                 <a class="nav-link" asp-action="Catalogue">
                     <i class="bi bi-journal-text me-2"></i>Power Reports Catalogue
                 </a>
+                }
+                @if (canViewBMS) {
                 <a class="nav-link" asp-action="BelowMinStock">
                     <i class="bi bi-exclamation-triangle me-2"></i>Below Minimum Stock
                 </a>
+                }
+                @if (canViewCancelLog) {
                 <a class="nav-link" asp-action="CancelLog">
                     <i class="bi bi-x-circle me-2"></i>Cancellation Logging
                 </a>
+                }
             </nav>
             
             <hr class="my-3">
@@ -48,12 +64,16 @@
                 <i class="bi bi-folder me-2"></i>CRM
             </h6>
             <nav class="nav flex-column">
+                @if (canViewPC) {
                 <a class="nav-link" asp-action="ProspectClients">
                     <i class="bi bi-people me-2"></i>Prospect Clients
                 </a>
+                }
+                @if (canViewOffers) {
                 <a class="nav-link" asp-action="OffersReport">
                     <i class="bi bi-file-earmark-text me-2"></i>Offers Report
                 </a>
+                }
             </nav>
 
             <hr class="my-3">
@@ -103,7 +123,7 @@
                         </div>
                     </div>
 
-                    @if (viewCost)
+                    @if (canViewPS)
                     {
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100 border-success">
@@ -129,6 +149,7 @@
                     </div>
                     }
 
+                    @if (canViewCharts) {
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100 border-info">
                             <div class="card-body d-flex flex-column">
@@ -151,7 +172,9 @@
                             </div>
                         </div>
                     </div>
+                    }
 
+                    @if (canViewPareto) {
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100" style="border-color:#6366f1;">
                             <div class="card-body d-flex flex-column">
@@ -174,7 +197,9 @@
                             </div>
                         </div>
                     </div>
+                    }
 
+                    @if (canViewCatalogue) {
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100 border-warning">
                             <div class="card-body d-flex flex-column">
@@ -197,7 +222,9 @@
                             </div>
                         </div>
                     </div>
+                    }
 
+                    @if (canViewBMS) {
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100 border-danger">
                             <div class="card-body d-flex flex-column">
@@ -220,7 +247,9 @@
                             </div>
                         </div>
                     </div>
+                    }
 
+                    @if (canViewCancelLog) {
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100" style="border-color:#dc2626;">
                             <div class="card-body d-flex flex-column">
@@ -243,12 +272,14 @@
                             </div>
                         </div>
                     </div>
+                    }
                 </div>
 
                 <h6 class="text-muted text-uppercase small fw-bold mb-3 mt-4">
                     <i class="bi bi-people me-1"></i>CRM
                 </h6>
                 <div class="row g-4 mb-4">
+                    @if (canViewPC) {
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100" style="border-color:#0ea5e9;">
                             <div class="card-body d-flex flex-column">
@@ -271,7 +302,9 @@
                             </div>
                         </div>
                     </div>
+                    }
 
+                    @if (canViewOffers) {
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100" style="border-color:#7c3aed;">
                             <div class="card-body d-flex flex-column">
@@ -294,6 +327,7 @@
                             </div>
                         </div>
                     </div>
+                    }
                 </div>
 
                 <h6 class="text-muted text-uppercase small fw-bold mb-3 mt-4">

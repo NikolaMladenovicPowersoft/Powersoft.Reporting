@@ -7,6 +7,7 @@
     var now = DateTime.Now;
     bool hasL1 = filter.PrimaryGroup != "NONE";
     bool hasL2 = filter.SecondaryGroup != "NONE";
+    bool viewCost = ViewBag.ViewCost == null || (bool)ViewBag.ViewCost;
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -86,7 +87,7 @@
                     <th class="num">Items</th><th class="num">Qty</th>
                     <th class="num">Subtotal</th><th class="num">Discount</th>
                     <th class="num">VAT</th><th class="num">Grand Total</th>
-                    <th class="num">Cost</th><th class="num">Order %</th>
+                    @if (viewCost) { <th class="num">Cost</th> }<th class="num">Order %</th>
                     <th>Lead</th><th>Comments</th><th>Internal Notes</th><th>Source</th>
                 </tr>
             </thead>
@@ -109,7 +110,7 @@
                         <td class="num">@r.InvoiceTotalDiscount.ToString("N2")</td>
                         <td class="num">@r.InvoiceVat.ToString("N2")</td>
                         <td class="num" style="font-weight:600">@r.InvoiceGrandTotal.ToString("N2")</td>
-                        <td class="num">@r.TotalItemCost.ToString("N2")</td>
+                        @if (viewCost) { <td class="num">@r.TotalItemCost.ToString("N2")</td> }
                         <td class="num">@r.OrderPercentage.ToString("N1")%</td>
                         <td>@r.LinkedLead</td>
                         <td style="white-space:normal;word-break:break-word;">@r.Comments</td>
@@ -125,7 +126,7 @@
                     <td class="num">@rows.Sum(r=>r.InvoiceTotalDiscount).ToString("N2")</td>
                     <td class="num">@rows.Sum(r=>r.InvoiceVat).ToString("N2")</td>
                     <td class="num" style="font-weight:700">@rows.Sum(r=>r.InvoiceGrandTotal).ToString("N2")</td>
-                    <td class="num">@rows.Sum(r=>r.TotalItemCost).ToString("N2")</td>
+                    @if (viewCost) { <td class="num">@rows.Sum(r=>r.TotalItemCost).ToString("N2")</td> }
                     <td colspan="5"></td>
                 </tr>
             </tbody>

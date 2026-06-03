@@ -7440,7 +7440,7 @@ public class ReportsController : Controller
             offerType, includeHistory, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("OffersReport");
 
-        var bytes = new CsvExportService().GenerateOffersReportCsv(result.Value.rows, result.Value.filter);
+        var bytes = new CsvExportService().GenerateOffersReportCsv(result.Value.rows, result.Value.filter, CanViewCost());
         return File(bytes, "text/csv", $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
     }
 
@@ -7459,7 +7459,7 @@ public class ReportsController : Controller
             offerType, includeHistory, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("OffersReport");
 
-        var bytes = new ExcelExportService().GenerateOffersReportExcel(result.Value.rows, result.Value.filter);
+        var bytes = new ExcelExportService().GenerateOffersReportExcel(result.Value.rows, result.Value.filter, CanViewCost());
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
     }
@@ -7479,7 +7479,7 @@ public class ReportsController : Controller
             offerType, includeHistory, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("OffersReport");
 
-        var bytes = new PdfExportService().GenerateOffersReportPdf(result.Value.rows, result.Value.filter);
+        var bytes = new PdfExportService().GenerateOffersReportPdf(result.Value.rows, result.Value.filter, CanViewCost());
         return File(bytes, "application/pdf",
             $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf");
     }
@@ -7502,6 +7502,7 @@ public class ReportsController : Controller
         ViewBag.Rows = result.Value.rows;
         ViewBag.Filter = result.Value.filter;
         ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+        ViewBag.ViewCost = CanViewCost();
         return View("OffersReportPrintPreview");
     }
 
@@ -7546,17 +7547,17 @@ public class ReportsController : Controller
         switch (format)
         {
             case "pdf":
-                fileBytes = new PdfExportService().GenerateOffersReportPdf(result.Value.rows, result.Value.filter);
+                fileBytes = new PdfExportService().GenerateOffersReportPdf(result.Value.rows, result.Value.filter, CanViewCost());
                 fileName = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
                 contentType = "application/pdf";
                 break;
             case "csv":
-                fileBytes = new CsvExportService().GenerateOffersReportCsv(result.Value.rows, result.Value.filter);
+                fileBytes = new CsvExportService().GenerateOffersReportCsv(result.Value.rows, result.Value.filter, CanViewCost());
                 fileName = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
                 contentType = "text/csv";
                 break;
             default:
-                fileBytes = new ExcelExportService().GenerateOffersReportExcel(result.Value.rows, result.Value.filter);
+                fileBytes = new ExcelExportService().GenerateOffersReportExcel(result.Value.rows, result.Value.filter, CanViewCost());
                 fileName = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 break;
@@ -7638,7 +7639,7 @@ public class ReportsController : Controller
 
         try
         {
-            var csvData = new CsvExportService().GenerateOffersReportCsvString(result.Value.rows, result.Value.filter);
+            var csvData = new CsvExportService().GenerateOffersReportCsvString(result.Value.rows, result.Value.filter, CanViewCost());
             var rowCount = result.Value.rows.Count;
 
             string? customPrompt = null;

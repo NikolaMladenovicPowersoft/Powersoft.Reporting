@@ -891,17 +891,17 @@ public class ScheduleExecutionService
         switch (schedule.ExportFormat?.ToUpperInvariant())
         {
             case "CSV":
-                fileBytes   = new CsvExportService().GenerateOffersReportCsv(rows, filter);
+                fileBytes   = new CsvExportService().GenerateOffersReportCsv(rows, filter, parameters.ViewCost);
                 fileName    = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
                 contentType = "text/csv";
                 break;
             case "PDF":
-                fileBytes   = new PdfExportService().GenerateOffersReportPdf(rows, filter);
+                fileBytes   = new PdfExportService().GenerateOffersReportPdf(rows, filter, parameters.ViewCost);
                 fileName    = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
                 contentType = "application/pdf";
                 break;
             default:
-                fileBytes   = new ExcelExportService().GenerateOffersReportExcel(rows, filter);
+                fileBytes   = new ExcelExportService().GenerateOffersReportExcel(rows, filter, parameters.ViewCost);
                 fileName    = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 break;

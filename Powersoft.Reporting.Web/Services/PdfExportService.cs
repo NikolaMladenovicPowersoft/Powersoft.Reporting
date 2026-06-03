@@ -734,11 +734,11 @@ public class PdfExportService
     }
 
     public byte[] GenerateOffersReportPdf(
-        List<OffersReportRow> rows, OffersReportFilter filter)
+        List<OffersReportRow> rows, OffersReportFilter filter, bool viewCost = true)
     {
         bool hasL1 = filter.PrimaryGroup != "NONE";
         bool hasL2 = filter.SecondaryGroup != "NONE";
-        int colCount = 22 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+        int colCount = 22 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) - (viewCost ? 0 : 1);
 
         using var ms = new MemoryStream();
         var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
@@ -767,7 +767,11 @@ public class PdfExportService
             "Offer No", "Date", "Valid Until", "Status",
             "Customer", "Store", "Agent",
             "Items", "Qty", "Subtotal", "Disc.",
-            "VAT", "Grand Total", "Cost", "Order %",
+            "VAT", "Grand Total"
+        });
+        if (viewCost) headers.Add("Cost");
+        headers.AddRange(new[] {
+            "Order %",
             "Lead", "Printed", "Emailed", "Std Offer", "Comments", "Internal Notes", "Source"
         });
 
@@ -801,7 +805,7 @@ public class PdfExportService
             AddDataCell(table, row.InvoiceTotalDiscount.ToString("N2"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, row.InvoiceVat.ToString("N2"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, row.InvoiceGrandTotal.ToString("N2"), bg, Element.ALIGN_RIGHT);
-            AddDataCell(table, row.TotalItemCost.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            if (viewCost) AddDataCell(table, row.TotalItemCost.ToString("N2"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, row.OrderPercentage.ToString("N1") + "%", bg, Element.ALIGN_RIGHT);
             AddDataCell(table, row.LinkedLead, bg);
             AddDataCell(table, row.Printed ? "Yes" : "", bg);

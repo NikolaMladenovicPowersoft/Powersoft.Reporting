@@ -928,7 +928,7 @@ public class ExcelExportService
     }
 
     public byte[] GenerateOffersReportExcel(
-        List<OffersReportRow> rows, OffersReportFilter filter)
+        List<OffersReportRow> rows, OffersReportFilter filter, bool viewCost = true)
     {
         bool hasL1 = filter.PrimaryGroup != "NONE";
         bool hasL2 = filter.SecondaryGroup != "NONE";
@@ -970,7 +970,7 @@ public class ExcelExportService
         ws.Cell(headerRow, col++).Value = "Disc %";
         ws.Cell(headerRow, col++).Value = "VAT";
         ws.Cell(headerRow, col++).Value = "Grand Total";
-        ws.Cell(headerRow, col++).Value = "Cost";
+        if (viewCost) ws.Cell(headerRow, col++).Value = "Cost";
         ws.Cell(headerRow, col++).Value = "Order %";
         ws.Cell(headerRow, col++).Value = "Lead";
         ws.Cell(headerRow, col++).Value = "Printed";
@@ -1014,8 +1014,11 @@ public class ExcelExportService
             ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
             ws.Cell(dataRow, col).Value = row.InvoiceGrandTotal;
             ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
-            ws.Cell(dataRow, col).Value = row.TotalItemCost;
-            ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            if (viewCost)
+            {
+                ws.Cell(dataRow, col).Value = row.TotalItemCost;
+                ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            }
             ws.Cell(dataRow, col).Value = row.OrderPercentage;
             ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
             ws.Cell(dataRow, col++).Value = row.LinkedLead;

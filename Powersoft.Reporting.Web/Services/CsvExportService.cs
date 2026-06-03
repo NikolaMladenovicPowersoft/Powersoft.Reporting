@@ -625,7 +625,7 @@ public class CsvExportService
     }
 
     public byte[] GenerateOffersReportCsv(
-        List<OffersReportRow> rows, OffersReportFilter filter)
+        List<OffersReportRow> rows, OffersReportFilter filter, bool viewCost = true)
     {
         bool hasL1 = filter.PrimaryGroup != "NONE";
         bool hasL2 = filter.SecondaryGroup != "NONE";
@@ -640,7 +640,12 @@ public class CsvExportService
             "Offer No", "Date", "Valid Until", "Status",
             "Customer", "Store", "Agent",
             "Items", "Qty", "Subtotal", "Discount", "Disc %",
-            "VAT", "Grand Total", "Cost", "Order %",
+            "VAT", "Grand Total"
+        });
+        if (viewCost) headers.Add("Cost");
+        headers.AddRange(new[]
+        {
+            "Order %",
             "Lead", "Printed", "Emailed", "Comments", "Internal Notes", "Source"
         });
         sb.AppendLine(string.Join(",", headers.Select(Escape)));
@@ -664,7 +669,7 @@ public class CsvExportService
             vals.Add(row.InvoiceDiscountPerc.ToString("F2"));
             vals.Add(row.InvoiceVat.ToString("F2"));
             vals.Add(row.InvoiceGrandTotal.ToString("F2"));
-            vals.Add(row.TotalItemCost.ToString("F2"));
+            if (viewCost) vals.Add(row.TotalItemCost.ToString("F2"));
             vals.Add(row.OrderPercentage.ToString("F2"));
             vals.Add(row.LinkedLead);
             vals.Add(row.Printed ? "Yes" : "");
@@ -679,9 +684,9 @@ public class CsvExportService
     }
 
     public string GenerateOffersReportCsvString(
-        List<OffersReportRow> rows, OffersReportFilter filter)
+        List<OffersReportRow> rows, OffersReportFilter filter, bool viewCost = true)
     {
-        var bytes = GenerateOffersReportCsv(rows, filter);
+        var bytes = GenerateOffersReportCsv(rows, filter, viewCost);
         return Encoding.UTF8.GetString(bytes);
     }
 

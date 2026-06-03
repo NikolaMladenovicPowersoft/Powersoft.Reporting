@@ -770,187 +770,14 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     }
 </style>
 
-<!-- Schedule Modal -->
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="scheduleModalLabel"><i class="bi bi-clock-history me-2"></i>Schedule Catalogue Report</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-light border mb-3 py-2">
-                    <small class="text-muted">
-                        <i class="bi bi-info-circle me-1"></i>
-                        The report will run automatically and recipients will receive an email with a link to download the exported file.
-                    </small>
-                </div>
-
-                <h6 class="text-muted mb-2"><i class="bi bi-funnel me-1"></i>Parameters (current selection)</h6>
-                <div class="bg-light rounded p-2 mb-3 small">
-                    <span class="me-3"><strong>Mode:</strong> @Model.ReportMode</span>
-                    <span class="me-3"><strong>Report On:</strong> @Model.ReportOn</span>
-                    @if (Model.HasPrimaryGroup)
-                    {
-                        <span class="me-3"><strong>Group:</strong> @Model.PrimaryGroup @(Model.HasSecondaryGroup ? $"→ {Model.SecondaryGroup}" : "") @(Model.HasThirdGroup ? $"→ {Model.ThirdGroup}" : "")</span>
-                    }
-                    @if (Model.SelectedStoreCodes.Any())
-                    {
-                        <span><strong>Stores:</strong> @Model.SelectedStoreCodes.Count selected</span>
-                    }
-                </div>
-
-                <h6 class="text-muted mb-2"><i class="bi bi-calendar-range me-1"></i>Report date range</h6>
-                <p class="small text-muted mb-2">Computed when the schedule runs (e.g. last 7 days from run date).</p>
-                <div class="row g-3 mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Period type</label>
-                        <select class="form-select" id="schedDateRangeType" onchange="onSchedDateRangeTypeChange()">
-                            <option value="LastNDays" data-value="7">Last 7 days</option>
-                            <option value="LastNDays" data-value="30">Last 30 days</option>
-                            <option value="ThisMonth">This month (to today)</option>
-                            <option value="LastMonth">Last month</option>
-                            <option value="YearToDate">Year to date</option>
-                            <option value="LastYear">Last year</option>
-                            <option value="Custom">Custom (fixed dates)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3" id="schedCustomDateFromWrap" style="display:none;">
-                        <label class="form-label fw-semibold">From</label>
-                        <input type="date" class="form-control" id="schedDateFrom" value="@Model.DateFrom.ToString("yyyy-MM-dd")">
-                    </div>
-                    <div class="col-md-3" id="schedCustomDateToWrap" style="display:none;">
-                        <label class="form-label fw-semibold">To</label>
-                        <input type="date" class="form-control" id="schedDateTo" value="@Model.DateTo.ToString("yyyy-MM-dd")">
-                    </div>
-                </div>
-
-                <h6 class="text-muted mb-2"><i class="bi bi-gear me-1"></i>Schedule settings</h6>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Schedule Name</label>
-                        <input type="text" class="form-control" id="schedName" placeholder="e.g. Weekly Catalogue Summary" required>
-                        <input type="hidden" id="schedId" value="">
-                        <small class="text-muted">A label to identify this schedule in the list</small>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Export Format</label>
-                        <select class="form-select" id="schedFormat">
-                            <option value="Excel">Excel (.xlsx)</option>
-                            <option value="CSV">CSV</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Recurrence</label>
-                        <select class="form-select" id="schedRecurrence" onchange="onRecurrenceChange()">
-                            <option value="Once">Run Once</option>
-                            <option value="Daily" selected>Daily</option>
-                            <option value="Weekly">Weekly</option>
-                            <option value="Monthly">Monthly</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4" id="schedDayContainer" style="display:none;">
-                        <label class="form-label fw-semibold" id="schedDayLabel">Day</label>
-                        <select class="form-select" id="schedDay">
-                            <option value="1">Monday</option>
-                            <option value="2">Tuesday</option>
-                            <option value="3">Wednesday</option>
-                            <option value="4">Thursday</option>
-                            <option value="5">Friday</option>
-                            <option value="6">Saturday</option>
-                            <option value="0">Sunday</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4" id="schedWeeklyDaysContainer" style="display:none;">
-                        <label class="form-label fw-semibold">Days of week</label>
-                        <div class="d-flex flex-wrap gap-2">
-                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="1"> Mon</label>
-                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="2"> Tue</label>
-                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="3"> Wed</label>
-                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="4"> Thu</label>
-                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="5"> Fri</label>
-                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="6"> Sat</label>
-                            <label class="btn btn-outline-secondary btn-sm"><input type="checkbox" class="sched-dow" value="0"> Sun</label>
-                        </div>
-                    </div>
-                    <div class="col-md-4" id="schedMonthDayContainer" style="display:none;">
-                        <label class="form-label fw-semibold">Day of month</label>
-                        <select class="form-select" id="schedMonthDay">
-                            @for (var i = 1; i <= 28; i++) { <option value="@i">@i</option> }
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Time</label>
-                        <input type="time" class="form-control" id="schedTime" value="08:00">
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Start date (recurrence)</label>
-                        <input type="date" class="form-control" id="schedStartDate" value="@DateTime.Today.ToString("yyyy-MM-dd")" min="@DateTime.Today.ToString("yyyy-MM-dd")" style="max-width:12rem;">
-                    </div>
-
-                    <div class="col-12 mt-2">
-                        <h6 class="text-muted mb-2"><i class="bi bi-envelope me-1"></i>Recipients</h6>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Email addresses</label>
-                        <input type="text" class="form-control" id="schedRecipients" placeholder="user@@company.com, manager@@company.com">
-                        <small class="text-muted">Separate multiple addresses with commas</small>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Email Subject <span class="text-muted fw-normal">(optional)</span></label>
-                        <input type="text" class="form-control" id="schedSubject" placeholder="Catalogue Report - {date}">
-                    </div>
-
-                    <div class="col-12 mt-3">
-                        <h6 class="text-muted mb-2"><i class="bi bi-stars me-1"></i>AI Analysis</h6>
-                    </div>
-                    <div class="col-12">
-                        <div class="form-check form-switch mb-2">
-                            <input class="form-check-input" type="checkbox" id="schedSkipIfEmpty">
-                            <label class="form-check-label fw-semibold" for="schedSkipIfEmpty">Don't send if empty</label>
-                        </div>
-                        <small class="text-muted d-block mb-3">When enabled, the email will not be sent if the report returns 0 records.</small>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="schedIncludeAi" onchange="onSchedAiToggle()">
-                            <label class="form-check-label fw-semibold" for="schedIncludeAi">Include AI Analysis in email</label>
-                        </div>
-                        <small class="text-muted d-block mt-1">When enabled, an AI-generated business intelligence summary will be included in the scheduled email body.</small>
-                        <div id="schedAiDetails" class="mt-2 ps-4" style="display:none;">
-                            <div class="row g-2 align-items-center">
-                                <div class="col-auto">
-                                    <label class="form-label small mb-0 fw-semibold" for="schedAiLocale">Language</label>
-                                </div>
-                                <div class="col-auto">
-                                    <select class="form-select form-select-sm" id="schedAiLocale" style="width:auto;min-width:140px;">
-                                        <option value="el">Ελληνικά</option>
-                                        <option value="en">English</option>
-                                        <option value="sr">Srpski</option>
-                                        <option value="de">Deutsch</option>
-                                        <option value="fr">Français</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="scheduleAlert" class="mt-3" style="display:none;"></div>
-
-                <hr class="my-3">
-                <h6 class="text-muted"><i class="bi bi-list-check me-1"></i>Existing Schedules</h6>
-                <div id="existingSchedules" class="small text-muted">Loading...</div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary me-auto" onclick="resetScheduleForm()" title="Clear the form to create a new schedule">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
-                </button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="saveSchedule()">
-                    <i class="bi bi-check-lg me-1"></i>Save Schedule
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+@* Schedule Modal — shared partial (gold standard from Purchases vs Sales) *@
+@await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel {
+    SaveAction      = "SaveCatalogueSchedule",
+    ListAction      = "GetCatalogueSchedules",
+    ReportBadge     = "Catalogue",
+    NamePlaceholder = "e.g. Weekly Catalogue Summary",
+    SubjectPlaceholder = "Catalogue Report - {date}"
+})
 
 <!-- Column Settings Modal (searchable) -->
 <div class="modal fade" id="columnSettingsModal" tabindex="-1" aria-labelledby="columnSettingsLabel" aria-hidden="true">
@@ -1770,22 +1597,6 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         }
     }
 
-    function onSchedDateRangeTypeChange() {
-        var sel = document.getElementById('schedDateRangeType');
-        var isCustom = (sel.options[sel.selectedIndex].value === 'Custom');
-        document.getElementById('schedCustomDateFromWrap').style.display = isCustom ? '' : 'none';
-        document.getElementById('schedCustomDateToWrap').style.display = isCustom ? '' : 'none';
-    }
-
-    function onRecurrenceChange() {
-        var type = document.getElementById('schedRecurrence').value;
-        document.getElementById('schedDayContainer').style.display = 'none';
-        document.getElementById('schedWeeklyDaysContainer').style.display = 'none';
-        document.getElementById('schedMonthDayContainer').style.display = 'none';
-        if (type === 'Weekly') document.getElementById('schedWeeklyDaysContainer').style.display = '';
-        else if (type === 'Monthly') document.getElementById('schedMonthDayContainer').style.display = '';
-    }
-
     function validateEmailList(input) {
         if (!input || !input.trim()) return { valid: false, emails: [], errors: ['Please enter at least one email address.'] };
         var emails = input.split(/[,;]/).map(function(e) { return e.trim(); }).filter(function(e) { return e.length > 0; });
@@ -2192,6 +2003,64 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         if (cf) p.columnFilters = cf;
         return p;
     }
+
+    // ===== Shared schedule partial API =====
+
+    // Called by _Schedule.cshtml saveSchedule() — must return report-specific params object.
+    // The partial merges reportDateRange on top before posting.
+    function collectScheduleParameters() {
+        return collectCatalogueParams();
+    }
+
+    // Called by _Schedule.cshtml loadScheduleIntoForm() to restore report-specific UI fields
+    // when editing an existing schedule. Best-effort: silently skip missing elements.
+    function onScheduleParametersLoaded(p) {
+        if (!p) return;
+        function sv(id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; }
+        function sc(id, val) { var el = document.getElementById(id); if (el && val != null) el.checked = !!val; }
+        sv('ReportMode',    p.reportMode);
+        sv('ReportOn',      p.reportOn);
+        sv('PrimaryGroup',  p.primaryGroup);
+        sv('SecondaryGroup', p.secondaryGroup);
+        sv('ThirdGroup',    p.thirdGroup);
+        sv('DateBasis',     p.dateBasis);
+        sc('UseDateTime',   p.useDateTime);
+        sv('ProfitBasedOn', p.profitBasedOn);
+        sc('ProfitIncludesVat', p.profitIncludesVat);
+        sv('StockValueBasedOn', p.stockValueBasedOn);
+        sc('StockValueIncludesVat', p.stockValueIncludesVat);
+        sv('CostType',      p.costType);
+        sc('ShowProfit',    p.showProfit);
+        sc('ShowStock',     p.showStock);
+        if (p.displayColumns) {
+            var dcHid = document.getElementById('displayColumnsHidden');
+            if (dcHid) dcHid.value = p.displayColumns;
+        }
+        if (p.itemsSelection && typeof reloadItemsSelectionFromJson === 'function') {
+            try { reloadItemsSelectionFromJson(typeof p.itemsSelection === 'string' ? JSON.parse(p.itemsSelection) : p.itemsSelection); } catch (e) {}
+        }
+    }
+
+    // Pre-fills the shared schedule modal's date range to Custom using the current screen dates.
+    function autoSelectScheduleDateRange() {
+        var df = document.getElementById('DateFrom') ? document.getElementById('DateFrom').value
+                 : (document.getElementById('dateFrom') ? document.getElementById('dateFrom').value : '');
+        var dt = document.getElementById('DateTo') ? document.getElementById('DateTo').value
+                 : (document.getElementById('dateTo') ? document.getElementById('dateTo').value : '');
+        if (!df || !dt) return;
+        var sel = document.getElementById('schedDateRangeType');
+        if (!sel) return;
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === 'Custom') { sel.selectedIndex = i; break; }
+        }
+        var schedFrom = document.getElementById('schedDateFrom');
+        var schedTo   = document.getElementById('schedDateTo');
+        if (schedFrom) schedFrom.value = df;
+        if (schedTo)   schedTo.value   = dt;
+        if (typeof onSchedDateRangeTypeChange === 'function') onSchedDateRangeTypeChange();
+    }
+
+    // ===== End shared schedule partial API =====
 
     function exportCatalogue(format) {
         var action = format === 'csv' ? '@Url.Action("ExportCatalogueCsv", "Reports")' : '@Url.Action("ExportCatalogueExcel", "Reports")';

@@ -55,6 +55,23 @@ public class ScheduleParameters
     public bool ReportByDateTime { get; set; }
     public int MaxRecords { get; set; } = 50000;
 
+    // Catalogue specific (distinct keys to avoid clashing with PS reportMode/primaryGroup).
+    // Note: showProfit/showStock/storeCodes/itemsSelection/sortColumn are shared and parsed above.
+    public string? CatReportMode { get; set; }
+    public string? CatReportOn { get; set; }
+    public string? CatPrimaryGroup { get; set; }
+    public string? CatSecondaryGroup { get; set; }
+    public string? CatThirdGroup { get; set; }
+    public string? CatDisplayColumns { get; set; }
+    public string? CatDateBasis { get; set; }
+    public bool CatUseDateTime { get; set; }
+    public int CatProfitBasedOn { get; set; } = 99;
+    public bool CatProfitIncludesVat { get; set; }
+    public int CatStockValueBasedOn { get; set; } = 99;
+    public bool CatStockValueIncludesVat { get; set; }
+    public int CatCostType { get; set; } = 99;
+    public string? CatColumnFilters { get; set; }
+
     // Shared
     public bool IncludeVat { get; set; }
     public List<string>? StoreCodes { get; set; }

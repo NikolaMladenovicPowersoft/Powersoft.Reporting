@@ -1003,6 +1003,29 @@ function renderPareto(data) {
             '<td class="text-end fw-semibold">' + r.cumulativePercentage.toFixed(1) + '%</td>' +
             '<td class="text-center"><span class="badge ' + badge + '">' + r.classification + '</span></td></tr>';
     });
+
+    // Legacy parity (Report8020.vb fOther*): when "Show Others" is off we still surface the
+    // hidden rows as a single aggregated "Others" line instead of dropping them — otherwise a
+    // filter that leaves one dominant row (>= Class A threshold) looks like data vanished.
+    if (!showOthers) {
+        var hidden = allRows.filter(function(r) { return !r.isDisplay; });
+        if (hidden.length > 0) {
+            var sum = function(sel) { return hidden.reduce(function(a, r) { return a + sel(r); }, 0); };
+            var oQty = sum(function(r) { return r.quantity; });
+            var oSub = sum(function(r) { return r.subtotal; });
+            var oProf = sum(function(r) { return r.profit; });
+            var oPct = sum(function(r) { return r.percentage; });
+            html += '<tr class="table-secondary fw-semibold">' +
+                '<td></td><td></td>' +
+                '<td><i class="bi bi-three-dots me-1"></i>Others (' + hidden.length + ')</td>' +
+                '<td class="text-end">' + fmtQty(oQty) + '</td>' +
+                '<td class="text-end">' + fmtNum(oSub) + '</td>' +
+                '<td class="text-end">' + fmtNum(oProf) + '</td>' +
+                '<td class="text-end">' + oPct.toFixed(2) + '%</td>' +
+                '<td class="text-end">100.0%</td>' +
+                '<td class="text-center">&mdash;</td></tr>';
+        }
+    }
     tbody.innerHTML = html;
 }
 

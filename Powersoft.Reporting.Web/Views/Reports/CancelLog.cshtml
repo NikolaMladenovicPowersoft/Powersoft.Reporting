@@ -263,74 +263,14 @@
 </div>
 
 <!-- Schedule Modal -->
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-clock-history me-2 text-warning"></i>Schedule Report</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="scheduleAlert" style="display:none;"></div>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Schedule Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="schedName" placeholder="e.g. Daily Cancel Log">
-                        <input type="hidden" id="schedId" value="">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="schedRecipients" placeholder="user@@example.com" value="gm@@powersoft.com.cy">
-                        <small class="text-muted">Separate multiple emails with ; or ,</small>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Recurrence</label>
-                        <select class="form-select" id="schedRecurrence">
-                            <option value="Daily">Daily</option>
-                            <option value="Weekly">Weekly</option>
-                            <option value="Monthly">Monthly</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Time</label>
-                        <input type="time" class="form-control" id="schedTime" value="08:00">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Export Format</label>
-                        <select class="form-select" id="schedFormat">
-                            <option value="CSV">CSV</option>
-                            <option value="Excel">Excel</option>
-                        </select>
-                    </div>
-                    <div class="col-12">
-                        <div class="form-check form-switch mb-2">
-                            <input class="form-check-input" type="checkbox" id="schedSkipIfEmpty" checked>
-                            <label class="form-check-label fw-semibold" for="schedSkipIfEmpty">Don't send if empty</label>
-                        </div>
-                    </div>
-                    <div class="col-12 mt-2">
-                        <h6 class="text-muted mb-2"><i class="bi bi-stars me-1"></i>AI Analysis</h6>
-                    </div>
-                    <div class="col-12">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="schedIncludeAi">
-                            <label class="form-check-label fw-semibold" for="schedIncludeAi">Include AI Analysis in email</label>
-                        </div>
-                        <small class="text-muted d-block mt-1">When enabled, an AI-generated summary will be included in the scheduled email body.</small>
-                    </div>
-                </div>
-                <hr>
-                <h6 class="text-muted mb-2"><i class="bi bi-list-ul me-1"></i>Existing Schedules</h6>
-                <div id="existingSchedules"><em class="text-muted">Loading...</em></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary me-auto" onclick="resetScheduleForm()" title="Clear the form"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
-            </div>
-        </div>
-    </div>
-</div>
+@await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel
+{
+    SaveAction = "SaveCancelLogSchedule",
+    ListAction = "GetCancelLogSchedules",
+    ReportBadge = "Cancel Log",
+    NamePlaceholder = "e.g. Daily Cancel Log",
+    SubjectPlaceholder = "Cancellation Logging Report - {date}"
+})
 
 <!-- Send to Email Modal -->
 <div class="modal fade" id="sendEmailModal" tabindex="-1">
@@ -564,7 +504,6 @@ var _emailTemplatesCache = [];
     document.querySelectorAll('input[name="DatePreset"]').forEach(function(r) {
         r.addEventListener('change', function() { applyPresetDates(this.value); });
     });
-    document.getElementById('scheduleModal').addEventListener('show.bs.modal', function() { loadSchedules(); });
     fetch('/Reports/GetAiStatus').then(r=>r.json()).then(d=>{
         if(!d.configured){var btn=document.getElementById('btnAnalyze');if(btn){btn.title='AI not configured';btn.classList.add('disabled');}}
     }).catch(()=>{});
@@ -896,74 +835,39 @@ function groupBy(arr, key) {
     return order.map(function(k) { return { key: k, items: map[k] }; });
 }
 
-// ========== SCHEDULE ==========
-function loadSchedules() {
-    fetch('@Url.Action("GetCancelLogSchedules","Reports")', { credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(list) {
-            var container = document.getElementById('existingSchedules');
-            if (!list || list.length === 0) { container.innerHTML = '<p class="text-muted">No schedules configured yet.</p>'; return; }
-            var html = '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>Name</th><th>Recurrence</th><th>Time</th><th>Format</th><th>Next Run</th><th></th></tr></thead><tbody>';
-            for (var i = 0; i < list.length; i++) {
-                var s = list[i];
-                html += '<tr><td>'+escapeHtml(s.scheduleName)+'</td><td>'+escapeHtml(s.recurrenceType)+'</td><td>'+escapeHtml(s.scheduleTime)+'</td><td>'+escapeHtml(s.exportFormat)+'</td><td>'+escapeHtml(s.nextRun||'-')+'</td>';
-                html += '<td class="text-nowrap"><button class="btn btn-sm btn-outline-primary me-1" onclick="loadScheduleIntoForm('+s.scheduleId+')"><i class="bi bi-pencil"></i></button>';
-                html += '<button class="btn btn-sm btn-outline-danger" onclick="deleteSchedule('+s.scheduleId+')"><i class="bi bi-trash"></i></button></td></tr>';
-            }
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        }).catch(function() { document.getElementById('existingSchedules').innerHTML = '<p class="text-danger">Failed to load schedules.</p>'; });
+// ========== SCHEDULE (shared _Schedule.cshtml partial) ==========
+// Returns the report-specific parameters the scheduler needs to reproduce this report headless.
+// Keys mirror ScheduleParametersParser (clReportType/clPrimaryGroup/clSecondaryGroup avoid the
+// PS reportType/primaryGroup collision).
+function collectScheduleParameters() {
+    var p = {
+        reportType: 'CancelLog',
+        reportByDateTime: document.getElementById('dateMode').value === 'datetime',
+        actionType: document.getElementById('lineType').value,
+        clReportType: document.getElementById('reportType').value,
+        clPrimaryGroup: document.getElementById('primaryGroup').value,
+        clSecondaryGroup: document.getElementById('secondaryGroup').value,
+        timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+        maxRecords: document.getElementById('maxRecords').value,
+        sortColumn: _sortCol,
+        sortDirection: _sortDir
+    };
+    if (typeof getItemsSelectionFilter === 'function') {
+        p.itemsSelectionJson = JSON.stringify(getItemsSelectionFilter());
+    }
+    return p;
 }
-function resetScheduleForm() {
-    document.getElementById('schedId').value = '';
-    document.getElementById('schedName').value = '';
-    document.getElementById('schedRecipients').value = 'gm@@powersoft.com.cy';
-    document.getElementById('schedRecurrence').value = 'Daily';
-    document.getElementById('schedTime').value = '08:00';
-    document.getElementById('schedFormat').value = 'CSV';
-    document.getElementById('schedSkipIfEmpty').checked = true;
-    document.getElementById('schedIncludeAi').checked = false;
-    document.getElementById('scheduleAlert').style.display = 'none';
-}
-function saveSchedule() {
-    var name = document.getElementById('schedName').value.trim();
-    var recipients = document.getElementById('schedRecipients').value.trim();
-    if (!name) { showAlert('scheduleAlert','danger','Schedule name is required.'); return; }
-    if (!recipients) { showAlert('scheduleAlert','danger','At least one recipient is required.'); return; }
-    var fd = new FormData();
-    fd.append('scheduleName',name); fd.append('recurrenceType',document.getElementById('schedRecurrence').value);
-    fd.append('exportFormat',document.getElementById('schedFormat').value); fd.append('scheduleTime',document.getElementById('schedTime').value);
-    fd.append('recipients',recipients); fd.append('skipIfEmpty',document.getElementById('schedSkipIfEmpty').checked);
-    var sid = document.getElementById('schedId').value;
-    if (sid) fd.append('scheduleId', sid);
-    fetch('@Url.Action("SaveCancelLogSchedule","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (!d.success) { showAlert('scheduleAlert','danger',d.message); return; }
-            showAlert('scheduleAlert','success', d.updated ? 'Schedule updated.' : 'Schedule saved.');
-            resetScheduleForm(); loadSchedules();
-        }).catch(function(e) { showAlert('scheduleAlert','danger','Save failed: '+e.message); });
-}
-function loadScheduleIntoForm(id) {
-    fetch('@Url.Action("GetScheduleById","Reports")?id='+id, { credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(s) {
-            if (!s || s.error) return;
-            document.getElementById('schedId').value = s.scheduleId;
-            document.getElementById('schedName').value = s.scheduleName||'';
-            document.getElementById('schedRecipients').value = s.recipients||'';
-            document.getElementById('schedRecurrence').value = s.recurrenceType||'Daily';
-            document.getElementById('schedTime').value = s.scheduleTime||'08:00';
-            document.getElementById('schedFormat').value = s.exportFormat||'CSV';
-            document.getElementById('schedSkipIfEmpty').checked = s.skipIfEmpty !== false;
-            showAlert('scheduleAlert','info','Editing: '+escapeHtml(s.scheduleName));
-        });
-}
-function deleteSchedule(id) {
-    if (!confirm('Delete this schedule?')) return;
-    fetch('@Url.Action("DeleteSchedule","Reports")?id='+id, { method:'DELETE', credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.success) { loadSchedules(); resetScheduleForm(); } else showAlert('scheduleAlert','danger',d.message||'Delete failed.'); });
+
+// Restore report-specific controls when an existing schedule is loaded for editing.
+function onScheduleParametersLoaded(p) {
+    if (!p) return;
+    if (p.actionType) document.getElementById('lineType').value = p.actionType;
+    if (p.clReportType) document.getElementById('reportType').value = p.clReportType;
+    if (p.clPrimaryGroup) document.getElementById('primaryGroup').value = p.clPrimaryGroup;
+    if (p.clSecondaryGroup) document.getElementById('secondaryGroup').value = p.clSecondaryGroup;
+    if (p.maxRecords) document.getElementById('maxRecords').value = p.maxRecords;
+    var dm = document.getElementById('dateMode');
+    if (dm && typeof p.reportByDateTime !== 'undefined') dm.value = p.reportByDateTime ? 'datetime' : 'date';
 }
 
 // ========== SEND EMAIL ==========

@@ -122,6 +122,20 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("compareLastYear", out var cclyy))
                 p.CompareLastYear = ParseBool(cclyy, p.CompareLastYear);
 
+            // CancelLog specific (keys from collectScheduleParameters() in CancelLog.cshtml)
+            if (root.TryGetProperty("actionType", out var clat) || root.TryGetProperty("ActionType", out clat))
+                p.CancelActionType = clat.GetString();
+            if (root.TryGetProperty("clReportType", out var clrt) || root.TryGetProperty("CancelLogReportType", out clrt))
+                p.CancelLogReportType = clrt.GetString();
+            if (root.TryGetProperty("clPrimaryGroup", out var clpg) || root.TryGetProperty("CancelLogPrimaryGroup", out clpg))
+                p.CancelLogPrimaryGroup = clpg.GetString();
+            if (root.TryGetProperty("clSecondaryGroup", out var clsg) || root.TryGetProperty("CancelLogSecondaryGroup", out clsg))
+                p.CancelLogSecondaryGroup = clsg.GetString();
+            if (root.TryGetProperty("reportByDateTime", out var clrbdt))
+                p.ReportByDateTime = ParseBool(clrbdt, false);
+            if (root.TryGetProperty("maxRecords", out var clmr) || root.TryGetProperty("MaxRecords", out clmr))
+                p.MaxRecords = ParseInt(clmr, 50000);
+
             // ItemsSelection dimension filter (categories/brands/suppliers/stores/items/etc.).
             // The view serialises it as a JSON *string* under "itemsSelectionJson"; older/code
             // paths may embed it as a nested object. Without this the scheduler silently dropped

@@ -47,6 +47,14 @@ public class ScheduleParameters
     public string? ChartType { get; set; }
     public bool ShowOthers { get; set; } = true;
 
+    // CancelLog specific (distinct keys to avoid clashing with PS primaryGroup/reportType)
+    public string? CancelActionType { get; set; }
+    public string? CancelLogReportType { get; set; }
+    public string? CancelLogPrimaryGroup { get; set; }
+    public string? CancelLogSecondaryGroup { get; set; }
+    public bool ReportByDateTime { get; set; }
+    public int MaxRecords { get; set; } = 50000;
+
     // Shared
     public bool IncludeVat { get; set; }
     public List<string>? StoreCodes { get; set; }

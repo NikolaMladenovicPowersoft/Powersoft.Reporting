@@ -5451,32 +5451,66 @@ public class ReportsController : Controller
 
     [HttpPost]
     public async Task<IActionResult> SaveCancelLogSchedule(
-        string scheduleName, string recurrenceType, string exportFormat,
-        string scheduleTime, string recipients, string? filterJson = null,
-        bool includeAiAnalysis = false, bool skipIfEmpty = false, int scheduleId = 0)
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
             return Json(new { success = false, message = "Not connected." });
 
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
         try
         {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                }
+                else
+                {
+                    nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+            {
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            }
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
             var schedule = new ReportSchedule
             {
                 ReportType = ReportTypeConstants.CancelLog,
                 ScheduleName = scheduleName,
-                RecurrenceType = recurrenceType,
-                ExportFormat = exportFormat,
-                ScheduleTime = TimeSpan.Parse(scheduleTime),
+                CreatedBy = User.Identity?.Name ?? "unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
-                ParametersJson = filterJson ?? "{}",
+                EmailSubject = emailSubject,
+                ParametersJson = parametersJson,
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
                 SkipIfEmpty = skipIfEmpty,
-                IsActive = true,
-                CreatedBy = User.Identity?.Name ?? "unknown"
+                IsActive = true
             };
-
-            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
 
             if (scheduleId > 0)
             {
@@ -5494,7 +5528,6 @@ public class ReportsController : Controller
                 return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
             }
 
-            schedule.CreatedBy = User.Identity?.Name ?? "unknown";
             var id = await repo.CreateScheduleAsync(schedule);
             return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
         }

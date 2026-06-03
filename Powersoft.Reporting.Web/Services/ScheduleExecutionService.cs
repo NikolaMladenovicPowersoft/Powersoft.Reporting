@@ -304,7 +304,78 @@ public class ScheduleExecutionService
         if (string.Equals(reportType, ReportTypeConstants.Charts, StringComparison.OrdinalIgnoreCase))
             return await GenerateChartsReportAsync(schedule, connString);
 
+        if (string.Equals(reportType, ReportTypeConstants.CancelLog, StringComparison.OrdinalIgnoreCase))
+            return await GenerateCancelLogReportAsync(schedule, connString);
+
         return await GenerateAverageBasketReportAsync(schedule, connString);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateCancelLogReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        var filter = new CancelLogFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            ReportByDateTime = parameters.ReportByDateTime,
+            ActionType = Enum.TryParse<CancelLogActionType>(parameters.CancelActionType, true, out var at) ? at : CancelLogActionType.All,
+            ReportType = Enum.TryParse<CancelLogReportType>(parameters.CancelLogReportType, true, out var rt) ? rt : CancelLogReportType.Detailed,
+            PrimaryGroup = string.IsNullOrWhiteSpace(parameters.CancelLogPrimaryGroup) ? "NONE" : parameters.CancelLogPrimaryGroup,
+            SecondaryGroup = string.IsNullOrWhiteSpace(parameters.CancelLogSecondaryGroup) ? "NONE" : parameters.CancelLogSecondaryGroup,
+            TimezoneOffsetMinutes = parameters.TimezoneOffsetMinutes,
+            MaxRecords = parameters.MaxRecords > 0 ? parameters.MaxRecords : 50000,
+            ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
+            SortColumn = string.IsNullOrWhiteSpace(parameters.SortColumn) ? "SessionDateTime" : parameters.SortColumn,
+            SortDirection = parameters.SortDirection
+        };
+
+        var repo = _repositoryFactory.CreateCancelLogRepository(connString);
+
+        List<CancelLogDetailedRow>? detailedRows = null;
+        List<CancelLogSummaryRow>? summaryRows = null;
+        int rowCount;
+        if (filter.ReportType == CancelLogReportType.Summary)
+        {
+            var (rows, _) = await repo.GetSummaryAsync(filter);
+            summaryRows = rows;
+            rowCount = rows.Count;
+        }
+        else
+        {
+            var (rows, _) = await repo.GetDetailedAsync(filter);
+            detailedRows = rows;
+            rowCount = rows.Count;
+        }
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateCancelLogPdf(detailedRows, summaryRows, filter);
+                fileName = $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateCancelLogCsv(detailedRows, summaryRows, filter);
+                fileName = $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateCancelLogExcel(detailedRows, summaryRows, filter);
+                fileName = $"CancelLog_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        return (rowCount, fileBytes, fileName, contentType, period);
     }
 
     private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>

@@ -310,6 +310,12 @@ public class ScheduleExecutionService
         if (string.Equals(reportType, ReportTypeConstants.Catalogue, StringComparison.OrdinalIgnoreCase))
             return await GenerateCatalogueReportAsync(schedule, connString);
 
+        if (string.Equals(reportType, ReportTypeConstants.ProspectClients, StringComparison.OrdinalIgnoreCase))
+            return await GenerateProspectClientsReportAsync(schedule, connString);
+
+        if (string.Equals(reportType, ReportTypeConstants.OffersReport, StringComparison.OrdinalIgnoreCase))
+            return await GenerateOffersReportAsync(schedule, connString);
+
         return await GenerateAverageBasketReportAsync(schedule, connString);
     }
 
@@ -784,6 +790,109 @@ public class ScheduleExecutionService
         }
 
         return (data.Count, fileBytes, fileName, contentType, $"As of {DateTime.Now:yyyy-MM-dd}");
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateProspectClientsReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = ScheduleParametersParser.Parse(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        var filter = new ProspectClientsFilter
+        {
+            DateFrom       = dateFrom,
+            DateTo         = dateTo,
+            DateField      = parameters.PcDateField     ?? "RegistrationDate",
+            StatusFilter   = parameters.PcStatusFilter  ?? "All",
+            PriorityFilter = parameters.PcPriorityFilter  ?? "All",
+            FollowedByFilter   = parameters.PcFollowedByFilter ?? "All",
+            Category1Filter    = parameters.PcCategory1Filter  ?? "All",
+            Category2Filter    = parameters.PcCategory2Filter  ?? "All",
+            PrimaryGroup       = parameters.PcPrimaryGroup   ?? "NONE",
+            SecondaryGroup     = parameters.PcSecondaryGroup ?? "NONE",
+            MaxRecords         = parameters.MaxRecords > 0 ? parameters.MaxRecords : 50000,
+            SortColumn         = parameters.SortColumn ?? "RegistrationDate",
+            SortDirection      = parameters.SortDirection ?? "DESC",
+            IncludeHistory     = parameters.PcIncludeHistory
+        };
+
+        var repo = _repositoryFactory.CreateProspectClientsRepository(connString);
+        var (rows, _) = await repo.GetDataAsync(filter);
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+
+        byte[] fileBytes;
+        string fileName, contentType;
+        switch (schedule.ExportFormat?.ToUpperInvariant())
+        {
+            case "CSV":
+                fileBytes   = new CsvExportService().GenerateProspectClientsCsv(rows, filter);
+                fileName    = $"ProspectClients_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            case "PDF":
+                fileBytes   = new PdfExportService().GenerateProspectClientsPdf(rows, filter);
+                fileName    = $"ProspectClients_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            default:
+                fileBytes   = new ExcelExportService().GenerateProspectClientsExcel(rows, filter);
+                fileName    = $"ProspectClients_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        return (rows.Count, fileBytes, fileName, contentType, period);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateOffersReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = ScheduleParametersParser.Parse(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        var filter = new OffersReportFilter
+        {
+            DateFrom       = dateFrom,
+            DateTo         = dateTo,
+            DateField      = parameters.OrDateField    ?? "DateTrans",
+            StatusFilter   = parameters.OrStatusFilter ?? "All",
+            StoreFilter    = parameters.OrStoreFilter  ?? "All",
+            AgentFilter    = parameters.OrAgentFilter  ?? "All",
+            PrimaryGroup   = parameters.OrPrimaryGroup   ?? "NONE",
+            SecondaryGroup = parameters.OrSecondaryGroup ?? "NONE",
+            MaxRecords     = parameters.MaxRecords > 0 ? parameters.MaxRecords : 50000,
+            SortColumn     = parameters.SortColumn    ?? "DateTrans",
+            SortDirection  = parameters.SortDirection ?? "DESC",
+            OfferType      = parameters.OrOfferType   ?? "All",
+            IncludeHistory = parameters.OrIncludeHistory
+        };
+
+        var repo = _repositoryFactory.CreateOffersReportRepository(connString);
+        var (rows, _) = await repo.GetDataAsync(filter);
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+
+        byte[] fileBytes;
+        string fileName, contentType;
+        switch (schedule.ExportFormat?.ToUpperInvariant())
+        {
+            case "CSV":
+                fileBytes   = new CsvExportService().GenerateOffersReportCsv(rows, filter);
+                fileName    = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            case "PDF":
+                fileBytes   = new PdfExportService().GenerateOffersReportPdf(rows, filter);
+                fileName    = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            default:
+                fileBytes   = new ExcelExportService().GenerateOffersReportExcel(rows, filter);
+                fileName    = $"OffersReport_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        return (rows.Count, fileBytes, fileName, contentType, period);
     }
 
     private async Task<ReportAnalysis?> RunAiAnalysisSafe(

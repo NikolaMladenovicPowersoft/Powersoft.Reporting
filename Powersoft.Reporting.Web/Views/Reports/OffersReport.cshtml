@@ -312,229 +312,14 @@
     </div>
 </div>
 
-<!-- Schedule Modal -->
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-clock-history me-2 text-warning"></i>Schedule Report</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="existingSchedules" class="mb-4"><p class="text-muted">Loading schedules...</p></div>
-                <hr>
-                <h6><i class="bi bi-plus-circle me-1"></i>New / Edit Schedule</h6>
-                <input type="hidden" id="schedId" value="">
-                <div class="row g-3">
-                    <div class="col-md-6"><label class="form-label">Schedule Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="schedName" placeholder="e.g. Weekly Offers Summary"></div>
-                    <div class="col-md-6"><label class="form-label">Recipients <span class="text-danger">*</span></label><input type="text" class="form-control" id="schedRecipients" placeholder="email1@@co.com, email2@@co.com"></div>
-                    <div class="col-md-3"><label class="form-label">Recurrence</label><select class="form-select" id="schedRecurrence"><option>Daily</option><option>Weekly</option><option>Monthly</option></select></div>
-                    <div class="col-md-3"><label class="form-label">Time</label><input type="time" class="form-control" id="schedTime" value="08:00"></div>
-                    <div class="col-md-3"><label class="form-label">Format</label><select class="form-select" id="schedFormat"><option>CSV</option><option>Excel</option><option>PDF</option></select></div>
-                    <div class="col-md-3 d-flex align-items-end gap-3">
-                        <div class="form-check"><input class="form-check-input" type="checkbox" id="schedSkipIfEmpty" checked><label class="form-check-label" for="schedSkipIfEmpty">Skip if empty</label></div>
-                        <div class="form-check"><input class="form-check-input" type="checkbox" id="schedIncludeAi"><label class="form-check-label" for="schedIncludeAi">AI</label></div>
-                    </div>
-                </div>
-                <div id="scheduleAlert" class="mt-3" style="display:none;"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" onclick="resetScheduleForm()">Clear</button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-warning" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Send Email Modal -->
-<div class="modal fade" id="sendEmailModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-envelope-at me-2 text-primary"></i>Send Report via Email</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="sendEmailRecipients" placeholder="email@@example.com, ...">
-                        <div class="invalid-feedback" id="sendEmailRecipientsError"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Template</label>
-                        <select class="form-select" id="sendEmailTemplate" onchange="onEmailTemplateChange()">
-                            <option value="">-- No template (default) --</option>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">CC <span class="text-muted fw-normal">(optional)</span></label>
-                        <input type="text" class="form-control" id="sendEmailCC" placeholder="cc@@example.com">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">BCC <span class="text-muted fw-normal">(optional)</span></label>
-                        <input type="text" class="form-control" id="sendEmailBCC" placeholder="bcc@@example.com">
-                    </div>
-                    <div class="col-md-8">
-                        <label class="form-label fw-semibold">Subject</label>
-                        <input type="text" class="form-control" id="sendEmailSubject" value="Offers Report">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Format</label>
-                        <select class="form-select" id="sendEmailFormat">
-                            <option value="Excel" selected>Excel (.xlsx)</option>
-                            <option value="PDF">PDF</option>
-                            <option value="CSV">CSV</option>
-                        </select>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Email Message</label>
-                        <div class="border rounded" style="max-height:250px;overflow-y:auto;padding:12px;font-family:Arial,sans-serif;font-size:13px;background:#fafafa;" id="sendEmailBodyPreview">
-                            <em class="text-muted">Select a template to preview the email body, or the default body will be used.</em>
-                        </div>
-                    </div>
-                </div>
-                <div id="sendEmailAlert" class="mt-3" style="display:none;"></div>
-            </div>
-            <div class="modal-footer">
-                <a asp-controller="Settings" asp-action="EmailTemplates" class="btn btn-outline-secondary me-auto" title="Manage email templates">
-                    <i class="bi bi-gear me-1"></i>Manage Templates
-                </a>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="sendEmailBtn" onclick="sendReportEmail()">
-                    <span class="spinner-border spinner-border-sm d-none me-1" id="sendEmailSpinner"></span>
-                    <i class="bi bi-send me-1" id="sendEmailIcon"></i>Send
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- AI Analysis Modal -->
-<div class="modal fade" id="aiAnalysisModal" tabindex="-1" aria-labelledby="aiAnalysisModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header" style="background:linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%);color:white;">
-                <h5 class="modal-title" id="aiAnalysisModalLabel"><i class="bi bi-stars me-2"></i>AI Business Intelligence</h5>
-                <div class="ms-auto me-3 d-flex align-items-center gap-2">
-                    <select id="aiPromptTemplateSelect" class="form-select form-select-sm" style="width:auto;min-width:140px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" title="AI Prompt Template" onchange="this.setAttribute('data-user-picked','1')">
-                        <option value="0" style="color:#333;">Default Prompt</option>
-                    </select>
-                    <button type="button" class="btn btn-sm btn-outline-light" onclick="togglePromptEditor()" title="Manage AI prompt templates" style="border-color:rgba(255,255,255,0.3);">
-                        <i class="bi bi-gear"></i>
-                    </button>
-                    <label class="me-1 mb-0 small opacity-75" for="aiLangSelect"><i class="bi bi-translate"></i></label>
-                    <select id="aiLangSelect" class="form-select form-select-sm" style="width:auto;min-width:120px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" onchange="saveAiLang(this.value)">
-                        <option value="el" style="color:#333;">Ελληνικά</option>
-                        <option value="en" style="color:#333;">English</option>
-                        <option value="sr" style="color:#333;">Srpski</option>
-                        <option value="de" style="color:#333;">Deutsch</option>
-                        <option value="fr" style="color:#333;">Français</option>
-                    </select>
-                </div>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body p-0">
-                <div id="aiLoading" class="text-center py-5">
-                    <div class="spinner-grow text-primary mb-2" style="width:3rem;height:3rem;"></div>
-                    <h6 class="mt-3 text-muted">AI is analyzing your offers data...</h6>
-                    <p class="text-muted small">Identifying patterns, conversion rates, and actionable insights</p>
-                    <div class="progress mx-auto" style="width:200px;height:4px;"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%;background:#7c3aed;"></div></div>
-                </div>
-                <div id="aiError" class="d-none p-4"><div class="alert alert-danger" id="aiErrorMsg"></div></div>
-                <div id="aiPromptEditor" class="d-none border-bottom" style="background:#f8fafc;">
-                    <div class="p-4">
-                        <h6 class="mb-3"><i class="bi bi-pencil-square me-1"></i>AI Prompt Templates</h6>
-                        <div class="row g-3">
-                            <div class="col-md-5"><label class="form-label small fw-semibold">Template Name</label><input type="text" class="form-control form-control-sm" id="aiPromptName" placeholder="e.g. Focus on conversion"></div>
-                            <div class="col-md-4"><label class="form-label small fw-semibold">Applies to</label><select class="form-select form-select-sm" id="aiPromptReportType"><option value="">All Reports</option><option value="OffersReport" selected>Offers Report</option></select></div>
-                            <div class="col-md-3 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="aiPromptIsDefault"><label class="form-check-label small" for="aiPromptIsDefault">Set as default</label></div></div>
-                            <div class="col-12"><label class="form-label small fw-semibold">System Prompt</label><textarea class="form-control form-control-sm" id="aiPromptText" rows="6" placeholder="You are a senior sales analyst..."></textarea><small class="text-muted">This prompt will be sent to the AI as the system instruction.</small></div>
-                            <div class="col-12 d-flex gap-2"><button class="btn btn-sm btn-primary" onclick="saveAiPromptTemplate()"><i class="bi bi-save me-1"></i>Save Template</button><button class="btn btn-sm btn-outline-secondary" onclick="clearPromptEditor()">Clear</button><div id="aiPromptAlert" class="ms-2 small align-self-center"></div></div>
-                        </div>
-                        <hr class="my-3">
-                        <div id="aiPromptTemplatesList" class="small text-muted">Loading templates...</div>
-                    </div>
-                </div>
-                <div id="aiResults" class="d-none">
-                    <div id="aiHealthBanner" class="px-4 py-3 d-flex align-items-center justify-content-between" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
-                        <div class="d-flex align-items-center gap-3">
-                            <div id="aiHealthBadge" class="d-flex flex-column align-items-center justify-content-center rounded-circle" style="width:64px;height:64px;font-weight:700;font-size:1.2rem;"></div>
-                            <div><div class="fw-bold" id="aiHealthLabel" style="font-size:1.1rem;"></div><div class="text-muted small" id="aiTrendDesc"></div></div>
-                        </div>
-                        <div id="aiTrendBadge" class="badge fs-6 px-3 py-2"></div>
-                    </div>
-                    <div class="p-4">
-                        <div class="alert border-start border-4 border-primary bg-primary bg-opacity-10 mb-4" id="aiExecSummary" style="font-size:0.95rem;"></div>
-                        <div class="row g-2 mb-4" id="aiKpis"></div>
-                        <div class="row g-4">
-                            <div class="col-md-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Key Findings</h6></div><div class="card-body pt-2" id="aiKeyFindings"></div></div></div>
-                            <div class="col-md-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-check2-circle text-success me-2"></i>Recommendations</h6></div><div class="card-body pt-2" id="aiRecs"></div></div></div>
-                        </div>
-                        <div class="row g-4 mt-1">
-                            <div class="col-md-6" id="aiTopSection"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-trophy-fill text-warning me-2"></i>Top Performers</h6></div><div class="card-body pt-2" id="aiTopPerformers"></div></div></div>
-                            <div class="col-md-6" id="aiBottomSection"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Needs Attention</h6></div><div class="card-body pt-2" id="aiBottomPerformers"></div></div></div>
-                        </div>
-                        <div id="aiAlertsSection" class="mt-4"></div>
-                    </div>
-                    <div class="px-4 py-2 d-flex justify-content-between align-items-center" style="background:#f8fafc;border-top:1px solid #e2e8f0;">
-                        <span class="text-muted small"><i class="bi bi-cpu me-1"></i><span id="aiModel"></span></span>
-                        <span class="text-muted small"><i class="bi bi-currency-dollar me-1"></i><span id="aiTokens"></span></span>
-                        <span class="text-muted small"><i class="bi bi-clock me-1"></i><span id="aiTime"></span></span>
-                    </div>
-                    <div class="border-top" style="background:#f8fafc;">
-                        <div class="px-4 py-2"><h6 class="mb-2 text-muted"><i class="bi bi-chat-dots me-1"></i>Follow-up Questions</h6></div>
-                        <div id="aiChatMessages" class="px-4" style="max-height:300px;overflow-y:auto;"></div>
-                        <div class="px-4 py-3">
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="aiChatInput" placeholder="Ask a follow-up question about this report..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendAiChat();}">
-                                <button class="btn btn-primary" type="button" onclick="sendAiChat()" id="btnSendChat"><i class="bi bi-send"></i></button>
-                            </div>
-                            <div id="aiChatTokenInfo" class="text-muted small mt-1" style="display:none;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn text-white" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);" onclick="analyzeReport()" id="btnReanalyze" style="display:none;"><i class="bi bi-arrow-clockwise me-1"></i>Re-analyze</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Save Layout As Modal -->
-<div class="modal fade" id="saveLayoutAsModal" tabindex="-1" aria-labelledby="saveLayoutAsLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="saveLayoutAsLabel"><i class="bi bi-bookmark-plus me-2"></i>Save Layout As</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label for="saveLayoutAsName" class="form-label">Layout name <span class="text-danger">*</span></label>
-                    <input type="text" id="saveLayoutAsName" class="form-control" maxlength="100" placeholder="e.g. Approved Offers Only" autocomplete="off" />
-                    <div class="form-text">Used to identify the layout. You can have multiple named layouts.</div>
-                </div>
-                <div class="form-check form-switch mb-2">
-                    <input class="form-check-input" type="checkbox" id="saveLayoutAsPublic" />
-                    <label class="form-check-label" for="saveLayoutAsPublic">Share with all users (public layout)</label>
-                    <div class="form-text">Public layouts are visible to everyone but can only be edited or deleted by you.</div>
-                </div>
-                <div id="saveLayoutAsAlert" class="alert d-none" role="alert"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveLayoutAsConfirmBtn" onclick="saveLayoutAsConfirm()">
-                    <span class="spinner-border spinner-border-sm d-none me-1" id="saveLayoutAsSpinner"></span>
-                    <i class="bi bi-save me-1"></i>Save
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+@* Schedule Modal — shared partial *@
+@await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel {
+    SaveAction      = "SaveOffersReportSchedule",
+    ListAction      = "GetOffersReportSchedules",
+    ReportBadge     = "Offers Report",
+    NamePlaceholder = "e.g. Weekly Offers Summary",
+    SubjectPlaceholder = "Offers Report - {date}"
+})
 
 <script>
 var _sortCol = 'DateTrans';
@@ -937,64 +722,38 @@ function loadSchedules() {
             container.innerHTML = html;
         }).catch(function() { document.getElementById('existingSchedules').innerHTML = '<p class="text-danger">Failed to load schedules.</p>'; });
 }
-function resetScheduleForm() {
-    document.getElementById('schedId').value = '';
-    document.getElementById('schedName').value = '';
-    document.getElementById('schedRecipients').value = '';
-    document.getElementById('schedRecurrence').value = 'Daily';
-    document.getElementById('schedTime').value = '08:00';
-    document.getElementById('schedFormat').value = 'CSV';
-    document.getElementById('schedSkipIfEmpty').checked = true;
-    document.getElementById('schedIncludeAi').checked = false;
-    document.getElementById('scheduleAlert').style.display = 'none';
-}
-function saveSchedule() {
-    var name = document.getElementById('schedName').value.trim();
-    var recipients = document.getElementById('schedRecipients').value.trim();
-    if (!name) { showAlert('scheduleAlert','danger','Schedule name is required.'); return; }
-    if (!recipients) { showAlert('scheduleAlert','danger','At least one recipient is required.'); return; }
-    var fd = new FormData();
-    fd.append('scheduleName',name);
-    fd.append('recurrenceType',document.getElementById('schedRecurrence').value);
-    fd.append('exportFormat',document.getElementById('schedFormat').value);
-    fd.append('scheduleTime',document.getElementById('schedTime').value);
-    fd.append('recipients',recipients);
-    fd.append('skipIfEmpty',document.getElementById('schedSkipIfEmpty').checked);
-    fd.append('includeAiAnalysis',document.getElementById('schedIncludeAi').checked);
-    var sid = document.getElementById('schedId').value;
-    if (sid) fd.append('scheduleId', sid);
-    var filterData = JSON.stringify(getFilterParams());
-    fd.append('filterJson', filterData);
-    fetch('@Url.Action("SaveOffersReportSchedule","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (!d.success) { showAlert('scheduleAlert','danger',d.message); return; }
-            showAlert('scheduleAlert','success','Schedule saved.');
-            resetScheduleForm(); loadSchedules();
-        }).catch(function(e) { showAlert('scheduleAlert','danger','Save failed: '+e.message); });
-}
-function loadScheduleIntoForm(id) {
-    fetch('@Url.Action("GetScheduleById","Reports")?scheduleId='+id, { credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(s) {
-            if (!s || s.error) return;
-            document.getElementById('schedId').value = s.scheduleId;
-            document.getElementById('schedName').value = s.scheduleName||'';
-            document.getElementById('schedRecipients').value = s.recipients||'';
-            document.getElementById('schedRecurrence').value = s.recurrenceType||'Daily';
-            document.getElementById('schedTime').value = s.scheduleTime||'08:00';
-            document.getElementById('schedFormat').value = s.exportFormat||'CSV';
-            document.getElementById('schedSkipIfEmpty').checked = s.skipIfEmpty !== false;
-            showAlert('scheduleAlert','info','Editing: '+escapeHtml(s.scheduleName));
-        });
-}
-function deleteSchedule(id) {
-    if (!confirm('Delete this schedule?')) return;
-    fetch('@Url.Action("DeleteSchedule","Reports")?scheduleId='+id, { method:'POST', credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.success) { loadSchedules(); resetScheduleForm(); } else showAlert('scheduleAlert','danger',d.message||'Delete failed.'); });
+// ===== Shared schedule partial API =====
+
+function collectScheduleParameters() {
+    return getFilterParams();
 }
 
+function onScheduleParametersLoaded(p) {
+    if (!p) return;
+    function sv(id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; }
+    function sc(id, val) { var el = document.getElementById(id); if (el && val != null) el.checked = !!val; }
+    sv('dateField',     p.dateField);
+    sv('statusFilter',  p.statusFilter);
+    sv('storeFilter',   p.storeFilter);
+    sv('agentFilter',   p.agentFilter);
+    sv('primaryGroup',  p.primaryGroup);
+    sv('secondaryGroup',p.secondaryGroup);
+    sv('maxRecords',    p.maxRecords);
+    sv('offerTypeFilter', p.offerType);
+    if (p.includeHistory !== undefined) sc('includeHistory', p.includeHistory);
+}
+
+function autoSelectScheduleDateRange() {
+    var df = document.getElementById('dateFrom'); if (!df || !df.value) return;
+    var dt = document.getElementById('dateTo');   if (!dt || !dt.value) return;
+    var sel = document.getElementById('schedDateRangeType'); if (!sel) return;
+    for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === 'Custom') { sel.selectedIndex = i; break; } }
+    var sf = document.getElementById('schedDateFrom'); if (sf) sf.value = df.value;
+    var st = document.getElementById('schedDateTo');   if (st) st.value = dt.value;
+    if (typeof onSchedDateRangeTypeChange === 'function') onSchedDateRangeTypeChange();
+}
+
+// ===== End shared schedule partial API =====
 // ========== SEND EMAIL ==========
 function validateEmailList(input) {
     if(!input||!input.trim()) return {valid:false,errors:['Enter at least one email.']};

@@ -169,6 +169,27 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("columnFilters", out var catCf) || root.TryGetProperty("CatColumnFilters", out catCf))
                 p.CatColumnFilters = AsString(catCf);
 
+            // ProspectClients specific (prefix Pc to avoid clashing with shared fields)
+            if (root.TryGetProperty("dateField",        out var pcDf)  || root.TryGetProperty("PcDateField",        out pcDf))  p.PcDateField        = AsString(pcDf);
+            if (root.TryGetProperty("statusFilter",     out var pcSf)  || root.TryGetProperty("PcStatusFilter",     out pcSf))  p.PcStatusFilter     = AsString(pcSf);
+            if (root.TryGetProperty("priorityFilter",   out var pcPf)  || root.TryGetProperty("PcPriorityFilter",   out pcPf))  p.PcPriorityFilter   = AsString(pcPf);
+            if (root.TryGetProperty("followedByFilter", out var pcFb)  || root.TryGetProperty("PcFollowedByFilter", out pcFb))  p.PcFollowedByFilter = AsString(pcFb);
+            if (root.TryGetProperty("category1Filter",  out var pcC1)  || root.TryGetProperty("PcCategory1Filter",  out pcC1))  p.PcCategory1Filter  = AsString(pcC1);
+            if (root.TryGetProperty("category2Filter",  out var pcC2)  || root.TryGetProperty("PcCategory2Filter",  out pcC2))  p.PcCategory2Filter  = AsString(pcC2);
+            if (root.TryGetProperty("primaryGroup",     out var pcPg)  || root.TryGetProperty("PcPrimaryGroup",     out pcPg))  p.PcPrimaryGroup     = AsString(pcPg);
+            if (root.TryGetProperty("secondaryGroup",   out var pcSg)  || root.TryGetProperty("PcSecondaryGroup",   out pcSg))  p.PcSecondaryGroup   = AsString(pcSg);
+            if (root.TryGetProperty("includeHistory",   out var pcIh)  || root.TryGetProperty("PcIncludeHistory",   out pcIh))  p.PcIncludeHistory   = ParseBool(pcIh, false);
+
+            // OffersReport specific (prefix Or)
+            if (root.TryGetProperty("dateField",    out var orDf) || root.TryGetProperty("OrDateField",    out orDf)) p.OrDateField    = AsString(orDf);
+            if (root.TryGetProperty("statusFilter", out var orSf) || root.TryGetProperty("OrStatusFilter", out orSf)) p.OrStatusFilter = AsString(orSf);
+            if (root.TryGetProperty("storeFilter",  out var orStf)|| root.TryGetProperty("OrStoreFilter",  out orStf))p.OrStoreFilter  = AsString(orStf);
+            if (root.TryGetProperty("agentFilter",  out var orAf) || root.TryGetProperty("OrAgentFilter",  out orAf)) p.OrAgentFilter  = AsString(orAf);
+            if (root.TryGetProperty("primaryGroup", out var orPg) || root.TryGetProperty("OrPrimaryGroup", out orPg)) p.OrPrimaryGroup = AsString(orPg);
+            if (root.TryGetProperty("secondaryGroup",out var orSg)|| root.TryGetProperty("OrSecondaryGroup",out orSg))p.OrSecondaryGroup = AsString(orSg);
+            if (root.TryGetProperty("offerType",    out var orOt) || root.TryGetProperty("OrOfferType",    out orOt)) p.OrOfferType    = AsString(orOt);
+            if (root.TryGetProperty("includeHistory",out var orIh)|| root.TryGetProperty("OrIncludeHistory",out orIh))p.OrIncludeHistory = ParseBool(orIh, false);
+
             // ItemsSelection dimension filter (categories/brands/suppliers/stores/items/etc.).
             // The view serialises it as a JSON *string* under "itemsSelectionJson"; older/code
             // paths may embed it as a nested object. Without this the scheduler silently dropped

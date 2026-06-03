@@ -6741,32 +6741,71 @@ public class ReportsController : Controller
 
     [HttpPost]
     public async Task<IActionResult> SaveProspectClientsSchedule(
-        string scheduleName, string recurrenceType, string exportFormat,
-        string scheduleTime, string recipients, string? filterJson = null,
-        bool includeAiAnalysis = false, bool skipIfEmpty = false, int scheduleId = 0)
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        string? filterJson = null,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
             return Json(new { success = false, message = "Not connected." });
 
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
         try
         {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            if (scheduleId <= 0)
+            {
+                var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
+                var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.ProspectClients);
+                if (count >= maxSchedules)
+                    return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+            }
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                }
+                else nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            // Accept parametersJson (shared partial) or legacy filterJson
+            var paramsToStore = !string.IsNullOrWhiteSpace(parametersJson) ? parametersJson : (filterJson ?? "{}");
+
             var schedule = new ReportSchedule
             {
-                ReportType = ReportTypeConstants.ProspectClients,
-                ScheduleName = scheduleName,
-                RecurrenceType = recurrenceType,
-                ExportFormat = exportFormat,
-                ScheduleTime = TimeSpan.Parse(scheduleTime),
-                Recipients = recipients,
-                ParametersJson = filterJson ?? "{}",
+                ReportType     = ReportTypeConstants.ProspectClients,
+                ScheduleName   = scheduleName,
+                CreatedBy      = User.Identity?.Name ?? "Unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay  = recurrenceDay,
+                ScheduleTime   = parsedTime,
+                ExportFormat   = exportFormat ?? "Excel",
+                Recipients     = recipients,
+                EmailSubject   = emailSubject,
+                ParametersJson = paramsToStore,
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate    = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
-                SkipIfEmpty = skipIfEmpty,
-                IsActive = true,
-                CreatedBy = User.Identity?.Name ?? "unknown"
+                AiLocale       = aiLocale ?? "el",
+                SkipIfEmpty    = skipIfEmpty
             };
-
-            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
 
             if (scheduleId > 0)
             {
@@ -6784,7 +6823,6 @@ public class ReportsController : Controller
                 return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
             }
 
-            schedule.CreatedBy = User.Identity?.Name ?? "unknown";
             var id = await repo.CreateScheduleAsync(schedule);
             return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
         }
@@ -7419,32 +7457,70 @@ public class ReportsController : Controller
 
     [HttpPost]
     public async Task<IActionResult> SaveOffersReportSchedule(
-        string scheduleName, string recurrenceType, string exportFormat,
-        string scheduleTime, string recipients, string? filterJson = null,
-        bool includeAiAnalysis = false, bool skipIfEmpty = false, int scheduleId = 0)
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        string? filterJson = null,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
             return Json(new { success = false, message = "Not connected." });
 
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
         try
         {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            if (scheduleId <= 0)
+            {
+                var maxSchedules = await GetMaxSchedulesPerReportAsync(tenantConnString);
+                var count = await repo.CountActiveSchedulesForReportAsync(ReportTypeConstants.OffersReport);
+                if (count >= maxSchedules)
+                    return Json(new { success = false, message = $"Schedule limit reached. Maximum {maxSchedules} active schedules per report." });
+            }
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                }
+                else nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var paramsToStore = !string.IsNullOrWhiteSpace(parametersJson) ? parametersJson : (filterJson ?? "{}");
+
             var schedule = new ReportSchedule
             {
-                ReportType = ReportTypeConstants.OffersReport,
-                ScheduleName = scheduleName,
-                RecurrenceType = recurrenceType,
-                ExportFormat = exportFormat,
-                ScheduleTime = TimeSpan.Parse(scheduleTime),
-                Recipients = recipients,
-                ParametersJson = filterJson ?? "{}",
+                ReportType     = ReportTypeConstants.OffersReport,
+                ScheduleName   = scheduleName,
+                CreatedBy      = User.Identity?.Name ?? "Unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay  = recurrenceDay,
+                ScheduleTime   = parsedTime,
+                ExportFormat   = exportFormat ?? "Excel",
+                Recipients     = recipients,
+                EmailSubject   = emailSubject,
+                ParametersJson = paramsToStore,
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate    = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
-                SkipIfEmpty = skipIfEmpty,
-                IsActive = true,
-                CreatedBy = User.Identity?.Name ?? "unknown"
+                AiLocale       = aiLocale ?? "el",
+                SkipIfEmpty    = skipIfEmpty
             };
-
-            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
 
             if (scheduleId > 0)
             {
@@ -7462,7 +7538,6 @@ public class ReportsController : Controller
                 return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
             }
 
-            schedule.CreatedBy = User.Identity?.Name ?? "unknown";
             var id = await repo.CreateScheduleAsync(schedule);
             return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
         }

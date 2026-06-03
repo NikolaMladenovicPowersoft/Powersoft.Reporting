@@ -72,6 +72,27 @@ public class ScheduleParameters
     public int CatCostType { get; set; } = 99;
     public string? CatColumnFilters { get; set; }
 
+    // ProspectClients specific
+    public string? PcDateField { get; set; }
+    public string? PcStatusFilter { get; set; }
+    public string? PcPriorityFilter { get; set; }
+    public string? PcFollowedByFilter { get; set; }
+    public string? PcCategory1Filter { get; set; }
+    public string? PcCategory2Filter { get; set; }
+    public string? PcPrimaryGroup { get; set; }
+    public string? PcSecondaryGroup { get; set; }
+    public bool PcIncludeHistory { get; set; }
+
+    // OffersReport specific
+    public string? OrDateField { get; set; }
+    public string? OrStatusFilter { get; set; }
+    public string? OrStoreFilter { get; set; }
+    public string? OrAgentFilter { get; set; }
+    public string? OrPrimaryGroup { get; set; }
+    public string? OrSecondaryGroup { get; set; }
+    public string? OrOfferType { get; set; }
+    public bool OrIncludeHistory { get; set; }
+
     // Shared
     public bool IncludeVat { get; set; }
     public List<string>? StoreCodes { get; set; }

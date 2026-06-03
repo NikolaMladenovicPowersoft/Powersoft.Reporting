@@ -109,70 +109,14 @@
     </div>
 </div>
 
-<!-- Schedule Modal -->
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-clock-history me-2 text-warning"></i>Schedule Report</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="scheduleAlert" style="display:none;"></div>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Schedule Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="schedName" placeholder="e.g. Daily Stock Alert">
-                        <input type="hidden" id="schedId" value="">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="schedRecipients" placeholder="user@example.com; user2@example.com">
-                        <small class="text-muted">Separate multiple emails with ; or ,</small>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Recurrence</label>
-                        <select class="form-select" id="schedRecurrence">
-                            <option value="Daily">Daily</option>
-                            <option value="Weekly">Weekly</option>
-                            <option value="Monthly">Monthly</option>
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Time</label>
-                        <input type="time" class="form-control" id="schedTime" value="08:00">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold">Export Format</label>
-                        <select class="form-select" id="schedFormat">
-                            <option value="CSV">CSV</option>
-                            <option value="Excel">Excel</option>
-                        </select>
-                    </div>
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Email Subject</label>
-                        <input type="text" class="form-control" id="schedSubject" placeholder="Leave empty for auto-generated subject">
-                    </div>
-                    <div class="col-12">
-                        <div class="form-check form-switch mb-2">
-                            <input class="form-check-input" type="checkbox" id="schedSkipIfEmpty" checked>
-                            <label class="form-check-label fw-semibold" for="schedSkipIfEmpty">Don't send if empty</label>
-                        </div>
-                        <small class="text-muted d-block">When enabled, the email will not be sent if no items are below minimum stock. Recommended for this report type.</small>
-                    </div>
-                </div>
-                <hr>
-                <h6 class="text-muted mb-2"><i class="bi bi-list-ul me-1"></i>Existing Schedules</h6>
-                <div id="existingSchedules"><em class="text-muted">Loading...</em></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary me-auto" onclick="resetScheduleForm()" title="Clear the form to create a new schedule"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset</button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
-            </div>
-        </div>
-    </div>
-</div>
+@* Schedule Modal — shared partial (gold standard from Purchases vs Sales) *@
+@await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel {
+    SaveAction      = "SaveBmsSchedule",
+    ListAction      = "GetBmsSchedules",
+    ReportBadge     = "Below Min Stock",
+    NamePlaceholder = "e.g. Daily Stock Alert",
+    SubjectPlaceholder = "Below Min Stock Report - {date}"
+})
 
 <script>
 var _sortCol = 'Difference';
@@ -284,195 +228,28 @@ function fmt(v) { return v != null ? v.toLocaleString(undefined, { minimumFracti
 function fmtMoney(v) { return v != null ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'; }
 function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-function saveSchedule() {
-    var name = document.getElementById('schedName').value.trim();
-    var recipients = document.getElementById('schedRecipients').value.trim();
-    var alertDiv = document.getElementById('scheduleAlert');
-    if (!name || !recipients) {
-        alertDiv.innerHTML = '<div class="alert alert-warning mb-2">Please fill in schedule name and recipients.</div>';
-        alertDiv.style.display = '';
-        return;
-    }
-    var fd = new FormData();
-    fd.append('scheduleName', name);
-    fd.append('recurrenceType', document.getElementById('schedRecurrence').value);
-    fd.append('scheduleTime', document.getElementById('schedTime').value);
-    fd.append('exportFormat', document.getElementById('schedFormat').value);
-    fd.append('recipients', recipients);
-    fd.append('emailSubject', document.getElementById('schedSubject').value);
-    fd.append('skipIfEmpty', document.getElementById('schedSkipIfEmpty').checked);
+// ===== Shared schedule partial API =====
 
-    var params = {
-        storeCodes: typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : '',
-        itemsSelectionJson: (function () {
-            if (typeof getItemsSelectionFilter === 'function') {
-                var f = getItemsSelectionFilter();
-                return Object.keys(f).length > 0 ? JSON.stringify(f) : '';
-            }
-            return '';
-        })(),
+function collectScheduleParameters() {
+    var p = {
+        reportType: 'BelowMinStock',
         sortColumn: _sortCol,
-        sortDirection: _sortDir,
-        reportType: 'BelowMinStock'
+        sortDirection: _sortDir
     };
-    fd.append('parametersJson', JSON.stringify(params));
-
-    var startDate = new Date().toISOString().slice(0, 10);
-    var recurrence = document.getElementById('schedRecurrence').value;
-    var recurrenceJson = {
-        type: recurrence,
-        time: document.getElementById('schedTime').value,
-        range: { startDate: startDate, noEndDate: true }
-    };
-    fd.append('recurrenceJson', JSON.stringify(recurrenceJson));
-
-    // Edit mode: if the form was loaded from an existing schedule, send the id so the server
-    // performs an UPDATE instead of inserting a duplicate record.
-    var sid = document.getElementById('schedId').value;
-    if (sid) fd.append('scheduleId', sid);
-
-    var saveBtn = document.querySelector('#scheduleModal .btn-primary[onclick="saveSchedule()"]');
-    if (saveBtn) saveBtn.disabled = true;
-
-    fetch('@Url.Action("SaveBmsSchedule", "Reports")', { method: 'POST', body: fd })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (saveBtn) saveBtn.disabled = false;
-            if (d.success) {
-                alertDiv.innerHTML = '<div class="alert alert-success mb-2"><i class="bi bi-check-circle me-1"></i>' + d.message + '</div>';
-                alertDiv.style.display = '';
-                loadExistingSchedules();
-                if (d.updated) {
-                    // Update: keep the form populated so the user can tweak again without re-loading.
-                    showScheduleToast('Schedule updated', 'success');
-                } else {
-                    // New schedule: clear the form after a beat so the user can queue another one.
-                    setTimeout(function() {
-                        resetScheduleForm();
-                        showScheduleToast('Schedule saved successfully', 'success');
-                    }, 700);
-                }
-            } else {
-                alertDiv.innerHTML = '<div class="alert alert-danger mb-2">' + d.message + '</div>';
-                alertDiv.style.display = '';
-            }
-        })
-        .catch(function() {
-            if (saveBtn) saveBtn.disabled = false;
-            alertDiv.innerHTML = '<div class="alert alert-danger mb-2">Network error.</div>';
-            alertDiv.style.display = '';
-        });
+    if (typeof getItemsSelectionStoreCodes === 'function') p.storeCodes = getItemsSelectionStoreCodes();
+    if (typeof getItemsSelectionFilter === 'function') {
+        var f = getItemsSelectionFilter();
+        if (Object.keys(f).length > 0) p.itemsSelectionJson = JSON.stringify(f);
+    }
+    return p;
 }
 
-function showScheduleToast(message, type) {
-    var existing = document.getElementById('schedToast');
-    if (existing) existing.remove();
-    var div = document.createElement('div');
-    div.id = 'schedToast';
-    div.className = 'alert alert-' + type + ' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';
-    div.style.zIndex = '11000';
-    div.innerHTML = '<i class="bi bi-' + (type === 'success' ? 'check-circle' : 'exclamation-triangle') + ' me-1"></i>' + message +
-        '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
-    document.body.appendChild(div);
-    setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
+function onScheduleParametersLoaded(p) {
+    // BMS has no report-specific filter controls to restore.
 }
 
-function deleteScheduleRow(scheduleId, scheduleName) {
-    if (!confirm('Delete schedule "' + scheduleName + '"?\nThis cannot be undone.')) return;
-    var fd = new FormData();
-    fd.append('scheduleId', scheduleId);
-    fetch('@Url.Action("DeleteSchedule", "Reports")', { method: 'POST', body: fd })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) {
-                showScheduleToast('Schedule deleted', 'success');
-                loadExistingSchedules();
-                // If the form still held the deleted schedule's data (after a prior Load), wipe it so
-                // the user isn't left editing a record that no longer exists.
-                resetScheduleForm();
-            } else {
-                showScheduleToast(data.message || 'Failed to delete schedule', 'danger');
-            }
-        })
-        .catch(function() { showScheduleToast('Network error', 'danger'); });
-}
+// BMS is date-independent (shows current stock), so no pre-fill needed.
+function autoSelectScheduleDateRange() {}
 
-function loadExistingSchedules() {
-    fetch('@Url.Action("GetBmsSchedules", "Reports")')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var c = document.getElementById('existingSchedules');
-            if (!data || !data.length) { c.innerHTML = '<em class="text-muted">No schedules configured yet.</em>'; return; }
-            var h = '<table class="table table-sm mb-0 align-middle"><thead><tr><th>Name</th><th>Recurrence</th><th>Format</th><th>Time</th><th>Next Run</th><th>Skip Empty</th><th class="text-end">Actions</th></tr></thead><tbody>';
-            data.forEach(function(s) {
-                var safeName = (s.scheduleName || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                h += '<tr data-schedule-id="' + s.scheduleId + '" style="cursor:pointer;" title="Click to load this schedule">' +
-                     '<td>' + escapeHtml(s.scheduleName || '') + '</td><td>' + s.recurrenceType + '</td><td>' + s.exportFormat + '</td>' +
-                     '<td>' + s.scheduleTime + '</td><td>' + (s.nextRun || '-') + '</td>' +
-                     '<td>' + (s.skipIfEmpty ? '<i class="bi bi-check-circle text-success"></i>' : '-') + '</td>' +
-                     '<td class="text-end">' +
-                        '<button type="button" class="btn btn-sm btn-outline-primary me-1" title="Load into form" onclick="event.stopPropagation(); loadScheduleIntoForm(' + s.scheduleId + ')"><i class="bi bi-pencil"></i></button>' +
-                        '<button type="button" class="btn btn-sm btn-outline-danger" title="Delete schedule" onclick="event.stopPropagation(); deleteScheduleRow(' + s.scheduleId + ', \'' + safeName + '\')"><i class="bi bi-trash"></i></button>' +
-                     '</td></tr>';
-            });
-            h += '</tbody></table>';
-            c.innerHTML = h;
-            c.querySelectorAll('tr[data-schedule-id]').forEach(function(tr) {
-                tr.addEventListener('click', function() {
-                    loadScheduleIntoForm(parseInt(tr.getAttribute('data-schedule-id'), 10));
-                });
-            });
-        })
-        .catch(function() { document.getElementById('existingSchedules').innerHTML = '<em class="text-muted">Could not load schedules.</em>'; });
-}
-
-// A2: clean-state on open + click-to-load. BMS modal has fewer fields than AvgBasket/PS (no date range,
-// no AI, no weekly/monthly-day pickers), so both helpers only touch fields that actually exist here.
-function resetScheduleForm() {
-    document.getElementById('schedId').value = '';
-    document.getElementById('schedName').value = '';
-    document.getElementById('schedRecipients').value = 'gm@powersoft.com.cy';
-    document.getElementById('schedSubject').value = '';
-    document.getElementById('schedFormat').value = 'Excel';
-    document.getElementById('schedRecurrence').value = 'Daily';
-    document.getElementById('schedTime').value = '08:00';
-    // BMS defaults SkipIfEmpty to true (recommended for this report — less noise when everything is stocked).
-    document.getElementById('schedSkipIfEmpty').checked = true;
-    var a = document.getElementById('scheduleAlert');
-    if (a) { a.style.display = 'none'; a.innerHTML = ''; }
-}
-
-function loadScheduleIntoForm(scheduleId) {
-    fetch('@Url.Action("GetScheduleById", "Reports")?scheduleId=' + scheduleId)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (!data || !data.success || !data.schedule) {
-                showScheduleToast((data && data.message) || 'Could not load schedule', 'danger');
-                return;
-            }
-            var s = data.schedule;
-            // Remember the id so a subsequent Save updates this schedule instead of cloning it.
-            document.getElementById('schedId').value = scheduleId;
-            document.getElementById('schedName').value = s.scheduleName || '';
-            document.getElementById('schedRecipients').value = s.recipients || '';
-            document.getElementById('schedSubject').value = s.emailSubject || '';
-            document.getElementById('schedFormat').value = s.exportFormat || 'Excel';
-            document.getElementById('schedRecurrence').value = s.recurrenceType || 'Daily';
-            document.getElementById('schedTime').value = s.scheduleTime || '08:00';
-            document.getElementById('schedSkipIfEmpty').checked = !!s.skipIfEmpty;
-            var a = document.getElementById('scheduleAlert');
-            if (a) {
-                a.innerHTML = '<div class="alert alert-info mb-0 py-2"><i class="bi bi-pencil-square me-1"></i>Editing <strong>' + escapeHtml(s.scheduleName || '') + '</strong>. Saving will update this schedule in place &mdash; click <em>Reset</em> to start a new one instead.</div>';
-                a.style.display = '';
-            }
-        })
-        .catch(function() { showScheduleToast('Network error loading schedule', 'danger'); });
-}
-
-document.getElementById('scheduleModal').addEventListener('show.bs.modal', function() {
-    resetScheduleForm();
-    loadExistingSchedules();
-});
-
-function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// ===== End shared schedule partial API =====
 </script>

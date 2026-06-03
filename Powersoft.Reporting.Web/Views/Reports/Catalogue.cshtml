@@ -140,7 +140,7 @@
 
             @* ===== ROW 4: Profit / Stock / Cost (dropdowns + Includes VAT) + Options (Show Gross/Profit/Stock) + Rows per page ===== *@
             <div class="row g-3 mb-4 align-items-start">
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-2" data-perm="cost">
                     <label class="form-label fw-semibold small mb-1">Profit Based On</label>
                     <select asp-for="ProfitBasedOn" class="form-select form-select-sm" asp-items="Html.GetEnumSelectList<CatalogueCostBasis>()"></select>
                     <div class="form-check mt-1">
@@ -148,7 +148,7 @@
                         <label asp-for="ProfitIncludesVat" class="form-check-label small">Includes VAT</label>
                     </div>
                 </div>
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-2" data-perm="cost">
                     <label class="form-label fw-semibold small mb-1">Stock Value Based On</label>
                     <select asp-for="StockValueBasedOn" class="form-select form-select-sm" asp-items="Html.GetEnumSelectList<CatalogueCostBasis>()"></select>
                     <div class="form-check mt-1">
@@ -156,14 +156,14 @@
                         <label asp-for="StockValueIncludesVat" class="form-check-label small">Includes VAT</label>
                     </div>
                 </div>
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-2" data-perm="cost">
                     <label class="form-label fw-semibold small mb-1">Cost Type</label>
                     <select asp-for="CostType" class="form-select form-select-sm" asp-items="Html.GetEnumSelectList<CatalogueCostBasis>()"></select>
                 </div>
                 <div class="col-12 col-md-4">
                     <label class="form-label fw-semibold small mb-1">Display Options</label>
                     <div class="d-flex flex-wrap gap-3 pt-1">
-                        <div class="form-check" title="Quick-toggle for Profit / Markup / Margin columns. Synced with Display Columns selector.">
+                        <div class="form-check" data-perm="profit" title="Quick-toggle for Profit / Markup / Margin columns. Synced with Display Columns selector.">
                             <input type="checkbox" asp-for="ShowProfit" class="form-check-input" id="showProfitToggle" />
                             <label asp-for="ShowProfit" class="form-check-label small">Show Profit</label>
                         </div>
@@ -1403,6 +1403,9 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
 
 @section Scripts {
 <script>
+    var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
+    var _viewSupplier = @(ViewBag.ViewSupplier != null ? (ViewBag.ViewSupplier ? "true" : "false") : "true");
+
     function getSelectedDisplayCols() {
         return document.getElementById('displayColumnsHidden').value
             .split(',').filter(c => c.length > 0);

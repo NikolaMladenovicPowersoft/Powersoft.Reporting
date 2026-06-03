@@ -237,7 +237,11 @@ internal static class DimensionFilterBuilder
             else if (realIds.Count > 0)
             {
                 var names = AddParams(parms, realIds, prefix, ref idx);
-                sb.Append($" AND {column} NOT IN ({string.Join(",", names)})");
+                // Exclude only the chosen real ids. A row with NO value (NULL) is not the excluded
+                // value, so it must be KEPT — otherwise "exclude category X" silently drops every
+                // uncategorised item too. To also drop NULLs the user explicitly adds the N/A marker
+                // (handled by the realIds+hasNa branch above, which appends AND IS NOT NULL).
+                sb.Append($" AND ({column} NOT IN ({string.Join(",", names)}) OR {column} IS NULL)");
             }
             else if (hasNa)
             {

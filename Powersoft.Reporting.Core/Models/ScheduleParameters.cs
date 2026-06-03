@@ -36,7 +36,16 @@ public class ScheduleParameters
     public decimal ClassBThreshold { get; set; } = 95;
     public decimal PriceInterval { get; set; } = 10;
     public int PriceOnIndex { get; set; }
+    public bool PriceOnIncludesVat { get; set; }
     public int TimezoneOffsetMinutes { get; set; }
+
+    // Charts specific (keys from collectChartParams() in Charts.cshtml)
+    public string? ChartMode { get; set; }
+    public string? ChartDimension { get; set; }
+    public string? ChartMetric { get; set; }
+    public int TopN { get; set; } = 10;
+    public string? ChartType { get; set; }
+    public bool ShowOthers { get; set; } = true;
 
     // Shared
     public bool IncludeVat { get; set; }

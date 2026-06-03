@@ -84,4 +84,55 @@ public class ScheduleParametersParserTests
         p.Should().NotBeNull();
         p.ItemsSelectionJson.Should().BeNull();
     }
+
+    // Mirrors collectParetoParams() in Pareto.cshtml. Before the scheduler handler was added,
+    // a scheduled Pareto silently ran Average Basket and dropped all of these fields.
+    private const string ParetoParametersJson =
+        "{\"dimension\":\"Brand\",\"metric\":\"Profit\",\"includeVat\":true," +
+        "\"excludeNegativeAmounts\":false,\"classAThreshold\":\"70\",\"classBThreshold\":\"95\"," +
+        "\"profitBasis\":\"AverageCost\",\"timezoneOffsetMinutes\":-120,\"storeCodes\":\"S01,S02\"," +
+        "\"itemsSelectionJson\":\"{\\\"suppliers\\\":{\\\"ids\\\":[\\\"42\\\"],\\\"mode\\\":\\\"include\\\"}}\"}";
+
+    [Fact]
+    public void Parse_ReadsParetoFields()
+    {
+        var p = ScheduleParametersParser.Parse(ParetoParametersJson);
+
+        p.ParetoDimension.Should().Be("Brand");
+        p.ParetoMetric.Should().Be("Profit");
+        p.IncludeVat.Should().BeTrue();
+        p.ExcludeNegativeAmounts.Should().BeFalse();
+        p.ClassAThreshold.Should().Be(70);
+        p.ProfitBasis.Should().Be((int)ParetoProfitBasis.AverageCost);
+        p.TimezoneOffsetMinutes.Should().Be(-120);
+        p.StoreCodes.Should().BeEquivalentTo(new[] { "S01", "S02" });
+
+        var filter = ItemsSelectionParser.Parse(p.ItemsSelectionJson);
+        filter!.Suppliers.Ids.Should().ContainSingle().Which.Should().Be("42");
+    }
+
+    // Mirrors collectChartParams() in Charts.cshtml: showOthers is "1"/"0" and the items key
+    // is "itemsSelection" (not itemsSelectionJson). A scheduled chart previously ran Average Basket.
+    private const string ChartParametersJson =
+        "{\"mode\":\"Sales\",\"dimension\":\"Brand\",\"metric\":\"Value\",\"topN\":\"15\"," +
+        "\"chartType\":\"bar\",\"showOthers\":\"0\",\"compareLastYear\":\"1\",\"includeVat\":\"1\"," +
+        "\"storeCodes\":\"S01\"," +
+        "\"itemsSelection\":\"{\\\"categories\\\":{\\\"ids\\\":[\\\"7\\\"],\\\"mode\\\":\\\"include\\\"}}\"}";
+
+    [Fact]
+    public void Parse_ReadsChartFields()
+    {
+        var p = ScheduleParametersParser.Parse(ChartParametersJson);
+
+        p.ChartMode.Should().Be("Sales");
+        p.ChartDimension.Should().Be("Brand");
+        p.ChartMetric.Should().Be("Value");
+        p.TopN.Should().Be(15);
+        p.ChartType.Should().Be("bar");
+        p.ShowOthers.Should().BeFalse("showOthers came as \"0\"");
+        p.CompareLastYear.Should().BeTrue("compareLastYear came as \"1\"");
+
+        var filter = ItemsSelectionParser.Parse(p.ItemsSelectionJson);
+        filter!.Categories.Ids.Should().ContainSingle().Which.Should().Be("7");
+    }
 }

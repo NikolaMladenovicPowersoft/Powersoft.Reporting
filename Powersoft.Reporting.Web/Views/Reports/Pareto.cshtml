@@ -1020,7 +1020,8 @@ function collectParetoParams() {
         classBThreshold: '95',
         profitBasis: document.getElementById('profitBasis').value,
         timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
-        storeCodes: getSelectedStoreCodes()
+        storeCodes: getSelectedStoreCodes(),
+        itemsSelectionJson: getItemsSelectionJson()
     };
     if (dim === 'ByPrice') {
         p.priceInterval = document.getElementById('priceInterval').value;

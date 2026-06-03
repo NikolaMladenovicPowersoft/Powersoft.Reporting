@@ -81,11 +81,53 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("includeAdditionalCharges", out var iac))
                 p.IncludeAdditionalCharges = iac.ValueKind != JsonValueKind.False;
 
+            // Pareto 80/20 specific (keys produced by collectParetoParams() in Pareto.cshtml)
+            if (root.TryGetProperty("dimension", out var pd) || root.TryGetProperty("ParetoDimension", out pd))
+                p.ParetoDimension = pd.GetString();
+            if (root.TryGetProperty("metric", out var pm) || root.TryGetProperty("ParetoMetric", out pm))
+                p.ParetoMetric = pm.GetString();
+            if (root.TryGetProperty("excludeNegativeAmounts", out var ena))
+                p.ExcludeNegativeAmounts = ena.ValueKind != JsonValueKind.False;
+            if (root.TryGetProperty("classAThreshold", out var cat) || root.TryGetProperty("ClassAThreshold", out cat))
+                p.ClassAThreshold = ParseDecimal(cat, 80);
+            if (root.TryGetProperty("classBThreshold", out var cbt) || root.TryGetProperty("ClassBThreshold", out cbt))
+                p.ClassBThreshold = ParseDecimal(cbt, 95);
+            if (root.TryGetProperty("profitBasis", out var pb) || root.TryGetProperty("ProfitBasis", out pb))
+                p.ProfitBasis = (int)ParseEnum<ParetoProfitBasis>(pb);
+            if (root.TryGetProperty("priceInterval", out var pi) || root.TryGetProperty("PriceInterval", out pi))
+                p.PriceInterval = ParseDecimal(pi, 10);
+            if (root.TryGetProperty("priceOnIndex", out var poi) || root.TryGetProperty("PriceOnIndex", out poi))
+                p.PriceOnIndex = ParseInt(poi, 0);
+            if (root.TryGetProperty("priceOnIncludesVat", out var poiv))
+                p.PriceOnIncludesVat = poiv.ValueKind == JsonValueKind.True;
+            if (root.TryGetProperty("timezoneOffsetMinutes", out var tzo) || root.TryGetProperty("TimezoneOffsetMinutes", out tzo))
+                p.TimezoneOffsetMinutes = ParseInt(tzo, 0);
+
+            // Charts specific (keys produced by collectChartParams() in Charts.cshtml).
+            // showOthers/compareLastYear arrive as "1"/"0" strings here, hence ParseBool.
+            if (root.TryGetProperty("mode", out var cmode) || root.TryGetProperty("ChartMode", out cmode))
+                p.ChartMode = cmode.GetString();
+            if (root.TryGetProperty("chartType", out var ctype) || root.TryGetProperty("ChartType", out ctype))
+                p.ChartType = ctype.GetString();
+            if (root.TryGetProperty("topN", out var ctn) || root.TryGetProperty("TopN", out ctn))
+                p.TopN = ParseInt(ctn, 10);
+            if (root.TryGetProperty("showOthers", out var cso) || root.TryGetProperty("ShowOthers", out cso))
+                p.ShowOthers = ParseBool(cso, true);
+            // dimension/metric keys are shared with Pareto; capture them into chart fields too.
+            if (root.TryGetProperty("dimension", out var cdim))
+                p.ChartDimension = cdim.GetString();
+            if (root.TryGetProperty("metric", out var cmet))
+                p.ChartMetric = cmet.GetString();
+            // compareLastYear may be "1"/"0" (charts) or true/false (AB) — re-read defensively.
+            if (root.TryGetProperty("compareLastYear", out var cclyy))
+                p.CompareLastYear = ParseBool(cclyy, p.CompareLastYear);
+
             // ItemsSelection dimension filter (categories/brands/suppliers/stores/items/etc.).
             // The view serialises it as a JSON *string* under "itemsSelectionJson"; older/code
             // paths may embed it as a nested object. Without this the scheduler silently dropped
             // every Items Selection filter and only honoured legacy storeCodes/itemIds.
-            if (root.TryGetProperty("itemsSelectionJson", out var isj) || root.TryGetProperty("ItemsSelectionJson", out isj))
+            if (root.TryGetProperty("itemsSelectionJson", out var isj) || root.TryGetProperty("ItemsSelectionJson", out isj)
+                || root.TryGetProperty("itemsSelection", out isj) || root.TryGetProperty("ItemsSelection", out isj))
             {
                 p.ItemsSelectionJson = isj.ValueKind switch
                 {
@@ -137,6 +179,38 @@ public static class ScheduleParametersParser
                 return parsed;
         }
         return default;
+    }
+
+    private static bool ParseBool(JsonElement el, bool fallback)
+    {
+        switch (el.ValueKind)
+        {
+            case JsonValueKind.True: return true;
+            case JsonValueKind.False: return false;
+            case JsonValueKind.Number: return el.TryGetInt32(out var n) ? n != 0 : fallback;
+            case JsonValueKind.String:
+                var s = el.GetString();
+                if (string.IsNullOrEmpty(s)) return fallback;
+                if (s == "1" || s.Equals("true", StringComparison.OrdinalIgnoreCase)) return true;
+                if (s == "0" || s.Equals("false", StringComparison.OrdinalIgnoreCase)) return false;
+                return fallback;
+            default: return fallback;
+        }
+    }
+
+    private static decimal ParseDecimal(JsonElement el, decimal fallback)
+    {
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetDecimal(out var d)) return d;
+        if (el.ValueKind == JsonValueKind.String && decimal.TryParse(el.GetString(),
+            System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var ds)) return ds;
+        return fallback;
+    }
+
+    private static int ParseInt(JsonElement el, int fallback)
+    {
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out var n)) return n;
+        if (el.ValueKind == JsonValueKind.String && int.TryParse(el.GetString(), out var ns)) return ns;
+        return fallback;
     }
 
     private static List<string>? ParseStringList(JsonElement el)

@@ -298,7 +298,123 @@ public class ScheduleExecutionService
         if (string.Equals(reportType, ReportTypeConstants.BelowMinStock, StringComparison.OrdinalIgnoreCase))
             return await GenerateBelowMinStockReportAsync(schedule, connString);
 
+        if (string.Equals(reportType, ReportTypeConstants.Pareto, StringComparison.OrdinalIgnoreCase))
+            return await GenerateParetoReportAsync(schedule, connString);
+
+        if (string.Equals(reportType, ReportTypeConstants.Charts, StringComparison.OrdinalIgnoreCase))
+            return await GenerateChartsReportAsync(schedule, connString);
+
         return await GenerateAverageBasketReportAsync(schedule, connString);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateChartsReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        var filter = new ChartFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            Mode = Enum.TryParse<ChartMode>(parameters.ChartMode, true, out var cmode) ? cmode : ChartMode.Sales,
+            Dimension = Enum.TryParse<ChartDimension>(parameters.ChartDimension, true, out var cdim) ? cdim : ChartDimension.Category,
+            Metric = Enum.TryParse<ChartMetric>(parameters.ChartMetric, true, out var cmet) ? cmet : ChartMetric.Value,
+            TopN = parameters.TopN > 0 ? parameters.TopN : 10,
+            ShowOthers = parameters.ShowOthers,
+            CompareLastYear = parameters.CompareLastYear,
+            IncludeVat = parameters.IncludeVat,
+            StoreCodes = parameters.StoreCodes,
+            ChartType = string.IsNullOrWhiteSpace(parameters.ChartType) ? "pie" : parameters.ChartType,
+            ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson)
+        };
+
+        var repo = _repositoryFactory.CreateChartRepository(connString);
+        var data = await repo.GetSalesBreakdownAsync(filter);
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateChartPdf(data, filter);
+                fileName = $"Chart_{filter.Dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateChartCsv(data, filter);
+                fileName = $"Chart_{filter.Dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateChartExcel(data, filter);
+                fileName = $"Chart_{filter.Dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        return (data.Count, fileBytes, fileName, contentType, period);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateParetoReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        var filter = new ParetoFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            Dimension = Enum.TryParse<ParetoDimension>(parameters.ParetoDimension, true, out var pdim) ? pdim : ParetoDimension.Item,
+            Metric = Enum.TryParse<ParetoMetric>(parameters.ParetoMetric, true, out var pmet) ? pmet : ParetoMetric.Value,
+            IncludeVat = parameters.IncludeVat,
+            StoreCodes = parameters.StoreCodes,
+            ClassAThreshold = parameters.ClassAThreshold,
+            ClassBThreshold = parameters.ClassBThreshold,
+            ExcludeNegativeAmounts = parameters.ExcludeNegativeAmounts,
+            ProfitBasis = Enum.IsDefined(typeof(ParetoProfitBasis), parameters.ProfitBasis)
+                ? (ParetoProfitBasis)parameters.ProfitBasis : ParetoProfitBasis.LatestCost,
+            TimezoneOffsetMinutes = parameters.TimezoneOffsetMinutes,
+            PriceInterval = parameters.PriceInterval,
+            PriceOnIndex = parameters.PriceOnIndex,
+            PriceOnIncludesVat = parameters.PriceOnIncludesVat,
+            ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson)
+        };
+
+        var repo = _repositoryFactory.CreateParetoRepository(connString);
+        var result = await repo.GetParetoDataAsync(filter);
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateParetoPdf(result, filter);
+                fileName = $"Pareto_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateParetoCsv(result, filter);
+                fileName = $"Pareto_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateParetoExcel(result, filter);
+                fileName = $"Pareto_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        return (result.Rows.Count, fileBytes, fileName, contentType, period);
     }
 
     private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>

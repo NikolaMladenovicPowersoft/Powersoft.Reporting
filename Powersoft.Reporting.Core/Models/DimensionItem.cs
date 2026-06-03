@@ -7,6 +7,19 @@ public class DimensionItem
     public string Name { get; set; } = "";
 }
 
+// Per-tenant capability flags for the fashion/retail dimensions. Drives whether the
+// Items Selection component shows Model/Colour/Size/GroupSize/Fabric/Attribute filters,
+// so non-fashion tenants (cafe, salon, etc.) are not cluttered with empty pickers.
+public class FashionDimensionAvailability
+{
+    public bool HasModels { get; set; }
+    public bool HasColours { get; set; }
+    public bool HasSizes { get; set; }
+    public bool HasGroupSizes { get; set; }
+    public bool HasFabrics { get; set; }
+    public bool HasAttributes { get; set; }
+}
+
 public enum FilterMode
 {
     All = 0,

@@ -323,18 +323,56 @@ public class DimensionRepository : IDimensionRepository
     {
         if (attrIndex < 1 || attrIndex > 6) return new List<DimensionItem>();
 
-        var codeCol = $"Attribute{attrIndex}Code";
-        var nameCol = $"Attribute{attrIndex}Name";
+        // Attribute id lives on tbl_Item.fk_AttrID{n}; the human-readable code/name live on
+        // the denormalised tbl_RelItemAttributes (keyed by pk_ItemID). The previous query read
+        // fk_AttrID{n} straight off tbl_RelItemAttributes, where that column does not exist.
+        var codeCol = $"r.Attribute{attrIndex}Code";
+        var nameCol = $"r.Attribute{attrIndex}Name";
         var sql = $@"
             SELECT DISTINCT
-                CAST(fk_AttrID{attrIndex} AS NVARCHAR(20)) AS Id,
+                CAST(i.fk_AttrID{attrIndex} AS NVARCHAR(20)) AS Id,
                 ISNULL({codeCol},'') AS Code,
                 ISNULL({nameCol}, {codeCol}) AS Name
-            FROM tbl_RelItemAttributes
-            WHERE fk_AttrID{attrIndex} IS NOT NULL AND fk_AttrID{attrIndex} > 0
+            FROM tbl_Item i
+            JOIN tbl_RelItemAttributes r ON i.pk_ItemID = r.pk_ItemID
+            WHERE i.fk_AttrID{attrIndex} IS NOT NULL AND i.fk_AttrID{attrIndex} > 0
             ORDER BY Code";
 
         return await ExecuteListQueryAsync(sql);
+    }
+
+    // A dimension is "available" only if items actually reference it (not merely that a
+    // dimension master table has a seeded row), so non-fashion tenants stay uncluttered.
+    // Model/Colour/Size live on tbl_Item; GroupSize/Fabric on tbl_Model; Attributes on
+    // tbl_RelItemAttributes. Single round-trip; each EXISTS short-circuits.
+    public async Task<FashionDimensionAvailability> GetFashionDimensionAvailabilityAsync()
+    {
+        const string sql = @"
+            SELECT
+                CAST(CASE WHEN EXISTS(SELECT 1 FROM tbl_Item  WHERE fk_ModelID  > 0) THEN 1 ELSE 0 END AS INT) AS HasModels,
+                CAST(CASE WHEN EXISTS(SELECT 1 FROM tbl_Item  WHERE fk_ColourID > 0) THEN 1 ELSE 0 END AS INT) AS HasColours,
+                CAST(CASE WHEN EXISTS(SELECT 1 FROM tbl_Item  WHERE fk_SizeID   > 0) THEN 1 ELSE 0 END AS INT) AS HasSizes,
+                CAST(CASE WHEN EXISTS(SELECT 1 FROM tbl_Model WHERE fk_SizeGroupID > 0) THEN 1 ELSE 0 END AS INT) AS HasGroupSizes,
+                CAST(CASE WHEN EXISTS(SELECT 1 FROM tbl_Model WHERE fk_FabricID > 0) THEN 1 ELSE 0 END AS INT) AS HasFabrics,
+                CAST(CASE WHEN EXISTS(SELECT 1 FROM tbl_Item
+                    WHERE fk_AttrID1 > 0 OR fk_AttrID2 > 0 OR fk_AttrID3 > 0
+                       OR fk_AttrID4 > 0 OR fk_AttrID5 > 0 OR fk_AttrID6 > 0) THEN 1 ELSE 0 END AS INT) AS HasAttributes";
+
+        using var conn = new SqlConnection(_connectionString);
+        using var cmd = new SqlCommand(sql, conn);
+        await conn.OpenAsync();
+        using var reader = await cmd.ExecuteReaderAsync();
+        var result = new FashionDimensionAvailability();
+        if (await reader.ReadAsync())
+        {
+            result.HasModels = reader.GetInt32(0) == 1;
+            result.HasColours = reader.GetInt32(1) == 1;
+            result.HasSizes = reader.GetInt32(2) == 1;
+            result.HasGroupSizes = reader.GetInt32(3) == 1;
+            result.HasFabrics = reader.GetInt32(4) == 1;
+            result.HasAttributes = reader.GetInt32(5) == 1;
+        }
+        return result;
     }
 
     private async Task<List<DimensionItem>> ExecuteListQueryAsync(string sql)

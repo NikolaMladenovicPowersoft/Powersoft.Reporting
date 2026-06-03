@@ -22,4 +22,5 @@ public interface IDimensionRepository
     Task<List<DimensionItem>> GetGroupSizesAsync();
     Task<List<DimensionItem>> GetFabricsAsync();
     Task<List<DimensionItem>> GetAttributeValuesAsync(int attrIndex);
+    Task<FashionDimensionAvailability> GetFashionDimensionAvailabilityAsync();
 }

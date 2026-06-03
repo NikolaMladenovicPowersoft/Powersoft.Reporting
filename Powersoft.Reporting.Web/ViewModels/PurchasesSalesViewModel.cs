@@ -91,6 +91,15 @@ public class PurchasesSalesViewModel
     public bool HasSavedLayout { get; set; }
     public string? HiddenColumns { get; set; }
 
+    // Fashion dimension availability (data-driven): show the Model/Colour/Size/GroupSize/
+    // Fabric/Attribute filters only when the tenant's items actually use them.
+    public bool ShowModels { get; set; }
+    public bool ShowColours { get; set; }
+    public bool ShowSizes { get; set; }
+    public bool ShowGroupSizes { get; set; }
+    public bool ShowFabrics { get; set; }
+    public bool ShowAttributes { get; set; }
+
     public bool HasPrimaryGroup => PrimaryGroup != PsGroupBy.None;
     public bool HasSecondaryGroup => SecondaryGroup != PsGroupBy.None;
     public bool HasThirdGroup => ThirdGroup != PsGroupBy.None;

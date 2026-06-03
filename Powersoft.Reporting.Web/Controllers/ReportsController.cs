@@ -1492,6 +1492,7 @@ public class ReportsController : Controller
 
         await ApplyPsSavedLayoutAsync(viewModel, tenantConnString);
         await LoadPsStoresAsync(viewModel, tenantConnString);
+        await LoadPsFashionAvailabilityAsync(viewModel, tenantConnString);
         return View(viewModel);
     }
 
@@ -1514,6 +1515,7 @@ public class ReportsController : Controller
         model.IsConnected = true;
         model.CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePurchasesSales);
         await LoadPsStoresAsync(model, tenantConnString);
+        await LoadPsFashionAvailabilityAsync(model, tenantConnString);
 
         var filter = model.ToPurchasesSalesFilter();
         filter.ItemsSelection = ParseItemsSelection(model.ItemsSelectionJson);
@@ -1886,6 +1888,27 @@ public class ReportsController : Controller
         {
             _logger.LogWarning(ex, "Failed to load stores for PS report");
             model.AvailableStores = new();
+        }
+    }
+
+    // Data-driven fashion dimensions: only surface Model/Colour/Size/GroupSize/Fabric/
+    // Attribute filters when the tenant's items actually reference them.
+    private async Task LoadPsFashionAvailabilityAsync(PurchasesSalesViewModel model, string tenantConnString)
+    {
+        try
+        {
+            var dimRepo = _repositoryFactory.CreateDimensionRepository(tenantConnString);
+            var avail = await dimRepo.GetFashionDimensionAvailabilityAsync();
+            model.ShowModels = avail.HasModels;
+            model.ShowColours = avail.HasColours;
+            model.ShowSizes = avail.HasSizes;
+            model.ShowGroupSizes = avail.HasGroupSizes;
+            model.ShowFabrics = avail.HasFabrics;
+            model.ShowAttributes = avail.HasAttributes;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load fashion dimension availability for PS report");
         }
     }
 

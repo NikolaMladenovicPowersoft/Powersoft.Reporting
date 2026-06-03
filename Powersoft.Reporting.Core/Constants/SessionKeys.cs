@@ -39,14 +39,14 @@ public static class ModuleConstants
 
     public const int ActionViewAvgBasket = 6025;
     public const int ActionScheduleAvgBasket = 6026;
-    public const int ActionViewPurchasesSales = 6027;
-    public const int ActionSchedulePurchasesSales = 6028;
-    public const int ActionViewCatalogue = 6029;
-    public const int ActionScheduleCatalogue = 6030;
-    public const int ActionViewPareto = 6031;
-    public const int ActionSchedulePareto = 6032;
-    public const int ActionViewCharts = 6033;
-    public const int ActionScheduleCharts = 6034;
+        public const int ActionViewPurchasesSales = 6027;
+        public const int ActionSchedulePurchasesSales = 6028;
+        public const int ActionViewPareto = 6029;
+        public const int ActionSchedulePareto = 6030;
+        public const int ActionViewCharts = 6031;
+        public const int ActionScheduleCharts = 6032;
+        public const int ActionViewCatalogue = 6033;
+        public const int ActionScheduleCatalogue = 6034;
     public const int ActionViewProspectClients = 6035;
     public const int ActionScheduleProspectClients = 6036;
     public const int ActionViewOffersReport = 6037;

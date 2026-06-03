@@ -1664,6 +1664,7 @@ function buildReportUrl(baseAction) {
     var compareLy = document.getElementById('compareLyCheck') ? document.getElementById('compareLyCheck').checked : @(Model.CompareLastYear ? "true" : "false");
     var storeCodes = typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : '';
     var itemIds = typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : '';
+    var itemsSelectionJson = typeof getItemsSelectionFilter === 'function' ? JSON.stringify(getItemsSelectionFilter()) : '';
     var sortCol = (document.getElementById('sortColumnHidden') || {}).value || 'Period';
     var sortDir = (document.getElementById('sortDirectionHidden') || {}).value || 'ASC';
     return baseAction +
@@ -1676,6 +1677,7 @@ function buildReportUrl(baseAction) {
         '&compareLastYear=' + compareLy +
         '&storeCodes=' + encodeURIComponent(storeCodes) +
         '&itemIds=' + encodeURIComponent(itemIds) +
+        '&ItemsSelectionJson=' + encodeURIComponent(itemsSelectionJson) +
         '&sortColumn=' + encodeURIComponent(sortCol) +
         '&sortDirection=' + encodeURIComponent(sortDir);
 }
@@ -1844,6 +1846,7 @@ function saveSchedule() {
         compareLastYear: document.getElementById('compareLyCheck').checked,
         storeCodes: typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : (document.getElementById('selectedStoreCodesHidden').value || ''),
         itemIds: typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : (document.getElementById('selectedItemIdsHidden').value || ''),
+        itemsSelectionJson: typeof getItemsSelectionFilter === 'function' ? JSON.stringify(getItemsSelectionFilter()) : '',
         sortColumn: document.getElementById('sortColumnHidden').value || 'Period',
         sortDirection: document.getElementById('sortDirectionHidden').value || 'ASC'
     };
@@ -2217,6 +2220,7 @@ function sendReportEmail() {
     formData.append('compareLastYear', document.getElementById('compareLyCheck') ? document.getElementById('compareLyCheck').checked : @(Model.CompareLastYear ? "true" : "false"));
     formData.append('storeCodes', typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : (document.getElementById('selectedStoreCodesHidden').value || ''));
     formData.append('itemIds', typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : (document.getElementById('selectedItemIdsHidden').value || ''));
+    formData.append('ItemsSelectionJson', typeof getItemsSelectionFilter === 'function' ? JSON.stringify(getItemsSelectionFilter()) : '');
     formData.append('sortColumn', (document.getElementById('sortColumnHidden') || {}).value || 'Period');
     formData.append('sortDirection', (document.getElementById('sortDirectionHidden') || {}).value || 'ASC');
 
@@ -2768,6 +2772,7 @@ function analyzeReport() {
 
     var form = document.getElementById('reportForm');
     document.querySelectorAll('#reportForm select[disabled], #reportForm input[disabled]').forEach(function(el) { el.disabled = false; });
+    if (typeof populateItemsSelectionHidden === 'function') populateItemsSelectionHidden();
     var formData = new FormData(form);
     onLayoutChange();
     formData.append('storeCodes', typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : (document.getElementById('selectedStoreCodesHidden').value || ''));

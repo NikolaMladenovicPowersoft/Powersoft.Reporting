@@ -324,6 +324,7 @@ public class ScheduleExecutionService
             CompareLastYear = parameters.CompareLastYear,
             StoreCodes = parameters.StoreCodes ?? new(),
             ItemIds = parameters.ItemIds ?? new(),
+            ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
             SortColumn = parameters.SortColumn,
             SortDirection = parameters.SortDirection,
             PageSize = int.MaxValue
@@ -520,6 +521,7 @@ public class ScheduleExecutionService
                     CompareLastYear = parameters.CompareLastYear,
                     StoreCodes = parameters.StoreCodes ?? new(),
                     ItemIds = parameters.ItemIds ?? new(),
+                    ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
                     SortColumn = parameters.SortColumn,
                     SortDirection = parameters.SortDirection,
                     PageSize = int.MaxValue

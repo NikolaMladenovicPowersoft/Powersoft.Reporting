@@ -1073,9 +1073,9 @@ public class ReportsController : Controller
     public async Task<IActionResult> PrintPreview(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
-        string sortColumn = "Period", string sortDirection = "ASC")
+        string sortColumn = "Period", string sortDirection = "ASC", string? ItemsSelectionJson = null)
     {
-        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson);
         if (result == null) return RedirectToAction("AverageBasket");
 
         var model = new AverageBasketViewModel
@@ -1102,9 +1102,9 @@ public class ReportsController : Controller
     public async Task<IActionResult> ExportExcel(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
-        string sortColumn = "Period", string sortDirection = "ASC")
+        string sortColumn = "Period", string sortDirection = "ASC", string? ItemsSelectionJson = null)
     {
-        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson);
         if (result == null) return RedirectToAction("AverageBasket");
 
         var service = new ExcelExportService();
@@ -1117,9 +1117,9 @@ public class ReportsController : Controller
     public async Task<IActionResult> ExportPdf(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
-        string sortColumn = "Period", string sortDirection = "ASC")
+        string sortColumn = "Period", string sortDirection = "ASC", string? ItemsSelectionJson = null)
     {
-        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson);
         if (result == null) return RedirectToAction("AverageBasket");
 
         var service = new PdfExportService();
@@ -1132,9 +1132,9 @@ public class ReportsController : Controller
     public async Task<IActionResult> ExportCsv(
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear, string? storeCodes, string? itemIds,
-        string sortColumn = "Period", string sortDirection = "ASC")
+        string sortColumn = "Period", string sortDirection = "ASC", string? ItemsSelectionJson = null)
     {
-        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
+        var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy, includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson);
         if (result == null) return RedirectToAction("AverageBasket");
 
         var service = new CsvExportService();
@@ -1152,7 +1152,7 @@ public class ReportsController : Controller
         DateTime dateFrom, DateTime dateTo, BreakdownType breakdown, GroupByType groupBy,
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear,
         string? storeCodes, string? itemIds,
-        string sortColumn = "Period", string sortDirection = "ASC")
+        string sortColumn = "Period", string sortDirection = "ASC", string? ItemsSelectionJson = null)
     {
         if (string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Please enter at least one email address." });
@@ -1170,7 +1170,7 @@ public class ReportsController : Controller
             return Json(new { success = false, message = $"Invalid BCC email: {string.Join(", ", bccList.invalid)}" });
 
         var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy,
-            includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
+            includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson);
         if (result == null)
             return Json(new { success = false, message = "Failed to generate report data." });
 
@@ -2240,13 +2240,13 @@ public class ReportsController : Controller
         GroupByType secondaryGroupBy, bool includeVat, bool compareLastYear,
         string? storeCodes, string? itemIds,
         string sortColumn = "Period", string sortDirection = "ASC",
-        string? locale = "el", int? promptTemplateId = null)
+        string? locale = "el", int? promptTemplateId = null, string? ItemsSelectionJson = null)
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
 
         var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy,
-            includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection);
+            includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson);
         if (result == null)
             return Json(new { success = false, message = "Failed to generate report data for analysis." });
 

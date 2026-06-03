@@ -90,4 +90,36 @@ public class DimensionFilterBuilderTests
         sql.Should().BeEmpty();
         parms.Should().BeEmpty();
     }
+
+    // p0-avgbasket-fix #2: Average Basket exposes a Supplier dimension. The builder only emits
+    // the supplier clause when the ColumnMap supplies a Supplier column (AB now maps it to the
+    // tbl_RelItemSuppliers primary-supplier join alias). Default map has no supplier column.
+    [Fact]
+    public void Supplier_is_ignored_when_column_not_mapped()
+    {
+        var sel = new ItemsSelectionFilter
+        {
+            Suppliers = new DimensionFilter { Mode = FilterMode.Include, Ids = { "SUP01" } }
+        };
+
+        var (sql, parms) = DimensionFilterBuilder.Build(sel); // Default map: Supplier = ""
+
+        sql.Should().BeEmpty();
+        parms.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Supplier_emits_clause_when_column_mapped()
+    {
+        var sel = new ItemsSelectionFilter
+        {
+            Suppliers = new DimensionFilter { Mode = FilterMode.Include, Ids = { "SUP01", "SUP02" } }
+        };
+        var cols = new DimensionFilterBuilder.ColumnMap(Supplier: "ris_dim.fk_SupplierNo");
+
+        var (sql, parms) = DimensionFilterBuilder.Build(sel, cols);
+
+        sql.Should().Contain("ris_dim.fk_SupplierNo IN (");
+        parms.Should().HaveCount(2);
+    }
 }

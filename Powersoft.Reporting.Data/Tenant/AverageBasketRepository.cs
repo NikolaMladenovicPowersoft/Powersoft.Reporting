@@ -22,6 +22,7 @@ public class AverageBasketRepository : IAverageBasketRepository
         Season: "t_dim.fk_SeasonID",
         Item: "t2.fk_ItemID",
         Store: "t1.fk_StoreCode",
+        Supplier: "ris_dim.fk_SupplierNo",
         ItemTableAlias: "t_dim");
 
     public async Task<PagedResult<AverageBasketRow>> GetAverageBasketDataAsync(ReportFilter filter)
@@ -34,6 +35,10 @@ public class AverageBasketRepository : IAverageBasketRepository
 
         var needsDimJoin = DimensionFilterBuilder.NeedsItemJoin(filter.ItemsSelection);
         var dimJoin = needsDimJoin ? "\n            INNER JOIN tbl_Item t_dim ON t2.fk_ItemID = t_dim.pk_ItemID" : "";
+        // Supplier filter lives on tbl_RelItemSuppliers (primary supplier), mirroring the
+        // Supplier grouping join. Appended to dimJoin so it flows into every leg/totals fragment.
+        if (filter.ItemsSelection?.Suppliers.HasFilter == true)
+            dimJoin += "\n            LEFT JOIN tbl_RelItemSuppliers ris_dim ON t2.fk_ItemID = ris_dim.fk_ItemID AND ISNULL(ris_dim.PrimarySupplier, 0) = 1";
         var (dimWhere, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection, AbDimCols);
 
         var (ctes, dataSelect) = anyGrouping
@@ -265,7 +270,7 @@ public class AverageBasketRepository : IAverageBasketRepository
 
     #region SQL Building
 
-    private static readonly Dictionary<string, string> ColumnSqlMap = new(StringComparer.OrdinalIgnoreCase)
+    internal static readonly Dictionary<string, string> ColumnSqlMap = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Period"] = "d.Period",
         ["GroupName"] = "d.GroupName",
@@ -276,6 +281,8 @@ public class AverageBasketRepository : IAverageBasketRepository
         ["QtySold"] = "d.QtySold",
         ["QtyReturned"] = "d.QtyReturned",
         ["NetQty"] = "(d.QtySold - d.QtyReturned)",
+        ["SaleValue"] = "d.NetSales",
+        ["ReturnValue"] = "d.NetReturns",
         ["Sales"] = "(d.NetSales - d.NetReturns)",
         ["AvgBasket"] = "CASE WHEN (d.InvoiceCount - d.CreditCount) > 0 THEN (d.NetSales - d.NetReturns) * 1.0 / (d.InvoiceCount - d.CreditCount) ELSE 0 END",
         ["AvgQty"] = "CASE WHEN (d.InvoiceCount - d.CreditCount) > 0 THEN CAST((d.QtySold - d.QtyReturned) AS FLOAT) / (d.InvoiceCount - d.CreditCount) ELSE 0 END"
@@ -310,6 +317,23 @@ public class AverageBasketRepository : IAverageBasketRepository
         return $"{sqlExpr} {dir}";
     }
 
+    // Column filters must match the value shown in the grid, which is VAT-inclusive when
+    // IncludeVat is on. The static ColumnSqlMap holds the net (no-VAT) base; this mirrors the
+    // VAT handling already in ResolveSortExpression so a filter agrees with what the user sees.
+    internal static string ApplyVatToValueExpr(string column, string baseExpr, bool includeVat)
+    {
+        if (!includeVat) return baseExpr;
+        if (string.Equals(column, "SaleValue", StringComparison.OrdinalIgnoreCase))
+            return "(d.NetSales + d.VatSales)";
+        if (string.Equals(column, "ReturnValue", StringComparison.OrdinalIgnoreCase))
+            return "(d.NetReturns + d.VatReturns)";
+        if (string.Equals(column, "Sales", StringComparison.OrdinalIgnoreCase))
+            return "(d.NetSales + d.VatSales - d.NetReturns - d.VatReturns)";
+        if (string.Equals(column, "AvgBasket", StringComparison.OrdinalIgnoreCase))
+            return "CASE WHEN (d.InvoiceCount - d.CreditCount) > 0 THEN (d.NetSales + d.VatSales - d.NetReturns - d.VatReturns) * 1.0 / (d.InvoiceCount - d.CreditCount) ELSE 0 END";
+        return baseExpr;
+    }
+
     private (string whereClause, List<SqlParameter> filterParams) BuildColumnFilterClause(ReportFilter filter)
     {
         if (filter.FilterValues == null || !filter.FilterValues.Any())
@@ -325,6 +349,7 @@ public class AverageBasketRepository : IAverageBasketRepository
             var value = kvp.Value?.Trim();
             if (string.IsNullOrEmpty(value)) continue;
             if (!ColumnSqlMap.TryGetValue(column, out var sqlExpr)) continue;
+            sqlExpr = ApplyVatToValueExpr(column, sqlExpr, filter.IncludeVat);
 
             var op = filter.FilterOperators.TryGetValue(column, out var opVal) ? opVal : "eq";
             if (!ValidFilterOps.Contains(op)) op = "eq";

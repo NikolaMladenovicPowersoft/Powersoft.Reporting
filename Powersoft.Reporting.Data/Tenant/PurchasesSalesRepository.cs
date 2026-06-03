@@ -883,6 +883,7 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
                 Model: "t2.fk_ModelID",
                 Colour: "t2.fk_ColourID",
                 Size: "t2.fk_SizeID",
+                GroupSize: "t5.fk_SizeGroupID",
                 Fabric: "t5.fk_FabricID",
                 Attr1: "t2.fk_AttrID1",
                 Attr2: "t2.fk_AttrID2",

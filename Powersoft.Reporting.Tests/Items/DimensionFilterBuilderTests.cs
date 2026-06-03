@@ -122,4 +122,36 @@ public class DimensionFilterBuilderTests
         sql.Should().Contain("ris_dim.fk_SupplierNo IN (");
         parms.Should().HaveCount(2);
     }
+
+    // p0-ps-proof: Purchases vs Sales now exposes fashion dimensions, including Group Size
+    // (mapped to tbl_Model.fk_SizeGroupID via the always-present t5 join). The builder only
+    // emits the group-size clause when the ColumnMap supplies a GroupSize column.
+    [Fact]
+    public void GroupSize_is_ignored_when_column_not_mapped()
+    {
+        var sel = new ItemsSelectionFilter
+        {
+            GroupSizes = new DimensionFilter { Mode = FilterMode.Include, Ids = { "10" } }
+        };
+
+        var (sql, parms) = DimensionFilterBuilder.Build(sel); // Default map: GroupSize = ""
+
+        sql.Should().BeEmpty();
+        parms.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GroupSize_emits_clause_when_column_mapped()
+    {
+        var sel = new ItemsSelectionFilter
+        {
+            GroupSizes = new DimensionFilter { Mode = FilterMode.Include, Ids = { "10", "20" } }
+        };
+        var cols = new DimensionFilterBuilder.ColumnMap(GroupSize: "t5.fk_SizeGroupID");
+
+        var (sql, parms) = DimensionFilterBuilder.Build(sel, cols);
+
+        sql.Should().Contain("t5.fk_SizeGroupID IN (");
+        parms.Should().HaveCount(2);
+    }
 }

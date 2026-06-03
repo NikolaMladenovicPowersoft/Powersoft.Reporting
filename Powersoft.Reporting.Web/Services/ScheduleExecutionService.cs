@@ -613,17 +613,17 @@ public class ScheduleExecutionService
         switch (format)
         {
             case "pdf":
-                fileBytes = new PdfExportService().GenerateParetoPdf(result, filter);
+                fileBytes = new PdfExportService().GenerateParetoPdf(result, filter, parameters.ViewCost);
                 fileName = $"Pareto_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
                 contentType = "application/pdf";
                 break;
             case "csv":
-                fileBytes = new CsvExportService().GenerateParetoCsv(result, filter);
+                fileBytes = new CsvExportService().GenerateParetoCsv(result, filter, parameters.ViewCost);
                 fileName = $"Pareto_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
                 contentType = "text/csv";
                 break;
             default:
-                fileBytes = new ExcelExportService().GenerateParetoExcel(result, filter);
+                fileBytes = new ExcelExportService().GenerateParetoExcel(result, filter, parameters.ViewCost);
                 fileName = $"Pareto_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 break;
@@ -776,14 +776,14 @@ public class ScheduleExecutionService
         string fileName;
         string contentType;
 
-        var csvService = new CsvExportService();
+        bool viewCost = parameters.ViewCost;
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("ItemCode,ItemName,Store,StoreName,Category,Department,Brand,CurrentStock,MinimumStock,Difference,Cost,StockValue,Shelf");
+        sb.AppendLine("ItemCode,ItemName,Store,StoreName,Category,Department,Brand,CurrentStock,MinimumStock,Difference," + (viewCost ? "Cost,StockValue," : "") + "Shelf");
         foreach (var r in data)
         {
             sb.AppendLine($"\"{r.ItemCode}\",\"{r.ItemName}\",\"{r.StoreCode}\",\"{r.StoreName}\"," +
                 $"\"{r.CategoryName}\",\"{r.DepartmentName}\",\"{r.BrandName}\"," +
-                $"{r.CurrentStock},{r.MinimumStock},{r.Difference},{r.Cost ?? 0},{r.StockValue ?? 0},\"{r.Shelf}\"");
+                $"{r.CurrentStock},{r.MinimumStock},{r.Difference}," + (viewCost ? $"{r.Cost ?? 0},{r.StockValue ?? 0}," : "") + $"\"{r.Shelf}\"");
         }
 
         switch (format)

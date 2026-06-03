@@ -424,7 +424,7 @@ public class CsvExportService
         return new UTF8Encoding(true).GetBytes(sb.ToString());
     }
 
-    public byte[] GenerateParetoCsv(ParetoResult result, ParetoFilter filter)
+    public byte[] GenerateParetoCsv(ParetoResult result, ParetoFilter filter, bool viewCost = true)
     {
         var sb = new StringBuilder();
 
@@ -442,7 +442,10 @@ public class CsvExportService
         sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
         sb.AppendLine();
 
-        sb.AppendLine(string.Join(",", new[] { "Rank", "Code", "Name", "Quantity", "Subtotal", "Profit", "%", "Cumul. %", "Class", "Display" }.Select(Escape)));
+        var header = new List<string> { "Rank", "Code", "Name", "Quantity", "Subtotal" };
+        if (viewCost) header.Add("Profit");
+        header.AddRange(new[] { "%", "Cumul. %", "Class", "Display" });
+        sb.AppendLine(string.Join(",", header.Select(Escape)));
 
         foreach (var row in result.Rows)
         {
@@ -452,21 +455,21 @@ public class CsvExportService
                 row.Code,
                 row.Name,
                 row.Quantity.ToString("F4", CultureInfo.InvariantCulture),
-                row.Subtotal.ToString("F2", CultureInfo.InvariantCulture),
-                row.Profit.ToString("F2", CultureInfo.InvariantCulture),
-                row.Percentage.ToString("F2", CultureInfo.InvariantCulture),
-                row.CumulativePercentage.ToString("F1", CultureInfo.InvariantCulture),
-                row.Classification,
-                row.IsDisplay ? "Yes" : ""
+                row.Subtotal.ToString("F2", CultureInfo.InvariantCulture)
             };
+            if (viewCost) cells.Add(row.Profit.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.Percentage.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.CumulativePercentage.ToString("F1", CultureInfo.InvariantCulture));
+            cells.Add(row.Classification);
+            cells.Add(row.IsDisplay ? "Yes" : "");
             sb.AppendLine(string.Join(",", cells.Select(Escape)));
         }
 
         var totalCells = new List<string> { "", "", "TOTAL",
             result.TotalQuantity.ToString("F4", CultureInfo.InvariantCulture),
-            result.TotalSubtotal.ToString("F2", CultureInfo.InvariantCulture),
-            result.TotalProfit.ToString("F2", CultureInfo.InvariantCulture),
-            "100.00", "", "", "" };
+            result.TotalSubtotal.ToString("F2", CultureInfo.InvariantCulture) };
+        if (viewCost) totalCells.Add(result.TotalProfit.ToString("F2", CultureInfo.InvariantCulture));
+        totalCells.AddRange(new[] { "100.00", "", "", "" });
         sb.AppendLine(string.Join(",", totalCells.Select(Escape)));
 
         return new UTF8Encoding(true).GetBytes(sb.ToString());

@@ -8,6 +8,7 @@
     var canSchedule = (bool)(ViewBag.CanSchedule ?? false);
     var dateFromDefault = ViewBag.DateFrom as string ?? DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd");
     var dateToDefault = ViewBag.DateTo as string ?? DateTime.Today.ToString("yyyy-MM-dd");
+    bool viewCost = ViewBag.ViewCost == null || (bool)ViewBag.ViewCost;
 }
 
 <style>
@@ -93,7 +94,7 @@
                         <option value="Department">By Department</option>
                         <option value="Brand">By Brand</option>
                         <option value="Season">By Season</option>
-                        <option value="Supplier">By Supplier</option>
+                        <option value="Supplier" data-perm-opt="supplier">By Supplier</option>
                         <option value="Model">By Model</option>
                         <option value="Colour">By Colour</option>
                         <option value="Size">By Size</option>
@@ -109,7 +110,7 @@
                     <select class="form-select" id="metric" onchange="onMetricChanged()">
                         <option value="Value" selected>Value</option>
                         <option value="Quantity">Quantity</option>
-                        <option value="Profit">Profit</option>
+                        <option value="Profit" data-perm-opt="cost">Profit</option>
                     </select>
                 </div>
                 <div class="col-6 col-md-2" id="profitBasisGroup" style="display:none;">
@@ -281,7 +282,7 @@
                         <th>Name</th>
                         <th class="text-end">Quantity</th>
                         <th class="text-end">Subtotal</th>
-                        <th class="text-end">Profit</th>
+                        @if (viewCost) { <th class="text-end">Profit</th> }
                         <th class="text-end">%</th>
                         <th class="text-end">Cumul. %</th>
                         <th class="text-center">Class</th>
@@ -621,7 +622,7 @@ function renderPareto(data) {
             '<td>' + r.name + '</td>' +
             '<td class="text-end">' + fmtQty(r.quantity) + '</td>' +
             '<td class="text-end">' + fmtNum(r.subtotal) + '</td>' +
-            '<td class="text-end">' + fmtNum(r.profit) + '</td>' +
+            (_viewCost ? ('<td class="text-end">' + fmtNum(r.profit) + '</td>') : '') +
             '<td class="text-end">' + r.percentage.toFixed(2) + '%</td>' +
             '<td class="text-end fw-semibold">' + r.cumulativePercentage.toFixed(1) + '%</td>' +
             '<td class="text-center"><span class="badge ' + badge + '">' + r.classification + '</span></td></tr>';
@@ -643,7 +644,7 @@ function renderPareto(data) {
                 '<td><i class="bi bi-three-dots me-1"></i>Others (' + hidden.length + ')</td>' +
                 '<td class="text-end">' + fmtQty(oQty) + '</td>' +
                 '<td class="text-end">' + fmtNum(oSub) + '</td>' +
-                '<td class="text-end">' + fmtNum(oProf) + '</td>' +
+                (_viewCost ? ('<td class="text-end">' + fmtNum(oProf) + '</td>') : '') +
                 '<td class="text-end">' + oPct.toFixed(2) + '%</td>' +
                 '<td class="text-end">100.0%</td>' +
                 '<td class="text-center">&mdash;</td></tr>';

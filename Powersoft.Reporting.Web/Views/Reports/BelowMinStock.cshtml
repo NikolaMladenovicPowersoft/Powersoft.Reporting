@@ -97,8 +97,8 @@
                             <th class="text-end" style="cursor:pointer" onclick="sortBy('CurrentStock')">Stock <i class="bi bi-arrow-down-up text-muted"></i></th>
                             <th class="text-end" style="cursor:pointer" onclick="sortBy('MinimumStock')">Min Stock <i class="bi bi-arrow-down-up text-muted"></i></th>
                             <th class="text-end" style="cursor:pointer" onclick="sortBy('Difference')">Difference <i class="bi bi-arrow-down-up text-muted"></i></th>
-                            <th class="text-end" style="cursor:pointer" onclick="sortBy('Cost')">Cost <i class="bi bi-arrow-down-up text-muted"></i></th>
-                            <th class="text-end" style="cursor:pointer" onclick="sortBy('StockValue')">Stock Value <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" data-perm="cost" style="cursor:pointer" onclick="sortBy('Cost')">Cost <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" data-perm="cost" style="cursor:pointer" onclick="sortBy('StockValue')">Stock Value <i class="bi bi-arrow-down-up text-muted"></i></th>
                             <th style="cursor:pointer" onclick="sortBy('Shelf')">Shelf <i class="bi bi-arrow-down-up text-muted"></i></th>
                         </tr>
                     </thead>
@@ -181,7 +181,7 @@ function generateReport() {
 function renderTable(data) {
     var body = document.getElementById('reportBody');
     if (!data.length) {
-        body.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">No items below minimum stock</td></tr>';
+        body.innerHTML = '<tr><td colspan="' + (_viewCost ? 12 : 10) + '" class="text-center text-muted py-4">No items below minimum stock</td></tr>';
         return;
     }
     var html = '';
@@ -197,8 +197,8 @@ function renderTable(data) {
             '<td class="text-end">' + fmt(r.currentStock) + '</td>' +
             '<td class="text-end">' + fmt(r.minimumStock) + '</td>' +
             '<td class="text-end ' + diffCls + '">' + fmt(r.difference) + '</td>' +
-            '<td class="text-end">' + fmtMoney(r.cost) + '</td>' +
-            '<td class="text-end">' + fmtMoney(r.stockValue) + '</td>' +
+            (_viewCost ? ('<td class="text-end">' + fmtMoney(r.cost) + '</td>' +
+            '<td class="text-end">' + fmtMoney(r.stockValue) + '</td>') : '') +
             '<td>' + esc(r.shelf || '-') + '</td>' +
             '</tr>';
     });
@@ -213,11 +213,11 @@ function sortBy(col) {
 
 function exportCsv() {
     if (!_lastData.length) return;
-    var csv = 'ItemCode,ItemName,Store,StoreName,Category,Department,Brand,CurrentStock,MinStock,Difference,Cost,StockValue,Shelf\n';
+    var csv = 'ItemCode,ItemName,Store,StoreName,Category,Department,Brand,CurrentStock,MinStock,Difference,' + (_viewCost ? 'Cost,StockValue,' : '') + 'Shelf\n';
     _lastData.forEach(function(r) {
         csv += '"' + (r.itemCode||'') + '","' + (r.itemName||'') + '","' + (r.storeCode||'') + '","' + (r.storeName||'') + '",' +
             '"' + (r.categoryName||'') + '","' + (r.departmentName||'') + '","' + (r.brandName||'') + '",' +
-            r.currentStock + ',' + r.minimumStock + ',' + r.difference + ',' + (r.cost||0) + ',' + (r.stockValue||0) + ',"' + (r.shelf||'') + '"\n';
+            r.currentStock + ',' + r.minimumStock + ',' + r.difference + ',' + (_viewCost ? ((r.cost||0) + ',' + (r.stockValue||0) + ',') : '') + '"' + (r.shelf||'') + '"\n';
     });
     var blob = new Blob([csv], { type: 'text/csv' });
     var a = document.createElement('a');

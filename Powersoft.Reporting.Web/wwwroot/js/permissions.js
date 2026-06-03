@@ -51,6 +51,21 @@
         if (!canViewSupplier) {
             document.querySelectorAll('[data-perm="supplier"]')
                 .forEach(function (el) { el.style.display = 'none'; });
+
+            // Disable + hide <option>/<div> that select a supplier dimension/grouping
+            document.querySelectorAll('[data-perm-opt="supplier"]')
+                .forEach(function (el) {
+                    el.disabled = true;
+                    el.style.display = 'none';
+                    // If a now-hidden option was selected, fall back to the first enabled option
+                    if (el.tagName === 'OPTION' && el.selected && el.parentElement) {
+                        var sel = el.parentElement.closest ? el.parentElement.closest('select') : null;
+                        if (sel) {
+                            var firstOk = Array.prototype.find.call(sel.options, function (o) { return !o.disabled; });
+                            if (firstOk) sel.value = firstOk.value;
+                        }
+                    }
+                });
         }
     }
 

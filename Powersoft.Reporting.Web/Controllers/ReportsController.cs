@@ -618,7 +618,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -2249,7 +2249,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -2990,7 +2990,7 @@ public class ReportsController : Controller
                 classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
                 timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
             var service = new ExcelExportService();
-            var bytes = service.GenerateParetoExcel(result, filter);
+            var bytes = service.GenerateParetoExcel(result, filter, CanViewCost());
             var filename = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
             return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
         }
@@ -3026,7 +3026,7 @@ public class ReportsController : Controller
                 classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
                 timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
             var service = new PdfExportService();
-            var bytes = service.GenerateParetoPdf(result, filter);
+            var bytes = service.GenerateParetoPdf(result, filter, CanViewCost());
             var filename = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
             return File(bytes, "application/pdf", filename);
         }
@@ -3062,7 +3062,7 @@ public class ReportsController : Controller
                 classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
                 timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
             var service = new CsvExportService();
-            var bytes = service.GenerateParetoCsv(result, filter);
+            var bytes = service.GenerateParetoCsv(result, filter, CanViewCost());
             var filename = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
             return File(bytes, "text/csv", filename);
         }
@@ -3172,7 +3172,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -3255,17 +3255,17 @@ public class ReportsController : Controller
         switch (format)
         {
             case "pdf":
-                fileBytes = new PdfExportService().GenerateParetoPdf(result, filter);
+                fileBytes = new PdfExportService().GenerateParetoPdf(result, filter, CanViewCost());
                 fileName = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
                 contentType = "application/pdf";
                 break;
             case "csv":
-                fileBytes = new CsvExportService().GenerateParetoCsv(result, filter);
+                fileBytes = new CsvExportService().GenerateParetoCsv(result, filter, CanViewCost());
                 fileName = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
                 contentType = "text/csv";
                 break;
             default:
-                fileBytes = new ExcelExportService().GenerateParetoExcel(result, filter);
+                fileBytes = new ExcelExportService().GenerateParetoExcel(result, filter, CanViewCost());
                 fileName = $"Pareto_{dimension}_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 break;
@@ -3410,7 +3410,7 @@ public class ReportsController : Controller
             var filter = BuildParetoFilter(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
                 classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
                 timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
-            var csvBytes = csvService.GenerateParetoCsv(result, filter);
+            var csvBytes = csvService.GenerateParetoCsv(result, filter, CanViewCost());
             var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
 
             string? customPrompt = null;
@@ -3941,7 +3941,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -5271,7 +5271,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -5475,7 +5475,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -5686,7 +5686,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -7001,7 +7001,7 @@ public class ReportsController : Controller
                 ExportFormat   = exportFormat ?? "Excel",
                 Recipients     = recipients,
                 EmailSubject   = emailSubject,
-                ParametersJson = paramsToStore,
+                ParametersJson = InjectPermissionsIntoParametersJson(paramsToStore),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate    = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -7736,7 +7736,7 @@ public class ReportsController : Controller
                 ExportFormat   = exportFormat ?? "Excel",
                 Recipients     = recipients,
                 EmailSubject   = emailSubject,
-                ParametersJson = paramsToStore,
+                ParametersJson = InjectPermissionsIntoParametersJson(paramsToStore),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate    = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,

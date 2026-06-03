@@ -301,7 +301,7 @@ public class PdfExportService
         return ms.ToArray();
     }
 
-    public byte[] GenerateParetoPdf(ParetoResult result, ParetoFilter filter)
+    public byte[] GenerateParetoPdf(ParetoResult result, ParetoFilter filter, bool viewCost = true)
     {
         using var ms = new MemoryStream();
         var document = new Document(PageSize.A4, 30, 30, 30, 20);
@@ -333,15 +333,17 @@ public class PdfExportService
         AddSummaryCard(summaryTable, $"Class C: {result.ClassCCount}", $"{cPct:N1}% of value", new BaseColor(254, 226, 226), summaryBold, summaryFont);
         document.Add(summaryTable);
 
-        var table = new PdfPTable(9) { WidthPercentage = 100, SpacingBefore = 5f };
-        table.SetWidths(new float[] { 4f, 10f, 22f, 10f, 12f, 12f, 8f, 9f, 6f });
+        var table = new PdfPTable(viewCost ? 9 : 8) { WidthPercentage = 100, SpacingBefore = 5f };
+        table.SetWidths(viewCost
+            ? new float[] { 4f, 10f, 22f, 10f, 12f, 12f, 8f, 9f, 6f }
+            : new float[] { 4f, 10f, 24f, 12f, 14f, 9f, 11f, 6f });
 
         AddHeaderCell(table, "#");
         AddHeaderCell(table, "Code");
         AddHeaderCell(table, "Name");
         AddHeaderCell(table, "Qty");
         AddHeaderCell(table, "Subtotal");
-        AddHeaderCell(table, "Profit");
+        if (viewCost) AddHeaderCell(table, "Profit");
         AddHeaderCell(table, "%");
         AddHeaderCell(table, "Cumul. %");
         AddHeaderCell(table, "Class");
@@ -360,7 +362,7 @@ public class PdfExportService
             AddDataCell(table, row.Name, bg);
             AddDataCell(table, row.Quantity.ToString("N0"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, row.Subtotal.ToString("N2"), bg, Element.ALIGN_RIGHT);
-            AddDataCell(table, row.Profit.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            if (viewCost) AddDataCell(table, row.Profit.ToString("N2"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, $"{row.Percentage:N2}%", bg, Element.ALIGN_RIGHT);
             AddDataCell(table, $"{row.CumulativePercentage:N1}%", bg, Element.ALIGN_RIGHT);
             AddDataCell(table, row.Classification, bg, Element.ALIGN_CENTER);
@@ -371,7 +373,7 @@ public class PdfExportService
         AddTotalCell(table, "TOTAL");
         AddTotalCell(table, result.TotalQuantity.ToString("N0"), Element.ALIGN_RIGHT);
         AddTotalCell(table, result.TotalSubtotal.ToString("N2"), Element.ALIGN_RIGHT);
-        AddTotalCell(table, result.TotalProfit.ToString("N2"), Element.ALIGN_RIGHT);
+        if (viewCost) AddTotalCell(table, result.TotalProfit.ToString("N2"), Element.ALIGN_RIGHT);
         AddTotalCell(table, "100%", Element.ALIGN_RIGHT);
         AddTotalCell(table, "");
         AddTotalCell(table, "");

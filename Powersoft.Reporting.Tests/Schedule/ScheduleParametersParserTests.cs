@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Powersoft.Reporting.Core.Enums;
 using Powersoft.Reporting.Core.Helpers;
 using Powersoft.Reporting.Core.Models;
 using Xunit;
@@ -134,5 +135,74 @@ public class ScheduleParametersParserTests
 
         var filter = ItemsSelectionParser.Parse(p.ItemsSelectionJson);
         filter!.Categories.Ids.Should().ContainSingle().Which.Should().Be("7");
+    }
+
+    [Fact]
+    public void Parse_CancelLog_RootDateFromTo_FallbackWhenNoReportDateRange()
+    {
+        var json = "{\"dateFrom\":\"2026-01-01\",\"dateTo\":\"2026-06-30\",\"clReportType\":\"Detailed\",\"actionType\":\"All\"}";
+        var p = ScheduleParametersParser.Parse(json);
+
+        p.DateRange.Should().NotBeNull();
+        p.DateRange!.Type.Should().Be(ReportDateRangeType.Custom);
+        p.DateRange.DateFrom.Should().Be("2026-01-01");
+        p.DateRange.DateTo.Should().Be("2026-06-30");
+    }
+
+    // Mirrors collectCatalogueParams() in Catalogue.cshtml. GetEnumSelectList() emits numeric enum
+    // values, so reportMode/primaryGroup/etc. arrive as numeric strings ("1","2"). Before the
+    // Catalogue scheduler handler was added, a scheduled Catalogue silently ran Average Basket.
+    // The reportMode/primaryGroup keys collide with PS, so they are captured into distinct Cat* fields.
+    private const string CatalogueParametersJson =
+        "{\"dateFrom\":\"2026-01-01\",\"dateTo\":\"2026-01-31\",\"dateBasis\":\"1\",\"useDateTime\":true," +
+        "\"reportMode\":\"1\",\"reportOn\":\"0\",\"primaryGroup\":\"2\",\"secondaryGroup\":\"5\",\"thirdGroup\":\"0\"," +
+        "\"profitBasedOn\":\"88\",\"profitIncludesVat\":true,\"stockValueBasedOn\":\"99\",\"stockValueIncludesVat\":false," +
+        "\"costType\":\"98\",\"displayColumns\":\"ItemCode,ItemName,Quantity,Value\"," +
+        "\"showProfit\":true,\"showStock\":false,\"storeCodes\":\"S01\"," +
+        "\"itemsSelection\":\"{\\\"categories\\\":{\\\"ids\\\":[\\\"7\\\"],\\\"mode\\\":\\\"include\\\"}}\"," +
+        "\"sortColumn\":\"ItemCode\",\"sortDirection\":\"ASC\"," +
+        "\"columnFilters\":\"{\\\"values\\\":{\\\"ItemCode\\\":\\\"AB\\\"},\\\"operators\\\":{\\\"ItemCode\\\":\\\"contains\\\"}}\"}";
+
+    [Fact]
+    public void Parse_ReadsCatalogueFields()
+    {
+        var p = ScheduleParametersParser.Parse(CatalogueParametersJson);
+
+        p.CatReportMode.Should().Be("1");
+        p.CatReportOn.Should().Be("0");
+        p.CatPrimaryGroup.Should().Be("2");
+        p.CatSecondaryGroup.Should().Be("5");
+        p.CatThirdGroup.Should().Be("0");
+        p.CatProfitBasedOn.Should().Be(88);
+        p.CatProfitIncludesVat.Should().BeTrue();
+        p.CatStockValueBasedOn.Should().Be(99);
+        p.CatStockValueIncludesVat.Should().BeFalse();
+        p.CatCostType.Should().Be(98);
+        p.CatDateBasis.Should().Be("1");
+        p.CatUseDateTime.Should().BeTrue();
+        p.CatDisplayColumns.Should().Be("ItemCode,ItemName,Quantity,Value");
+        p.CatColumnFilters.Should().NotBeNullOrWhiteSpace();
+        p.ShowProfit.Should().BeTrue();
+        p.ShowStock.Should().BeFalse();
+        p.StoreCodes.Should().BeEquivalentTo(new[] { "S01" });
+
+        var filter = ItemsSelectionParser.Parse(p.ItemsSelectionJson);
+        filter!.Categories.Ids.Should().ContainSingle().Which.Should().Be("7");
+    }
+
+    // The handler relies on Enum.TryParse turning these numeric strings into the right members.
+    [Fact]
+    public void Parse_CatalogueEnumStrings_RoundTripToEnumMembers()
+    {
+        var p = ScheduleParametersParser.Parse(CatalogueParametersJson);
+
+        Enum.TryParse<CatalogueReportMode>(p.CatReportMode, true, out var rm).Should().BeTrue();
+        rm.Should().Be(CatalogueReportMode.Summary);
+
+        Enum.TryParse<CatalogueGroupBy>(p.CatPrimaryGroup, true, out var pg).Should().BeTrue();
+        pg.Should().Be(CatalogueGroupBy.Category);
+
+        Enum.TryParse<CatalogueGroupBy>(p.CatSecondaryGroup, true, out var sg).Should().BeTrue();
+        sg.Should().Be(CatalogueGroupBy.Brand);
     }
 }

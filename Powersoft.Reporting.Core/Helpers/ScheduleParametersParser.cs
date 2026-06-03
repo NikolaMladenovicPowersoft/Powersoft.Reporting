@@ -136,6 +136,39 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("maxRecords", out var clmr) || root.TryGetProperty("MaxRecords", out clmr))
                 p.MaxRecords = ParseInt(clmr, 50000);
 
+            // Catalogue specific (keys from collectCatalogueParams() in Catalogue.cshtml).
+            // reportMode/primaryGroup/etc. share key names with PS but carry CatalogueGroupBy
+            // values; captured into distinct Cat* fields so the Catalogue handler reads the
+            // right enum without clobbering the PS fields above.
+            if (root.TryGetProperty("reportMode", out var catRm) || root.TryGetProperty("CatReportMode", out catRm))
+                p.CatReportMode = AsString(catRm);
+            if (root.TryGetProperty("reportOn", out var catRo) || root.TryGetProperty("CatReportOn", out catRo))
+                p.CatReportOn = AsString(catRo);
+            if (root.TryGetProperty("primaryGroup", out var catPg) || root.TryGetProperty("CatPrimaryGroup", out catPg))
+                p.CatPrimaryGroup = AsString(catPg);
+            if (root.TryGetProperty("secondaryGroup", out var catSg) || root.TryGetProperty("CatSecondaryGroup", out catSg))
+                p.CatSecondaryGroup = AsString(catSg);
+            if (root.TryGetProperty("thirdGroup", out var catTg) || root.TryGetProperty("CatThirdGroup", out catTg))
+                p.CatThirdGroup = AsString(catTg);
+            if (root.TryGetProperty("displayColumns", out var catDc) || root.TryGetProperty("CatDisplayColumns", out catDc))
+                p.CatDisplayColumns = AsString(catDc);
+            if (root.TryGetProperty("dateBasis", out var catDb) || root.TryGetProperty("CatDateBasis", out catDb))
+                p.CatDateBasis = AsString(catDb);
+            if (root.TryGetProperty("useDateTime", out var catUdt) || root.TryGetProperty("CatUseDateTime", out catUdt))
+                p.CatUseDateTime = ParseBool(catUdt, false);
+            if (root.TryGetProperty("profitBasedOn", out var catPbo) || root.TryGetProperty("CatProfitBasedOn", out catPbo))
+                p.CatProfitBasedOn = ParseInt(catPbo, 99);
+            if (root.TryGetProperty("profitIncludesVat", out var catPiv) || root.TryGetProperty("CatProfitIncludesVat", out catPiv))
+                p.CatProfitIncludesVat = ParseBool(catPiv, false);
+            if (root.TryGetProperty("stockValueBasedOn", out var catSvb) || root.TryGetProperty("CatStockValueBasedOn", out catSvb))
+                p.CatStockValueBasedOn = ParseInt(catSvb, 99);
+            if (root.TryGetProperty("stockValueIncludesVat", out var catSiv) || root.TryGetProperty("CatStockValueIncludesVat", out catSiv))
+                p.CatStockValueIncludesVat = ParseBool(catSiv, false);
+            if (root.TryGetProperty("costType", out var catCt) || root.TryGetProperty("CatCostType", out catCt))
+                p.CatCostType = ParseInt(catCt, 99);
+            if (root.TryGetProperty("columnFilters", out var catCf) || root.TryGetProperty("CatColumnFilters", out catCf))
+                p.CatColumnFilters = AsString(catCf);
+
             // ItemsSelection dimension filter (categories/brands/suppliers/stores/items/etc.).
             // The view serialises it as a JSON *string* under "itemsSelectionJson"; older/code
             // paths may embed it as a nested object. Without this the scheduler silently dropped
@@ -172,6 +205,19 @@ public static class ScheduleParametersParser
                 }
             }
 
+            // Fallback: screen dateFrom/dateTo at root (CancelLog collectScheduleParameters snapshot).
+            if (p.DateRange == null
+                && (root.TryGetProperty("dateFrom", out var rootDf) || root.TryGetProperty("DateFrom", out rootDf))
+                && (root.TryGetProperty("dateTo", out var rootDt) || root.TryGetProperty("DateTo", out rootDt)))
+            {
+                p.DateRange = new ReportDateRangeOption
+                {
+                    Type = ReportDateRangeType.Custom,
+                    DateFrom = rootDf.GetString(),
+                    DateTo = rootDt.GetString()
+                };
+            }
+
             return p;
         }
         catch
@@ -194,6 +240,15 @@ public static class ScheduleParametersParser
         }
         return default;
     }
+
+    private static string? AsString(JsonElement el) => el.ValueKind switch
+    {
+        JsonValueKind.String => el.GetString(),
+        JsonValueKind.Number => el.GetRawText(),
+        JsonValueKind.True => "true",
+        JsonValueKind.False => "false",
+        _ => null
+    };
 
     private static bool ParseBool(JsonElement el, bool fallback)
     {

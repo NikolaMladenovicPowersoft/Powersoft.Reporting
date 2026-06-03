@@ -307,6 +307,9 @@ public class ScheduleExecutionService
         if (string.Equals(reportType, ReportTypeConstants.CancelLog, StringComparison.OrdinalIgnoreCase))
             return await GenerateCancelLogReportAsync(schedule, connString);
 
+        if (string.Equals(reportType, ReportTypeConstants.Catalogue, StringComparison.OrdinalIgnoreCase))
+            return await GenerateCatalogueReportAsync(schedule, connString);
+
         return await GenerateAverageBasketReportAsync(schedule, connString);
     }
 
@@ -315,6 +318,13 @@ public class ScheduleExecutionService
     {
         var parameters = DeserializeParameters(schedule.ParametersJson);
         var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+        (dateFrom, dateTo) = CancelLogScheduleDates.Normalize(dateFrom, dateTo, parameters.ReportByDateTime);
+
+        _logger.LogInformation(
+            "CancelLog schedule {Id}: dates {From:yyyy-MM-dd HH:mm} to {To:yyyy-MM-dd HH:mm}, byDateTime={ByDt}, action={Action}, clReport={ClRt}, hasItemsFilter={HasItems}",
+            schedule.ScheduleId, dateFrom, dateTo, parameters.ReportByDateTime,
+            parameters.CancelActionType ?? "All", parameters.CancelLogReportType ?? "Detailed",
+            !string.IsNullOrWhiteSpace(parameters.ItemsSelectionJson));
 
         var filter = new CancelLogFilter
         {
@@ -376,6 +386,124 @@ public class ScheduleExecutionService
 
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
         return (rowCount, fileBytes, fileName, contentType, period);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateCatalogueReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        // Mirrors ReportsController.BuildCatalogueFilterFromParams so a scheduled run produces
+        // byte-for-byte the same filter the on-screen export would for the same parameters.
+        var filter = new CatalogueFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            DateBasis = Enum.TryParse<CatalogueDateBasis>(parameters.CatDateBasis, true, out var cdb) ? cdb : CatalogueDateBasis.TransactionDate,
+            UseDateTime = parameters.CatUseDateTime,
+            ReportMode = Enum.TryParse<CatalogueReportMode>(parameters.CatReportMode, true, out var crm) ? crm : CatalogueReportMode.Detailed,
+            ReportOn = Enum.TryParse<CatalogueReportOn>(parameters.CatReportOn, true, out var cro) ? cro : CatalogueReportOn.Sale,
+            PrimaryGroup = Enum.TryParse<CatalogueGroupBy>(parameters.CatPrimaryGroup, true, out var cpg) ? cpg : CatalogueGroupBy.None,
+            SecondaryGroup = Enum.TryParse<CatalogueGroupBy>(parameters.CatSecondaryGroup, true, out var csg) ? csg : CatalogueGroupBy.None,
+            ThirdGroup = Enum.TryParse<CatalogueGroupBy>(parameters.CatThirdGroup, true, out var ctg) ? ctg : CatalogueGroupBy.None,
+            ShowProfit = parameters.ShowProfit,
+            ShowStock = parameters.ShowStock,
+            StoreCodes = parameters.StoreCodes ?? new(),
+            ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
+            SortColumn = string.IsNullOrWhiteSpace(parameters.SortColumn) ? "ItemCode" : parameters.SortColumn,
+            SortDirection = string.IsNullOrWhiteSpace(parameters.SortDirection) ? "ASC" : parameters.SortDirection,
+            PageNumber = 1,
+            PageSize = int.MaxValue,
+            ProfitBasedOn = (CatalogueCostBasis)parameters.CatProfitBasedOn,
+            ProfitIncludesVat = parameters.CatProfitIncludesVat,
+            StockValueBasedOn = (CatalogueCostBasis)parameters.CatStockValueBasedOn,
+            StockValueIncludesVat = parameters.CatStockValueIncludesVat,
+            CostType = (CatalogueCostBasis)parameters.CatCostType
+        };
+
+        if (!string.IsNullOrWhiteSpace(parameters.CatDisplayColumns))
+            filter.DisplayColumns = parameters.CatDisplayColumns
+                .Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        // Group cascade rules (same as the controller): an empty parent collapses its children.
+        if (filter.PrimaryGroup == CatalogueGroupBy.None)
+        {
+            filter.SecondaryGroup = CatalogueGroupBy.None;
+            filter.ThirdGroup = CatalogueGroupBy.None;
+        }
+        if (filter.SecondaryGroup == CatalogueGroupBy.None)
+            filter.ThirdGroup = CatalogueGroupBy.None;
+
+        // An explicit Include store selection in the Items widget wins over the legacy storeCodes list.
+        if (filter.ItemsSelection != null && filter.ItemsSelection.Stores.HasFilter
+            && filter.ItemsSelection.Stores.Mode == FilterMode.Include)
+            filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+
+        ApplyCatalogueColumnFilters(filter, parameters.CatColumnFilters);
+
+        var repo = _repositoryFactory.CreateCatalogueRepository(connString);
+        var result = await repo.GetCatalogueDataAsync(filter);
+        var rows = result.Items;
+        CatalogueTotals? totals = filter.ReportOn != CatalogueReportOn.Both
+            ? await repo.GetCatalogueTotalsAsync(filter)
+            : null;
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "csv":
+                fileBytes = new CsvExportService().GenerateCatalogueCsv(rows, totals, filter);
+                fileName = $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                // Catalogue has no dedicated PDF export — fall back to Excel for any non-CSV format.
+                fileBytes = new ExcelExportService().GenerateCatalogueExcel(rows, totals, filter);
+                fileName = $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        return (rows.Count, fileBytes, fileName, contentType, period);
+    }
+
+    /// <summary>
+    /// Replicates ReportsController.ApplyColumnFiltersFromJson for the headless scheduler path so
+    /// per-column grid filters saved with a Catalogue schedule are honoured at execution time.
+    /// </summary>
+    private static void ApplyCatalogueColumnFilters(CatalogueFilter filter, string? columnFilters)
+    {
+        if (string.IsNullOrWhiteSpace(columnFilters)) return;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(columnFilters);
+            if (doc.RootElement.TryGetProperty("values", out var vals) && vals.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var prop in vals.EnumerateObject())
+                {
+                    var v = prop.Value.GetString();
+                    if (!string.IsNullOrEmpty(v)) filter.FilterValues[prop.Name] = v;
+                }
+            }
+            if (doc.RootElement.TryGetProperty("operators", out var ops) && ops.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var prop in ops.EnumerateObject())
+                {
+                    var v = prop.Value.GetString();
+                    if (!string.IsNullOrEmpty(v)) filter.FilterOperators[prop.Name] = v;
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Malformed JSON — ignore, run without column filters (same as the controller).
+        }
     }
 
     private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>

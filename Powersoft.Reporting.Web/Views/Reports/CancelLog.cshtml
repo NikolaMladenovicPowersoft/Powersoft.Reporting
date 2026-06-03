@@ -839,9 +839,29 @@ function groupBy(arr, key) {
 // Returns the report-specific parameters the scheduler needs to reproduce this report headless.
 // Keys mirror ScheduleParametersParser (clReportType/clPrimaryGroup/clSecondaryGroup avoid the
 // PS reportType/primaryGroup collision).
+// Called by _Schedule.cshtml when the modal opens — pre-fill Period type from screen dates
+// so the scheduled run uses the same window the user just tested (not a stale Last-7-days default).
+function autoSelectScheduleDateRange() {
+    var df = document.getElementById('dateFrom').value;
+    var dt = document.getElementById('dateTo').value;
+    if (!df || !dt) return;
+    var sel = document.getElementById('schedDateRangeType');
+    if (!sel) return;
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === 'Custom') { sel.selectedIndex = i; break; }
+    }
+    var schedFrom = document.getElementById('schedDateFrom');
+    var schedTo = document.getElementById('schedDateTo');
+    if (schedFrom) schedFrom.value = df;
+    if (schedTo) schedTo.value = dt;
+    if (typeof onSchedDateRangeTypeChange === 'function') onSchedDateRangeTypeChange();
+}
+
 function collectScheduleParameters() {
     var p = {
         reportType: 'CancelLog',
+        dateFrom: document.getElementById('dateFrom').value,
+        dateTo: document.getElementById('dateTo').value,
         reportByDateTime: document.getElementById('dateMode').value === 'datetime',
         actionType: document.getElementById('lineType').value,
         clReportType: document.getElementById('reportType').value,

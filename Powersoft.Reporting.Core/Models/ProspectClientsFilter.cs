@@ -16,4 +16,6 @@ public class ProspectClientsFilter
     public string FollowedByFilter { get; set; } = "All";
     public string Category1Filter { get; set; } = "All";
     public string Category2Filter { get; set; } = "All";
+    public List<string> CustomerCodes { get; set; } = new();
+    public bool CustomerExcludeMode { get; set; } = false;
 }

@@ -295,6 +295,17 @@ WHERE 1=1 {whereClause}";
             sb.Append(" AND t.IsStandardOffer = 1");
         }
 
+        if (filter.CustomerCodes.Count > 0)
+        {
+            var inOp = filter.CustomerExcludeMode ? "NOT IN" : "IN";
+            var paramNames = filter.CustomerCodes
+                .Select((_, i) => $"@custCode{i}")
+                .ToList();
+            sb.Append($" AND t.fk_CustomerCode {inOp} ({string.Join(",", paramNames)})");
+            for (int i = 0; i < filter.CustomerCodes.Count; i++)
+                parms.Add(new SqlParameter($"@custCode{i}", System.Data.SqlDbType.NVarChar, 50) { Value = filter.CustomerCodes[i] });
+        }
+
         return (sb.ToString(), parms);
     }
 
@@ -344,6 +355,7 @@ WHERE 1=1 {whereClause}";
             .Replace("t.fk_StoreCode", "h.fk_StoreCode")
             .Replace("t.fk_AgentID", "h.fk_AgentID")
             .Replace("t.IsStandardOffer", "h.IsStandardOffer")
+            .Replace("t.fk_CustomerCode", "h.fk_CustomerCode")
             .Replace("s.OrderStatusCode", "sh.OrderStatusCode");
 
     private static string BuildOrderByAlias(string sortColumn, string sortDirection)

@@ -400,6 +400,17 @@ public class ProspectClientsRepository : IProspectClientsRepository
             parms.Add(new SqlParameter("@cat2", System.Data.SqlDbType.BigInt) { Value = cat2Id });
         }
 
+        if (filter.CustomerCodes.Count > 0)
+        {
+            var inOp = filter.CustomerExcludeMode ? "NOT IN" : "IN";
+            var paramNames = filter.CustomerCodes
+                .Select((_, i) => $"@pcCustCode{i}")
+                .ToList();
+            sb.Append($" AND t.fk_CustomerNo {inOp} ({string.Join(",", paramNames)})");
+            for (int i = 0; i < filter.CustomerCodes.Count; i++)
+                parms.Add(new SqlParameter($"@pcCustCode{i}", System.Data.SqlDbType.NVarChar, 50) { Value = filter.CustomerCodes[i] });
+        }
+
         return (sb.ToString(), parms);
     }
 

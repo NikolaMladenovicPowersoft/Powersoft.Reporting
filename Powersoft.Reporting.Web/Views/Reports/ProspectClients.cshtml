@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = "Prospect Clients";
     var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
     var canSchedule = true;
@@ -33,7 +33,7 @@
             <h2 class="mb-0">
                 <i class="bi bi-people me-2 text-primary"></i>Prospect Clients
             </h2>
-            <p class="text-muted mb-0">CRM pipeline report — leads, prospects, and conversion tracking</p>
+            <p class="text-muted mb-0">CRM pipeline report β€” leads, prospects, and conversion tracking</p>
         </div>
     </div>
 </div>
@@ -170,6 +170,7 @@
             </div>
         </div>
 
+        @await Html.PartialAsync("_CustomerSelection")
         <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
             <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
                 <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
@@ -353,7 +354,7 @@
     </div>
 </div>
 
-@* Schedule Modal — shared partial *@
+@* Schedule Modal β€” shared partial *@
 @await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel {
     SaveAction      = "SaveProspectClientsSchedule",
     ListAction      = "GetProspectClientsSchedules",
@@ -467,6 +468,7 @@ function resetFilters() {
     _lastData = [];
     document.getElementById('layoutsCurrentName').textContent = 'Layouts';
     resetColumnVisibility();
+    if (typeof clearCustomerSelection === 'function') clearCustomerSelection();
 }
 
 function applyPresetDates(preset) {
@@ -508,7 +510,9 @@ function getFilterParams() {
         maxRecords: document.getElementById('maxRecords').value,
         sortColumn: _sortCol,
         sortDirection: _sortDir,
-        includeHistory: document.getElementById('includeHistory').checked
+        includeHistory: document.getElementById('includeHistory').checked,
+        customerCodesJson: JSON.stringify((typeof getCustomerSelectionFilter==='function' ? getCustomerSelectionFilter() : {codes:[]}).codes||[]),
+        customerExcludeMode: (typeof getCustomerSelectionFilter==='function' ? getCustomerSelectionFilter() : {excludeMode:false}).excludeMode||false
     };
 }
 
@@ -520,7 +524,8 @@ function buildExportUrl(action) {
         +'&category1Filter='+encodeURIComponent(p.category1Filter)+'&category2Filter='+encodeURIComponent(p.category2Filter)
         +'&primaryGroup='+p.primaryGroup+'&secondaryGroup='+p.secondaryGroup
         +'&maxRecords='+p.maxRecords+'&sortColumn='+p.sortColumn+'&sortDirection='+p.sortDirection
-        +'&includeHistory='+p.includeHistory;
+        +'&includeHistory='+p.includeHistory
+        +'&customerCodesJson='+encodeURIComponent(p.customerCodesJson)+'&customerExcludeMode='+p.customerExcludeMode;
     return '/Reports/' + action + '?' + qs;
 }
 
@@ -821,6 +826,9 @@ function onScheduleParametersLoaded(p) {
     sv('secondaryGroup',   p.secondaryGroup);
     sv('maxRecords',       p.maxRecords);
     if (p.includeHistory !== undefined) sc('includeHistory', p.includeHistory);
+    if (p.customerCodesJson && typeof reloadCustomerSelectionFromJson === 'function') {
+        try { reloadCustomerSelectionFromJson({codes:JSON.parse(p.customerCodesJson),excludeMode:p.customerExcludeMode==='true'||p.customerExcludeMode===true}); } catch(e) {}
+    }
 }
 
 function autoSelectScheduleDateRange() {
@@ -1084,6 +1092,11 @@ function collectCurrentLayout() {
     p['HiddenColumns'] = hidden.join(',');
     var preset = document.querySelector('input[name="DatePreset"]:checked');
     if (preset) p['DatePreset'] = preset.value;
+    if (typeof getCustomerSelectionFilter === 'function') {
+        var csf = getCustomerSelectionFilter();
+        p['CustomerCodesJson'] = JSON.stringify(csf.codes || []);
+        p['CustomerExcludeMode'] = csf.excludeMode ? 'true' : 'false';
+    }
     return p;
 }
 
@@ -1215,6 +1228,9 @@ function applyLayoutParameters(parms) {
     if (parms.DatePreset) {
         var r = document.querySelector('input[name="DatePreset"][value="'+parms.DatePreset+'"]');
         if (r) { r.checked = true; applyPresetDates(parms.DatePreset); }
+    }
+    if (parms.CustomerCodesJson && typeof reloadCustomerSelectionFromJson === 'function') {
+        try { reloadCustomerSelectionFromJson({codes:JSON.parse(parms.CustomerCodesJson),excludeMode:parms.CustomerExcludeMode==='true'}); } catch(e) {}
     }
 }
 

@@ -1,0 +1,195 @@
+@* Standalone Customer Filter widget. Public API (window-level):
+   getCustomerSelectionFilter()         → { codes:[], names:[], excludeMode:bool }
+   reloadCustomerSelectionFromJson(obj) → restore state from saved JSON / object
+   clearCustomerSelection()             → clear all selected customers
+   The partial is self-contained; no dependency on items-selection.js *@
+
+<div class="card mb-3" id="customerSelectionCard">
+    <div class="card-header bg-light py-2 d-flex align-items-center" style="cursor:pointer;"
+         onclick="toggleCustomerSelection()">
+        <i class="bi bi-people me-2"></i>
+        <strong class="small">Customer Filter</strong>
+        <span id="csActiveBadge" class="badge bg-primary ms-2 d-none">0</span>
+        <span id="csExcludeBadge" class="badge bg-danger ms-1 d-none">EXCLUDE</span>
+        <span class="ms-auto small text-primary" id="csToggleText">
+            <i class="bi bi-eye me-1"></i>Show
+        </span>
+    </div>
+    <div class="card-body py-2 d-none" id="csBody">
+        <div class="row g-2 align-items-center mb-2">
+            <div class="col-auto">
+                <div class="btn-group btn-group-sm" id="csModeGroup" role="group">
+                    <button type="button" class="btn btn-outline-success active" id="csModeInclude"
+                            onclick="setCustomerMode(false)" title="Include selected customers">
+                        <i class="bi bi-plus-circle me-1"></i>Include
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" id="csModeExclude"
+                            onclick="setCustomerMode(true)" title="Exclude selected customers">
+                        <i class="bi bi-dash-circle me-1"></i>Exclude
+                    </button>
+                </div>
+            </div>
+            <div class="col">
+                <div class="input-group input-group-sm" style="max-width:400px;">
+                    <input type="text" class="form-control" id="csSearchInput"
+                           placeholder="Search customer by name or code..."
+                           oninput="csOnSearchInput(this.value)"
+                           onkeydown="csOnSearchKeydown(event)"
+                           autocomplete="off" />
+                    <span class="input-group-text"><i class="bi bi-search text-muted"></i></span>
+                </div>
+                <div id="csDropdown" class="list-group position-absolute shadow-sm"
+                     style="z-index:1050;max-height:220px;overflow-y:auto;min-width:360px;display:none;"></div>
+            </div>
+            <div class="col-auto">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearCustomerSelection()">
+                    <i class="bi bi-x-lg me-1"></i>Clear All
+                </button>
+            </div>
+        </div>
+        <div id="csChips" class="d-flex flex-wrap gap-1" style="min-height:28px;"></div>
+        <div class="small text-muted mt-1" id="csHint">Type to search and add customers</div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var _selected = [];   // [{code, name}]
+    var _exclude = false;
+    var _searchTimer = null;
+    var _dimUrl = '@Url.Action("GetDimension", "Reports")';
+
+    function render() {
+        var chips = document.getElementById('csChips');
+        var badge = document.getElementById('csActiveBadge');
+        var exBadge = document.getElementById('csExcludeBadge');
+        var hint = document.getElementById('csHint');
+
+        chips.innerHTML = _selected.map(function (s) {
+            var cls = _exclude ? 'bg-danger' : 'bg-primary';
+            return '<span class="badge ' + cls + ' d-flex align-items-center gap-1" style="font-size:.8rem;font-weight:500;">' +
+                '<span class="text-truncate" style="max-width:200px;" title="' + escHtml(s.name) + '">' + escHtml(s.name) + '</span>' +
+                '<button type="button" class="btn-close btn-close-white btn-sm p-0" style="font-size:.6rem;" ' +
+                'onclick="csRemove(\'' + escAttr(s.code) + '\')" title="Remove"></button></span>';
+        }).join('');
+
+        badge.textContent = _selected.length;
+        badge.classList.toggle('d-none', _selected.length === 0);
+        exBadge.classList.toggle('d-none', !_exclude || _selected.length === 0);
+        hint.style.display = _selected.length > 0 ? 'none' : '';
+    }
+
+    function escHtml(s) {
+        return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function escAttr(s) {
+        return (s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    window.toggleCustomerSelection = function () {
+        var body = document.getElementById('csBody');
+        var toggleText = document.getElementById('csToggleText');
+        var isHidden = body.classList.contains('d-none');
+        body.classList.toggle('d-none', !isHidden);
+        toggleText.innerHTML = isHidden
+            ? '<i class="bi bi-eye-slash me-1"></i>Hide'
+            : '<i class="bi bi-eye me-1"></i>Show';
+    };
+
+    window.setCustomerMode = function (excludeMode) {
+        _exclude = excludeMode;
+        document.getElementById('csModeInclude').classList.toggle('active', !excludeMode);
+        document.getElementById('csModeExclude').classList.toggle('active', excludeMode);
+        render();
+    };
+
+    window.csRemove = function (code) {
+        _selected = _selected.filter(function (s) { return s.code !== code; });
+        render();
+    };
+
+    window.clearCustomerSelection = function () {
+        _selected = [];
+        render();
+    };
+
+    window.csOnSearchInput = function (val) {
+        clearTimeout(_searchTimer);
+        if (!val || val.length < 2) { hideDropdown(); return; }
+        _searchTimer = setTimeout(function () { csSearch(val); }, 250);
+    };
+
+    window.csOnSearchKeydown = function (e) {
+        if (e.key === 'Escape') { hideDropdown(); }
+    };
+
+    function csSearch(q) {
+        fetch(_dimUrl + '?type=customer&q=' + encodeURIComponent(q) + '&max=20', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) { showDropdown(data); })
+            .catch(function () { hideDropdown(); });
+    }
+
+    function showDropdown(items) {
+        var dd = document.getElementById('csDropdown');
+        if (!items || !items.length) { hideDropdown(); return; }
+        dd.innerHTML = items.map(function (item) {
+            var alreadySelected = _selected.some(function (s) { return s.code === item.code; });
+            var cls = alreadySelected ? 'list-group-item list-group-item-action text-muted' : 'list-group-item list-group-item-action';
+            return '<button type="button" class="' + cls + ' py-1 px-2 small" onclick="csSelectItem(\'' +
+                escAttr(item.code) + '\',\'' + escAttr(item.name) + '\')">' +
+                '<i class="bi bi-person me-1 text-muted"></i>' +
+                '<strong>' + escHtml(item.code) + '</strong> — ' + escHtml(item.name) +
+                (alreadySelected ? ' <span class="badge bg-secondary ms-1" style="font-size:.65rem;">selected</span>' : '') +
+                '</button>';
+        }).join('');
+        dd.style.display = 'block';
+    }
+
+    function hideDropdown() {
+        document.getElementById('csDropdown').style.display = 'none';
+    }
+
+    window.csSelectItem = function (code, name) {
+        if (!_selected.some(function (s) { return s.code === code; })) {
+            _selected.push({ code: code, name: name });
+        }
+        document.getElementById('csSearchInput').value = '';
+        hideDropdown();
+        render();
+    };
+
+    document.addEventListener('click', function (e) {
+        var inp = document.getElementById('csSearchInput');
+        var dd = document.getElementById('csDropdown');
+        if (inp && dd && !inp.contains(e.target) && !dd.contains(e.target)) {
+            hideDropdown();
+        }
+    });
+
+    window.getCustomerSelectionFilter = function () {
+        return {
+            codes: _selected.map(function (s) { return s.code; }),
+            names: _selected.map(function (s) { return s.name; }),
+            excludeMode: _exclude
+        };
+    };
+
+    window.reloadCustomerSelectionFromJson = function (data) {
+        if (!data) return;
+        var parsed = typeof data === 'string' ? JSON.parse(data) : data;
+        _selected = [];
+        var codes = parsed.codes || parsed.customerCodes || [];
+        var names = parsed.names || parsed.customerNames || [];
+        for (var i = 0; i < codes.length; i++) {
+            _selected.push({ code: codes[i], name: names[i] || codes[i] });
+        }
+        _exclude = !!(parsed.excludeMode || parsed.customerExcludeMode);
+        document.getElementById('csModeInclude').classList.toggle('active', !_exclude);
+        document.getElementById('csModeExclude').classList.toggle('active', _exclude);
+        render();
+    };
+
+    render();
+})();
+</script>

@@ -1,4 +1,4 @@
-@{
+﻿@{
     ViewData["Title"] = "Offers Report";
     var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
     var canSchedule = true;
@@ -146,6 +146,7 @@
             </div>
         </div>
 
+        @await Html.PartialAsync("_CustomerSelection")
         <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
             <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
                 <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
@@ -312,7 +313,7 @@
     </div>
 </div>
 
-@* Schedule Modal — shared partial *@
+@* Schedule Modal β€” shared partial *@
 @await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel {
     SaveAction      = "SaveOffersReportSchedule",
     ListAction      = "GetOffersReportSchedules",
@@ -419,6 +420,7 @@ function resetFilters() {
     _lastData = [];
     document.getElementById('layoutsCurrentName').textContent = 'Layouts';
     resetColumnVisibility();
+    if (typeof clearCustomerSelection === 'function') clearCustomerSelection();
 }
 
 function applyPresetDates(preset) {
@@ -459,7 +461,9 @@ function getFilterParams() {
         sortColumn: _sortCol,
         sortDirection: _sortDir,
         offerType: document.getElementById('offerTypeFilter').value,
-        includeHistory: document.getElementById('includeHistory').checked
+        includeHistory: document.getElementById('includeHistory').checked,
+        customerCodesJson: JSON.stringify((typeof getCustomerSelectionFilter==='function' ? getCustomerSelectionFilter() : {codes:[]}).codes||[]),
+        customerExcludeMode: (typeof getCustomerSelectionFilter==='function' ? getCustomerSelectionFilter() : {excludeMode:false}).excludeMode||false
     };
 }
 
@@ -470,7 +474,8 @@ function buildExportUrl(action) {
         +'&agentFilter='+encodeURIComponent(p.agentFilter)
         +'&primaryGroup='+p.primaryGroup+'&secondaryGroup='+p.secondaryGroup
         +'&maxRecords='+p.maxRecords+'&sortColumn='+p.sortColumn+'&sortDirection='+p.sortDirection
-        +'&offerType='+encodeURIComponent(p.offerType)+'&includeHistory='+p.includeHistory;
+        +'&offerType='+encodeURIComponent(p.offerType)+'&includeHistory='+p.includeHistory
+        +'&customerCodesJson='+encodeURIComponent(p.customerCodesJson)+'&customerExcludeMode='+p.customerExcludeMode;
     return '/Reports/' + action + '?' + qs;
 }
 
@@ -741,6 +746,9 @@ function onScheduleParametersLoaded(p) {
     sv('maxRecords',    p.maxRecords);
     sv('offerTypeFilter', p.offerType);
     if (p.includeHistory !== undefined) sc('includeHistory', p.includeHistory);
+    if (p.customerCodesJson && typeof reloadCustomerSelectionFromJson === 'function') {
+        try { reloadCustomerSelectionFromJson({codes:JSON.parse(p.customerCodesJson),excludeMode:p.customerExcludeMode==='true'||p.customerExcludeMode===true}); } catch(e) {}
+    }
 }
 
 function autoSelectScheduleDateRange() {
@@ -998,6 +1006,11 @@ function collectCurrentLayout() {
     p['HiddenColumns'] = hidden.join(',');
     var preset = document.querySelector('input[name="DatePreset"]:checked');
     if (preset) p['DatePreset'] = preset.value;
+    if (typeof getCustomerSelectionFilter === 'function') {
+        var csf = getCustomerSelectionFilter();
+        p['CustomerCodesJson'] = JSON.stringify(csf.codes || []);
+        p['CustomerExcludeMode'] = csf.excludeMode ? 'true' : 'false';
+    }
     return p;
 }
 
@@ -1123,6 +1136,9 @@ function applyLayoutParameters(parms) {
     if (parms.DatePreset) {
         var r = document.querySelector('input[name="DatePreset"][value="'+parms.DatePreset+'"]');
         if (r) { r.checked = true; applyPresetDates(parms.DatePreset); }
+    }
+    if (parms.CustomerCodesJson && typeof reloadCustomerSelectionFromJson === 'function') {
+        try { reloadCustomerSelectionFromJson({codes:JSON.parse(parms.CustomerCodesJson),excludeMode:parms.CustomerExcludeMode==='true'}); } catch(e) {}
     }
 }
 
@@ -1277,3 +1293,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 </script>
+
+
+

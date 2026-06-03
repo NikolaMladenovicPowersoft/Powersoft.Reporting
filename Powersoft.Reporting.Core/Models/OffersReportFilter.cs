@@ -15,4 +15,6 @@ public class OffersReportFilter
     public string SortDirection { get; set; } = "DESC";
     public string OfferType { get; set; } = "All";
     public bool IncludeHistory { get; set; }
+    public List<string> CustomerCodes { get; set; } = new();
+    public bool CustomerExcludeMode { get; set; } = false;
 }

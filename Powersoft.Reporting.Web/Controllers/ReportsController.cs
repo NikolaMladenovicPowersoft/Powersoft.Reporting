@@ -44,6 +44,13 @@ public class ReportsController : Controller
         _logger = logger;
     }
     
+    private static List<string> ParseCustomerCodesJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<string>();
+        try { return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>(); }
+        catch { return new List<string>(); }
+    }
+
     private static (string[] valid, string[] invalid) ParseAndValidateEmailList(string? input)
     {
         if (string.IsNullOrWhiteSpace(input))
@@ -6239,7 +6246,9 @@ public class ReportsController : Controller
         bool includeHistory = false,
         string followedByFilter = "All",
         string category1Filter = "All",
-        string category2Filter = "All")
+        string category2Filter = "All",
+        string customerCodesJson = "",
+        bool customerExcludeMode = false)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
@@ -6262,7 +6271,9 @@ public class ReportsController : Controller
                 IncludeHistory = includeHistory,
                 FollowedByFilter = followedByFilter,
                 Category1Filter = category1Filter,
-                Category2Filter = category2Filter
+                Category2Filter = category2Filter,
+                CustomerCodes = ParseCustomerCodesJson(customerCodesJson),
+                CustomerExcludeMode = customerExcludeMode
             };
 
             var repo = _repositoryFactory.CreateProspectClientsRepository(tenantConnString);
@@ -6455,7 +6466,8 @@ public class ReportsController : Controller
         DateTime dateFrom, DateTime dateTo, string dateField, string statusFilter, string priorityFilter,
         string primaryGroup, string secondaryGroup, int maxRecords,
         string sortColumn, string sortDirection, bool includeHistory = false,
-        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All",
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString)) return null;
@@ -6475,7 +6487,9 @@ public class ReportsController : Controller
             IncludeHistory = includeHistory,
             FollowedByFilter = followedByFilter,
             Category1Filter = category1Filter,
-            Category2Filter = category2Filter
+            Category2Filter = category2Filter,
+            CustomerCodes = ParseCustomerCodesJson(customerCodesJson),
+            CustomerExcludeMode = customerExcludeMode
         };
 
         try
@@ -6499,11 +6513,12 @@ public class ReportsController : Controller
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
         bool includeHistory = false,
-        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All",
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
             primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
-            followedByFilter, category1Filter, category2Filter);
+            followedByFilter, category1Filter, category2Filter, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("ProspectClients");
 
         var bytes = new CsvExportService().GenerateProspectClientsCsv(result.Value.rows, result.Value.filter);
@@ -6518,11 +6533,12 @@ public class ReportsController : Controller
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
         bool includeHistory = false,
-        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All",
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
             primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
-            followedByFilter, category1Filter, category2Filter);
+            followedByFilter, category1Filter, category2Filter, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("ProspectClients");
 
         var bytes = new ExcelExportService().GenerateProspectClientsExcel(result.Value.rows, result.Value.filter);
@@ -6538,11 +6554,12 @@ public class ReportsController : Controller
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
         bool includeHistory = false,
-        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All",
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
             primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
-            followedByFilter, category1Filter, category2Filter);
+            followedByFilter, category1Filter, category2Filter, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("ProspectClients");
 
         var bytes = new PdfExportService().GenerateProspectClientsPdf(result.Value.rows, result.Value.filter);
@@ -6558,11 +6575,12 @@ public class ReportsController : Controller
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
         bool includeHistory = false,
-        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All",
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
             primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
-            followedByFilter, category1Filter, category2Filter);
+            followedByFilter, category1Filter, category2Filter, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("ProspectClients");
 
         ViewBag.Rows = result.Value.rows;
@@ -6581,7 +6599,8 @@ public class ReportsController : Controller
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
         bool includeHistory = false,
-        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All",
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         if (string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Please enter at least one email address." });
@@ -6694,11 +6713,12 @@ public class ReportsController : Controller
         int maxRecords = 50000, string sortColumn = "RegistrationDate", string sortDirection = "DESC",
         bool includeHistory = false,
         string? locale = "en", int? promptTemplateId = null,
-        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All")
+        string followedByFilter = "All", string category1Filter = "All", string category2Filter = "All",
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
             primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
-            followedByFilter, category1Filter, category2Filter);
+            followedByFilter, category1Filter, category2Filter, customerCodesJson, customerExcludeMode);
         if (result == null)
             return Json(new { success = false, message = "Failed to generate report data." });
 
@@ -6962,7 +6982,9 @@ public class ReportsController : Controller
         string sortColumn = "DateTrans",
         string sortDirection = "DESC",
         string offerType = "All",
-        bool includeHistory = false)
+        bool includeHistory = false,
+        string customerCodesJson = "",
+        bool customerExcludeMode = false)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString))
@@ -6984,7 +7006,9 @@ public class ReportsController : Controller
                 SortColumn = sortColumn,
                 SortDirection = sortDirection,
                 OfferType = offerType ?? "All",
-                IncludeHistory = includeHistory
+                IncludeHistory = includeHistory,
+                CustomerCodes = ParseCustomerCodesJson(customerCodesJson),
+                CustomerExcludeMode = customerExcludeMode
             };
 
             var repo = _repositoryFactory.CreateOffersReportRepository(tenantConnString);
@@ -7178,7 +7202,8 @@ public class ReportsController : Controller
         string storeFilter, string agentFilter,
         string primaryGroup, string secondaryGroup, int maxRecords,
         string sortColumn, string sortDirection,
-        string offerType = "All", bool includeHistory = false)
+        string offerType = "All", bool includeHistory = false,
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString)) return null;
@@ -7197,7 +7222,9 @@ public class ReportsController : Controller
             SortColumn = sortColumn,
             SortDirection = sortDirection,
             OfferType = offerType ?? "All",
-            IncludeHistory = includeHistory
+            IncludeHistory = includeHistory,
+            CustomerCodes = ParseCustomerCodesJson(customerCodesJson),
+            CustomerExcludeMode = customerExcludeMode
         };
 
         try
@@ -7220,11 +7247,12 @@ public class ReportsController : Controller
         string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
-        string offerType = "All", bool includeHistory = false)
+        string offerType = "All", bool includeHistory = false,
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
             storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
-            offerType, includeHistory);
+            offerType, includeHistory, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("OffersReport");
 
         var bytes = new CsvExportService().GenerateOffersReportCsv(result.Value.rows, result.Value.filter);
@@ -7238,11 +7266,12 @@ public class ReportsController : Controller
         string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
-        string offerType = "All", bool includeHistory = false)
+        string offerType = "All", bool includeHistory = false,
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
             storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
-            offerType, includeHistory);
+            offerType, includeHistory, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("OffersReport");
 
         var bytes = new ExcelExportService().GenerateOffersReportExcel(result.Value.rows, result.Value.filter);
@@ -7257,11 +7286,12 @@ public class ReportsController : Controller
         string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
-        string offerType = "All", bool includeHistory = false)
+        string offerType = "All", bool includeHistory = false,
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
             storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
-            offerType, includeHistory);
+            offerType, includeHistory, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("OffersReport");
 
         var bytes = new PdfExportService().GenerateOffersReportPdf(result.Value.rows, result.Value.filter);
@@ -7276,11 +7306,12 @@ public class ReportsController : Controller
         string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
-        string offerType = "All", bool includeHistory = false)
+        string offerType = "All", bool includeHistory = false,
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
             storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
-            offerType, includeHistory);
+            offerType, includeHistory, customerCodesJson, customerExcludeMode);
         if (result == null) return RedirectToAction("OffersReport");
 
         ViewBag.Rows = result.Value.rows;
@@ -7298,7 +7329,8 @@ public class ReportsController : Controller
         string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
-        string offerType = "All", bool includeHistory = false)
+        string offerType = "All", bool includeHistory = false,
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         if (string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Please enter at least one email address." });
@@ -7317,7 +7349,7 @@ public class ReportsController : Controller
 
         var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
             storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
-            offerType, includeHistory);
+            offerType, includeHistory, customerCodesJson, customerExcludeMode);
         if (result == null)
             return Json(new { success = false, message = "Failed to generate report data." });
 
@@ -7410,11 +7442,12 @@ public class ReportsController : Controller
         string primaryGroup = "NONE", string secondaryGroup = "NONE",
         int maxRecords = 50000, string sortColumn = "DateTrans", string sortDirection = "DESC",
         string? locale = "en", int? promptTemplateId = null,
-        string offerType = "All", bool includeHistory = false)
+        string offerType = "All", bool includeHistory = false,
+        string customerCodesJson = "", bool customerExcludeMode = false)
     {
         var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
             storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
-            offerType, includeHistory);
+            offerType, includeHistory, customerCodesJson, customerExcludeMode);
         if (result == null)
             return Json(new { success = false, message = "Failed to generate report data." });
 

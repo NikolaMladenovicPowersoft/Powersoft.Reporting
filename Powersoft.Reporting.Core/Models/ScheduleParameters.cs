@@ -82,6 +82,8 @@ public class ScheduleParameters
     public string? PcPrimaryGroup { get; set; }
     public string? PcSecondaryGroup { get; set; }
     public bool PcIncludeHistory { get; set; }
+    public string? PcCustomerCodesJson { get; set; }
+    public bool PcCustomerExcludeMode { get; set; }
 
     // OffersReport specific
     public string? OrDateField { get; set; }
@@ -92,6 +94,8 @@ public class ScheduleParameters
     public string? OrSecondaryGroup { get; set; }
     public string? OrOfferType { get; set; }
     public bool OrIncludeHistory { get; set; }
+    public string? OrCustomerCodesJson { get; set; }
+    public bool OrCustomerExcludeMode { get; set; }
 
     // Shared
     public bool IncludeVat { get; set; }

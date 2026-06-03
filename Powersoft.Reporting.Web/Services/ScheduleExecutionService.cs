@@ -122,6 +122,13 @@ public class ScheduleExecutionService
         return summary;
     }
 
+    private static List<string> ParseJsonStringList(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<string>();
+        try { return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>(); }
+        catch { return new List<string>(); }
+    }
+
     private static string ShortenTimeout(string connString, int seconds)
     {
         var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connString)
@@ -813,7 +820,9 @@ public class ScheduleExecutionService
             MaxRecords         = parameters.MaxRecords > 0 ? parameters.MaxRecords : 50000,
             SortColumn         = parameters.SortColumn ?? "RegistrationDate",
             SortDirection      = parameters.SortDirection ?? "DESC",
-            IncludeHistory     = parameters.PcIncludeHistory
+            IncludeHistory     = parameters.PcIncludeHistory,
+            CustomerCodes      = ParseJsonStringList(parameters.PcCustomerCodesJson),
+            CustomerExcludeMode = parameters.PcCustomerExcludeMode
         };
 
         var repo = _repositoryFactory.CreateProspectClientsRepository(connString);
@@ -863,8 +872,10 @@ public class ScheduleExecutionService
             MaxRecords     = parameters.MaxRecords > 0 ? parameters.MaxRecords : 50000,
             SortColumn     = parameters.SortColumn    ?? "DateTrans",
             SortDirection  = parameters.SortDirection ?? "DESC",
-            OfferType      = parameters.OrOfferType   ?? "All",
-            IncludeHistory = parameters.OrIncludeHistory
+            OfferType           = parameters.OrOfferType   ?? "All",
+            IncludeHistory      = parameters.OrIncludeHistory,
+            CustomerCodes       = ParseJsonStringList(parameters.OrCustomerCodesJson),
+            CustomerExcludeMode = parameters.OrCustomerExcludeMode
         };
 
         var repo = _repositoryFactory.CreateOffersReportRepository(connString);

@@ -179,6 +179,8 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("primaryGroup",     out var pcPg)  || root.TryGetProperty("PcPrimaryGroup",     out pcPg))  p.PcPrimaryGroup     = AsString(pcPg);
             if (root.TryGetProperty("secondaryGroup",   out var pcSg)  || root.TryGetProperty("PcSecondaryGroup",   out pcSg))  p.PcSecondaryGroup   = AsString(pcSg);
             if (root.TryGetProperty("includeHistory",   out var pcIh)  || root.TryGetProperty("PcIncludeHistory",   out pcIh))  p.PcIncludeHistory   = ParseBool(pcIh, false);
+            if (root.TryGetProperty("customerCodesJson", out var pcCcj) || root.TryGetProperty("PcCustomerCodesJson", out pcCcj)) p.PcCustomerCodesJson = AsString(pcCcj);
+            if (root.TryGetProperty("customerExcludeMode", out var pcCem) || root.TryGetProperty("PcCustomerExcludeMode", out pcCem)) p.PcCustomerExcludeMode = ParseBool(pcCem, false);
 
             // OffersReport specific (prefix Or)
             if (root.TryGetProperty("dateField",    out var orDf) || root.TryGetProperty("OrDateField",    out orDf)) p.OrDateField    = AsString(orDf);
@@ -189,6 +191,8 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("secondaryGroup",out var orSg)|| root.TryGetProperty("OrSecondaryGroup",out orSg))p.OrSecondaryGroup = AsString(orSg);
             if (root.TryGetProperty("offerType",    out var orOt) || root.TryGetProperty("OrOfferType",    out orOt)) p.OrOfferType    = AsString(orOt);
             if (root.TryGetProperty("includeHistory",out var orIh)|| root.TryGetProperty("OrIncludeHistory",out orIh))p.OrIncludeHistory = ParseBool(orIh, false);
+            if (root.TryGetProperty("customerCodesJson", out var orCcj) || root.TryGetProperty("OrCustomerCodesJson", out orCcj)) p.OrCustomerCodesJson = AsString(orCcj);
+            if (root.TryGetProperty("customerExcludeMode", out var orCem) || root.TryGetProperty("OrCustomerExcludeMode", out orCem)) p.OrCustomerExcludeMode = ParseBool(orCem, false);
 
             // ItemsSelection dimension filter (categories/brands/suppliers/stores/items/etc.).
             // The view serialises it as a JSON *string* under "itemsSelectionJson"; older/code

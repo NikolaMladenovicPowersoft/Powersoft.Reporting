@@ -4832,6 +4832,22 @@ public class ReportsController : Controller
 
         ApplyColumnFiltersFromJson(filter, columnFilters);
 
+        // Permission enforcement (legacy action 6015 ViewCost): a user without cost
+        // rights may only report on Sale. Purchase/Both expose cost, so force Sale and
+        // disable profit regardless of what the client posted (defense vs crafted URLs).
+        if (!CanViewCost())
+        {
+            filter.ReportOn = CatalogueReportOn.Sale;
+            filter.ShowProfit = false;
+        }
+        // ViewSupplier (legacy action 1200): never group by Supplier when not allowed.
+        if (!CanViewSupplier())
+        {
+            if (filter.PrimaryGroup == CatalogueGroupBy.Supplier) filter.PrimaryGroup = CatalogueGroupBy.None;
+            if (filter.SecondaryGroup == CatalogueGroupBy.Supplier) filter.SecondaryGroup = CatalogueGroupBy.None;
+            if (filter.ThirdGroup == CatalogueGroupBy.Supplier) filter.ThirdGroup = CatalogueGroupBy.None;
+        }
+
         return filter;
     }
 

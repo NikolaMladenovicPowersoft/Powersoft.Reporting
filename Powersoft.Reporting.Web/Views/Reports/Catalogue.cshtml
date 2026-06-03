@@ -1406,6 +1406,34 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
     var _viewSupplier = @(ViewBag.ViewSupplier != null ? (ViewBag.ViewSupplier ? "true" : "false") : "true");
 
+    // Permission enforcement in the UI (server-side is authoritative in BuildCatalogueFilterFromParams):
+    // no-cost users can only Report On Sale; no-supplier users cannot group by Supplier.
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!_viewCost) {
+            var ro = document.querySelector('[name="ReportOn"]');
+            if (ro) {
+                Array.prototype.slice.call(ro.options).forEach(function (o) {
+                    // CatalogueReportOn: Sale=0, Purchase=1, Both=2
+                    if (o.value === '1' || o.value === '2') o.remove();
+                });
+                ro.value = '0';
+            }
+        }
+        if (!_viewSupplier) {
+            // Remove the Supplier grouping option (CatalogueGroupBy.Supplier = 4) from all group selects
+            ['PrimaryGroup', 'SecondaryGroup', 'ThirdGroup'].forEach(function (n) {
+                var sel = document.querySelector('[name="' + n + '"]');
+                if (!sel) return;
+                Array.prototype.slice.call(sel.options).forEach(function (o) {
+                    if (o.value === '4') {
+                        if (o.selected) sel.value = '0';
+                        o.remove();
+                    }
+                });
+            });
+        }
+    });
+
     function getSelectedDisplayCols() {
         return document.getElementById('displayColumnsHidden').value
             .split(',').filter(c => c.length > 0);

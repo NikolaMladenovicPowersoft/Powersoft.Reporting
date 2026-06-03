@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Powersoft.Reporting.Core\Powersoft.Reporting.Core.csproj" />
     <ProjectReference Include="..\Powersoft.Reporting.Data\Powersoft.Reporting.Data.csproj" />
+    <ProjectReference Include="..\Powersoft.Reporting.Web\Powersoft.Reporting.Web.csproj" />
   </ItemGroup>
 
 </Project>

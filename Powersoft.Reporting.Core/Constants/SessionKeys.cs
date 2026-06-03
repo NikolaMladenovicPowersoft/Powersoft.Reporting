@@ -9,6 +9,10 @@ public static class SessionKeys
     public const string UserCode = "UserCode";
     public const string RoleID = "RoleID";
     public const string Ranking = "Ranking";
+
+    // Permission flags resolved at login from tbl_RelRoleAction
+    public const string ViewCost = "ViewCost";
+    public const string ViewSupplier = "ViewSupplier";
 }
 
 /// <summary>
@@ -20,6 +24,10 @@ public static class AppClaimTypes
     public const string RoleID = "ps:roleid";
     public const string Ranking = "ps:ranking";
     public const string RoleName = "ps:rolename";
+
+    // Permission flags (resolved at login, stored in auth cookie)
+    public const string ViewCost = "ps:viewcost";
+    public const string ViewSupplier = "ps:viewsupplier";
 }
 
 /// <summary>
@@ -43,6 +51,14 @@ public static class ModuleConstants
     public const int ActionScheduleProspectClients = 6036;
     public const int ActionViewOffersReport = 6037;
     public const int ActionScheduleOffersReport = 6038;
+    public const int ActionViewBelowMinStock = 6039;
+    public const int ActionScheduleBelowMinStock = 6040;
+    public const int ActionViewCancelLog = 6041;
+    public const int ActionScheduleCancelLog = 6042;
+
+    // Legacy Powersoft365 cross-module actions (already exist in psCentral — do NOT seed)
+    public const int ActionViewCost = 6015;
+    public const int ActionViewSupplierList = 1200;
 
     /// <summary>
     /// Ranking threshold for DB filtering. Users with Ranking below this value (1, 5, 10)

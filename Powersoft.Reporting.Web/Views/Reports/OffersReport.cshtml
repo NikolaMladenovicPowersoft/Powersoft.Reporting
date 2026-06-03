@@ -1,4 +1,4 @@
-﻿@{
+@{
     ViewData["Title"] = "Offers Report";
     var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
     var canSchedule = true;
@@ -313,7 +313,7 @@
     </div>
 </div>
 
-@* Schedule Modal β€” shared partial *@
+@* Schedule Modal — shared partial *@
 @await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel {
     SaveAction      = "SaveOffersReportSchedule",
     ListAction      = "GetOffersReportSchedules",
@@ -323,6 +323,8 @@
 })
 
 <script>
+var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
+var _viewSupplier = @(ViewBag.ViewSupplier != null ? (ViewBag.ViewSupplier ? "true" : "false") : "true");
 var _sortCol = 'DateTrans';
 var _sortDir = 'DESC';
 var _lastData = [];

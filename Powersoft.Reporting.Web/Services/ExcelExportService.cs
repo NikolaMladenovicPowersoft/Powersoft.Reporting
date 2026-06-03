@@ -297,7 +297,9 @@ public class ExcelExportService
     public byte[] GenerateCatalogueExcel(
         List<CatalogueRow> rows,
         CatalogueTotals? totals,
-        CatalogueFilter filter)
+        CatalogueFilter filter,
+        bool viewCost = true,
+        bool viewSupplier = true)
     {
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Catalogue");
@@ -343,11 +345,11 @@ public class ExcelExportService
         if (dc("NetValue")) cols.Add(("NetValue", "Net Value", true, r => r.NetValue));
         if (dc("VatAmount")) cols.Add(("VatAmount", "VAT", true, r => r.VatAmount));
         if (dc("GrossAmount")) cols.Add(("GrossAmount", "Gross Amt", true, r => r.GrossAmount));
-        if (dc("Profit")) cols.Add(("Profit", "Profit", true, r => r.ProfitValue));
-        if (dc("Markup")) cols.Add(("Markup", "Markup %", true, r => r.Markup));
-        if (dc("Margin")) cols.Add(("Margin", "Margin %", true, r => r.Margin));
-        if (dc("Cost")) cols.Add(("Cost", "Cost", true, r => r.Cost));
-        if (dc("TotalCost")) cols.Add(("TotalCost", "Total Cost", true, r => r.TotalCost));
+        if (dc("Profit")    && viewCost) cols.Add(("Profit", "Profit", true, r => r.ProfitValue));
+        if (dc("Markup")    && viewCost) cols.Add(("Markup", "Markup %", true, r => r.Markup));
+        if (dc("Margin")    && viewCost) cols.Add(("Margin", "Margin %", true, r => r.Margin));
+        if (dc("Cost")      && viewCost) cols.Add(("Cost", "Cost", true, r => r.Cost));
+        if (dc("TotalCost") && viewCost) cols.Add(("TotalCost", "Total Cost", true, r => r.TotalCost));
         if (dc("TotalStockQty")) cols.Add(("TotalStockQty", "Stock Qty", true, r => r.TotalStockQty));
         if (dc("TotalStockValue")) cols.Add(("TotalStockValue", "Stock Value", true, r => r.TotalStockValue));
         if (dc("EntityCode")) cols.Add(("EntityCode", "Entity Code", false, r => r.EntityCode));
@@ -378,7 +380,7 @@ public class ExcelExportService
         if (dc("Colour")) cols.Add(("Colour", "Colour", false, r => r.Colour));
         if (dc("Size")) cols.Add(("Size", "Size", false, r => r.Size));
         if (dc("Franchise")) cols.Add(("Franchise", "Franchise", false, r => r.FranchiseName));
-        if (dc("ItemSupplier")) cols.Add(("ItemSupplier", "Supplier", false, r => r.ItemSupplierName));
+        if (dc("ItemSupplier") && viewSupplier) cols.Add(("ItemSupplier", "Supplier", false, r => r.ItemSupplierName));
         if (dc("Price1Excl")) cols.Add(("Price1Excl", "Price 1 Ex", true, r => r.Price1Excl));
         if (dc("Price1Incl")) cols.Add(("Price1Incl", "Price 1 In", true, r => r.Price1Incl));
         if (dc("Price2Excl")) cols.Add(("Price2Excl", "Price 2 Ex", true, r => r.Price2Excl));

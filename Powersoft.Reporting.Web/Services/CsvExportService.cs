@@ -247,7 +247,9 @@ public class CsvExportService
     public byte[] GenerateCatalogueCsv(
         List<CatalogueRow> rows,
         CatalogueTotals? totals,
-        CatalogueFilter filter)
+        CatalogueFilter filter,
+        bool viewCost = true,
+        bool viewSupplier = true)
     {
         bool hasL1 = filter.PrimaryGroup != Core.Enums.CatalogueGroupBy.None;
         bool hasL2 = filter.SecondaryGroup != Core.Enums.CatalogueGroupBy.None;
@@ -282,11 +284,11 @@ public class CsvExportService
         if (dc("NetValue")) cols.Add(("NetValue", "Net Value", true, r => r.NetValue.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("VatAmount")) cols.Add(("VatAmount", "VAT", true, r => r.VatAmount.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("GrossAmount")) cols.Add(("GrossAmount", "Gross Amt", true, r => r.GrossAmount.ToString("F2", CultureInfo.InvariantCulture)));
-        if (dc("Profit")) cols.Add(("Profit", "Profit", true, r => r.ProfitValue.ToString("F2", CultureInfo.InvariantCulture)));
-        if (dc("Markup")) cols.Add(("Markup", "Markup %", true, r => r.Markup.ToString("F1", CultureInfo.InvariantCulture)));
-        if (dc("Margin")) cols.Add(("Margin", "Margin %", true, r => r.Margin.ToString("F1", CultureInfo.InvariantCulture)));
-        if (dc("Cost")) cols.Add(("Cost", "Cost", true, r => r.Cost.ToString("F2", CultureInfo.InvariantCulture)));
-        if (dc("TotalCost")) cols.Add(("TotalCost", "Total Cost", true, r => r.TotalCost.ToString("F2", CultureInfo.InvariantCulture)));
+        if (dc("Profit")    && viewCost) cols.Add(("Profit", "Profit", true, r => r.ProfitValue.ToString("F2", CultureInfo.InvariantCulture)));
+        if (dc("Markup")    && viewCost) cols.Add(("Markup", "Markup %", true, r => r.Markup.ToString("F1", CultureInfo.InvariantCulture)));
+        if (dc("Margin")    && viewCost) cols.Add(("Margin", "Margin %", true, r => r.Margin.ToString("F1", CultureInfo.InvariantCulture)));
+        if (dc("Cost")      && viewCost) cols.Add(("Cost", "Cost", true, r => r.Cost.ToString("F2", CultureInfo.InvariantCulture)));
+        if (dc("TotalCost") && viewCost) cols.Add(("TotalCost", "Total Cost", true, r => r.TotalCost.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("TotalStockQty")) cols.Add(("TotalStockQty", "Stock Qty", true, r => r.TotalStockQty.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("TotalStockValue")) cols.Add(("TotalStockValue", "Stock Value", true, r => r.TotalStockValue.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("EntityCode")) cols.Add(("EntityCode", "Entity Code", false, r => r.EntityCode ?? ""));
@@ -317,7 +319,7 @@ public class CsvExportService
         if (dc("Colour")) cols.Add(("Colour", "Colour", false, r => r.Colour ?? ""));
         if (dc("Size")) cols.Add(("Size", "Size", false, r => r.Size ?? ""));
         if (dc("Franchise")) cols.Add(("Franchise", "Franchise", false, r => r.FranchiseName ?? ""));
-        if (dc("ItemSupplier")) cols.Add(("ItemSupplier", "Supplier", false, r => r.ItemSupplierName ?? ""));
+        if (dc("ItemSupplier") && viewSupplier) cols.Add(("ItemSupplier", "Supplier", false, r => r.ItemSupplierName ?? ""));
         if (dc("Price1Excl")) cols.Add(("Price1Excl", "Price 1 Ex", true, r => r.Price1Excl.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("Price1Incl")) cols.Add(("Price1Incl", "Price 1 In", true, r => r.Price1Incl.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("Price2Excl")) cols.Add(("Price2Excl", "Price 2 Ex", true, r => r.Price2Excl.ToString("F2", CultureInfo.InvariantCulture)));

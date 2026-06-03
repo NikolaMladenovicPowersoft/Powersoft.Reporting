@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Powersoft.Reporting.Core.Constants;
+using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
 using Powersoft.Reporting.Web.ViewModels;
 using IAppAuthService = Powersoft.Reporting.Core.Interfaces.IAuthenticationService;
@@ -13,11 +14,13 @@ namespace Powersoft.Reporting.Web.Controllers;
 public class AccountController : Controller
 {
     private readonly IAppAuthService _authService;
+    private readonly ICentralRepository _centralRepository;
     private readonly ILogger<AccountController> _logger;
 
-    public AccountController(IAppAuthService authService, ILogger<AccountController> logger)
+    public AccountController(IAppAuthService authService, ICentralRepository centralRepository, ILogger<AccountController> logger)
     {
         _authService = authService;
+        _centralRepository = centralRepository;
         _logger = logger;
     }
 
@@ -55,6 +58,17 @@ public class AccountController : Controller
             {
                 var user = result.User;
 
+                // Resolve cross-module permissions at login time.
+                // Ranking <= 20: all actions allowed (system admin, client admin, client standard).
+                // Ranking > 20: custom role — check tbl_RelRoleAction for each permission.
+                bool viewCost = true;
+                bool viewSupplier = true;
+                if (user.Ranking > ModuleConstants.RankingAllActionsAllowed)
+                {
+                    viewCost     = await _centralRepository.IsActionAuthorizedAsync(user.RoleID, ModuleConstants.ActionViewCost);
+                    viewSupplier = await _centralRepository.IsActionAuthorizedAsync(user.RoleID, ModuleConstants.ActionViewSupplierList);
+                }
+
                 var claims = new List<Claim>
                 {
                     new Claim(ClaimTypes.Name, user.Username),
@@ -62,7 +76,9 @@ public class AccountController : Controller
                     new Claim(AppClaimTypes.UserCode, user.Username),
                     new Claim(AppClaimTypes.RoleID, user.RoleID.ToString()),
                     new Claim(AppClaimTypes.Ranking, user.Ranking.ToString()),
-                    new Claim(AppClaimTypes.RoleName, user.RoleName)
+                    new Claim(AppClaimTypes.RoleName, user.RoleName),
+                    new Claim(AppClaimTypes.ViewCost, viewCost.ToString()),
+                    new Claim(AppClaimTypes.ViewSupplier, viewSupplier.ToString()),
                 };
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -83,6 +99,8 @@ public class AccountController : Controller
                 HttpContext.Session.SetString(SessionKeys.UserCode, user.Username);
                 HttpContext.Session.SetInt32(SessionKeys.RoleID, user.RoleID);
                 HttpContext.Session.SetInt32(SessionKeys.Ranking, user.Ranking);
+                HttpContext.Session.SetString(SessionKeys.ViewCost, viewCost.ToString());
+                HttpContext.Session.SetString(SessionKeys.ViewSupplier, viewSupplier.ToString());
 
                 _logger.LogInformation(
                     "User {Username} logged in (Role: {RoleName}, Ranking: {Ranking})", 

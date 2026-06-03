@@ -490,6 +490,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script>
+var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
+var _viewSupplier = @(ViewBag.ViewSupplier != null ? (ViewBag.ViewSupplier ? "true" : "false") : "true");
 Chart.register(ChartDataLabels);
 Chart.defaults.set('plugins.datalabels', { display: false });
 

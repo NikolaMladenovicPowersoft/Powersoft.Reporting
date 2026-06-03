@@ -122,6 +122,151 @@ ELSE
 GO
 
 -- =====================================================
+-- Step 3b: Actions 6027–6042 (added 2026-06)
+--   6027/6028: View/Schedule Purchases vs Sales
+--   6029/6030: View/Schedule Pareto 80/20
+--   6031/6032: View/Schedule Charts & Dashboards
+--   6033/6034: View/Schedule Catalogue
+--   6035/6036: View/Schedule Prospect Clients
+--   6037/6038: View/Schedule Offers Report
+--   6039/6040: View/Schedule Below Min Stock
+--   6041/6042: View/Schedule Cancel Log
+-- =====================================================
+
+-- 6027 View Purchases vs Sales
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6027)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6027, 1085, 'ViewPurchasesSales', 'View Purchases vs Sales Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6027 AND fk_ActionCategoryID <> 1085;
+
+-- 6028 Schedule Purchases vs Sales
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6028)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6028, 1085, 'SchedulePurchasesSales', 'Schedule Purchases vs Sales Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6028 AND fk_ActionCategoryID <> 1085;
+
+-- 6029 View Pareto 80/20
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6029)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6029, 1085, 'ViewPareto', 'View Pareto 80/20 Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6029 AND fk_ActionCategoryID <> 1085;
+
+-- 6030 Schedule Pareto 80/20
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6030)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6030, 1085, 'SchedulePareto', 'Schedule Pareto 80/20 Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6030 AND fk_ActionCategoryID <> 1085;
+
+-- 6031 View Charts & Dashboards
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6031)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6031, 1085, 'ViewCharts', 'View Charts & Dashboards', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6031 AND fk_ActionCategoryID <> 1085;
+
+-- 6032 Schedule Charts & Dashboards
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6032)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6032, 1085, 'ScheduleCharts', 'Schedule Charts & Dashboards', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6032 AND fk_ActionCategoryID <> 1085;
+
+-- 6033 View Catalogue
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6033)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6033, 1085, 'ViewCatalogue', 'View Power Reports Catalogue', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6033 AND fk_ActionCategoryID <> 1085;
+
+-- 6034 Schedule Catalogue
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6034)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6034, 1085, 'ScheduleCatalogue', 'Schedule Power Reports Catalogue', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6034 AND fk_ActionCategoryID <> 1085;
+
+-- 6035 View Prospect Clients
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6035)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6035, 1085, 'ViewProspectClients', 'View Prospect Clients Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6035 AND fk_ActionCategoryID <> 1085;
+
+-- 6036 Schedule Prospect Clients
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6036)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6036, 1085, 'ScheduleProspectClients', 'Schedule Prospect Clients Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6036 AND fk_ActionCategoryID <> 1085;
+
+-- 6037 View Offers Report
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6037)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6037, 1085, 'ViewOffersReport', 'View Offers Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6037 AND fk_ActionCategoryID <> 1085;
+
+-- 6038 Schedule Offers Report
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6038)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6038, 1085, 'ScheduleOffersReport', 'Schedule Offers Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6038 AND fk_ActionCategoryID <> 1085;
+
+-- 6039 View Below Min Stock
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6039)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6039, 1085, 'ViewBelowMinStock', 'View Below Minimum Stock Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6039 AND fk_ActionCategoryID <> 1085;
+
+-- 6040 Schedule Below Min Stock
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6040)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6040, 1085, 'ScheduleBelowMinStock', 'Schedule Below Minimum Stock Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6040 AND fk_ActionCategoryID <> 1085;
+
+-- 6041 View Cancel Log
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6041)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6041, 1085, 'ViewCancelLog', 'View Cancel Log Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6041 AND fk_ActionCategoryID <> 1085;
+
+-- 6042 Schedule Cancel Log
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6042)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6042, 1085, 'ScheduleCancelLog', 'Schedule Cancel Log Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6042 AND fk_ActionCategoryID <> 1085;
+GO
+
+-- Link all new actions to module RENGINEAI
+DECLARE @newActions TABLE (ActionID INT);
+INSERT INTO @newActions VALUES (6027),(6028),(6029),(6030),(6031),(6032),
+    (6033),(6034),(6035),(6036),(6037),(6038),(6039),(6040),(6041),(6042);
+
+INSERT INTO tbl_RelModuleAction (fk_ModuleCode, fk_ActionID)
+SELECT 'RENGINEAI', a.ActionID
+FROM @newActions a
+WHERE NOT EXISTS (
+    SELECT 1 FROM tbl_RelModuleAction rma
+    WHERE rma.fk_ModuleCode = 'RENGINEAI' AND rma.fk_ActionID = a.ActionID
+);
+
+PRINT 'Linked new actions 6027-6042 to RENGINEAI module (skipped existing).';
+GO
+
+-- NOTE: Actions 6015 (ViewCost) and 1200 (ViewSupplierList) are legacy PSBase actions.
+-- They already exist in pscentral — DO NOT re-seed.
+-- They are checked by IsActionAuthorizedAsync in the Reporting Engine at login.
+
+-- =====================================================
 -- Cleanup: remove old category 9900 if it was created by mistake
 -- =====================================================
 IF EXISTS (SELECT 1 FROM tbl_ActionCategory WHERE pk_ActionCategoryID = 9900 AND ActionCategoryName = 'Report Engine')

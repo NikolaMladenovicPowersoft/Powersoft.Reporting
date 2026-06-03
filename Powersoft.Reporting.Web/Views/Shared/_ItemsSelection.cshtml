@@ -38,7 +38,11 @@
             @if (Model.ShowSeasons) {
                 <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("season", "Season", "bi-calendar3"))</div>
             }
-            @if (Model.ShowSuppliers) {
+            @{
+                var _isViewSup = User.FindFirst("ps:viewsupplier")?.Value;
+                bool _canViewSupplier = _isViewSup == null || _isViewSup != "False";
+            }
+            @if (Model.ShowSuppliers && _canViewSupplier) {
                 <div class="col-lg-3 col-md-4 col-sm-6">@await Html.PartialAsync("_DimensionFilter", ("supplier", "Supplier", "bi-truck"))</div>
             }
             @if (Model.ShowCustomers) {

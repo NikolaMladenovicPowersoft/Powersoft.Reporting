@@ -467,16 +467,20 @@ public class ScheduleExecutionService
         string fileName;
         string contentType;
 
+        // Permission flags baked into ParametersJson at schedule creation time
+        bool viewCost     = parameters.ViewCost;
+        bool viewSupplier = parameters.ViewSupplier;
+
         switch (format)
         {
             case "csv":
-                fileBytes = new CsvExportService().GenerateCatalogueCsv(rows, totals, filter);
+                fileBytes = new CsvExportService().GenerateCatalogueCsv(rows, totals, filter, viewCost, viewSupplier);
                 fileName = $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
                 contentType = "text/csv";
                 break;
             default:
                 // Catalogue has no dedicated PDF export — fall back to Excel for any non-CSV format.
-                fileBytes = new ExcelExportService().GenerateCatalogueExcel(rows, totals, filter);
+                fileBytes = new ExcelExportService().GenerateCatalogueExcel(rows, totals, filter, viewCost, viewSupplier);
                 fileName = $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 break;

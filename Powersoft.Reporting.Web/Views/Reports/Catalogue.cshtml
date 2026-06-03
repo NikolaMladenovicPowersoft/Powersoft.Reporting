@@ -278,14 +278,14 @@
                 <div class="stat-label">@(useGross ? "Total Gross" : "Total Net Value")</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-3" data-perm="profit">
             <div class="stat-card text-center">
                 @{ var catProfitColor = Model.Totals.TotalProfitValue >= 0 ? "text-success" : "text-danger"; }
                 <div class="stat-value @catProfitColor">@Model.Totals.TotalProfitValue.ToString("N2")</div>
                 <div class="stat-label">Total Profit</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-3" data-perm="margin">
             <div class="stat-card text-center">
                 @{ var catMarginColor = Model.Totals.TotalMargin >= 0 ? "text-success" : "text-danger"; }
                 <div class="stat-value @catMarginColor">@Model.Totals.TotalMargin.ToString("N2")%</div>
@@ -358,11 +358,11 @@
                             @if (dc("NetValue")) { <th class="sortable text-end col-trans" data-col="NetValue">Net Value</th> }
                             @if (dc("VatAmount")) { <th class="sortable text-end col-trans" data-col="VatAmount">VAT</th> }
                             @if (dc("GrossAmount")) { <th class="sortable text-end col-trans" data-col="GrossAmount">Gross Amt</th> }
-                            @if (dc("Profit")) { <th class="sortable text-end col-profit" data-col="ProfitValue">Profit</th> }
-                            @if (dc("Markup")) { <th class="text-end col-profit" data-col="Markup">Markup %</th> }
-                            @if (dc("Margin")) { <th class="text-end col-profit" data-col="Margin">Margin %</th> }
-                            @if (dc("Cost")) { <th class="sortable text-end col-cost" data-col="Cost">Cost</th> }
-                            @if (dc("TotalCost")) { <th class="sortable text-end col-cost" data-col="TotalCost">Total Cost</th> }
+                            @if (dc("Profit")) { <th class="sortable text-end col-profit" data-col="ProfitValue" data-perm="profit">Profit</th> }
+                            @if (dc("Markup")) { <th class="text-end col-profit" data-col="Markup" data-perm="profit">Markup %</th> }
+                            @if (dc("Margin")) { <th class="text-end col-profit" data-col="Margin" data-perm="margin">Margin %</th> }
+                            @if (dc("Cost")) { <th class="sortable text-end col-cost" data-col="Cost" data-perm="cost">Cost</th> }
+                            @if (dc("TotalCost")) { <th class="sortable text-end col-cost" data-col="TotalCost" data-perm="cost">Total Cost</th> }
                             @if (dc("TotalStockQty")) { <th class="sortable text-end col-stock" data-col="TotalStockQty">Stock Qty</th> }
                             @if (dc("TotalStockValue")) { <th class="text-end col-stock" data-col="TotalStockValue">Stock Value</th> }
                             @if (dc("EntityCode")) { <th data-col="EntityCode">Entity Code</th> }
@@ -399,7 +399,7 @@
                             @if (dc("CustomerCategory1")) { <th data-col="CustomerCategory1Descr">Cust Cat 1</th> }
                             @if (dc("CustomerCategory2")) { <th data-col="CustomerCategory2Descr">Cust Cat 2</th> }
                             @if (dc("CustomerCategory3")) { <th data-col="CustomerCategory3Descr">Cust Cat 3</th> }
-                            @if (dc("ItemSupplier")) { <th data-col="ItemSupplier">Supplier</th> }
+                            @if (dc("ItemSupplier")) { <th data-col="ItemSupplier" data-perm="supplier">Supplier</th> }
                             @if (dc("Price1Excl")) { <th class="text-end" data-col="Price1Excl">Price 1 Ex</th> }
                             @if (dc("Price1Incl")) { <th class="text-end" data-col="Price1Incl">Price 1 In</th> }
                             @if (dc("Price2Excl")) { <th class="text-end" data-col="Price2Excl">Price 2 Ex</th> }
@@ -467,11 +467,11 @@
                             @if (dc("NetValue")) { <td class="text-end">@item.NetValue.ToString("N2")</td> }
                             @if (dc("VatAmount")) { <td class="text-end">@item.VatAmount.ToString("N2")</td> }
                             @if (dc("GrossAmount")) { <td class="text-end">@item.GrossAmount.ToString("N2")</td> }
-                            @if (dc("Profit")) { <td class="text-end @(item.ProfitValue < 0 ? "text-danger" : "text-success")">@item.ProfitValue.ToString("N2")</td> }
-                            @if (dc("Markup")) { <td class="text-end">@item.Markup.ToString("N1")%</td> }
-                            @if (dc("Margin")) { <td class="text-end">@item.Margin.ToString("N1")%</td> }
-                            @if (dc("Cost")) { <td class="text-end">@item.Cost.ToString("N2")</td> }
-                            @if (dc("TotalCost")) { <td class="text-end">@item.TotalCost.ToString("N2")</td> }
+                            @if (dc("Profit")) { <td class="text-end @(item.ProfitValue < 0 ? "text-danger" : "text-success")" data-perm="profit">@item.ProfitValue.ToString("N2")</td> }
+                            @if (dc("Markup")) { <td class="text-end" data-perm="profit">@item.Markup.ToString("N1")%</td> }
+                            @if (dc("Margin")) { <td class="text-end" data-perm="margin">@item.Margin.ToString("N1")%</td> }
+                            @if (dc("Cost")) { <td class="text-end" data-perm="cost">@item.Cost.ToString("N2")</td> }
+                            @if (dc("TotalCost")) { <td class="text-end" data-perm="cost">@item.TotalCost.ToString("N2")</td> }
                             @if (dc("TotalStockQty")) { <td class="text-end">@item.TotalStockQty.ToString("N0")</td> }
                             @if (dc("TotalStockValue")) { <td class="text-end">@item.TotalStockValue.ToString("N2")</td> }
                             @{var entityType = (item.InvoiceType == "P" || item.InvoiceType == "E") ? "supplier" : "customer";}
@@ -509,7 +509,7 @@
                             @if (dc("CustomerCategory1")) { <td class="small">@item.CustomerCategory1Descr</td> }
                             @if (dc("CustomerCategory2")) { <td class="small">@item.CustomerCategory2Descr</td> }
                             @if (dc("CustomerCategory3")) { <td class="small">@item.CustomerCategory3Descr</td> }
-                            @if (dc("ItemSupplier")) { <td class="small">@item.ItemSupplierName</td> }
+                            @if (dc("ItemSupplier")) { <td class="small" data-perm="supplier">@item.ItemSupplierName</td> }
                             @if (dc("Price1Excl")) { <td class="text-end">@item.Price1Excl.ToString("N2")</td> }
                             @if (dc("Price1Incl")) { <td class="text-end">@item.Price1Incl.ToString("N2")</td> }
                             @if (dc("Price2Excl")) { <td class="text-end">@item.Price2Excl.ToString("N2")</td> }
@@ -575,11 +575,11 @@
                                 @if (dc("NetValue")) { <td class="text-end fw-semibold">@subNet.ToString("N2")</td> }
                                 @if (dc("VatAmount")) { <td class="text-end fw-semibold">@subVat.ToString("N2")</td> }
                                 @if (dc("GrossAmount")) { <td class="text-end fw-semibold">@subGross.ToString("N2")</td> }
-                                @if (dc("Profit")) { <td class="text-end fw-semibold @(subProfit < 0 ? "text-danger" : "text-success")">@subProfit.ToString("N2")</td> }
-                                @if (dc("Markup")) { <td class="text-end fw-semibold">@subMarkup.ToString("N1")%</td> }
-                                @if (dc("Margin")) { <td class="text-end fw-semibold">@subMargin.ToString("N1")%</td> }
-                                @if (dc("Cost")) { <td></td> }
-                                @if (dc("TotalCost")) { <td class="text-end fw-semibold">@subTotalCost.ToString("N2")</td> }
+                                @if (dc("Profit")) { <td class="text-end fw-semibold @(subProfit < 0 ? "text-danger" : "text-success")" data-perm="profit">@subProfit.ToString("N2")</td> }
+                                @if (dc("Markup")) { <td class="text-end fw-semibold" data-perm="profit">@subMarkup.ToString("N1")%</td> }
+                                @if (dc("Margin")) { <td class="text-end fw-semibold" data-perm="margin">@subMargin.ToString("N1")%</td> }
+                                @if (dc("Cost")) { <td data-perm="cost"></td> }
+                                @if (dc("TotalCost")) { <td class="text-end fw-semibold" data-perm="cost">@subTotalCost.ToString("N2")</td> }
                                 @if (dc("TotalStockQty")) { <td class="text-end fw-semibold">@subStockQty.ToString("N0")</td> }
                                 @if (dc("TotalStockValue")) { <td></td> }
                                 @foreach (var c in dimColsForCount) { if (dc(c)) { <td></td> } }
@@ -656,11 +656,11 @@
                                 @if (dc("NetValue")) { <td class="text-end">@Model.Totals.TotalNetValue.ToString("N2")</td> }
                                 @if (dc("VatAmount")) { <td class="text-end">@Model.Totals.TotalVatAmount.ToString("N2")</td> }
                                 @if (dc("GrossAmount")) { <td class="text-end">@Model.Totals.TotalGrossAmount.ToString("N2")</td> }
-                                @if (dc("Profit")) { <td class="text-end">@Model.Totals.TotalProfitValue.ToString("N2")</td> }
-                                @if (dc("Markup")) { <td class="text-end">@Model.Totals.TotalMarkup.ToString("N1")%</td> }
-                                @if (dc("Margin")) { <td class="text-end">@Model.Totals.TotalMargin.ToString("N1")%</td> }
-                                @if (dc("Cost")) { <td></td> }
-                                @if (dc("TotalCost")) { <td class="text-end">@Model.Totals.TotalTotalCost.ToString("N2")</td> }
+                                @if (dc("Profit")) { <td class="text-end" data-perm="profit">@Model.Totals.TotalProfitValue.ToString("N2")</td> }
+                                @if (dc("Markup")) { <td class="text-end" data-perm="profit">@Model.Totals.TotalMarkup.ToString("N1")%</td> }
+                                @if (dc("Margin")) { <td class="text-end" data-perm="margin">@Model.Totals.TotalMargin.ToString("N1")%</td> }
+                                @if (dc("Cost")) { <td data-perm="cost"></td> }
+                                @if (dc("TotalCost")) { <td class="text-end" data-perm="cost">@Model.Totals.TotalTotalCost.ToString("N2")</td> }
                                 @if (dc("TotalStockQty")) { <td class="text-end">@Model.Totals.TotalStockQty.ToString("N0")</td> }
                                 @if (dc("TotalStockValue")) { <td></td> }
                                 @{

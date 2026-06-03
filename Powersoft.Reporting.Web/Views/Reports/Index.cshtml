@@ -1,6 +1,11 @@
 @{
     ViewData["Title"] = "Reports";
     var connectedDb = Context.Session.GetString("ConnectedDatabase");
+    // Read permission flags from auth cookie claims (set at login)
+    var viewCostClaim = User.FindFirst("ps:viewcost")?.Value;
+    var viewCost     = viewCostClaim == null || viewCostClaim != "False";
+    var viewSupplierClaim = User.FindFirst("ps:viewsupplier")?.Value;
+    var viewSupplier = viewSupplierClaim == null || viewSupplierClaim != "False";
 }
 
 <div class="row">
@@ -14,9 +19,12 @@
                 <a class="nav-link active" asp-action="AverageBasket">
                     <i class="bi bi-basket me-2"></i>Average Basket
                 </a>
-                <a class="nav-link" asp-action="PurchasesSales">
-                    <i class="bi bi-arrow-left-right me-2"></i>Purchases vs Sales
-                </a>
+                @if (viewCost)
+                {
+                    <a class="nav-link" asp-action="PurchasesSales">
+                        <i class="bi bi-arrow-left-right me-2"></i>Purchases vs Sales
+                    </a>
+                }
                 <a class="nav-link" asp-action="Charts">
                     <i class="bi bi-pie-chart me-2"></i>Charts & Dashboards
                 </a>
@@ -95,6 +103,8 @@
                         </div>
                     </div>
 
+                    @if (viewCost)
+                    {
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100 border-success">
                             <div class="card-body d-flex flex-column">
@@ -117,6 +127,7 @@
                             </div>
                         </div>
                     </div>
+                    }
 
                     <div class="col-md-6 col-lg-4">
                         <div class="card h-100 border-info">

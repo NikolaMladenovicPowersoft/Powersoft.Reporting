@@ -116,4 +116,10 @@ public class ScheduleParameters
 
     public string SortColumn { get; set; } = "Period";
     public string SortDirection { get; set; } = "ASC";
+
+    // Permission snapshot — captured at schedule creation time.
+    // The background worker has no user session, so permissions are baked in.
+    // Default true = safe (shows data); false = strips cost/supplier columns from exports.
+    public bool ViewCost { get; set; } = true;
+    public bool ViewSupplier { get; set; } = true;
 }

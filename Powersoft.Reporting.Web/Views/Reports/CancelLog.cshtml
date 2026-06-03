@@ -487,6 +487,8 @@
 </div>
 
 <script>
+var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
+var _viewSupplier = @(ViewBag.ViewSupplier != null ? (ViewBag.ViewSupplier ? "true" : "false") : "true");
 var _sortCol = 'SessionDateTime';
 var _sortDir = 'ASC';
 var _lastData = [];

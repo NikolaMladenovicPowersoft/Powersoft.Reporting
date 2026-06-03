@@ -350,6 +350,8 @@
 @section Scripts {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
+var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
+var _viewSupplier = @(ViewBag.ViewSupplier != null ? (ViewBag.ViewSupplier ? "true" : "false") : "true");
 var _paretoChart = null;
 
 document.querySelectorAll('input[name="DatePreset"]').forEach(function(el) {

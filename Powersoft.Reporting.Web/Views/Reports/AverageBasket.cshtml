@@ -912,6 +912,8 @@ else
 
 @section Scripts {
 <script>
+var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
+var _viewSupplier = @(ViewBag.ViewSupplier != null ? (ViewBag.ViewSupplier ? "true" : "false") : "true");
 // Populate items-selection hidden fields before any form submission
 function populateItemsSelectionHidden() {
     document.getElementById('itemsSelectionJsonHidden').value = typeof getItemsSelectionFilter === 'function' ? JSON.stringify(getItemsSelectionFilter()) : '';

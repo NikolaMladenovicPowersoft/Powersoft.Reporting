@@ -51,6 +51,24 @@ public class ReportsController : Controller
         catch { return new List<string>(); }
     }
 
+    /// <summary>
+    /// Injects server-side permission flags (ViewCost, ViewSupplier) into the schedule ParametersJson.
+    /// The background scheduler runs without a user session — permissions must be baked into the saved JSON.
+    /// </summary>
+    private string InjectPermissionsIntoParametersJson(string? json)
+    {
+        System.Text.Json.Nodes.JsonObject dict;
+        if (!string.IsNullOrWhiteSpace(json))
+        {
+            try { dict = System.Text.Json.Nodes.JsonNode.Parse(json) as System.Text.Json.Nodes.JsonObject ?? new(); }
+            catch { dict = new(); }
+        }
+        else { dict = new(); }
+        dict["ViewCost"]     = CanViewCost();
+        dict["ViewSupplier"] = CanViewSupplier();
+        return dict.ToJsonString();
+    }
+
     private static (string[] valid, string[] invalid) ParseAndValidateEmailList(string? input)
     {
         if (string.IsNullOrWhiteSpace(input))
@@ -150,6 +168,29 @@ public class ReportsController : Controller
         return await _centralRepository.IsActionAuthorizedAsync(roleId, actionId);
     }
 
+    /// <summary>
+    /// Returns true if the current user may see cost/profit/margin data.
+    /// Legacy action 6015 (ViewCost). Resolved at login and stored as a claim.
+    /// Ranking &lt;= 20: always true. Ranking > 20: depends on tbl_RelRoleAction.
+    /// </summary>
+    private bool CanViewCost()
+    {
+        if (GetRanking() <= ModuleConstants.RankingAllActionsAllowed) return true;
+        var claim = User.FindFirst(AppClaimTypes.ViewCost);
+        return claim == null || !bool.TryParse(claim.Value, out var v) || v;
+    }
+
+    /// <summary>
+    /// Returns true if the current user may see supplier information.
+    /// Legacy action 1200 (View Suppliers). Resolved at login and stored as a claim.
+    /// </summary>
+    private bool CanViewSupplier()
+    {
+        if (GetRanking() <= ModuleConstants.RankingAllActionsAllowed) return true;
+        var claim = User.FindFirst(AppClaimTypes.ViewSupplier);
+        return claim == null || !bool.TryParse(claim.Value, out var v) || v;
+    }
+
     public IActionResult Index()
     {
         var connectedDb = GetConnectedDatabaseName();
@@ -189,6 +230,9 @@ public class ReportsController : Controller
             DateTo = DateTime.Today,
             CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleAvgBasket)
         };
+
+        ViewBag.ViewCost     = CanViewCost();
+        ViewBag.ViewSupplier = CanViewSupplier();
         
         await ApplySavedLayoutAsync(viewModel, tenantConnString);
         await LoadAvailableStoresAsync(viewModel, tenantConnString);
@@ -503,7 +547,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -1488,6 +1532,13 @@ public class ReportsController : Controller
             return RedirectToAction("AccessDenied", "Account");
         }
 
+        // Purchases vs Sales inherently shows cost data — block if ViewCost right is denied.
+        if (!CanViewCost())
+        {
+            _logger.LogWarning("User {User} denied Purchases vs Sales — ViewCost permission denied", User.Identity?.Name);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
         var viewModel = new PurchasesSalesViewModel
         {
             ConnectedDatabase = connectedDb,
@@ -1496,6 +1547,9 @@ public class ReportsController : Controller
             DateTo = DateTime.Today,
             CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePurchasesSales)
         };
+
+        ViewBag.ViewCost     = CanViewCost();
+        ViewBag.ViewSupplier = CanViewSupplier();
 
         await ApplyPsSavedLayoutAsync(viewModel, tenantConnString);
         await LoadPsStoresAsync(viewModel, tenantConnString);
@@ -2124,7 +2178,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -2688,12 +2742,21 @@ public class ReportsController : Controller
         if (string.IsNullOrEmpty(tenantConnString))
             return RedirectToAction("Index", "Home");
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewPareto))
+        {
+            _logger.LogWarning("User {User} denied access to Pareto (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewPareto);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
         var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
         var stores = await storeRepo.GetActiveStoresAsync();
 
         ViewBag.ConnectedDatabase = connectedDb;
         ViewBag.Stores = stores;
-        ViewBag.CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePareto);
+        ViewBag.CanSchedule   = await IsActionAuthorizedAsync(ModuleConstants.ActionSchedulePareto);
+        ViewBag.ViewCost      = CanViewCost();
+        ViewBag.ViewSupplier  = CanViewSupplier();
         ViewBag.DateFrom = DateTime.Today.AddMonths(-1).ToString("yyyy-MM-dd");
         ViewBag.DateTo = DateTime.Today.ToString("yyyy-MM-dd");
         return View();
@@ -3038,7 +3101,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -3402,6 +3465,13 @@ public class ReportsController : Controller
         if (string.IsNullOrEmpty(tenantConnString))
             return RedirectToAction("Index", "Home");
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewCharts))
+        {
+            _logger.LogWarning("User {User} denied access to Charts (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewCharts);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
         var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
         var stores = await storeRepo.GetActiveStoresAsync();
 
@@ -3421,7 +3491,9 @@ public class ReportsController : Controller
 
         ViewBag.ConnectedDatabase = connectedDb;
         ViewBag.Stores = stores;
-        ViewBag.CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCharts);
+        ViewBag.CanSchedule   = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCharts);
+        ViewBag.ViewCost      = CanViewCost();
+        ViewBag.ViewSupplier  = CanViewSupplier();
         ViewBag.HasSavedLayout = hasSavedLayout;
         ViewBag.SavedLayout = savedLayout;
         return View();
@@ -3798,7 +3870,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -4224,6 +4296,9 @@ public class ReportsController : Controller
             DateTo = DateTime.Today,
             CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCatalogue)
         };
+
+        ViewBag.ViewCost     = CanViewCost();
+        ViewBag.ViewSupplier = CanViewSupplier();
 
         await LoadCatalogueStoresAsync(viewModel, tenantConnString);
         await LoadCatalogueSavedLayoutAsync(viewModel, tenantConnString);
@@ -5121,7 +5196,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -5238,11 +5313,21 @@ public class ReportsController : Controller
         if (string.IsNullOrEmpty(tenantConnString))
             return RedirectToAction("Index", "Home");
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewBelowMinStock))
+        {
+            _logger.LogWarning("User {User} denied access to BelowMinStock (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewBelowMinStock);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
         var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
         var stores = await storeRepo.GetActiveStoresAsync();
         ViewBag.StoresJson = System.Text.Json.JsonSerializer.Serialize(
             stores.Select(s => new { code = s.StoreCode, name = s.StoreName }));
         ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+        ViewBag.CanSchedule  = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleBelowMinStock);
+        ViewBag.ViewCost     = CanViewCost();
+        ViewBag.ViewSupplier = CanViewSupplier();
         return View();
     }
 
@@ -5290,6 +5375,9 @@ public class ReportsController : Controller
         if (string.IsNullOrEmpty(tenantConnString))
             return Json(new { success = false, message = "Not connected to database" });
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleBelowMinStock))
+            return Json(new { success = false, message = "Not authorized to schedule this report." });
+
         try
         {
             var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
@@ -5312,7 +5400,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -5376,6 +5464,13 @@ public class ReportsController : Controller
         if (string.IsNullOrEmpty(tenantConnString))
             return RedirectToAction("Index", "Home");
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewCancelLog))
+        {
+            _logger.LogWarning("User {User} denied access to CancelLog (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewCancelLog);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
         var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
         var stores = await storeRepo.GetActiveStoresAsync();
         ViewBag.StoresJson = System.Text.Json.JsonSerializer.Serialize(
@@ -5396,7 +5491,10 @@ public class ReportsController : Controller
         catch { /* first time — no layout */ }
 
         ViewBag.HasSavedLayout = hasSavedLayout;
-        ViewBag.SavedLayout = savedLayout;
+        ViewBag.SavedLayout    = savedLayout;
+        ViewBag.CanSchedule    = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCancelLog);
+        ViewBag.ViewCost       = CanViewCost();
+        ViewBag.ViewSupplier   = CanViewSupplier();
         return View();
     }
 
@@ -5468,6 +5566,9 @@ public class ReportsController : Controller
         if (string.IsNullOrEmpty(tenantConnString))
             return Json(new { success = false, message = "Not connected." });
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCancelLog))
+            return Json(new { success = false, message = "Not authorized to schedule this report." });
+
         if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Schedule name and recipients are required" });
 
@@ -5510,7 +5611,7 @@ public class ReportsController : Controller
                 ExportFormat = exportFormat ?? "Excel",
                 Recipients = recipients,
                 EmailSubject = emailSubject,
-                ParametersJson = parametersJson,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -6174,6 +6275,9 @@ public class ReportsController : Controller
         }
         catch { }
         ViewBag.ExtraFieldLabels = extraFieldLabels;
+        ViewBag.CanSchedule      = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleProspectClients);
+        ViewBag.ViewCost         = CanViewCost();
+        ViewBag.ViewSupplier     = CanViewSupplier();
 
         return View();
     }
@@ -6772,6 +6876,9 @@ public class ReportsController : Controller
         if (string.IsNullOrEmpty(tenantConnString))
             return Json(new { success = false, message = "Not connected." });
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleProspectClients))
+            return Json(new { success = false, message = "Not authorized to schedule this report." });
+
         if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Schedule name and recipients are required" });
 
@@ -6819,7 +6926,7 @@ public class ReportsController : Controller
                 ExportFormat   = exportFormat ?? "Excel",
                 Recipients     = recipients,
                 EmailSubject   = emailSubject,
-                ParametersJson = paramsToStore,
+                ParametersJson = InjectPermissionsIntoParametersJson(paramsToStore),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate    = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,
@@ -6906,7 +7013,10 @@ public class ReportsController : Controller
         catch { }
 
         ViewBag.HasSavedLayout = hasSavedLayout;
-        ViewBag.SavedLayout = savedLayout;
+        ViewBag.SavedLayout    = savedLayout;
+        ViewBag.CanSchedule    = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleOffersReport);
+        ViewBag.ViewCost       = CanViewCost();
+        ViewBag.ViewSupplier   = CanViewSupplier();
         return View();
     }
 
@@ -7501,6 +7611,9 @@ public class ReportsController : Controller
         if (string.IsNullOrEmpty(tenantConnString))
             return Json(new { success = false, message = "Not connected." });
 
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleOffersReport))
+            return Json(new { success = false, message = "Not authorized to schedule this report." });
+
         if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Schedule name and recipients are required" });
 
@@ -7547,7 +7660,7 @@ public class ReportsController : Controller
                 ExportFormat   = exportFormat ?? "Excel",
                 Recipients     = recipients,
                 EmailSubject   = emailSubject,
-                ParametersJson = paramsToStore,
+                ParametersJson = InjectPermissionsIntoParametersJson(paramsToStore),
                 RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
                 NextRunDate    = nextRun,
                 IncludeAiAnalysis = includeAiAnalysis,

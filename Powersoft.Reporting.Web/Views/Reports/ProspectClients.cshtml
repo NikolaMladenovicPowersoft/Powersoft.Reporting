@@ -1,4 +1,4 @@
-﻿@{
+@{
     ViewData["Title"] = "Prospect Clients";
     var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
     var canSchedule = true;
@@ -33,7 +33,7 @@
             <h2 class="mb-0">
                 <i class="bi bi-people me-2 text-primary"></i>Prospect Clients
             </h2>
-            <p class="text-muted mb-0">CRM pipeline report β€” leads, prospects, and conversion tracking</p>
+            <p class="text-muted mb-0">CRM pipeline report — leads, prospects, and conversion tracking</p>
         </div>
     </div>
 </div>
@@ -354,7 +354,7 @@
     </div>
 </div>
 
-@* Schedule Modal β€” shared partial *@
+@* Schedule Modal — shared partial *@
 @await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel {
     SaveAction      = "SaveProspectClientsSchedule",
     ListAction      = "GetProspectClientsSchedules",
@@ -364,6 +364,8 @@
 })
 
 <script>
+var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
+var _viewSupplier = @(ViewBag.ViewSupplier != null ? (ViewBag.ViewSupplier ? "true" : "false") : "true");
 var _sortCol = 'RegistrationDate';
 var _sortDir = 'DESC';
 var _lastData = [];

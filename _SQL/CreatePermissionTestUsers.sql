@@ -64,14 +64,18 @@ GO
 -- Clean previous run
 DELETE FROM tbl_RelRoleAction WHERE fk_RoleID = 9981;
 
+-- NOTE: Actions must exist in tbl_Action before this runs.
+-- Run SeedReportingModule_psCentral.sql first if any action is missing.
 INSERT INTO tbl_RelRoleAction (fk_RoleID, fk_ActionID)
-VALUES
-    (9981, 6025),   -- View Average Basket
-    (9981, 6033),   -- View Catalogue
-    (9981, 6035),   -- View Prospect Clients
-    (9981, 6037);   -- View Offers Report
+SELECT 9981, a
+FROM (VALUES (6025), (6033), (6035), (6037)) AS t(a)
+WHERE EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = t.a);  -- skip missing actions
 
-PRINT 'RTEST_NOCOST_ROLE (9981): granted 4 actions (no cost/supplier/schedules)';
+DECLARE @Granted INT = @@ROWCOUNT;
+IF @Granted < 4
+    PRINT 'WARNING: Only ' + CAST(@Granted AS VARCHAR) + '/4 actions granted. Run SeedReportingModule_psCentral.sql first!';
+ELSE
+    PRINT 'RTEST_NOCOST_ROLE (9981): granted 4 actions (no cost/supplier/schedules)';
 GO
 
 -- =====================================================

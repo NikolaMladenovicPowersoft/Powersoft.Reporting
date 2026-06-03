@@ -191,6 +191,33 @@ public class ReportsController : Controller
         return claim == null || !bool.TryParse(claim.Value, out var v) || v;
     }
 
+    /// <summary>
+    /// Removes cost/profit/margin and supplier column tokens from a Catalogue
+    /// DisplayColumns CSV string when the current user lacks the matching right.
+    /// Used for print preview, which renders columns purely from the display-column
+    /// selection (no JS-based hiding applies to printable output).
+    /// </summary>
+    private string StripRestrictedCatalogueColumns(string? displayColumns)
+    {
+        if (string.IsNullOrWhiteSpace(displayColumns)) return displayColumns ?? string.Empty;
+
+        var tokens = displayColumns.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!CanViewCost())
+        {
+            blocked.Add("Profit");
+            blocked.Add("Markup");
+            blocked.Add("Margin");
+            blocked.Add("Cost");
+            blocked.Add("TotalCost");
+        }
+        if (!CanViewSupplier())
+            blocked.Add("ItemSupplier");
+
+        if (blocked.Count == 0) return displayColumns;
+        return string.Join(",", tokens.Where(t => !blocked.Contains(t)));
+    }
+
     public async Task<IActionResult> Index()
     {
         var connectedDb = GetConnectedDatabaseName();
@@ -4867,7 +4894,7 @@ public class ReportsController : Controller
         var result = await RunCatalogueExportQuery(filter);
         if (result == null) return RedirectToAction("Catalogue");
 
-        var bytes = new ExcelExportService().GenerateCatalogueExcel(result.Value.rows, result.Value.totals, result.Value.filter);
+        var bytes = new ExcelExportService().GenerateCatalogueExcel(result.Value.rows, result.Value.totals, result.Value.filter, CanViewCost(), CanViewSupplier());
         return File(bytes,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
@@ -4901,7 +4928,7 @@ public class ReportsController : Controller
         var result = await RunCatalogueExportQuery(filter);
         if (result == null) return RedirectToAction("Catalogue");
 
-        var bytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+        var bytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter, CanViewCost(), CanViewSupplier());
         return File(bytes, "text/csv", $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
     }
 
@@ -4964,6 +4991,10 @@ public class ReportsController : Controller
         if (!string.IsNullOrWhiteSpace(displayColumns))
             model.DisplayColumnsString = displayColumns;
 
+        // Permission enforcement: strip cost/profit/margin + supplier columns server-side
+        // so they never render in the printable output (JS hiding does not apply to print).
+        model.DisplayColumnsString = StripRestrictedCatalogueColumns(model.DisplayColumnsString);
+
         return View(model);
     }
 
@@ -5023,14 +5054,14 @@ public class ReportsController : Controller
         switch (format)
         {
             case "csv":
-                fileBytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileBytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter, CanViewCost(), CanViewSupplier());
                 fileName = $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
                 contentType = "text/csv";
                 break;
             // TODO: implement PdfExportService.GenerateCataloguePdf — fall back to Excel for now
             case "pdf":
             default:
-                fileBytes = new ExcelExportService().GenerateCatalogueExcel(result.Value.rows, result.Value.totals, result.Value.filter);
+                fileBytes = new ExcelExportService().GenerateCatalogueExcel(result.Value.rows, result.Value.totals, result.Value.filter, CanViewCost(), CanViewSupplier());
                 fileName = $"Catalogue_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 break;
@@ -5314,7 +5345,7 @@ public class ReportsController : Controller
 
         try
         {
-            var csvBytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter);
+            var csvBytes = new CsvExportService().GenerateCatalogueCsv(result.Value.rows, result.Value.totals, result.Value.filter, CanViewCost(), CanViewSupplier());
             var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
 
             string? customPrompt = null;

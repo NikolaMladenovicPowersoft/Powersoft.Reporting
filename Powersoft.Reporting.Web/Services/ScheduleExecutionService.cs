@@ -431,6 +431,7 @@ public class ScheduleExecutionService
         var filter = new BelowMinStockFilter
         {
             StoreCodes = parameters.StoreCodes,
+            ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
             SortColumn = parameters.SortColumn ?? "ItemCode",
             SortDirection = parameters.SortDirection ?? "ASC"
         };

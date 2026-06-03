@@ -13,11 +13,32 @@ public class ParetoRepository : IParetoRepository
         _connectionString = connectionString;
     }
 
+    // The Items Selection filter is applied inside the Enriched CTE, whose aliases are
+    // it (tbl_Item), dt (RawTrans), its (primary supplier), cs (tbl_Customer).
+    // The default ColumnMap (t2/t1) does NOT exist here, so dimension filtering would
+    // emit invalid columns — this map binds each dimension to the correct Enriched alias.
+    private static readonly DimensionFilterBuilder.ColumnMap ParetoDimCols =
+        DimensionFilterBuilder.Default with
+        {
+            Category = "it.fk_CategoryID",
+            Department = "it.fk_DepartmentID",
+            Brand = "it.fk_BrandID",
+            Season = "it.fk_SeasonID",
+            Item = "it.pk_ItemID",
+            Store = "dt.fk_StoreCode",
+            Supplier = "its.fk_SupplierNo",
+            Customer = "dt.fk_CustomerCode",
+            Model = "it.fk_ModelID",
+            Colour = "it.fk_ColourID",
+            Size = "it.fk_SizeID",
+            ItemTableAlias = "it"
+        };
+
     public async Task<ParetoResult> GetParetoDataAsync(ParetoFilter filter)
     {
         var (codeExpr, nameExpr, outerJoinSql, outerGroupBy) = GetDimensionSql(filter.Dimension);
         var storeWhere = BuildStoreWhere(filter.StoreCodes);
-        var (dimWhere, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection);
+        var (dimWhere, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection, ParetoDimCols);
         var customerWhere = BuildCustomerWhere(filter);
         var profitExpr = BuildProfitExpression(filter);
         var excludeWhere = BuildExcludeNegativeWhere(filter);

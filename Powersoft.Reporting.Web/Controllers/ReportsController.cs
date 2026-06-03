@@ -3429,12 +3429,13 @@ public class ReportsController : Controller
         return await repo.GetSalesBreakdownAsync(filter);
     }
 
-    private static ChartFilter BuildChartFilter(
+    private ChartFilter BuildChartFilter(
         DateTime dateFrom, DateTime dateTo,
         ChartDimension dimension, ChartMetric metric,
         int topN, bool showOthers, bool compareLastYear, bool includeVat,
         string? storeCodes, string chartType,
-        ChartMode mode = ChartMode.Sales)
+        ChartMode mode = ChartMode.Sales,
+        string? itemsSelection = null)
     {
         return new ChartFilter
         {
@@ -3449,7 +3450,8 @@ public class ReportsController : Controller
             IncludeVat = includeVat,
             StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
                 : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
-            ChartType = chartType
+            ChartType = chartType,
+            ItemsSelection = ParseItemsSelection(itemsSelection)
         };
     }
 
@@ -3461,11 +3463,11 @@ public class ReportsController : Controller
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
         string? storeCodes = null, string chartType = "pie",
-        ChartMode mode = ChartMode.Sales)
+        ChartMode mode = ChartMode.Sales, string? itemsSelection = null)
     {
         try
         {
-            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode, itemsSelection);
             var data = await RunChartQuery(filter);
             if (data == null) return RedirectToAction("Charts");
 
@@ -3490,11 +3492,11 @@ public class ReportsController : Controller
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
         string? storeCodes = null, string chartType = "pie",
-        ChartMode mode = ChartMode.Sales)
+        ChartMode mode = ChartMode.Sales, string? itemsSelection = null)
     {
         try
         {
-            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode, itemsSelection);
             var data = await RunChartQuery(filter);
             if (data == null) return RedirectToAction("Charts");
 
@@ -3640,11 +3642,11 @@ public class ReportsController : Controller
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
         string? storeCodes = null, string chartType = "pie",
-        ChartMode mode = ChartMode.Sales)
+        ChartMode mode = ChartMode.Sales, string? itemsSelection = null)
     {
         try
         {
-            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode, itemsSelection);
             var data = await RunChartQuery(filter);
             if (data == null) return RedirectToAction("Charts");
 
@@ -3671,11 +3673,11 @@ public class ReportsController : Controller
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
         string? storeCodes = null, string chartType = "pie",
-        ChartMode mode = ChartMode.Sales)
+        ChartMode mode = ChartMode.Sales, string? itemsSelection = null)
     {
         try
         {
-            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
+            var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode, itemsSelection);
             var data = await RunChartQuery(filter);
             if (data == null) return RedirectToAction("Charts");
 
@@ -3835,7 +3837,7 @@ public class ReportsController : Controller
         int topN = 10, bool showOthers = true,
         bool compareLastYear = false, bool includeVat = false,
         string? storeCodes = null, string chartType = "pie",
-        ChartMode mode = ChartMode.Sales)
+        ChartMode mode = ChartMode.Sales, string? itemsSelection = null)
     {
         if (string.IsNullOrWhiteSpace(recipients))
             return Json(new { success = false, message = "Please enter at least one email address." });
@@ -3852,7 +3854,7 @@ public class ReportsController : Controller
         if (bccList.invalid.Length > 0)
             return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
 
-        var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode);
+        var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode, itemsSelection);
         var data = await RunChartQuery(filter);
         if (data == null || data.Count == 0)
             return Json(new { success = false, message = "Failed to generate chart data." });

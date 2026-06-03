@@ -829,6 +829,8 @@ function exportChart(format) {
         storeCodes: getSelectedStoreCodes(),
         chartType: document.getElementById('chartType').value
     });
+    var isJson = getItemsSelectionJson();
+    if (isJson) params.append('itemsSelection', isJson);
 
     var action = format === 'excel' ? 'ExportChartExcel' : format === 'pdf' ? 'ExportChartPdf' : 'ExportChartCsv';
     window.location.href = '/Reports/' + action + '?' + params.toString();
@@ -1720,6 +1722,8 @@ function sendReportEmail() {
     fd.append('includeVat', document.getElementById('includeVat').checked);
     fd.append('storeCodes', getSelectedStoreCodes());
     fd.append('chartType', document.getElementById('chartType').value);
+    var emailIsJson = getItemsSelectionJson();
+    if (emailIsJson) fd.append('itemsSelection', emailIsJson);
 
     fetch('@Url.Action("SendChartEmail", "Reports")', { method: 'POST', body: fd })
         .then(function(r) { return r.json(); })

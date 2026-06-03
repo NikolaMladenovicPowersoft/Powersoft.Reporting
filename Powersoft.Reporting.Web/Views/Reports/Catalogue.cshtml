@@ -1683,6 +1683,15 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
     });
 
     document.getElementById('reportForm').addEventListener('submit', function () {
+        // Sync the live Items Selection widget into the posted hidden field so Generate
+        // (and the sort/page reposts that submit this form) apply the same filter the user sees.
+        try {
+            if (typeof getItemsSelectionFilter === 'function') {
+                var f = getItemsSelectionFilter();
+                document.getElementById('itemsSelectionJsonHidden').value =
+                    Object.keys(f).length > 0 ? JSON.stringify(f) : '';
+            }
+        } catch (e) {}
         const btn = document.getElementById('generateBtn');
         btn.querySelector('.btn-text').classList.add('d-none');
         btn.querySelector('.spinner-border').classList.remove('d-none');
@@ -2027,8 +2036,13 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         if (parms.ItemsSelectionJson != null) {
             var isj = document.getElementById('itemsSelectionJsonHidden');
             if (isj) isj.value = parms.ItemsSelectionJson;
-            // Trigger items-selection partial to re-hydrate from the new JSON, if available.
-            if (typeof reloadItemsSelectionFromHidden === 'function') reloadItemsSelectionFromHidden();
+            // Re-hydrate the live Items Selection widget from the restored JSON.
+            if (typeof reloadItemsSelectionFromJson === 'function') {
+                try {
+                    var obj = parms.ItemsSelectionJson ? JSON.parse(parms.ItemsSelectionJson) : {};
+                    reloadItemsSelectionFromJson(obj);
+                } catch (e) {}
+            }
         }
         // Bidirectional sync: ShowProfit/ShowStock <-> column visibility (existing handlers handle this).
         if (typeof onShowProfitToggle === 'function') onShowProfitToggle();
@@ -2162,7 +2176,15 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
             showProfit: chk('ShowProfit'),
             showStock: chk('ShowStock'),
             storeCodes: v('selectedStoreCodesHidden'),
-            itemsSelection: v('itemsSelectionJsonHidden'),
+            itemsSelection: (function () {
+                // Read the LIVE widget so exports match the current screen selection even when
+                // the user hasn't re-clicked Generate (the hidden field only syncs on form submit).
+                if (typeof getItemsSelectionFilter === 'function') {
+                    var f = getItemsSelectionFilter();
+                    return Object.keys(f).length > 0 ? JSON.stringify(f) : '';
+                }
+                return v('itemsSelectionJsonHidden');
+            })(),
             sortColumn: v('sortColumnHidden') || 'ItemCode',
             sortDirection: v('sortDirectionHidden') || 'ASC'
         };

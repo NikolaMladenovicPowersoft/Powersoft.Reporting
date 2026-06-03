@@ -14,6 +14,17 @@ public class ChartRepository : IChartRepository
         _connectionString = connectionString;
     }
 
+    // Item dims live on t2 (tbl_Item); Supplier needs the primary-supplier relation join (ris_chart),
+    // added to each leg only when a supplier filter is active (mirrors Average Basket / Purchases vs Sales).
+    private static readonly DimensionFilterBuilder.ColumnMap ChartDimCols =
+        DimensionFilterBuilder.Default with { Supplier = "ris_chart.fk_SupplierNo" };
+
+    private const string SupplierJoinSql =
+        "LEFT JOIN tbl_RelItemSuppliers ris_chart ON t2.pk_ItemID = ris_chart.fk_ItemID AND ISNULL(ris_chart.PrimarySupplier,0) = 1";
+
+    private static string SupplierJoinIfNeeded(ChartFilter filter) =>
+        filter.ItemsSelection?.Suppliers is { HasFilter: true } ? SupplierJoinSql : "";
+
     public async Task<List<ChartDataPoint>> GetSalesBreakdownAsync(ChartFilter filter)
     {
         if (filter.Mode == ChartMode.SalesVsReturns
@@ -32,14 +43,15 @@ public class ChartRepository : IChartRepository
         var (dimSelect, dimJoin, dimGroup) = GetDimensionSql(filter.Dimension, isPurchase);
         var rawValueExpr = GetRawValueExpression(filter);
         var storeWhere = BuildStoreWhere(filter.StoreCodes);
-        var (dimWhere, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection);
+        var (dimWhere, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection, ChartDimCols);
+        var supplierJoin = SupplierJoinIfNeeded(filter);
 
         var sb = new StringBuilder();
         sb.AppendLine("SELECT TOP(@TopN) Label, SUM(Val) AS Val");
         sb.AppendLine("FROM (");
-        AppendTransactionLeg(sb, filter, isPurchase ? "PI" : "SI", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere);
+        AppendTransactionLeg(sb, filter, isPurchase ? "PI" : "SI", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere, supplierJoin: supplierJoin);
         sb.AppendLine("  UNION ALL");
-        AppendReturnLeg(sb, filter, isPurchase ? "PR" : "SR", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere);
+        AppendReturnLeg(sb, filter, isPurchase ? "PR" : "SR", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere, supplierJoin: supplierJoin);
         sb.AppendLine(") sub");
         sb.AppendLine("GROUP BY Label");
         sb.AppendLine("ORDER BY Val DESC");
@@ -52,9 +64,9 @@ public class ChartRepository : IChartRepository
             var tsb = new StringBuilder();
             tsb.AppendLine("SELECT SUM(Val) AS Val");
             tsb.AppendLine("FROM (");
-            AppendTransactionLeg(tsb, filter, isPurchase ? "PI" : "SI", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere);
+            AppendTransactionLeg(tsb, filter, isPurchase ? "PI" : "SI", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere, supplierJoin: supplierJoin);
             tsb.AppendLine("  UNION ALL");
-            AppendReturnLeg(tsb, filter, isPurchase ? "PR" : "SR", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere);
+            AppendReturnLeg(tsb, filter, isPurchase ? "PR" : "SR", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere, supplierJoin: supplierJoin);
             tsb.AppendLine(") sub");
             totalSql = tsb.ToString();
         }
@@ -65,9 +77,9 @@ public class ChartRepository : IChartRepository
             var csb = new StringBuilder();
             csb.AppendLine("SELECT TOP(@TopN) Label, SUM(Val) AS Val");
             csb.AppendLine("FROM (");
-            AppendTransactionLeg(csb, filter, isPurchase ? "PI" : "SI", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere, useLyDates: true);
+            AppendTransactionLeg(csb, filter, isPurchase ? "PI" : "SI", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere, useLyDates: true, supplierJoin: supplierJoin);
             csb.AppendLine("  UNION ALL");
-            AppendReturnLeg(csb, filter, isPurchase ? "PR" : "SR", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere, useLyDates: true);
+            AppendReturnLeg(csb, filter, isPurchase ? "PR" : "SR", dimSelect, rawValueExpr, dimJoin, storeWhere, dimWhere, useLyDates: true, supplierJoin: supplierJoin);
             csb.AppendLine(") sub");
             csb.AppendLine("GROUP BY Label");
             csb.AppendLine("ORDER BY Val DESC");
@@ -106,12 +118,13 @@ public class ChartRepository : IChartRepository
         var (_, dimJoin2, _) = GetDimensionSql(filter.Dimension, isPurchase2);
         var rawValueExpr = GetRawValueExpression(filter);
         var storeWhere = BuildStoreWhere(filter.StoreCodes);
-        var (dimWhere, _) = DimensionFilterBuilder.Build(filter.ItemsSelection);
+        var (dimWhere, _) = DimensionFilterBuilder.Build(filter.ItemsSelection, ChartDimCols);
+        var supplierJoin = SupplierJoinIfNeeded(filter);
 
         var sql1 = new StringBuilder();
         sql1.AppendLine("SELECT TOP(@TopN) Label, SUM(Val) AS Val");
         sql1.AppendLine("FROM (");
-        AppendRawLeg(sql1, filter, legType1, dimSelect, rawValueExpr, dimJoin1, storeWhere, dimWhere);
+        AppendRawLeg(sql1, filter, legType1, dimSelect, rawValueExpr, dimJoin1, storeWhere, dimWhere, supplierJoin: supplierJoin);
         sql1.AppendLine(") sub");
         sql1.AppendLine("GROUP BY Label");
         sql1.AppendLine("ORDER BY Val DESC");
@@ -119,7 +132,7 @@ public class ChartRepository : IChartRepository
         var sql2 = new StringBuilder();
         sql2.AppendLine("SELECT TOP(@TopN) Label, SUM(Val) AS Val");
         sql2.AppendLine("FROM (");
-        AppendRawLeg(sql2, filter, legType2, dimSelect, rawValueExpr, dimJoin2, storeWhere, dimWhere);
+        AppendRawLeg(sql2, filter, legType2, dimSelect, rawValueExpr, dimJoin2, storeWhere, dimWhere, supplierJoin: supplierJoin);
         sql2.AppendLine(") sub");
         sql2.AppendLine("GROUP BY Label");
         sql2.AppendLine("ORDER BY Val DESC");
@@ -221,22 +234,22 @@ public class ChartRepository : IChartRepository
 
     private void AppendTransactionLeg(StringBuilder sb, ChartFilter filter, string legType,
         string dimSelect, string valueExpr, string dimJoin, string storeWhere, string dimWhere,
-        bool useLyDates = false)
+        bool useLyDates = false, string supplierJoin = "")
     {
-        AppendRawLeg(sb, filter, legType, dimSelect, valueExpr, dimJoin, storeWhere, dimWhere, useLyDates);
+        AppendRawLeg(sb, filter, legType, dimSelect, valueExpr, dimJoin, storeWhere, dimWhere, useLyDates, supplierJoin);
     }
 
     private void AppendReturnLeg(StringBuilder sb, ChartFilter filter, string legType,
         string dimSelect, string valueExpr, string dimJoin, string storeWhere, string dimWhere,
-        bool useLyDates = false)
+        bool useLyDates = false, string supplierJoin = "")
     {
         var negValueExpr = $"(-1) * ({valueExpr})";
-        AppendRawLeg(sb, filter, legType, dimSelect, negValueExpr, dimJoin, storeWhere, dimWhere, useLyDates);
+        AppendRawLeg(sb, filter, legType, dimSelect, negValueExpr, dimJoin, storeWhere, dimWhere, useLyDates, supplierJoin);
     }
 
     private static void AppendRawLeg(StringBuilder sb, ChartFilter filter, string legType,
         string dimSelect, string valueExpr, string dimJoin, string storeWhere, string dimWhere,
-        bool useLyDates = false)
+        bool useLyDates = false, string supplierJoin = "")
     {
         var (detailTable, headerTable, detailFk, headerPk, entityTable, entityPk, entityFk) = legType switch
         {
@@ -258,6 +271,11 @@ public class ChartRepository : IChartRepository
         sb.AppendLine($"    FROM {detailTable} d");
         sb.AppendLine($"    INNER JOIN tbl_Item t2 ON d.fk_ItemID = t2.pk_ItemID");
         sb.AppendLine($"    INNER JOIN {headerTable} h ON {detailFk} = {headerPk}");
+
+        if (!string.IsNullOrEmpty(supplierJoin))
+        {
+            sb.AppendLine($"    {supplierJoin}");
+        }
 
         if (!string.IsNullOrEmpty(dimJoin))
         {
@@ -499,7 +517,7 @@ public class ChartRepository : IChartRepository
             for (int i = 0; i < filter.StoreCodes.Count; i++)
                 cmd.Parameters.AddWithValue($"@SC{i}", filter.StoreCodes[i]);
 
-        var (_, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection);
+        var (_, dimParams) = DimensionFilterBuilder.Build(filter.ItemsSelection, ChartDimCols);
         foreach (var p in dimParams)
         {
             if (!cmd.Parameters.Contains(p.ParameterName))

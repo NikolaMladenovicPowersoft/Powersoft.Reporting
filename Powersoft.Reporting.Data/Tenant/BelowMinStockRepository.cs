@@ -21,6 +21,7 @@ public class BelowMinStockRepository : IBelowMinStockRepository
         Season: "t2.fk_SeasonID",
         Item: "t2.pk_ItemID",
         Store: "ris.fk_StoreCode",
+        Supplier: "ris_sup.fk_SupplierNo",
         ItemTableAlias: "t2");
 
     public async Task<List<BelowMinStockRow>> GetBelowMinStockAsync(BelowMinStockFilter filter)
@@ -51,7 +52,16 @@ public class BelowMinStockRepository : IBelowMinStockRepository
             LEFT JOIN tbl_Store st ON ris.fk_StoreCode = st.pk_StoreCode
             LEFT JOIN tbl_ItemCategory cat ON t2.fk_CategoryID = cat.pk_CategoryID
             LEFT JOIN tbl_ItemDepartment dep ON t2.fk_DepartmentID = dep.pk_DepartmentID
-            LEFT JOIN tbl_Brands br ON t2.fk_BrandID = br.pk_BrandID
+            LEFT JOIN tbl_Brands br ON t2.fk_BrandID = br.pk_BrandID");
+
+        // Primary-supplier join only when a supplier filter is active (one row per item -> no fan-out).
+        if (filter.ItemsSelection?.Suppliers is { HasFilter: true })
+        {
+            sb.Append(@"
+            LEFT JOIN tbl_RelItemSuppliers ris_sup ON t2.pk_ItemID = ris_sup.fk_ItemID AND ISNULL(ris_sup.PrimarySupplier, 0) = 1");
+        }
+
+        sb.Append(@"
             WHERE ISNULL(ris.MinimumStock, 0) > 0
               AND ISNULL(ris.Stock, 0) < ISNULL(ris.MinimumStock, 0)");
 

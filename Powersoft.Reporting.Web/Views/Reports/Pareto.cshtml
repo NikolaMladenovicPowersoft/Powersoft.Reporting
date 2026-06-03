@@ -1664,6 +1664,9 @@ function loadSavedLayout() {
             }
             if (p.PriceInterval) document.getElementById('priceInterval').value = p.PriceInterval;
             if (p.PriceOnIndex) document.getElementById('priceOnIndex').value = p.PriceOnIndex;
+            if (p.ItemsSelectionJson && typeof reloadItemsSelectionFromJson === 'function') {
+                try { reloadItemsSelectionFromJson(JSON.parse(p.ItemsSelectionJson)); } catch (e) {}
+            }
             onDimensionChanged();
             onMetricChanged();
         })

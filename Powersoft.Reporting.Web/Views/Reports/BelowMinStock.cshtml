@@ -304,6 +304,13 @@ function saveSchedule() {
 
     var params = {
         storeCodes: typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : '',
+        itemsSelectionJson: (function () {
+            if (typeof getItemsSelectionFilter === 'function') {
+                var f = getItemsSelectionFilter();
+                return Object.keys(f).length > 0 ? JSON.stringify(f) : '';
+            }
+            return '';
+        })(),
         sortColumn: _sortCol,
         sortDirection: _sortDir,
         reportType: 'BelowMinStock'

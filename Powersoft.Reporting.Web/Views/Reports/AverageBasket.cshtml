@@ -346,7 +346,7 @@
                 <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
                     <i class="bi bi-envelope me-1"></i>Send to Email
                 </button>
-                <button class="btn btn-sm btn-outline-info" onclick="analyzeReport()" title="AI-powered report analysis" id="btnAnalyze">
+                <button class="btn btn-sm btn-outline-info" onclick="openAiAnalysis()" title="AI-powered report analysis" id="btnAnalyze">
                     <i class="bi bi-stars me-1"></i>AI Analyze
                 </button>
             </div>
@@ -908,6 +908,11 @@ else
     ReportBadge     = "Average Basket",
     NamePlaceholder = "e.g. Weekly Average Basket",
     SubjectPlaceholder = "Average Basket Report - {date}"
+})
+
+@await Html.PartialAsync("_AiAnalyze", new Powersoft.Reporting.Web.ViewModels.AiAnalyzePartialModel {
+    AnalyzeActionUrl = Url.Action("AnalyzeAbReport", "Reports"),
+    ReportType = "AverageBasket"
 })
 
 @section Scripts {
@@ -1910,36 +1915,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Check AI status on load
-    fetch('@Url.Action("GetAiStatus", "Reports")')
-        .then(r => r.json())
-        .then(d => {
-            if (!d.configured) {
-                var btn = document.getElementById('btnAnalyze');
-                if (btn) { btn.title = 'AI not configured \u2014 set API key in Settings'; btn.classList.add('disabled'); btn.disabled = true; }
-                var schedAi = document.getElementById('schedIncludeAi');
-                if (schedAi) { schedAi.disabled = true; schedAi.parentElement.title = 'AI not configured — set API key in Settings'; }
-            }
-        })
-        .catch(() => {});
 });
 
-// ==================== AI Analysis ====================
+// ==================== AI Analysis (via shared partial) ====================
 
-function saveAiLang(v) { localStorage.setItem('ps_ai_lang', v); }
-function getAiLang() { return localStorage.getItem('ps_ai_lang') || 'el'; }
-(function() { var s = document.getElementById('aiLangSelect'); if (s) s.value = getAiLang(); })();
-
-function analyzeReport() {
-    var modalEl = document.getElementById('aiAnalysisModal');
-    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    document.getElementById('aiLoading').classList.remove('d-none');
-    document.getElementById('aiError').classList.add('d-none');
-    document.getElementById('aiResults').classList.add('d-none');
-    document.getElementById('aiPromptEditor').classList.add('d-none');
-    document.getElementById('btnReanalyze').style.display = 'none';
-    modal.show();
-
+function collectAiFormData() {
     var form = document.getElementById('reportForm');
     document.querySelectorAll('#reportForm select[disabled], #reportForm input[disabled]').forEach(function(el) { el.disabled = false; });
     if (typeof populateItemsSelectionHidden === 'function') populateItemsSelectionHidden();
@@ -1949,342 +1929,9 @@ function analyzeReport() {
     formData.append('itemIds', typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : (document.getElementById('selectedItemIdsHidden').value || ''));
     formData.append('sortColumn', document.getElementById('sortColumnHidden').value || 'Period');
     formData.append('sortDirection', document.getElementById('sortDirectionHidden').value || 'ASC');
-    formData.append('locale', getAiLang());
-    var promptTplId = document.getElementById('aiPromptTemplateSelect').value;
-    if (promptTplId && promptTplId !== '0') formData.append('promptTemplateId', promptTplId);
-
-    fetch('@Url.Action("AnalyzeAbReport", "Reports")', { method: 'POST', body: formData })
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('aiLoading').classList.add('d-none');
-            if (!data.success) {
-                document.getElementById('aiError').classList.remove('d-none');
-                document.getElementById('aiErrorMsg').textContent = data.message;
-                document.getElementById('btnReanalyze').style.display = 'inline-block';
-                return;
-            }
-            var a = data.analysis;
-            renderAiAnalysis(a);
-            initAiConversation(a, data.csvPreview);
-
-            document.getElementById('aiResults').classList.remove('d-none');
-            document.getElementById('btnReanalyze').style.display = 'inline-block';
-        })
-        .catch(err => {
-            document.getElementById('aiLoading').classList.add('d-none');
-            document.getElementById('aiError').classList.remove('d-none');
-            document.getElementById('aiErrorMsg').textContent = 'Network error: ' + err.message;
-            document.getElementById('btnReanalyze').style.display = 'inline-block';
-        });
-}
-
-function renderAiAnalysis(a) {
-    var score = parseInt(a.healthScore) || 0;
-    var scoreColor = score >= 80 ? '#16a34a' : score >= 60 ? '#ca8a04' : score >= 40 ? '#ea580c' : '#dc2626';
-    var badge = document.getElementById('aiHealthBadge');
-    badge.style.background = scoreColor; badge.style.color = 'white'; badge.textContent = score;
-    document.getElementById('aiHealthLabel').textContent = a.healthLabel || '';
-    document.getElementById('aiTrendDesc').textContent = a.trendDescription || '';
-    var trendBadge = document.getElementById('aiTrendBadge');
-    var dir = (a.trendDirection || 'stable').toLowerCase();
-    var trendIcon = dir === 'up' ? 'bi-arrow-up-right' : dir === 'down' ? 'bi-arrow-down-right' : dir === 'mixed' ? 'bi-arrow-left-right' : 'bi-dash';
-    trendBadge.className = 'badge fs-6 px-3 py-2 ' + (dir === 'up' ? 'bg-success' : dir === 'down' ? 'bg-danger' : 'bg-secondary');
-    trendBadge.innerHTML = '<i class="bi ' + trendIcon + ' me-1"></i>' + dir.charAt(0).toUpperCase() + dir.slice(1);
-    document.getElementById('aiExecSummary').innerHTML = '<i class="bi bi-stars me-2 text-primary"></i>' + (a.executiveSummary || a.summary || '');
-    var kpisHtml = '';
-    (a.kpis || []).forEach(function(k) {
-        var ti = k.trend === 'up' ? '<i class="bi bi-caret-up-fill text-success"></i>' : k.trend === 'down' ? '<i class="bi bi-caret-down-fill text-danger"></i>' : '<i class="bi bi-dash text-muted"></i>';
-        kpisHtml += '<div class="col-6 col-md-3 col-lg-2"><div class="border rounded p-2 text-center h-100" style="background:#f8fafc;"><div class="text-muted small text-truncate">' + k.label + '</div><div class="fw-bold" style="font-size:1rem;">' + k.value + '</div><div>' + ti + '</div></div></div>';
-    });
-    document.getElementById('aiKpis').innerHTML = kpisHtml;
-    function renderFindings(items, cId, numbered) {
-        var html = '';
-        (items || []).forEach(function(f, i) {
-            var txt = typeof f === 'string' ? f : f.text;
-            var sev = typeof f === 'string' ? 'info' : (f.severity || 'info');
-            if (numbered) {
-                html += '<div class="d-flex align-items-start gap-2 mb-2"><span class="badge bg-success rounded-circle" style="width:20px;height:20px;font-size:0.65rem;padding:3px;">' + (i+1) + '</span><span class="small">' + txt + '</span></div>';
-            } else {
-                var sc = sev === 'high' ? 'border-danger' : sev === 'medium' ? 'border-warning' : 'border-info';
-                var sd = sev === 'high' ? 'text-danger' : sev === 'medium' ? 'text-warning' : 'text-info';
-                html += '<div class="d-flex align-items-start gap-2 mb-2 border-start border-3 ps-2 ' + sc + '"><i class="bi bi-circle-fill ' + sd + '" style="font-size:0.4rem;margin-top:7px;"></i><span class="small">' + txt + '</span></div>';
-            }
-        });
-        document.getElementById(cId).innerHTML = html || '<span class="text-muted small">—</span>';
-    }
-    renderFindings(a.keyFindings, 'aiKeyFindings', false);
-    renderFindings(a.recommendations, 'aiRecs', true);
-    function renderPerf(list, cId, secId) {
-        var html = '';
-        (list || []).forEach(function(p) {
-            html += '<div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom"><div><div class="fw-semibold small">' + p.name + '</div><div class="text-muted" style="font-size:0.75rem;">' + (p.detail || '') + '</div></div><div class="fw-bold small text-nowrap ms-2">' + (p.value || '') + '</div></div>';
-        });
-        document.getElementById(cId).innerHTML = html || '<span class="text-muted small">—</span>';
-        document.getElementById(secId).style.display = (list && list.length > 0) ? '' : 'none';
-    }
-    renderPerf(a.topPerformers, 'aiTopPerformers', 'aiTopSection');
-    renderPerf(a.bottomPerformers, 'aiBottomPerformers', 'aiBottomSection');
-    var alertsHtml = '';
-    (a.alerts || []).forEach(function(al) {
-        var txt = typeof al === 'string' ? al : al.text;
-        var sev = typeof al === 'string' ? 'warning' : (al.severity || 'warning');
-        var cls = sev === 'critical' ? 'alert-danger' : sev === 'warning' ? 'alert-warning' : 'alert-info';
-        var ic = sev === 'critical' ? 'bi-exclamation-octagon-fill' : sev === 'warning' ? 'bi-exclamation-triangle-fill' : 'bi-info-circle-fill';
-        alertsHtml += '<div class="alert ' + cls + ' py-2 mb-2 small"><i class="bi ' + ic + ' me-2"></i>' + txt + '</div>';
-    });
-    document.getElementById('aiAlertsSection').innerHTML = alertsHtml;
-    document.getElementById('aiModel').textContent = a.modelUsed || '';
-    document.getElementById('aiTokens').textContent = estimateAiCost(a.inputTokens || 0, a.outputTokens || 0);
-    document.getElementById('aiTime').textContent = ((a.durationMs || 0) / 1000).toFixed(1) + 's';
-    document.getElementById('aiChatMessages').innerHTML = '';
-    document.getElementById('aiChatInput').value = '';
-    document.getElementById('aiChatTokenInfo').style.display = 'none';
-    _aiTotalChatTokens = { input: 0, output: 0 };
-}
-
-var _aiConversation = [];
-var _aiTotalChatTokens = { input: 0, output: 0 };
-
-function estimateAiCost(inputTok, outputTok) {
-    var cost = (inputTok * 2.5 + outputTok * 10) / 1e6;
-    return cost < 0.005 ? '< $0.01' : '$' + cost.toFixed(2);
-}
-
-function initAiConversation(analysisJson, csvData) {
-    _aiConversation = [
-        { role: 'system', content: 'You are a senior financial data analyst. The user has already received an AI analysis of their report. The raw CSV data is included below so you can reference specific numbers when answering follow-up questions. Be concise, specific, and cite actual values from the data. Respond in the same language as the analysis.' }
-    ];
-    if (csvData) _aiConversation.push({ role: 'user', content: 'Here is the raw report data for reference:\n' + csvData });
-    _aiConversation.push({ role: 'assistant', content: JSON.stringify(analysisJson) });
-}
-
-function sendAiChat() {
-    var input = document.getElementById('aiChatInput');
-    var msg = input.value.trim();
-    if (!msg) return;
-    input.value = '';
-
-    appendChatBubble('user', msg);
-
-    var btn = document.getElementById('btnSendChat');
-    btn.disabled = true;
-    input.disabled = true;
-
-    var thinkingId = 'thinking_' + Date.now();
-    appendChatBubble('thinking', 'Thinking...', thinkingId);
-
-    fetch('@Url.Action("AiChatFollowup", "Reports")', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            history: _aiConversation,
-            message: msg
-        })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        removeChatBubble(thinkingId);
-        btn.disabled = false;
-        input.disabled = false;
-        input.focus();
-
-        if (!data.success) {
-            appendChatBubble('error', data.message || 'Failed to get response.');
-            return;
-        }
-
-        _aiConversation.push({ role: 'user', content: msg });
-        _aiConversation.push({ role: 'assistant', content: data.content });
-
-        appendChatBubble('assistant', data.content);
-
-        _aiTotalChatTokens.input += (data.inputTokens || 0);
-        _aiTotalChatTokens.output += (data.outputTokens || 0);
-        var info = document.getElementById('aiChatTokenInfo');
-        info.style.display = '';
-        info.innerHTML = '<i class="bi bi-currency-dollar me-1"></i>Chat: ' + estimateAiCost(_aiTotalChatTokens.input, _aiTotalChatTokens.output) +
-            ' | <i class="bi bi-clock me-1"></i>' + ((data.durationMs || 0) / 1000).toFixed(1) + 's';
-    })
-    .catch(function(err) {
-        removeChatBubble(thinkingId);
-        btn.disabled = false;
-        input.disabled = false;
-        appendChatBubble('error', 'Network error: ' + err.message);
-    });
-}
-
-function appendChatBubble(role, text, id) {
-    var container = document.getElementById('aiChatMessages');
-    var div = document.createElement('div');
-    if (id) div.id = id;
-    div.className = 'mb-2 d-flex ' + (role === 'user' ? 'justify-content-end' : 'justify-content-start');
-
-    var bubble = document.createElement('div');
-    bubble.className = 'px-3 py-2 rounded-3 small';
-    bubble.style.maxWidth = '85%';
-    bubble.style.whiteSpace = 'pre-wrap';
-    bubble.style.wordBreak = 'break-word';
-
-    if (role === 'user') {
-        bubble.style.background = '#6366f1';
-        bubble.style.color = 'white';
-        bubble.textContent = text;
-    } else if (role === 'thinking') {
-        bubble.style.background = '#f1f5f9';
-        bubble.style.color = '#94a3b8';
-        bubble.innerHTML = '<i class="bi bi-three-dots me-1"></i>' + text;
-    } else if (role === 'error') {
-        bubble.style.background = '#fee2e2';
-        bubble.style.color = '#dc2626';
-        bubble.textContent = text;
-    } else {
-        bubble.style.background = '#f1f5f9';
-        bubble.style.color = '#1e293b';
-        bubble.textContent = text;
-    }
-
-    div.appendChild(bubble);
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
-}
-
-function removeChatBubble(id) {
-    var el = document.getElementById(id);
-    if (el) el.remove();
-}
-
-// ==================== AI Prompt Templates ====================
-
-var _editingPromptId = 0;
-
-function togglePromptEditor() {
-    var el = document.getElementById('aiPromptEditor');
-    if (el.classList.contains('d-none')) {
-        el.classList.remove('d-none');
-        loadAiPromptTemplates();
-        var selectedId = parseInt(document.getElementById('aiPromptTemplateSelect').value);
-        if (selectedId > 0) {
-            editAiPromptTemplate(selectedId);
-        } else {
-            clearPromptEditor();
-        }
-    } else {
-        el.classList.add('d-none');
-    }
-}
-
-var _currentReportType = 'AverageBasket';
-
-function loadAiPromptTemplates() {
-    fetch('@Url.Action("GetAiPromptTemplates", "Reports")' + '?reportType=' + encodeURIComponent(_currentReportType))
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var sel = document.getElementById('aiPromptTemplateSelect');
-            var userPicked = sel.getAttribute('data-user-picked') === '1';
-            var savedVal = userPicked ? sel.value : null;
-            sel.innerHTML = '<option value="0" style="color:#333;">Default Prompt</option>';
-            var listHtml = '';
-            var defaultId = null;
-            (data || []).forEach(function(t) {
-                sel.innerHTML += '<option value="' + t.templateId + '" style="color:#333;">' + escapeHtml(t.templateName) + (t.isDefault ? ' ★' : '') + '</option>';
-                var isMatchingDefault = t.isDefault && (
-                    !t.reportType || t.reportType === '' || t.reportType === _currentReportType
-                );
-                if (isMatchingDefault) defaultId = t.templateId;
-                listHtml += '<div class="d-flex justify-content-between align-items-center border-bottom py-2">' +
-                    '<div><strong>' + escapeHtml(t.templateName) + '</strong>' +
-                    (t.isDefault ? ' <span class="badge bg-primary">Default</span>' : '') +
-                    (t.reportType ? ' <span class="badge bg-secondary">' + t.reportType + '</span>' : ' <span class="badge bg-light text-dark">All</span>') +
-                    '</div><div>' +
-                    '<button class="btn btn-sm btn-outline-primary me-1" onclick="editAiPromptTemplate(' + t.templateId + ')"><i class="bi bi-pencil"></i></button>' +
-                    '<button class="btn btn-sm btn-outline-danger" onclick="deleteAiPromptTemplate(' + t.templateId + ')"><i class="bi bi-trash"></i></button>' +
-                    '</div></div>';
-            });
-            document.getElementById('aiPromptTemplatesList').innerHTML = listHtml || '<em>No custom templates yet.</em>';
-            if (userPicked && savedVal) {
-                sel.value = savedVal;
-            } else if (defaultId) {
-                sel.value = defaultId;
-            }
-        })
-        .catch(function() {
-            document.getElementById('aiPromptTemplatesList').innerHTML = '<em>Could not load templates.</em>';
-        });
-}
-
-function saveAiPromptTemplate() {
-    var name = document.getElementById('aiPromptName').value.trim();
-    var prompt = document.getElementById('aiPromptText').value.trim();
-    var alert = document.getElementById('aiPromptAlert');
-    if (!name || !prompt) { alert.innerHTML = '<span class="text-danger">Name and prompt are required.</span>'; return; }
-
-    fetch('@Url.Action("SaveAiPromptTemplate", "Reports")', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            templateId: _editingPromptId,
-            templateName: name,
-            reportType: document.getElementById('aiPromptReportType').value || null,
-            systemPrompt: prompt,
-            isDefault: document.getElementById('aiPromptIsDefault').checked
-        })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-        if (d.success) {
-            alert.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>' + d.message + '</span>';
-            clearPromptEditor();
-            loadAiPromptTemplates();
-        } else {
-            alert.innerHTML = '<span class="text-danger">' + d.message + '</span>';
-        }
-    })
-    .catch(function() { alert.innerHTML = '<span class="text-danger">Network error.</span>'; });
-}
-
-function editAiPromptTemplate(id) {
-    fetch('@Url.Action("GetAiPromptTemplates", "Reports")' + '?reportType=' + encodeURIComponent(_currentReportType))
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var t = (data || []).find(function(x) { return x.templateId === id; });
-            if (!t) return;
-            _editingPromptId = t.templateId;
-            document.getElementById('aiPromptName').value = t.templateName;
-            document.getElementById('aiPromptReportType').value = t.reportType || '';
-            document.getElementById('aiPromptText').value = t.systemPrompt;
-            document.getElementById('aiPromptIsDefault').checked = t.isDefault;
-            document.getElementById('aiPromptAlert').innerHTML = '<span class="text-info">Editing: ' + escapeHtml(t.templateName) + '</span>';
-        });
-}
-
-function deleteAiPromptTemplate(id) {
-    if (!confirm('Delete this template?')) return;
-    fetch('@Url.Action("DeleteAiPromptTemplate", "Reports")', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'templateId=' + id
-    })
-    .then(function(r) { return r.json(); })
-    .then(function() { loadAiPromptTemplates(); });
-}
-
-function clearPromptEditor() {
-    _editingPromptId = 0;
-    document.getElementById('aiPromptName').value = '';
-    document.getElementById('aiPromptText').value = '';
-    document.getElementById('aiPromptReportType').value = '';
-    document.getElementById('aiPromptIsDefault').checked = false;
-    document.getElementById('aiPromptAlert').innerHTML = '';
+    return formData;
 }
 
 function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-// Load templates on modal open
-(function() {
-    var modal = document.getElementById('aiAnalysisModal');
-    if (modal) {
-        modal.addEventListener('show.bs.modal', function() { loadAiPromptTemplates(); });
-    }
-})();
 </script>
 }

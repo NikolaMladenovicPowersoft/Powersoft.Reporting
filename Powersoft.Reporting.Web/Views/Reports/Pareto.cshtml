@@ -268,7 +268,7 @@
                 <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
                     <i class="bi bi-envelope me-1"></i>Send to Email
                 </button>
-                <button class="btn btn-sm btn-outline-info" onclick="analyzeParetoReport()" title="AI-powered report analysis" id="btnAnalyze">
+                <button class="btn btn-sm btn-outline-info" onclick="openAiAnalysis()" title="AI-powered report analysis" id="btnAnalyze">
                     <i class="bi bi-stars me-1"></i>AI Analyze
                 </button>
             </div>
@@ -346,6 +346,11 @@
     ReportBadge     = "Pareto 80/20",
     NamePlaceholder = "e.g. Weekly Pareto Analysis",
     SubjectPlaceholder = "Pareto 80/20 Report - {date}"
+})
+
+@await Html.PartialAsync("_AiAnalyze", new Powersoft.Reporting.Web.ViewModels.AiAnalyzePartialModel {
+    AnalyzeActionUrl = Url.Action("AnalyzeParetoReport", "Reports"),
+    ReportType = "Pareto"
 })
 
 @section Scripts {
@@ -853,204 +858,9 @@ function sendParetoEmail() {
 }
 
 // ==================== AI Analysis ====================
-var _currentReportType = 'Pareto';
-var _aiConversationHistory = [];
-var _csvPreviewForChat = '';
-
-function getAiLang() {
-    return (document.getElementById('aiLangSelect') || {}).value || 'en';
-}
-
-function saveAiLang(lang) {
-    try { localStorage.setItem('ai_lang', lang); } catch(e) {}
-}
-
-function analyzeParetoReport() {
-    var modalEl = document.getElementById('aiAnalysisModal');
-    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-    document.getElementById('aiLoading').classList.remove('d-none');
-    document.getElementById('aiError').classList.add('d-none');
-    document.getElementById('aiResults').classList.add('d-none');
-    document.getElementById('aiPromptEditor').classList.add('d-none');
-    document.getElementById('btnReanalyze').style.display = 'none';
-    modal.show();
-
-    var formData = collectParetoFormData();
-    formData.append('locale', getAiLang());
-    var promptTplId = document.getElementById('aiPromptTemplateSelect').value;
-    if (promptTplId && promptTplId !== '0') formData.append('promptTemplateId', promptTplId);
-
-    fetch('@Url.Action("AnalyzeParetoReport", "Reports")', { method: 'POST', body: formData })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            document.getElementById('aiLoading').classList.add('d-none');
-            if (!data.success) {
-                document.getElementById('aiError').classList.remove('d-none');
-                document.getElementById('aiErrorMsg').textContent = data.message;
-                document.getElementById('btnReanalyze').style.display = 'inline-block';
-                return;
-            }
-            var a = data.analysis;
-            renderAiAnalysis(a);
-            initAiConversation(a, data.csvPreview);
-            document.getElementById('aiResults').classList.remove('d-none');
-            document.getElementById('btnReanalyze').style.display = 'inline-block';
-        })
-        .catch(function(err) {
-            document.getElementById('aiLoading').classList.add('d-none');
-            document.getElementById('aiError').classList.remove('d-none');
-            document.getElementById('aiErrorMsg').textContent = 'Network error: ' + err.message;
-            document.getElementById('btnReanalyze').style.display = 'inline-block';
-        });
-}
-
-function renderAiAnalysis(a) {
-    var summary = a.summary || '';
-    document.getElementById('aiExecSummary').innerHTML = summary;
-    document.getElementById('aiModel').textContent = a.modelUsed || '';
-    document.getElementById('aiTokens').textContent = (a.inputTokens || 0) + ' in / ' + (a.outputTokens || 0) + ' out';
-    document.getElementById('aiTime').textContent = ((a.durationMs || 0) / 1000).toFixed(1) + 's';
-
-    var kf = document.getElementById('aiKeyFindings');
-    kf.innerHTML = (a.keyFindings || []).map(function(f) { return '<div class="mb-2"><i class="bi bi-dot text-warning"></i>' + f + '</div>'; }).join('');
-
-    var rec = document.getElementById('aiRecs');
-    rec.innerHTML = (a.recommendations || []).map(function(r) { return '<div class="mb-2"><i class="bi bi-dot text-success"></i>' + r + '</div>'; }).join('');
-
-    var alertsSection = document.getElementById('aiAlertsSection');
-    if (a.alerts && a.alerts.length > 0) {
-        alertsSection.innerHTML = '<div class="card border-0 shadow-sm"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Alerts</h6></div><div class="card-body pt-2">' +
-            a.alerts.map(function(al) { return '<div class="mb-2 text-danger"><i class="bi bi-dot"></i>' + al + '</div>'; }).join('') + '</div></div>';
-    } else {
-        alertsSection.innerHTML = '';
-    }
-
-    document.getElementById('aiHealthBanner').style.display = 'none';
-    document.getElementById('aiKpis').innerHTML = '';
-}
-
-function initAiConversation(analysisJson, csvData) {
-    _csvPreviewForChat = csvData || '';
-    _aiConversationHistory = [
-        { role: 'system', content: 'You are a senior financial data analyst. The user has already received an AI analysis of their Pareto 80/20 report. The raw CSV data is included below so you can reference specific numbers when answering follow-up questions. Be concise, specific, and cite actual values from the data. Respond in the same language as the analysis.' }
-    ];
-    if (csvData) _aiConversationHistory.push({ role: 'user', content: 'Here is the raw report data for reference:\n' + csvData });
-    _aiConversationHistory.push({ role: 'assistant', content: JSON.stringify(analysisJson) });
-    document.getElementById('aiChatMessages').innerHTML = '';
-}
-
-function sendAiChat() {
-    var input = document.getElementById('aiChatInput');
-    var msg = input.value.trim();
-    if (!msg) return;
-    input.value = '';
-
-    var chatDiv = document.getElementById('aiChatMessages');
-    chatDiv.innerHTML += '<div class="mb-2 text-end"><span class="badge bg-primary px-3 py-2">' + escapeHtml(msg) + '</span></div>';
-    chatDiv.innerHTML += '<div class="mb-2" id="aiChatPending"><span class="spinner-border spinner-border-sm text-muted"></span></div>';
-    chatDiv.scrollTop = chatDiv.scrollHeight;
-
-    _aiConversationHistory.push({ role: 'user', content: msg });
-
-    fetch('@Url.Action("AiChatFollowup", "Reports")', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: _aiConversationHistory, message: msg })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        var pending = document.getElementById('aiChatPending');
-        if (pending) pending.remove();
-        if (data.success) {
-            _aiConversationHistory.push({ role: 'assistant', content: data.content });
-            chatDiv.innerHTML += '<div class="mb-2"><div class="border rounded p-2 bg-light small">' + data.content + '</div></div>';
-            var tokenInfo = document.getElementById('aiChatTokenInfo');
-            tokenInfo.textContent = 'Tokens: ' + data.inputTokens + ' in / ' + data.outputTokens + ' out \u2022 ' + (data.durationMs / 1000).toFixed(1) + 's';
-            tokenInfo.style.display = '';
-        } else {
-            chatDiv.innerHTML += '<div class="mb-2"><div class="alert alert-danger py-1 small mb-0">' + data.message + '</div></div>';
-        }
-        chatDiv.scrollTop = chatDiv.scrollHeight;
-    })
-    .catch(function(err) {
-        var pending = document.getElementById('aiChatPending');
-        if (pending) pending.remove();
-        chatDiv.innerHTML += '<div class="mb-2"><div class="alert alert-danger py-1 small mb-0">Network error</div></div>';
-    });
-}
-
-// ==================== AI Prompt Templates ====================
-function togglePromptEditor() {
-    var editor = document.getElementById('aiPromptEditor');
-    editor.classList.toggle('d-none');
-    if (!editor.classList.contains('d-none')) loadAiPromptTemplates();
-}
-
-function clearPromptEditor() {
-    document.getElementById('aiPromptName').value = '';
-    document.getElementById('aiPromptText').value = '';
-    document.getElementById('aiPromptIsDefault').checked = false;
-    document.getElementById('aiPromptAlert').textContent = '';
-}
-
-function loadAiPromptTemplates() {
-    fetch('@Url.Action("GetAiPromptTemplates", "Reports")' + '?reportType=' + encodeURIComponent(_currentReportType))
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            var list = document.getElementById('aiPromptTemplatesList');
-            var sel = document.getElementById('aiPromptTemplateSelect');
-            sel.innerHTML = '<option value="0" style="color:#333;">Default Prompt</option>';
-            if (!data || data.length === 0) { list.innerHTML = '<em>No custom templates.</em>'; return; }
-            var html = '<table class="table table-sm mb-0"><thead><tr><th>Name</th><th>Default</th><th></th></tr></thead><tbody>';
-            data.forEach(function(t) {
-                html += '<tr><td>' + escapeHtml(t.templateName) + '</td><td>' + (t.isDefault ? '<i class="bi bi-check-circle text-success"></i>' : '') + '</td>'
-                    + '<td class="text-end"><button class="btn btn-sm btn-outline-danger" onclick="deleteAiPromptTemplate(' + t.templateId + ')"><i class="bi bi-trash"></i></button></td></tr>';
-                var opt = document.createElement('option');
-                opt.value = t.templateId;
-                opt.textContent = t.templateName;
-                opt.style.color = '#333';
-                sel.appendChild(opt);
-                if (t.isDefault) opt.selected = true;
-            });
-            html += '</tbody></table>';
-            list.innerHTML = html;
-        })
-        .catch(function() { document.getElementById('aiPromptTemplatesList').innerHTML = '<em>Could not load templates.</em>'; });
-}
-
-function saveAiPromptTemplate() {
-    var name = document.getElementById('aiPromptName').value.trim();
-    var prompt = document.getElementById('aiPromptText').value.trim();
-    if (!name || !prompt) { document.getElementById('aiPromptAlert').textContent = 'Name and prompt required.'; return; }
-    fetch('@Url.Action("SaveAiPromptTemplate", "Reports")', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            templateName: name,
-            systemPrompt: prompt,
-            reportType: document.getElementById('aiPromptReportType').value,
-            isDefault: document.getElementById('aiPromptIsDefault').checked
-        })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        document.getElementById('aiPromptAlert').innerHTML = data.success
-            ? '<span class="text-success">Saved!</span>'
-            : '<span class="text-danger">' + data.message + '</span>';
-        if (data.success) { clearPromptEditor(); loadAiPromptTemplates(); }
-    });
-}
-
-function deleteAiPromptTemplate(id) {
-    if (!confirm('Delete this template?')) return;
-    fetch('@Url.Action("DeleteAiPromptTemplate", "Reports")', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: id })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) { if (data.success) loadAiPromptTemplates(); });
-}
+window.collectAiFormData = function() {
+    return collectParetoFormData();
+};
 
 // ==================== Layout ====================
 function collectCurrentLayout() {
@@ -1125,13 +935,6 @@ function loadSavedLayout() {
 
 document.addEventListener('DOMContentLoaded', function() {
     loadSavedLayout();
-    try {
-        var savedLang = localStorage.getItem('ai_lang');
-        if (savedLang) {
-            var sel = document.getElementById('aiLangSelect');
-            if (sel) sel.value = savedLang;
-        }
-    } catch(e) {}
 });
 
 // ==================== Item Detail ====================

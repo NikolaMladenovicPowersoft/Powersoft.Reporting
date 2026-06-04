@@ -18,4 +18,10 @@ public class ProspectClientsFilter
     public string Category2Filter { get; set; } = "All";
     public List<string> CustomerCodes { get; set; } = new();
     public bool CustomerExcludeMode { get; set; } = false;
+
+    // Multi-select — when non-empty, these take precedence over the single-value properties above.
+    public List<string> StatusCodes { get; set; } = new();
+    public List<string> PriorityCodes { get; set; } = new();
+    public List<string> Category1Codes { get; set; } = new();
+    public List<string> Category2Codes { get; set; } = new();
 }

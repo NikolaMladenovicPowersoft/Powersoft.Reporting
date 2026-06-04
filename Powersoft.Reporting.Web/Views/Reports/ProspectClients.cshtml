@@ -85,24 +85,40 @@
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold">Status</label>
-                <select class="form-select" id="statusFilter">
-                    <option value="All" selected>All</option>
-                    <option value="LEAD">Lead</option>
-                    <option value="PROSPECT">Prospect</option>
-                    <option value="WAITING">Waiting</option>
-                    <option value="ACCEPTED">Accepted</option>
-                    <option value="REJECTED">Rejected</option>
-                    <option value="0010">In Process</option>
-                </select>
+                <div class="dropdown" id="statusDropdown">
+                    <button class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center text-start" type="button"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside" style="overflow:hidden;min-height:38px;">
+                        <span id="statusFilterLabel" class="text-truncate small">All Statuses</span>
+                        <i class="bi bi-chevron-down flex-shrink-0 ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2" style="min-width:180px;">
+                        <div class="form-check"><input class="form-check-input status-chk" type="checkbox" id="st_LEAD" value="LEAD" onchange="updateMultiLabel('status-chk','statusFilterLabel','Status')"><label class="form-check-label small" for="st_LEAD">Lead</label></div>
+                        <div class="form-check"><input class="form-check-input status-chk" type="checkbox" id="st_PROSPECT" value="PROSPECT" onchange="updateMultiLabel('status-chk','statusFilterLabel','Status')"><label class="form-check-label small" for="st_PROSPECT">Prospect</label></div>
+                        <div class="form-check"><input class="form-check-input status-chk" type="checkbox" id="st_WAITING" value="WAITING" onchange="updateMultiLabel('status-chk','statusFilterLabel','Status')"><label class="form-check-label small" for="st_WAITING">Waiting</label></div>
+                        <div class="form-check"><input class="form-check-input status-chk" type="checkbox" id="st_ACCEPTED" value="ACCEPTED" onchange="updateMultiLabel('status-chk','statusFilterLabel','Status')"><label class="form-check-label small" for="st_ACCEPTED">Accepted</label></div>
+                        <div class="form-check"><input class="form-check-input status-chk" type="checkbox" id="st_REJECTED" value="REJECTED" onchange="updateMultiLabel('status-chk','statusFilterLabel','Status')"><label class="form-check-label small" for="st_REJECTED">Rejected</label></div>
+                        <div class="form-check"><input class="form-check-input status-chk" type="checkbox" id="st_0010" value="0010" onchange="updateMultiLabel('status-chk','statusFilterLabel','Status')"><label class="form-check-label small" for="st_0010">In Process</label></div>
+                        <hr class="my-1">
+                        <button type="button" class="btn btn-link btn-sm p-0 text-muted" onclick="clearMultiSelect('status-chk','statusFilterLabel','Status')">Clear</button>
+                    </div>
+                </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold">Priority</label>
-                <select class="form-select" id="priorityFilter">
-                    <option value="All" selected>All</option>
-                    <option value="NORMAL">Normal</option>
-                    <option value="HIGH">High</option>
-                    <option value="VERYHIGH">Very High</option>
-                </select>
+                <div class="dropdown" id="priorityDropdown">
+                    <button class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center text-start" type="button"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside" style="overflow:hidden;min-height:38px;">
+                        <span id="priorityFilterLabel" class="text-truncate small">All Priorities</span>
+                        <i class="bi bi-chevron-down flex-shrink-0 ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2" style="min-width:180px;">
+                        <div class="form-check"><input class="form-check-input priority-chk" type="checkbox" id="pr_NORMAL" value="NORMAL" onchange="updateMultiLabel('priority-chk','priorityFilterLabel','Priority')"><label class="form-check-label small" for="pr_NORMAL">Normal</label></div>
+                        <div class="form-check"><input class="form-check-input priority-chk" type="checkbox" id="pr_HIGH" value="HIGH" onchange="updateMultiLabel('priority-chk','priorityFilterLabel','Priority')"><label class="form-check-label small" for="pr_HIGH">High</label></div>
+                        <div class="form-check"><input class="form-check-input priority-chk" type="checkbox" id="pr_VERYHIGH" value="VERYHIGH" onchange="updateMultiLabel('priority-chk','priorityFilterLabel','Priority')"><label class="form-check-label small" for="pr_VERYHIGH">Very High</label></div>
+                        <hr class="my-1">
+                        <button type="button" class="btn btn-link btn-sm p-0 text-muted" onclick="clearMultiSelect('priority-chk','priorityFilterLabel','Priority')">Clear</button>
+                    </div>
+                </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold">Max Records</label>
@@ -118,15 +134,29 @@
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label fw-semibold">Category 1</label>
-                <select class="form-select" id="category1Filter">
-                    <option value="All" selected>All</option>
-                </select>
+                <div class="dropdown" id="category1Dropdown">
+                    <button class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center text-start" type="button"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside" style="overflow:hidden;min-height:38px;">
+                        <span id="category1FilterLabel" class="text-truncate small">All Categories</span>
+                        <i class="bi bi-chevron-down flex-shrink-0 ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2" id="category1CheckboxList" style="min-width:200px;max-height:220px;overflow-y:auto;">
+                        <em class="text-muted small">Loading...</em>
+                    </div>
+                </div>
             </div>
             <div class="col-6 col-md-3">
                 <label class="form-label fw-semibold">Category 2</label>
-                <select class="form-select" id="category2Filter">
-                    <option value="All" selected>All</option>
-                </select>
+                <div class="dropdown" id="category2Dropdown">
+                    <button class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center text-start" type="button"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside" style="overflow:hidden;min-height:38px;">
+                        <span id="category2FilterLabel" class="text-truncate small">All Categories</span>
+                        <i class="bi bi-chevron-down flex-shrink-0 ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2" id="category2CheckboxList" style="min-width:200px;max-height:220px;overflow-y:auto;">
+                        <em class="text-muted small">Loading...</em>
+                    </div>
+                </div>
             </div>
             <div class="col-6 col-md-3">
                 <div class="form-check form-switch mt-4">
@@ -170,7 +200,6 @@
             </div>
         </div>
 
-        @await Html.PartialAsync("_CustomerSelection")
         <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
             <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
                 <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
@@ -354,18 +383,231 @@
     </div>
 </div>
 
-@* Schedule Modal — shared partial *@
-@await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel {
-    SaveAction      = "SaveProspectClientsSchedule",
-    ListAction      = "GetProspectClientsSchedules",
-    ReportBadge     = "Prospect Clients",
-    NamePlaceholder = "e.g. Weekly Prospect Clients",
-    SubjectPlaceholder = "Prospect Clients Report - {date}"
-})
+<!-- Schedule Modal -->
+<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-clock-history me-2 text-warning"></i>Schedule Report</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="existingSchedules" class="mb-4"><p class="text-muted">Loading schedules...</p></div>
+                <hr>
+                <h6><i class="bi bi-plus-circle me-1"></i>New / Edit Schedule</h6>
+                <input type="hidden" id="schedId" value="">
+                <div class="row g-3">
+                    <div class="col-md-6"><label class="form-label">Schedule Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="schedName" placeholder="e.g. Weekly Prospects Summary"></div>
+                    <div class="col-md-6"><label class="form-label">Recipients <span class="text-danger">*</span></label><input type="text" class="form-control" id="schedRecipients" placeholder="email1@@co.com, email2@@co.com"></div>
+                    <div class="col-md-3"><label class="form-label">Recurrence</label><select class="form-select" id="schedRecurrence"><option>Daily</option><option>Weekly</option><option>Monthly</option></select></div>
+                    <div class="col-md-3"><label class="form-label">Time</label><input type="time" class="form-control" id="schedTime" value="08:00"></div>
+                    <div class="col-md-3"><label class="form-label">Format</label><select class="form-select" id="schedFormat"><option>CSV</option><option>Excel</option><option>PDF</option></select></div>
+                    <div class="col-md-3 d-flex align-items-end gap-3">
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="schedSkipIfEmpty" checked><label class="form-check-label" for="schedSkipIfEmpty">Skip if empty</label></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="schedIncludeAi"><label class="form-check-label" for="schedIncludeAi">AI</label></div>
+                    </div>
+                </div>
+                <div id="scheduleAlert" class="mt-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="resetScheduleForm()">Clear</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-warning" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Send Email Modal -->
+<div class="modal fade" id="sendEmailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-envelope-at me-2 text-primary"></i>Send Report via Email</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="sendEmailRecipients" placeholder="email@@example.com, ...">
+                        <div class="invalid-feedback" id="sendEmailRecipientsError"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Template</label>
+                        <select class="form-select" id="sendEmailTemplate" onchange="onEmailTemplateChange()">
+                            <option value="">-- No template (default) --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">CC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailCC" placeholder="cc@@example.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">BCC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailBCC" placeholder="bcc@@example.com">
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">Subject</label>
+                        <input type="text" class="form-control" id="sendEmailSubject" value="Prospect Clients Report">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Format</label>
+                        <select class="form-select" id="sendEmailFormat">
+                            <option value="Excel" selected>Excel (.xlsx)</option>
+                            <option value="PDF">PDF</option>
+                            <option value="CSV">CSV</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email Message</label>
+                        <div class="border rounded" style="max-height:250px;overflow-y:auto;padding:12px;font-family:Arial,sans-serif;font-size:13px;background:#fafafa;" id="sendEmailBodyPreview">
+                            <em class="text-muted">Select a template to preview the email body, or the default body will be used.</em>
+                        </div>
+                    </div>
+                </div>
+                <div id="sendEmailAlert" class="mt-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <a asp-controller="Settings" asp-action="EmailTemplates" class="btn btn-outline-secondary me-auto" title="Manage email templates">
+                    <i class="bi bi-gear me-1"></i>Manage Templates
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="sendEmailBtn" onclick="sendReportEmail()">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="sendEmailSpinner"></span>
+                    <i class="bi bi-send me-1" id="sendEmailIcon"></i>Send
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Analysis Modal -->
+<div class="modal fade" id="aiAnalysisModal" tabindex="-1" aria-labelledby="aiAnalysisModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header" style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);color:white;">
+                <h5 class="modal-title" id="aiAnalysisModalLabel"><i class="bi bi-stars me-2"></i>AI Business Intelligence</h5>
+                <div class="ms-auto me-3 d-flex align-items-center gap-2">
+                    <select id="aiPromptTemplateSelect" class="form-select form-select-sm" style="width:auto;min-width:140px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" title="AI Prompt Template" onchange="this.setAttribute('data-user-picked','1')">
+                        <option value="0" style="color:#333;">Default Prompt</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="togglePromptEditor()" title="Manage AI prompt templates" style="border-color:rgba(255,255,255,0.3);">
+                        <i class="bi bi-gear"></i>
+                    </button>
+                    <label class="me-1 mb-0 small opacity-75" for="aiLangSelect"><i class="bi bi-translate"></i></label>
+                    <select id="aiLangSelect" class="form-select form-select-sm" style="width:auto;min-width:120px;background:rgba(255,255,255,0.15);color:white;border-color:rgba(255,255,255,0.3);" onchange="saveAiLang(this.value)">
+                        <option value="el" style="color:#333;">Ελληνικά</option>
+                        <option value="en" style="color:#333;">English</option>
+                        <option value="sr" style="color:#333;">Srpski</option>
+                        <option value="de" style="color:#333;">Deutsch</option>
+                        <option value="fr" style="color:#333;">Français</option>
+                    </select>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="aiLoading" class="text-center py-5">
+                    <div class="spinner-grow text-primary mb-2" style="width:3rem;height:3rem;"></div>
+                    <h6 class="mt-3 text-muted">AI is analyzing your prospect data...</h6>
+                    <p class="text-muted small">Identifying pipeline patterns, conversion metrics, and actionable insights</p>
+                    <div class="progress mx-auto" style="width:200px;height:4px;"><div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:100%"></div></div>
+                </div>
+                <div id="aiError" class="d-none p-4"><div class="alert alert-danger" id="aiErrorMsg"></div></div>
+                <div id="aiPromptEditor" class="d-none border-bottom" style="background:#f8fafc;">
+                    <div class="p-4">
+                        <h6 class="mb-3"><i class="bi bi-pencil-square me-1"></i>AI Prompt Templates</h6>
+                        <div class="row g-3">
+                            <div class="col-md-5"><label class="form-label small fw-semibold">Template Name</label><input type="text" class="form-control form-control-sm" id="aiPromptName" placeholder="e.g. Focus on conversion"></div>
+                            <div class="col-md-4"><label class="form-label small fw-semibold">Applies to</label><select class="form-select form-select-sm" id="aiPromptReportType"><option value="">All Reports</option><option value="ProspectClients" selected>Prospect Clients</option></select></div>
+                            <div class="col-md-3 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="aiPromptIsDefault"><label class="form-check-label small" for="aiPromptIsDefault">Set as default</label></div></div>
+                            <div class="col-12"><label class="form-label small fw-semibold">System Prompt</label><textarea class="form-control form-control-sm" id="aiPromptText" rows="6" placeholder="You are a senior CRM analyst..."></textarea><small class="text-muted">This prompt will be sent to the AI as the system instruction.</small></div>
+                            <div class="col-12 d-flex gap-2"><button class="btn btn-sm btn-primary" onclick="saveAiPromptTemplate()"><i class="bi bi-save me-1"></i>Save Template</button><button class="btn btn-sm btn-outline-secondary" onclick="clearPromptEditor()">Clear</button><div id="aiPromptAlert" class="ms-2 small align-self-center"></div></div>
+                        </div>
+                        <hr class="my-3">
+                        <div id="aiPromptTemplatesList" class="small text-muted">Loading templates...</div>
+                    </div>
+                </div>
+                <div id="aiResults" class="d-none">
+                    <div id="aiHealthBanner" class="px-4 py-3 d-flex align-items-center justify-content-between" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+                        <div class="d-flex align-items-center gap-3">
+                            <div id="aiHealthBadge" class="d-flex flex-column align-items-center justify-content-center rounded-circle" style="width:64px;height:64px;font-weight:700;font-size:1.2rem;"></div>
+                            <div><div class="fw-bold" id="aiHealthLabel" style="font-size:1.1rem;"></div><div class="text-muted small" id="aiTrendDesc"></div></div>
+                        </div>
+                        <div id="aiTrendBadge" class="badge fs-6 px-3 py-2"></div>
+                    </div>
+                    <div class="p-4">
+                        <div class="alert border-start border-4 border-primary bg-primary bg-opacity-10 mb-4" id="aiExecSummary" style="font-size:0.95rem;"></div>
+                        <div class="row g-2 mb-4" id="aiKpis"></div>
+                        <div class="row g-4">
+                            <div class="col-md-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Key Findings</h6></div><div class="card-body pt-2" id="aiKeyFindings"></div></div></div>
+                            <div class="col-md-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-check2-circle text-success me-2"></i>Recommendations</h6></div><div class="card-body pt-2" id="aiRecs"></div></div></div>
+                        </div>
+                        <div class="row g-4 mt-1">
+                            <div class="col-md-6" id="aiTopSection"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-trophy-fill text-warning me-2"></i>Top Performers</h6></div><div class="card-body pt-2" id="aiTopPerformers"></div></div></div>
+                            <div class="col-md-6" id="aiBottomSection"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-transparent border-0 pb-0"><h6 class="mb-0"><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Needs Attention</h6></div><div class="card-body pt-2" id="aiBottomPerformers"></div></div></div>
+                        </div>
+                        <div id="aiAlertsSection" class="mt-4"></div>
+                    </div>
+                    <div class="px-4 py-2 d-flex justify-content-between align-items-center" style="background:#f8fafc;border-top:1px solid #e2e8f0;">
+                        <span class="text-muted small"><i class="bi bi-cpu me-1"></i><span id="aiModel"></span></span>
+                        <span class="text-muted small"><i class="bi bi-currency-dollar me-1"></i><span id="aiTokens"></span></span>
+                        <span class="text-muted small"><i class="bi bi-clock me-1"></i><span id="aiTime"></span></span>
+                    </div>
+                    <div class="border-top" style="background:#f8fafc;">
+                        <div class="px-4 py-2"><h6 class="mb-2 text-muted"><i class="bi bi-chat-dots me-1"></i>Follow-up Questions</h6></div>
+                        <div id="aiChatMessages" class="px-4" style="max-height:300px;overflow-y:auto;"></div>
+                        <div class="px-4 py-3">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="aiChatInput" placeholder="Ask a follow-up question about this report..." onkeydown="if(event.key==='Enter'){event.preventDefault();sendAiChat();}">
+                                <button class="btn btn-primary" type="button" onclick="sendAiChat()" id="btnSendChat"><i class="bi bi-send"></i></button>
+                            </div>
+                            <div id="aiChatTokenInfo" class="text-muted small mt-1" style="display:none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);" onclick="analyzeReport()" id="btnReanalyze" style="display:none;"><i class="bi bi-arrow-clockwise me-1"></i>Re-analyze</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Save Layout As Modal -->
+<div class="modal fade" id="saveLayoutAsModal" tabindex="-1" aria-labelledby="saveLayoutAsLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="saveLayoutAsLabel"><i class="bi bi-bookmark-plus me-2"></i>Save Layout As</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="saveLayoutAsName" class="form-label">Layout name <span class="text-danger">*</span></label>
+                    <input type="text" id="saveLayoutAsName" class="form-control" maxlength="100" placeholder="e.g. Hot Prospects Only" autocomplete="off" />
+                    <div class="form-text">Used to identify the layout. You can have multiple named layouts.</div>
+                </div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="saveLayoutAsPublic" />
+                    <label class="form-check-label" for="saveLayoutAsPublic">Share with all users (public layout)</label>
+                    <div class="form-text">Public layouts are visible to everyone but can only be edited or deleted by you.</div>
+                </div>
+                <div id="saveLayoutAsAlert" class="alert d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveLayoutAsConfirmBtn" onclick="saveLayoutAsConfirm()">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="saveLayoutAsSpinner"></span>
+                    <i class="bi bi-save me-1"></i>Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
-var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
-var _viewSupplier = @(ViewBag.ViewSupplier != null ? (ViewBag.ViewSupplier ? "true" : "false") : "true");
 var _sortCol = 'RegistrationDate';
 var _sortDir = 'DESC';
 var _lastData = [];
@@ -412,20 +654,34 @@ function loadFilterDropdowns() {
                 });
             }
             if (d.categories1) {
-                var sel1 = document.getElementById('category1Filter');
+                var cont1 = document.getElementById('category1CheckboxList');
+                cont1.innerHTML = '';
                 d.categories1.forEach(function(c) {
-                    var opt = document.createElement('option');
-                    opt.value = c.id; opt.textContent = c.name;
-                    sel1.appendChild(opt);
+                    var id = 'cat1_' + c.id;
+                    var div = document.createElement('div'); div.className = 'form-check';
+                    div.innerHTML = '<input class="form-check-input cat1-chk" type="checkbox" id="' + id + '" value="' + c.id + '" onchange="updateMultiLabel(\'cat1-chk\',\'category1FilterLabel\',\'Category 1\')">' +
+                        '<label class="form-check-label small" for="' + id + '">' + escapeHtml(c.name) + '</label>';
+                    cont1.appendChild(div);
                 });
+                var hr1 = document.createElement('hr'); hr1.className = 'my-1'; cont1.appendChild(hr1);
+                var clr1 = document.createElement('button'); clr1.type = 'button'; clr1.className = 'btn btn-link btn-sm p-0 text-muted';
+                clr1.textContent = 'Clear'; clr1.onclick = function() { clearMultiSelect('cat1-chk','category1FilterLabel','Category 1'); };
+                cont1.appendChild(clr1);
             }
             if (d.categories2) {
-                var sel2 = document.getElementById('category2Filter');
+                var cont2 = document.getElementById('category2CheckboxList');
+                cont2.innerHTML = '';
                 d.categories2.forEach(function(c) {
-                    var opt = document.createElement('option');
-                    opt.value = c.id; opt.textContent = c.name;
-                    sel2.appendChild(opt);
+                    var id = 'cat2_' + c.id;
+                    var div = document.createElement('div'); div.className = 'form-check';
+                    div.innerHTML = '<input class="form-check-input cat2-chk" type="checkbox" id="' + id + '" value="' + c.id + '" onchange="updateMultiLabel(\'cat2-chk\',\'category2FilterLabel\',\'Category 2\')">' +
+                        '<label class="form-check-label small" for="' + id + '">' + escapeHtml(c.name) + '</label>';
+                    cont2.appendChild(div);
                 });
+                var hr2 = document.createElement('hr'); hr2.className = 'my-1'; cont2.appendChild(hr2);
+                var clr2 = document.createElement('button'); clr2.type = 'button'; clr2.className = 'btn btn-link btn-sm p-0 text-muted';
+                clr2.textContent = 'Clear'; clr2.onclick = function() { clearMultiSelect('cat2-chk','category2FilterLabel','Category 2'); };
+                cont2.appendChild(clr2);
             }
             @if (hasSavedLayout && savedLayout != null) {
                 <text>applyLayoutParameters(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(savedLayout)));</text>
@@ -453,11 +709,11 @@ function resetFilters() {
     document.getElementById('dateFrom').value = y+'-01-01';
     document.getElementById('dateTo').value = fmtDate(today);
     document.getElementById('dateField').value = 'RegistrationDate';
-    document.getElementById('statusFilter').value = 'All';
-    document.getElementById('priorityFilter').value = 'All';
+    clearMultiSelect('status-chk', 'statusFilterLabel', 'Status');
+    clearMultiSelect('priority-chk', 'priorityFilterLabel', 'Priority');
     document.getElementById('followedByFilter').value = 'All';
-    document.getElementById('category1Filter').value = 'All';
-    document.getElementById('category2Filter').value = 'All';
+    clearMultiSelect('cat1-chk', 'category1FilterLabel', 'Category 1');
+    clearMultiSelect('cat2-chk', 'category2FilterLabel', 'Category 2');
     document.getElementById('primaryGroup').value = 'NONE';
     document.getElementById('secondaryGroup').value = 'NONE';
     document.getElementById('maxRecords').value = '50000';
@@ -470,7 +726,6 @@ function resetFilters() {
     _lastData = [];
     document.getElementById('layoutsCurrentName').textContent = 'Layouts';
     resetColumnVisibility();
-    if (typeof clearCustomerSelection === 'function') clearCustomerSelection();
 }
 
 function applyPresetDates(preset) {
@@ -497,37 +752,67 @@ function showAlert(id, type, msg) {
     el.style.display = '';
 }
 
+// Multi-select helpers
+function updateMultiLabel(cbClass, labelId, noun) {
+    var checked = Array.from(document.querySelectorAll('.' + cbClass + ':checked'));
+    var el = document.getElementById(labelId);
+    if (!el) return;
+    if (checked.length === 0) { el.textContent = 'All ' + noun + 's'; return; }
+    if (checked.length === 1) { var lbl = checked[0].parentElement.querySelector('label'); el.textContent = lbl ? lbl.textContent.trim() : checked[0].value; return; }
+    el.textContent = checked.length + ' selected';
+}
+function clearMultiSelect(cbClass, labelId, noun) {
+    document.querySelectorAll('.' + cbClass).forEach(function(cb) { cb.checked = false; });
+    updateMultiLabel(cbClass, labelId, noun);
+}
+function getCheckedValues(cbClass) {
+    return Array.from(document.querySelectorAll('.' + cbClass + ':checked')).map(function(cb) { return cb.value; });
+}
+function setCheckedValues(cbClass, labelId, noun, values) {
+    document.querySelectorAll('.' + cbClass).forEach(function(cb) { cb.checked = values.indexOf(cb.value) !== -1; });
+    updateMultiLabel(cbClass, labelId, noun);
+}
+
 function getFilterParams() {
+    var csf = typeof getCustomerSelectionFilter === 'function' ? getCustomerSelectionFilter() : {codes:[],excludeMode:false};
     return {
         dateFrom: document.getElementById('dateFrom').value,
         dateTo: document.getElementById('dateTo').value,
         dateField: document.getElementById('dateField').value,
-        statusFilter: document.getElementById('statusFilter').value,
-        priorityFilter: document.getElementById('priorityFilter').value,
+        statusFilter: 'All',
+        priorityFilter: 'All',
         followedByFilter: document.getElementById('followedByFilter').value,
-        category1Filter: document.getElementById('category1Filter').value,
-        category2Filter: document.getElementById('category2Filter').value,
+        category1Filter: 'All',
+        category2Filter: 'All',
         primaryGroup: document.getElementById('primaryGroup').value,
         secondaryGroup: document.getElementById('secondaryGroup').value,
         maxRecords: document.getElementById('maxRecords').value,
         sortColumn: _sortCol,
         sortDirection: _sortDir,
         includeHistory: document.getElementById('includeHistory').checked,
-        customerCodesJson: JSON.stringify((typeof getCustomerSelectionFilter==='function' ? getCustomerSelectionFilter() : {codes:[]}).codes||[]),
-        customerExcludeMode: (typeof getCustomerSelectionFilter==='function' ? getCustomerSelectionFilter() : {excludeMode:false}).excludeMode||false
+        customerCodesJson: JSON.stringify(csf.codes||[]),
+        customerExcludeMode: csf.excludeMode||false,
+        statusCodesJson: JSON.stringify(getCheckedValues('status-chk')),
+        priorityCodesJson: JSON.stringify(getCheckedValues('priority-chk')),
+        category1CodesJson: JSON.stringify(getCheckedValues('cat1-chk')),
+        category2CodesJson: JSON.stringify(getCheckedValues('cat2-chk'))
     };
 }
 
 function buildExportUrl(action) {
     var p = getFilterParams();
     var qs = 'dateFrom='+p.dateFrom+'&dateTo='+p.dateTo+'&dateField='+p.dateField
-        +'&statusFilter='+encodeURIComponent(p.statusFilter)+'&priorityFilter='+encodeURIComponent(p.priorityFilter)
+        +'&statusFilter=All&priorityFilter=All'
         +'&followedByFilter='+encodeURIComponent(p.followedByFilter)
-        +'&category1Filter='+encodeURIComponent(p.category1Filter)+'&category2Filter='+encodeURIComponent(p.category2Filter)
+        +'&category1Filter=All&category2Filter=All'
         +'&primaryGroup='+p.primaryGroup+'&secondaryGroup='+p.secondaryGroup
         +'&maxRecords='+p.maxRecords+'&sortColumn='+p.sortColumn+'&sortDirection='+p.sortDirection
         +'&includeHistory='+p.includeHistory
-        +'&customerCodesJson='+encodeURIComponent(p.customerCodesJson)+'&customerExcludeMode='+p.customerExcludeMode;
+        +'&customerCodesJson='+encodeURIComponent(p.customerCodesJson)+'&customerExcludeMode='+p.customerExcludeMode
+        +'&statusCodesJson='+encodeURIComponent(p.statusCodesJson)
+        +'&priorityCodesJson='+encodeURIComponent(p.priorityCodesJson)
+        +'&category1CodesJson='+encodeURIComponent(p.category1CodesJson)
+        +'&category2CodesJson='+encodeURIComponent(p.category2CodesJson);
     return '/Reports/' + action + '?' + qs;
 }
 
@@ -808,42 +1093,64 @@ function loadSchedules() {
             container.innerHTML = html;
         }).catch(function() { document.getElementById('existingSchedules').innerHTML = '<p class="text-danger">Failed to load schedules.</p>'; });
 }
-// ===== Shared schedule partial API =====
-
-function collectScheduleParameters() {
-    return getFilterParams();
+function resetScheduleForm() {
+    document.getElementById('schedId').value = '';
+    document.getElementById('schedName').value = '';
+    document.getElementById('schedRecipients').value = '';
+    document.getElementById('schedRecurrence').value = 'Daily';
+    document.getElementById('schedTime').value = '08:00';
+    document.getElementById('schedFormat').value = 'CSV';
+    document.getElementById('schedSkipIfEmpty').checked = true;
+    document.getElementById('schedIncludeAi').checked = false;
+    document.getElementById('scheduleAlert').style.display = 'none';
+}
+function saveSchedule() {
+    var name = document.getElementById('schedName').value.trim();
+    var recipients = document.getElementById('schedRecipients').value.trim();
+    if (!name) { showAlert('scheduleAlert','danger','Schedule name is required.'); return; }
+    if (!recipients) { showAlert('scheduleAlert','danger','At least one recipient is required.'); return; }
+    var fd = new FormData();
+    fd.append('scheduleName',name);
+    fd.append('recurrenceType',document.getElementById('schedRecurrence').value);
+    fd.append('exportFormat',document.getElementById('schedFormat').value);
+    fd.append('scheduleTime',document.getElementById('schedTime').value);
+    fd.append('recipients',recipients);
+    fd.append('skipIfEmpty',document.getElementById('schedSkipIfEmpty').checked);
+    fd.append('includeAiAnalysis',document.getElementById('schedIncludeAi').checked);
+    var sid = document.getElementById('schedId').value;
+    if (sid) fd.append('scheduleId', sid);
+    var filterData = JSON.stringify(getFilterParams());
+    fd.append('filterJson', filterData);
+    fetch('@Url.Action("SaveProspectClientsSchedule","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d.success) { showAlert('scheduleAlert','danger',d.message); return; }
+            showAlert('scheduleAlert','success','Schedule saved.');
+            resetScheduleForm(); loadSchedules();
+        }).catch(function(e) { showAlert('scheduleAlert','danger','Save failed: '+e.message); });
+}
+function loadScheduleIntoForm(id) {
+    fetch('@Url.Action("GetScheduleById","Reports")?scheduleId='+id, { credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(s) {
+            if (!s || s.error) return;
+            document.getElementById('schedId').value = s.scheduleId;
+            document.getElementById('schedName').value = s.scheduleName||'';
+            document.getElementById('schedRecipients').value = s.recipients||'';
+            document.getElementById('schedRecurrence').value = s.recurrenceType||'Daily';
+            document.getElementById('schedTime').value = s.scheduleTime||'08:00';
+            document.getElementById('schedFormat').value = s.exportFormat||'CSV';
+            document.getElementById('schedSkipIfEmpty').checked = s.skipIfEmpty !== false;
+            showAlert('scheduleAlert','info','Editing: '+escapeHtml(s.scheduleName));
+        });
+}
+function deleteSchedule(id) {
+    if (!confirm('Delete this schedule?')) return;
+    fetch('@Url.Action("DeleteSchedule","Reports")?scheduleId='+id, { method:'POST', credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d.success) { loadSchedules(); resetScheduleForm(); } else showAlert('scheduleAlert','danger',d.message||'Delete failed.'); });
 }
 
-function onScheduleParametersLoaded(p) {
-    if (!p) return;
-    function sv(id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; }
-    function sc(id, val) { var el = document.getElementById(id); if (el && val != null) el.checked = !!val; }
-    sv('dateField',        p.dateField);
-    sv('statusFilter',     p.statusFilter);
-    sv('priorityFilter',   p.priorityFilter);
-    sv('followedByFilter', p.followedByFilter);
-    sv('category1Filter',  p.category1Filter);
-    sv('category2Filter',  p.category2Filter);
-    sv('primaryGroup',     p.primaryGroup);
-    sv('secondaryGroup',   p.secondaryGroup);
-    sv('maxRecords',       p.maxRecords);
-    if (p.includeHistory !== undefined) sc('includeHistory', p.includeHistory);
-    if (p.customerCodesJson && typeof reloadCustomerSelectionFromJson === 'function') {
-        try { reloadCustomerSelectionFromJson({codes:JSON.parse(p.customerCodesJson),excludeMode:p.customerExcludeMode==='true'||p.customerExcludeMode===true}); } catch(e) {}
-    }
-}
-
-function autoSelectScheduleDateRange() {
-    var df = document.getElementById('dateFrom'); if (!df || !df.value) return;
-    var dt = document.getElementById('dateTo');   if (!dt || !dt.value) return;
-    var sel = document.getElementById('schedDateRangeType'); if (!sel) return;
-    for (var i = 0; i < sel.options.length; i++) { if (sel.options[i].value === 'Custom') { sel.selectedIndex = i; break; } }
-    var sf = document.getElementById('schedDateFrom'); if (sf) sf.value = df.value;
-    var st = document.getElementById('schedDateTo');   if (st) st.value = dt.value;
-    if (typeof onSchedDateRangeTypeChange === 'function') onSchedDateRangeTypeChange();
-}
-
-// ===== End shared schedule partial API =====
 // ========== SEND EMAIL ==========
 function validateEmailList(input) {
     if(!input||!input.trim()) return {valid:false,errors:['Enter at least one email.']};
@@ -1080,25 +1387,20 @@ function collectCurrentLayout() {
     function v(id) { var el = document.getElementById(id); return el ? el.value : ''; }
     var p = {};
     p['DateField'] = v('dateField');
-    p['StatusFilter'] = v('statusFilter');
-    p['PriorityFilter'] = v('priorityFilter');
+    p['StatusCodesJson'] = JSON.stringify(getCheckedValues('status-chk'));
+    p['PriorityCodesJson'] = JSON.stringify(getCheckedValues('priority-chk'));
     p['PrimaryGroup'] = v('primaryGroup');
     p['SecondaryGroup'] = v('secondaryGroup');
     p['MaxRecords'] = v('maxRecords');
     p['IncludeHistory'] = document.getElementById('includeHistory').checked ? 'true' : 'false';
     p['FollowedByFilter'] = v('followedByFilter');
-    p['Category1Filter'] = v('category1Filter');
-    p['Category2Filter'] = v('category2Filter');
+    p['Category1CodesJson'] = JSON.stringify(getCheckedValues('cat1-chk'));
+    p['Category2CodesJson'] = JSON.stringify(getCheckedValues('cat2-chk'));
     var hidden = [];
     document.querySelectorAll('.col-toggle').forEach(function(cb) { if (!cb.checked) hidden.push(cb.value); });
     p['HiddenColumns'] = hidden.join(',');
     var preset = document.querySelector('input[name="DatePreset"]:checked');
     if (preset) p['DatePreset'] = preset.value;
-    if (typeof getCustomerSelectionFilter === 'function') {
-        var csf = getCustomerSelectionFilter();
-        p['CustomerCodesJson'] = JSON.stringify(csf.codes || []);
-        p['CustomerExcludeMode'] = csf.excludeMode ? 'true' : 'false';
-    }
     return p;
 }
 
@@ -1213,15 +1515,15 @@ function loadNamedLayout(headerCode) {
 function applyLayoutParameters(parms) {
     function setVal(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
     setVal('dateField',       parms.DateField);
-    setVal('statusFilter',    parms.StatusFilter);
-    setVal('priorityFilter',  parms.PriorityFilter);
+    if (parms.StatusCodesJson) { try { setCheckedValues('status-chk','statusFilterLabel','Status',JSON.parse(parms.StatusCodesJson)); } catch(e) {} }
+    if (parms.PriorityCodesJson) { try { setCheckedValues('priority-chk','priorityFilterLabel','Priority',JSON.parse(parms.PriorityCodesJson)); } catch(e) {} }
     setVal('primaryGroup',    parms.PrimaryGroup);
     setVal('secondaryGroup',  parms.SecondaryGroup);
     setVal('maxRecords',      parms.MaxRecords);
     if (parms.IncludeHistory === 'true') document.getElementById('includeHistory').checked = true;
     setVal('followedByFilter',  parms.FollowedByFilter);
-    setVal('category1Filter',   parms.Category1Filter);
-    setVal('category2Filter',   parms.Category2Filter);
+    if (parms.Category1CodesJson) { try { setCheckedValues('cat1-chk','category1FilterLabel','Category 1',JSON.parse(parms.Category1CodesJson)); } catch(e) {} }
+    if (parms.Category2CodesJson) { try { setCheckedValues('cat2-chk','category2FilterLabel','Category 2',JSON.parse(parms.Category2CodesJson)); } catch(e) {} }
     if (parms.HiddenColumns != null) {
         var cols = parms.HiddenColumns ? parms.HiddenColumns.split(',') : [];
         document.querySelectorAll('.col-toggle').forEach(function(cb) { cb.checked = cols.indexOf(cb.value) === -1; });
@@ -1230,9 +1532,6 @@ function applyLayoutParameters(parms) {
     if (parms.DatePreset) {
         var r = document.querySelector('input[name="DatePreset"][value="'+parms.DatePreset+'"]');
         if (r) { r.checked = true; applyPresetDates(parms.DatePreset); }
-    }
-    if (parms.CustomerCodesJson && typeof reloadCustomerSelectionFromJson === 'function') {
-        try { reloadCustomerSelectionFromJson({codes:JSON.parse(parms.CustomerCodesJson),excludeMode:parms.CustomerExcludeMode==='true'}); } catch(e) {}
     }
 }
 

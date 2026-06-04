@@ -367,13 +367,29 @@ public class ProspectClientsRepository : IProspectClientsRepository
         parms.Add(new SqlParameter("@dFrom", System.Data.SqlDbType.Date) { Value = filter.DateFrom.Date });
         parms.Add(new SqlParameter("@dTo", System.Data.SqlDbType.Date) { Value = filter.DateTo.Date });
 
-        if (!string.Equals(filter.StatusFilter, "All", StringComparison.OrdinalIgnoreCase))
+        // Status — multi-select takes precedence over single-value filter
+        if (filter.StatusCodes.Count > 0)
+        {
+            var pNames = filter.StatusCodes.Select((_, i) => $"@stCode{i}").ToList();
+            sb.Append($" AND s.OrderStatusCode IN ({string.Join(",", pNames)})");
+            for (int i = 0; i < filter.StatusCodes.Count; i++)
+                parms.Add(new SqlParameter($"@stCode{i}", filter.StatusCodes[i]));
+        }
+        else if (!string.Equals(filter.StatusFilter, "All", StringComparison.OrdinalIgnoreCase))
         {
             sb.Append(" AND s.OrderStatusCode = @statusCode");
             parms.Add(new SqlParameter("@statusCode", filter.StatusFilter));
         }
 
-        if (!string.Equals(filter.PriorityFilter, "All", StringComparison.OrdinalIgnoreCase))
+        // Priority — multi-select takes precedence
+        if (filter.PriorityCodes.Count > 0)
+        {
+            var pNames = filter.PriorityCodes.Select((_, i) => $"@prCode{i}").ToList();
+            sb.Append($" AND p.FieldDetailCode IN ({string.Join(",", pNames)})");
+            for (int i = 0; i < filter.PriorityCodes.Count; i++)
+                parms.Add(new SqlParameter($"@prCode{i}", filter.PriorityCodes[i]));
+        }
+        else if (!string.Equals(filter.PriorityFilter, "All", StringComparison.OrdinalIgnoreCase))
         {
             sb.Append(" AND p.FieldDetailCode = @priorityCode");
             parms.Add(new SqlParameter("@priorityCode", filter.PriorityFilter));
@@ -386,14 +402,44 @@ public class ProspectClientsRepository : IProspectClientsRepository
             parms.Add(new SqlParameter("@followedBy", System.Data.SqlDbType.BigInt) { Value = agentId });
         }
 
-        if (!string.Equals(filter.Category1Filter, "All", StringComparison.OrdinalIgnoreCase)
+        // Category1 — multi-select takes precedence
+        if (filter.Category1Codes.Count > 0)
+        {
+            var validIds = filter.Category1Codes
+                .Where(c => long.TryParse(c, out _))
+                .Select((c, i) => (id: long.Parse(c), idx: i))
+                .ToList();
+            if (validIds.Count > 0)
+            {
+                var pNames = validIds.Select(v => $"@cat1m{v.idx}").ToList();
+                sb.Append($" AND t.fk_Category1 IN ({string.Join(",", pNames)})");
+                foreach (var v in validIds)
+                    parms.Add(new SqlParameter($"@cat1m{v.idx}", System.Data.SqlDbType.BigInt) { Value = v.id });
+            }
+        }
+        else if (!string.Equals(filter.Category1Filter, "All", StringComparison.OrdinalIgnoreCase)
             && long.TryParse(filter.Category1Filter, out var cat1Id))
         {
             sb.Append(" AND t.fk_Category1 = @cat1");
             parms.Add(new SqlParameter("@cat1", System.Data.SqlDbType.BigInt) { Value = cat1Id });
         }
 
-        if (!string.Equals(filter.Category2Filter, "All", StringComparison.OrdinalIgnoreCase)
+        // Category2 — multi-select takes precedence
+        if (filter.Category2Codes.Count > 0)
+        {
+            var validIds = filter.Category2Codes
+                .Where(c => long.TryParse(c, out _))
+                .Select((c, i) => (id: long.Parse(c), idx: i))
+                .ToList();
+            if (validIds.Count > 0)
+            {
+                var pNames = validIds.Select(v => $"@cat2m{v.idx}").ToList();
+                sb.Append($" AND t.fk_Category2 IN ({string.Join(",", pNames)})");
+                foreach (var v in validIds)
+                    parms.Add(new SqlParameter($"@cat2m{v.idx}", System.Data.SqlDbType.BigInt) { Value = v.id });
+            }
+        }
+        else if (!string.Equals(filter.Category2Filter, "All", StringComparison.OrdinalIgnoreCase)
             && long.TryParse(filter.Category2Filter, out var cat2Id))
         {
             sb.Append(" AND t.fk_Category2 = @cat2");

@@ -96,8 +96,39 @@
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-semibold">Email addresses</label>
-                        <input type="text" class="form-control" id="schedRecipients" placeholder="user@@company.com, manager@@company.com">
+                        <div class="input-group mb-1">
+                            <input type="text" class="form-control" id="schedRecipients" placeholder="user@@company.com, manager@@company.com">
+                            <button class="btn btn-outline-secondary" type="button" id="schedAddrBookBtn"
+                                    onclick="toggleAddressBook()" title="Address Book">
+                                <i class="bi bi-book me-1"></i>Book
+                            </button>
+                        </div>
                         <small class="text-muted">Separate multiple addresses with commas</small>
+                        <div id="schedAddrBookPanel" style="display:none;" class="border rounded p-2 mt-2 bg-light">
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="text" class="form-control form-control-sm" id="schedAddrSearch"
+                                       placeholder="Search address book..." oninput="searchAddressBook(this.value)">
+                                <button class="btn btn-sm btn-outline-primary" type="button" onclick="showAddRecipientForm()">
+                                    <i class="bi bi-plus"></i>
+                                </button>
+                            </div>
+                            <div id="schedAddrBookList" style="max-height:200px;overflow-y:auto;"></div>
+                            <div id="schedAddRecipientForm" style="display:none;" class="mt-2 border-top pt-2">
+                                <div class="row g-1">
+                                    <div class="col-6">
+                                        <input type="text" class="form-control form-control-sm" id="newRecipientEmail" placeholder="email@@example.com">
+                                    </div>
+                                    <div class="col-4">
+                                        <input type="text" class="form-control form-control-sm" id="newRecipientName" placeholder="Display Name">
+                                    </div>
+                                    <div class="col-2">
+                                        <button class="btn btn-sm btn-success w-100" type="button" onclick="saveNewRecipient()">
+                                            <i class="bi bi-check"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-semibold">Email Subject <span class="text-muted fw-normal">(optional)</span></label>
@@ -433,4 +464,117 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }).catch(function () { });
 });
+
+// ── Address Book ─────────────────────────────────────────────────────────────
+var _addrBookCache = null;
+var _addrBookSearchTimer = null;
+
+function toggleAddressBook() {
+    var panel = document.getElementById('schedAddrBookPanel');
+    if (!panel) return;
+    var visible = panel.style.display !== 'none';
+    panel.style.display = visible ? 'none' : '';
+    if (!visible && _addrBookCache === null) loadAddressBook();
+}
+
+function loadAddressBook(query) {
+    var url = '@Url.Action("GetEmailRecipients", "Reports")';
+    if (query) url += '?q=' + encodeURIComponent(query);
+    fetch(url, { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (!d.success) return;
+            if (!query) _addrBookCache = d.recipients;
+            renderAddressBookList(d.recipients || []);
+        }).catch(function() {});
+}
+
+function renderAddressBookList(recipients) {
+    var container = document.getElementById('schedAddrBookList');
+    if (!container) return;
+    if (!recipients.length) {
+        container.innerHTML = '<div class="text-muted small p-2">No contacts found. Use <i class="bi bi-plus"></i> to add.</div>';
+        return;
+    }
+    var html = '';
+    recipients.forEach(function(r) {
+        var safeName = escapeHtml(r.label || r.email);
+        html += '<div class="d-flex align-items-center gap-1 py-1 border-bottom">'
+            + '<span class="flex-grow-1 small" style="cursor:pointer;" onclick="addRecipientToInput(\'' + escapeHtml(r.email) + '\')">'
+            + '<i class="bi bi-person-fill me-1 text-muted"></i>' + safeName + '</span>'
+            + '<button type="button" class="btn btn-sm btn-link text-primary p-0" title="Add to recipients" onclick="addRecipientToInput(\'' + escapeHtml(r.email) + '\')">'
+            + '<i class="bi bi-plus-circle"></i></button>'
+            + '<button type="button" class="btn btn-sm btn-link text-danger p-0" title="Remove from book" onclick="removeRecipient(' + r.id + ', this)">'
+            + '<i class="bi bi-trash"></i></button>'
+            + '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function addRecipientToInput(email) {
+    var input = document.getElementById('schedRecipients');
+    if (!input) return;
+    var current = input.value.trim();
+    var emails = current ? current.split(',').map(function(e) { return e.trim(); }) : [];
+    if (emails.indexOf(email) === -1) {
+        emails.push(email);
+        input.value = emails.join(', ');
+    }
+}
+
+function searchAddressBook(q) {
+    clearTimeout(_addrBookSearchTimer);
+    _addrBookSearchTimer = setTimeout(function() {
+        if (!q) {
+            if (_addrBookCache) renderAddressBookList(_addrBookCache);
+            else loadAddressBook();
+        } else {
+            loadAddressBook(q);
+        }
+    }, 300);
+}
+
+function showAddRecipientForm() {
+    var form = document.getElementById('schedAddRecipientForm');
+    if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
+}
+
+function saveNewRecipient() {
+    var emailEl = document.getElementById('newRecipientEmail');
+    var nameEl  = document.getElementById('newRecipientName');
+    if (!emailEl) return;
+    var email = (emailEl.value || '').trim();
+    if (!email) { emailEl.focus(); return; }
+
+    var fd = new FormData();
+    fd.append('emailAddress', email);
+    fd.append('displayName', nameEl ? nameEl.value.trim() : '');
+
+    fetch('@Url.Action("AddEmailRecipient", "Reports")', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.success) {
+                emailEl.value = ''; if (nameEl) nameEl.value = '';
+                showAddRecipientForm();
+                _addrBookCache = null;
+                loadAddressBook();
+            } else {
+                alert(d.message || 'Failed to add recipient.');
+            }
+        }).catch(function() { alert('Network error.'); });
+}
+
+function removeRecipient(id, btn) {
+    if (!confirm('Remove this contact from the address book?')) return;
+    fetch('@Url.Action("DeleteEmailRecipient", "Reports")?id=' + id, { method: 'DELETE', credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.success) {
+                _addrBookCache = null;
+                loadAddressBook();
+            } else {
+                alert(d.message || 'Failed to remove.');
+            }
+        }).catch(function() {});
+}
 </script>

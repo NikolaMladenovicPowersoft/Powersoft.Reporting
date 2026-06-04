@@ -7946,4 +7946,94 @@ public class ReportsController : Controller
 
     #endregion
 
+    // ─── Email Address Book ────────────────────────────────────────────────────
+
+    [HttpGet]
+    public async Task<IActionResult> GetEmailRecipients(string? q = null)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, recipients = Array.Empty<object>() });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateEmailRecipientRepository(tenantConnString);
+            var list = string.IsNullOrWhiteSpace(q)
+                ? await repo.GetAllAsync()
+                : await repo.SearchAsync(q);
+
+            return Json(new
+            {
+                success = true,
+                recipients = list.Select(r => new
+                {
+                    id = r.RecipientId,
+                    email = r.EmailAddress,
+                    name = r.DisplayName,
+                    label = string.IsNullOrEmpty(r.DisplayName) ? r.EmailAddress : $"{r.DisplayName} <{r.EmailAddress}>"
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading email recipients");
+            return Json(new { success = false, recipients = Array.Empty<object>() });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AddEmailRecipient([FromForm] string emailAddress, [FromForm] string? displayName)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected." });
+
+        if (string.IsNullOrWhiteSpace(emailAddress) || !EmailRegex.IsMatch(emailAddress.Trim()))
+            return Json(new { success = false, message = "Invalid email address." });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateEmailRecipientRepository(tenantConnString);
+            var recipient = await repo.AddAsync(emailAddress.Trim(), displayName ?? "", GetUserCode());
+            if (recipient == null)
+                return Json(new { success = false, message = "Email already exists in address book." });
+
+            return Json(new
+            {
+                success = true,
+                recipient = new
+                {
+                    id = recipient.RecipientId,
+                    email = recipient.EmailAddress,
+                    name = recipient.DisplayName,
+                    label = string.IsNullOrEmpty(recipient.DisplayName) ? recipient.EmailAddress : $"{recipient.DisplayName} <{recipient.EmailAddress}>"
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding email recipient {Email}", emailAddress);
+            return Json(new { success = false, message = "Failed to add recipient." });
+        }
+    }
+
+    [HttpDelete]
+    public async Task<IActionResult> DeleteEmailRecipient(int id)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected." });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateEmailRecipientRepository(tenantConnString);
+            var deleted = await repo.DeleteAsync(id);
+            return Json(new { success = deleted, message = deleted ? "Removed from address book." : "Recipient not found." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting email recipient {Id}", id);
+            return Json(new { success = false, message = "Failed to delete recipient." });
+        }
+    }
 }

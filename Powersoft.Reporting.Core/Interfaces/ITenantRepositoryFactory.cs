@@ -16,4 +16,5 @@ public interface ITenantRepositoryFactory
     ICancelLogRepository CreateCancelLogRepository(string connectionString);
     IProspectClientsRepository CreateProspectClientsRepository(string connectionString);
     IOffersReportRepository CreateOffersReportRepository(string connectionString);
+    IEmailRecipientRepository CreateEmailRecipientRepository(string connectionString);
 }

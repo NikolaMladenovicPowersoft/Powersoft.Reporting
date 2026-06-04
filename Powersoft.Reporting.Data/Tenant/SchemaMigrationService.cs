@@ -150,6 +150,20 @@ BEGIN
     );
     CREATE INDEX IX_FilterPreset_User ON {SchemaName}.tbl_FilterPreset(CreatedBy, ReportType);
 END
+
+-- 7. tbl_EmailRecipientList (per-company address book)
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_EmailRecipientList') AND type = 'U')
+BEGIN
+    CREATE TABLE {SchemaName}.tbl_EmailRecipientList (
+        pk_RecipientID  INT IDENTITY(1,1) PRIMARY KEY,
+        EmailAddress    NVARCHAR(256) NOT NULL,
+        DisplayName     NVARCHAR(256) NULL,
+        IsActive        BIT           NOT NULL DEFAULT 1,
+        CreatedDate     DATETIME      NOT NULL DEFAULT GETDATE(),
+        CreatedBy       NVARCHAR(50)  NULL
+    );
+    CREATE UNIQUE INDEX IX_EmailRecipient_Email ON {SchemaName}.tbl_EmailRecipientList(EmailAddress) WHERE IsActive = 1;
+END
 ";
 
     public static async Task EnsureSchemaAsync(string connectionString)

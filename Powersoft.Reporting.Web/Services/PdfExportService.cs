@@ -500,7 +500,7 @@ public class PdfExportService
 
         int colCount;
         if (isDetailed)
-            colCount = 16 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+            colCount = 17 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
         else
             colCount = 6 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
 

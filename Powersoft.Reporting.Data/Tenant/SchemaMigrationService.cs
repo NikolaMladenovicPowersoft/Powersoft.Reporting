@@ -151,7 +151,24 @@ BEGIN
     CREATE INDEX IX_FilterPreset_User ON {SchemaName}.tbl_FilterPreset(CreatedBy, ReportType);
 END
 
--- 7. tbl_EmailRecipientList (per-company address book)
+-- 7. tbl_ReportScheduleLog — add token columns if missing
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_ReportScheduleLog') AND name = 'InputTokens')
+    ALTER TABLE {SchemaName}.tbl_ReportScheduleLog ADD InputTokens INT NULL, OutputTokens INT NULL, EstimatedCost DECIMAL(10,6) NULL;
+
+-- 8. tbl_AiTokenBudget — monthly per-company token budget
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_AiTokenBudget') AND type = 'U')
+BEGIN
+    CREATE TABLE {SchemaName}.tbl_AiTokenBudget (
+        pk_BudgetID         INT IDENTITY(1,1) PRIMARY KEY,
+        MonthlyTokenLimit   INT      NOT NULL DEFAULT 500000,
+        CurrentMonthUsed    INT      NOT NULL DEFAULT 0,
+        BudgetMonth         DATE     NOT NULL,
+        LastUpdated         DATETIME NOT NULL DEFAULT GETDATE()
+    );
+    CREATE UNIQUE INDEX IX_AiTokenBudget_Month ON {SchemaName}.tbl_AiTokenBudget(BudgetMonth);
+END
+
+-- 9. tbl_EmailRecipientList (per-company address book)
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_EmailRecipientList') AND type = 'U')
 BEGIN
     CREATE TABLE {SchemaName}.tbl_EmailRecipientList (

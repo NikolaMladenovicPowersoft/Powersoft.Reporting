@@ -21,6 +21,12 @@ public class DatabaseSettingsViewModel
     [Display(Name = "Report Retention (days)")]
     public int RetentionDays { get; set; } = 7;
 
+    [Range(1000, 100000000, ErrorMessage = "Must be between 1,000 and 100,000,000")]
+    [Display(Name = "Monthly AI Token Budget")]
+    public int MonthlyTokenLimit { get; set; } = 500000;
+
+    public int CurrentMonthUsed { get; set; }
+
     public bool IsSystemAdmin { get; set; }
     public bool CanEdit { get; set; }
     public string? SuccessMessage { get; set; }

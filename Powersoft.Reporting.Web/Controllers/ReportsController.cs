@@ -726,6 +726,66 @@ public class ReportsController : Controller
         return User.Identity?.Name ?? "UNKNOWN";
     }
 
+    /// <summary>
+    /// Checks the monthly AI token budget for the current tenant.
+    /// Returns null if OK, or an error message string if budget is exceeded or check fails.
+    /// </summary>
+    private async Task<string?> CheckAiBudgetAsync(string tenantConnString)
+    {
+        try
+        {
+            var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var budget = await schedRepo.GetOrCreateTokenBudgetAsync();
+            if (budget.MonthlyTokenLimit > 0 && budget.CurrentMonthUsed >= budget.MonthlyTokenLimit)
+                return $"Monthly AI token budget exceeded ({budget.CurrentMonthUsed:N0} / {budget.MonthlyTokenLimit:N0} tokens used this month).";
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not check AI token budget — allowing call to proceed");
+            return null; // Non-blocking: if budget check fails, allow the call
+        }
+    }
+
+    /// <summary>
+    /// Logs AI token usage after a successful analysis call.
+    /// </summary>
+    private async Task LogAiTokensAsync(string tenantConnString, int inputTokens, int outputTokens)
+    {
+        try
+        {
+            var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            await schedRepo.IncrementTokenUsageAsync(inputTokens, outputTokens);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to log AI token usage ({In}+{Out})", inputTokens, outputTokens);
+        }
+    }
+
+    /// <summary>
+    /// Budget check + AI call + token logging in one step.
+    /// Returns (analysis, null) on success, (null, errorMessage) on failure.
+    /// </summary>
+    private async Task<(ReportAnalysis? analysis, string? error)> AnalyzeWithBudgetAsync(
+        string csvData, string reportType, string? locale, string? customPrompt, string? tenantConnString)
+    {
+        if (!string.IsNullOrEmpty(tenantConnString))
+        {
+            var budgetError = await CheckAiBudgetAsync(tenantConnString);
+            if (budgetError != null) return (null, budgetError);
+        }
+
+        var analyzer = _analyzerFactory.Create();
+        var analysis = await analyzer.AnalyzeAsync(csvData, reportType, locale: locale,
+            customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+
+        if (!string.IsNullOrEmpty(tenantConnString))
+            await LogAiTokensAsync(tenantConnString, analysis.InputTokens, analysis.OutputTokens);
+
+        return (analysis, null);
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetLayout()
     {
@@ -1182,12 +1242,38 @@ public class ReportsController : Controller
                 l.LogId, l.ScheduleId, l.ScheduleName, l.ReportType,
                 runDate = l.RunDate.ToString("yyyy-MM-dd HH:mm:ss"),
                 l.Status, l.RowsGenerated, l.FileSizeBytes,
-                l.ErrorMessage, l.DurationMs
+                l.ErrorMessage, l.DurationMs,
+                l.InputTokens, l.OutputTokens, l.EstimatedCost
             }));
         }
         catch
         {
             return Json(new List<object>());
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetTokenBudget()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var budget = await repo.GetCurrentTokenBudgetAsync();
+            if (budget == null) return Json(new { });
+            return Json(new
+            {
+                budget.MonthlyTokenLimit,
+                budget.CurrentMonthUsed,
+                budgetMonth = budget.BudgetMonth.ToString("yyyy-MM-dd")
+            });
+        }
+        catch
+        {
+            return Json(new { });
         }
     }
 
@@ -2434,8 +2520,9 @@ public class ReportsController : Controller
                 "AI analysis [AverageBasket]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
 
-            var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "AverageBasket", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+            var tenantConn4AB = GetTenantConnectionString();
+            var (analysis, budgetErr4AB) = await AnalyzeWithBudgetAsync(csvData, "AverageBasket", locale, customPrompt, tenantConn4AB);
+            if (budgetErr4AB != null) return Json(new { success = false, message = budgetErr4AB });
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -2496,8 +2583,8 @@ public class ReportsController : Controller
                 "AI analysis [PurchasesSales]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
 
-            var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "PurchasesSales", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+            var (analysis, budgetErrPS) = await AnalyzeWithBudgetAsync(csvData, "PurchasesSales", locale, customPrompt, GetTenantConnectionString());
+            if (budgetErrPS != null) return Json(new { success = false, message = budgetErrPS });
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -3433,8 +3520,8 @@ public class ReportsController : Controller
                 "AI analysis [Pareto]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 result.Rows.Count, csvData.Length, locale, User.Identity?.Name);
 
-            var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "Pareto", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+            var (analysis, budgetErrPareto) = await AnalyzeWithBudgetAsync(csvData, "Pareto", locale, customPrompt, GetTenantConnectionString());
+            if (budgetErrPareto != null) return Json(new { success = false, message = budgetErrPareto });
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -3725,8 +3812,8 @@ public class ReportsController : Controller
                 "AI analysis [Chart]: {Dimension} x {Metric}, Top {TopN}, compareLY={CompareLY}, {DataPoints} points, {CsvLen} chars, user={User}",
                 dimension, metric, topN, compareLastYear, data.Count, csvData.Length, User.Identity?.Name);
 
-            var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, reportContext, locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+            var (analysis, budgetErrChart) = await AnalyzeWithBudgetAsync(csvData, reportContext, locale, customPrompt, GetTenantConnectionString());
+            if (budgetErrChart != null) return Json(new { success = false, message = budgetErrChart });
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -5384,8 +5471,8 @@ public class ReportsController : Controller
                 "AI analysis [Catalogue]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
 
-            var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "Catalogue", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+            var (analysis, budgetErrCat) = await AnalyzeWithBudgetAsync(csvData, "Catalogue", locale, customPrompt, GetTenantConnectionString());
+            if (budgetErrCat != null) return Json(new { success = false, message = budgetErrCat });
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -6313,8 +6400,8 @@ public class ReportsController : Controller
                 "AI analysis [CancelLog]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 rowCount, csvData.Length, locale, User.Identity?.Name);
 
-            var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "CancelLog", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+            var (analysis, budgetErrCL) = await AnalyzeWithBudgetAsync(csvData, "CancelLog", locale, customPrompt, GetTenantConnectionString());
+            if (budgetErrCL != null) return Json(new { success = false, message = budgetErrCL });
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -6974,8 +7061,8 @@ public class ReportsController : Controller
                 "AI analysis [ProspectClients]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 rowCount, csvData.Length, locale, User.Identity?.Name);
 
-            var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "ProspectClients", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+            var (analysis, budgetErrPC) = await AnalyzeWithBudgetAsync(csvData, "ProspectClients", locale, customPrompt, GetTenantConnectionString());
+            if (budgetErrPC != null) return Json(new { success = false, message = budgetErrPC });
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -7750,8 +7837,8 @@ public class ReportsController : Controller
                 "AI analysis [OffersReport]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 rowCount, csvData.Length, locale, User.Identity?.Name);
 
-            var analyzer = _analyzerFactory.Create();
-            var analysis = await analyzer.AnalyzeAsync(csvData, "OffersReport", locale: locale, customSystemPrompt: customPrompt, ct: HttpContext.RequestAborted);
+            var (analysis, budgetErrOR) = await AnalyzeWithBudgetAsync(csvData, "OffersReport", locale, customPrompt, GetTenantConnectionString());
+            if (budgetErrOR != null) return Json(new { success = false, message = budgetErrOR });
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }

@@ -50,6 +50,9 @@ public class SettingsController : Controller
 
         var settings = DatabaseSettings.FromDictionary(ini);
 
+        var schedRepo = _repositoryFactory.CreateScheduleRepository(connString);
+        var budget = await schedRepo.GetCurrentTokenBudgetAsync();
+
         var vm = new DatabaseSettingsViewModel
         {
             ConnectedDatabase = GetConnectedDatabaseName(),
@@ -58,6 +61,8 @@ public class SettingsController : Controller
             DefaultExportFormat = settings.DefaultExportFormat,
             SchedulerEnabled = settings.SchedulerEnabled,
             RetentionDays = settings.RetentionDays,
+            MonthlyTokenLimit = budget?.MonthlyTokenLimit ?? 500000,
+            CurrentMonthUsed = budget?.CurrentMonthUsed ?? 0,
             IsSystemAdmin = ranking < ModuleConstants.RankingSystemAdmin,
             CanEdit = ranking <= ModuleConstants.RankingSystemAdmin
         };
@@ -99,6 +104,9 @@ public class SettingsController : Controller
             ModuleConstants.IniDescriptionDbSettings,
             "ALL",
             settings.ToDictionary());
+
+        var schedRepo = _repositoryFactory.CreateScheduleRepository(connString);
+        await schedRepo.SetMonthlyTokenLimitAsync(vm.MonthlyTokenLimit);
 
         _logger.LogInformation("DB settings saved for {DB} by {User}",
             GetConnectedDatabaseName(), User.Identity?.Name);

@@ -115,6 +115,45 @@
                 </div>
             </div>
 
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-cpu me-2"></i>AI Token Budget</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label asp-for="MonthlyTokenLimit" class="form-label"></label>
+                            @if (isReadOnly)
+                            {
+                                <input asp-for="MonthlyTokenLimit" class="form-control" type="number" disabled />
+                            }
+                            else
+                            {
+                                <input asp-for="MonthlyTokenLimit" class="form-control" type="number" min="1000" max="100000000" />
+                            }
+                            <span asp-validation-for="MonthlyTokenLimit" class="text-danger small"></span>
+                            <div class="form-text">Maximum AI tokens allowed per month for this database. 500,000 = roughly 200 AI analyses.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Current Month Usage</label>
+                            @{
+                                var usedPct = Model.MonthlyTokenLimit > 0
+                                    ? Math.Min(100, (int)((double)Model.CurrentMonthUsed / Model.MonthlyTokenLimit * 100))
+                                    : 0;
+                                var barClass = usedPct >= 90 ? "bg-danger" : usedPct >= 70 ? "bg-warning" : "bg-success";
+                            }
+                            <div class="mb-1">
+                                <strong>@Model.CurrentMonthUsed.ToString("N0")</strong>
+                                <span class="text-muted"> / @Model.MonthlyTokenLimit.ToString("N0") tokens (@usedPct%)</span>
+                            </div>
+                            <div class="progress" style="height: 10px;">
+                                <div class="progress-bar @barClass" role="progressbar" style="width: @usedPct%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             @if (Model.CanEdit)
             {
                 <div class="d-flex gap-2">

@@ -32,6 +32,17 @@ public interface IScheduleRepository
     /// </summary>
     Task<List<ScheduleLogEntry>> GetScheduleLogsAsync(int? scheduleId = null, int top = 100);
 
+    /// <summary>
+    /// Updates the token usage on an existing log entry (called after AI analysis completes).
+    /// </summary>
+    Task UpdateLogTokensAsync(int logId, int inputTokens, int outputTokens, decimal estimatedCost);
+
+    // AI Token budget
+    Task<AiTokenBudget?> GetCurrentTokenBudgetAsync();
+    Task<AiTokenBudget> GetOrCreateTokenBudgetAsync();
+    Task<bool> IncrementTokenUsageAsync(int inputTokens, int outputTokens);
+    Task<bool> SetMonthlyTokenLimitAsync(int limit);
+
     // Email templates
     Task<List<EmailTemplate>> GetEmailTemplatesAsync(string? reportType = null);
     Task<EmailTemplate?> GetEmailTemplateByIdAsync(int templateId);

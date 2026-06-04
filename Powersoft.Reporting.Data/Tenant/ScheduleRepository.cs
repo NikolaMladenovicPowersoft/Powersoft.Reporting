@@ -272,7 +272,8 @@ public class ScheduleRepository : IScheduleRepository
         var sql = @"
             SELECT TOP (@Top)
                    l.pk_LogID, l.fk_ScheduleID, s.ScheduleName, s.ReportType,
-                   l.RunDate, l.Status, l.RowsGenerated, l.FileSizeBytes, l.ErrorMessage, l.DurationMs
+                   l.RunDate, l.Status, l.RowsGenerated, l.FileSizeBytes, l.ErrorMessage, l.DurationMs,
+                   l.InputTokens, l.OutputTokens, l.EstimatedCost
             FROM dboReportsAI.tbl_ReportScheduleLog l
             INNER JOIN dboReportsAI.tbl_ReportSchedule s ON s.pk_ScheduleID = l.fk_ScheduleID"
             + (scheduleId.HasValue ? " WHERE l.fk_ScheduleID = @ScheduleId" : "")
@@ -301,12 +302,115 @@ public class ScheduleRepository : IScheduleRepository
                 RowsGenerated = reader.IsDBNull(6) ? null : reader.GetInt32(6),
                 FileSizeBytes = reader.IsDBNull(7) ? null : reader.GetInt64(7),
                 ErrorMessage = reader.IsDBNull(8) ? null : reader.GetString(8),
-                DurationMs = reader.IsDBNull(9) ? null : reader.GetInt32(9)
+                DurationMs = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                InputTokens = reader.IsDBNull(10) ? null : reader.GetInt32(10),
+                OutputTokens = reader.IsDBNull(11) ? null : reader.GetInt32(11),
+                EstimatedCost = reader.IsDBNull(12) ? null : reader.GetDecimal(12)
             });
         }
 
         return entries;
     }
+
+    public async Task UpdateLogTokensAsync(int logId, int inputTokens, int outputTokens, decimal estimatedCost)
+    {
+        const string sql = @"
+            UPDATE dboReportsAI.tbl_ReportScheduleLog
+            SET InputTokens = @InTok, OutputTokens = @OutTok, EstimatedCost = @Cost
+            WHERE pk_LogID = @LogId";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@LogId", logId);
+        cmd.Parameters.AddWithValue("@InTok", inputTokens);
+        cmd.Parameters.AddWithValue("@OutTok", outputTokens);
+        cmd.Parameters.AddWithValue("@Cost", estimatedCost);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<AiTokenBudget?> GetCurrentTokenBudgetAsync()
+    {
+        const string sql = @"
+            SELECT pk_BudgetID, MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated
+            FROM dboReportsAI.tbl_AiTokenBudget
+            WHERE BudgetMonth = DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()), 0)";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        using var reader = await cmd.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+            return MapBudget(reader);
+        return null;
+    }
+
+    public async Task<AiTokenBudget> GetOrCreateTokenBudgetAsync()
+    {
+        // Read previous month's limit to carry forward for new month
+        const string sql = @"
+            DECLARE @thisMonth DATE = DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()), 0);
+            DECLARE @prevLimit INT = (
+                SELECT TOP 1 MonthlyTokenLimit FROM dboReportsAI.tbl_AiTokenBudget
+                ORDER BY BudgetMonth DESC
+            );
+            IF @prevLimit IS NULL SET @prevLimit = 500000;
+            IF NOT EXISTS (SELECT 1 FROM dboReportsAI.tbl_AiTokenBudget WHERE BudgetMonth = @thisMonth)
+                INSERT INTO dboReportsAI.tbl_AiTokenBudget (MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated)
+                VALUES (@prevLimit, 0, @thisMonth, GETDATE());
+            SELECT pk_BudgetID, MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated
+            FROM dboReportsAI.tbl_AiTokenBudget WHERE BudgetMonth = @thisMonth;";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        using var reader = await cmd.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+            return MapBudget(reader);
+        return new AiTokenBudget { MonthlyTokenLimit = 500000, BudgetMonth = DateTime.Today };
+    }
+
+    public async Task<bool> IncrementTokenUsageAsync(int inputTokens, int outputTokens)
+    {
+        const string sql = @"
+            DECLARE @thisMonth DATE = DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()), 0);
+            UPDATE dboReportsAI.tbl_AiTokenBudget
+            SET CurrentMonthUsed = CurrentMonthUsed + @tokens,
+                LastUpdated = GETDATE()
+            WHERE BudgetMonth = @thisMonth;";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@tokens", inputTokens + outputTokens);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    public async Task<bool> SetMonthlyTokenLimitAsync(int limit)
+    {
+        const string sql = @"
+            DECLARE @thisMonth DATE = DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()), 0);
+            IF EXISTS (SELECT 1 FROM dboReportsAI.tbl_AiTokenBudget WHERE BudgetMonth = @thisMonth)
+                UPDATE dboReportsAI.tbl_AiTokenBudget SET MonthlyTokenLimit = @limit WHERE BudgetMonth = @thisMonth;
+            ELSE
+                INSERT INTO dboReportsAI.tbl_AiTokenBudget (MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated)
+                VALUES (@limit, 0, @thisMonth, GETDATE());";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@limit", limit);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
+    private static AiTokenBudget MapBudget(SqlDataReader r) => new()
+    {
+        BudgetId = r.GetInt32(0),
+        MonthlyTokenLimit = r.GetInt32(1),
+        CurrentMonthUsed = r.GetInt32(2),
+        BudgetMonth = r.GetDateTime(3),
+        LastUpdated = r.GetDateTime(4)
+    };
 
     // ==================== Email Templates ====================
 

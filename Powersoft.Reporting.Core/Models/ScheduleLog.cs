@@ -10,6 +10,9 @@ public class ScheduleLog
     public long? FileSizeBytes { get; set; }
     public string? ErrorMessage { get; set; }
     public int? DurationMs { get; set; }
+    public int? InputTokens { get; set; }
+    public int? OutputTokens { get; set; }
+    public decimal? EstimatedCost { get; set; }
 }
 
 public class ScheduleLogEntry
@@ -24,6 +27,9 @@ public class ScheduleLogEntry
     public long? FileSizeBytes { get; set; }
     public string? ErrorMessage { get; set; }
     public int? DurationMs { get; set; }
+    public int? InputTokens { get; set; }
+    public int? OutputTokens { get; set; }
+    public decimal? EstimatedCost { get; set; }
 }
 
 public static class ScheduleLogStatus

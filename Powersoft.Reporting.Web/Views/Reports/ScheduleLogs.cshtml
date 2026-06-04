@@ -25,7 +25,7 @@
     </div>
 
     <div class="row mb-3">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="card border-0 bg-light">
                 <div class="card-body text-center py-2">
                     <div class="fs-4 fw-bold text-primary" id="statTotal">—</div>
@@ -33,7 +33,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="card border-0 bg-light">
                 <div class="card-body text-center py-2">
                     <div class="fs-4 fw-bold text-success" id="statSuccess">—</div>
@@ -41,7 +41,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="card border-0 bg-light">
                 <div class="card-body text-center py-2">
                     <div class="fs-4 fw-bold text-danger" id="statFailed">—</div>
@@ -49,11 +49,25 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="card border-0 bg-light">
                 <div class="card-body text-center py-2">
                     <div class="fs-4 fw-bold text-info" id="statAvgDuration">—</div>
                     <small class="text-muted">Avg Duration</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 bg-light" id="tokenBudgetCard">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <small class="text-muted fw-semibold">AI Tokens This Month</small>
+                        <small class="text-muted" id="tokenBudgetLabel">—</small>
+                    </div>
+                    <div class="progress" style="height:8px;">
+                        <div class="progress-bar" id="tokenBudgetBar" role="progressbar" style="width:0%"></div>
+                    </div>
+                    <small class="text-muted" id="tokenBudgetSub">Loading...</small>
                 </div>
             </div>
         </div>
@@ -73,11 +87,14 @@
                             <th class="text-end">Rows</th>
                             <th class="text-end">Size</th>
                             <th class="text-end">Duration</th>
+                            <th class="text-end">Input Tokens</th>
+                            <th class="text-end">Output Tokens</th>
+                            <th class="text-end">Est. Cost</th>
                             <th>Error</th>
                         </tr>
                     </thead>
                     <tbody id="logsBody">
-                        <tr><td colspan="9" class="text-center py-4 text-muted">Loading...</td></tr>
+                        <tr><td colspan="12" class="text-center py-4 text-muted">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -87,7 +104,10 @@
 
 @section Scripts {
 <script>
-    document.addEventListener('DOMContentLoaded', loadLogs);
+    document.addEventListener('DOMContentLoaded', function() {
+        loadLogs();
+        loadTokenBudget();
+    });
 
     function loadLogs() {
         fetch('@Url.Action("GetScheduleLogs")')
@@ -95,8 +115,44 @@
             .then(data => renderLogs(data))
             .catch(() => {
                 document.getElementById('logsBody').innerHTML =
-                    '<tr><td colspan="9" class="text-center py-4 text-danger">Failed to load logs</td></tr>';
+                    '<tr><td colspan="12" class="text-center py-4 text-danger">Failed to load logs</td></tr>';
             });
+    }
+
+    function loadTokenBudget() {
+        fetch('@Url.Action("GetTokenBudget")')
+            .then(r => r.json())
+            .then(b => renderTokenBudget(b))
+            .catch(() => {
+                document.getElementById('tokenBudgetSub').textContent = 'Could not load budget';
+            });
+    }
+
+    function renderTokenBudget(b) {
+        if (!b || b.monthlyTokenLimit == null) {
+            document.getElementById('tokenBudgetSub').textContent = 'No budget configured';
+            document.getElementById('tokenBudgetLabel').textContent = '';
+            return;
+        }
+        var used = b.currentMonthUsed || 0;
+        var limit = b.monthlyTokenLimit;
+        var pct = limit > 0 ? Math.min(100, Math.round(used / limit * 100)) : 0;
+        var barClass = pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warning' : 'bg-success';
+        document.getElementById('tokenBudgetBar').style.width = pct + '%';
+        document.getElementById('tokenBudgetBar').className = 'progress-bar ' + barClass;
+        document.getElementById('tokenBudgetLabel').textContent = pct + '%';
+        document.getElementById('tokenBudgetSub').innerHTML =
+            '<span class="' + (pct >= 90 ? 'text-danger' : 'text-muted') + '">'
+            + formatTokens(used) + ' / ' + formatTokens(limit) + ' tokens used'
+            + (b.budgetMonth ? ' (' + b.budgetMonth.substring(0, 7) + ')' : '')
+            + '</span>';
+    }
+
+    function formatTokens(n) {
+        if (n == null) return '—';
+        if (n >= 1000000) return (n / 1000000).toFixed(2) + 'M';
+        if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+        return n.toString();
     }
 
     function renderLogs(data) {
@@ -117,7 +173,7 @@
 
         if (filtered.length === 0) {
             document.getElementById('logsBody').innerHTML =
-                '<tr><td colspan="9" class="text-center py-4 text-muted">No logs found</td></tr>';
+                '<tr><td colspan="12" class="text-center py-4 text-muted">No logs found</td></tr>';
             return;
         }
 
@@ -136,6 +192,12 @@
                   + truncate(l.errorMessage, 40) + '</span>'
                 : '—';
 
+            var inputTok = (l.inputTokens != null) ? l.inputTokens.toLocaleString() : '—';
+            var outputTok = (l.outputTokens != null) ? l.outputTokens.toLocaleString() : '—';
+            var costStr = (l.estimatedCost != null && l.estimatedCost > 0)
+                ? '$' + Number(l.estimatedCost).toFixed(4)
+                : '—';
+
             html += '<tr>'
                 + '<td class="text-muted">' + l.logId + '</td>'
                 + '<td><strong>' + escapeHtml(l.scheduleName) + '</strong><br/><small class="text-muted">ID: ' + l.scheduleId + '</small></td>'
@@ -145,6 +207,9 @@
                 + '<td class="text-end">' + (l.rowsGenerated !== null ? l.rowsGenerated.toLocaleString() : '—') + '</td>'
                 + '<td class="text-end">' + sizeStr + '</td>'
                 + '<td class="text-end">' + durationStr + '</td>'
+                + '<td class="text-end text-info">' + inputTok + '</td>'
+                + '<td class="text-end text-info">' + outputTok + '</td>'
+                + '<td class="text-end text-warning">' + costStr + '</td>'
                 + '<td>' + errorStr + '</td>'
                 + '</tr>';
         });

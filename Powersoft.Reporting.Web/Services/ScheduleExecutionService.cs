@@ -985,12 +985,42 @@ public class ScheduleExecutionService
             }
 
             var csvData = Encoding.UTF8.GetString(csvBytes);
+
+            // budget check
+            try
+            {
+                var budgetRepo = _repositoryFactory.CreateScheduleRepository(connString);
+                var budget = await budgetRepo.GetOrCreateTokenBudgetAsync();
+                if (budget.CurrentMonthUsed >= budget.MonthlyTokenLimit)
+                {
+                    _logger.LogWarning(
+                        "Schedule {Id}: monthly AI token budget exceeded ({Used}/{Limit}), skipping AI analysis",
+                        schedule.ScheduleId, budget.CurrentMonthUsed, budget.MonthlyTokenLimit);
+                    return null;
+                }
+            }
+            catch (Exception budgetEx)
+            {
+                _logger.LogWarning(budgetEx, "Schedule {Id}: failed to check AI token budget, proceeding without check", schedule.ScheduleId);
+            }
+
             var analyzer = _analyzerFactory.Create();
             var analysis = await analyzer.AnalyzeAsync(csvData, reportType, locale: schedule.AiLocale, ct: ct);
 
             _logger.LogInformation(
                 "Schedule {Id}: AI analysis completed — {InTok}+{OutTok} tokens",
                 schedule.ScheduleId, analysis.InputTokens, analysis.OutputTokens);
+
+            // log token usage
+            try
+            {
+                var tokenRepo = _repositoryFactory.CreateScheduleRepository(connString);
+                await tokenRepo.IncrementTokenUsageAsync(analysis.InputTokens, analysis.OutputTokens);
+            }
+            catch (Exception tokenEx)
+            {
+                _logger.LogWarning(tokenEx, "Schedule {Id}: failed to log AI token usage", schedule.ScheduleId);
+            }
 
             return analysis;
         }

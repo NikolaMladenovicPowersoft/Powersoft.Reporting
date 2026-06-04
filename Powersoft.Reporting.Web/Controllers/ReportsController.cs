@@ -767,6 +767,8 @@ public class ReportsController : Controller
     /// Budget check + AI call + token logging in one step.
     /// Returns (analysis, null) on success, (null, errorMessage) on failure.
     /// </summary>
+    private const int MaxCsvBytesForAi = 100_000;
+
     private async Task<(ReportAnalysis? analysis, string? error)> AnalyzeWithBudgetAsync(
         string csvData, string reportType, string? locale, string? customPrompt, string? tenantConnString)
     {
@@ -774,6 +776,16 @@ public class ReportsController : Controller
         {
             var budgetError = await CheckAiBudgetAsync(tenantConnString);
             if (budgetError != null) return (null, budgetError);
+        }
+
+        if (Encoding.UTF8.GetByteCount(csvData) > MaxCsvBytesForAi)
+        {
+            var bytes = Encoding.UTF8.GetBytes(csvData);
+            csvData = Encoding.UTF8.GetString(bytes, 0, MaxCsvBytesForAi);
+            var lastNewline = csvData.LastIndexOf('\n');
+            if (lastNewline > 0) csvData = csvData[..lastNewline];
+            _logger.LogInformation("AI CSV truncated from {Original} to {Truncated} bytes for {Report}",
+                bytes.Length, Encoding.UTF8.GetByteCount(csvData), reportType);
         }
 
         var analyzer = _analyzerFactory.Create();
@@ -7221,6 +7233,15 @@ public class ReportsController : Controller
             hasSavedLayout = savedLayout.Count > 0;
         }
         catch { }
+
+        try
+        {
+            var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+            var stores = await storeRepo.GetActiveStoresAsync();
+            ViewBag.StoresJson = System.Text.Json.JsonSerializer.Serialize(
+                stores.Select(s => new { code = s.StoreCode, name = s.StoreName }));
+        }
+        catch { ViewBag.StoresJson = "[]"; }
 
         ViewBag.HasSavedLayout = hasSavedLayout;
         ViewBag.SavedLayout    = savedLayout;

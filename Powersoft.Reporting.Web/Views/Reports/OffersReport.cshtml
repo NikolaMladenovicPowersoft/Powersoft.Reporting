@@ -1,9 +1,11 @@
+@using Powersoft.Reporting.Core.Models
 @{
     ViewData["Title"] = "Offers Report";
     var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
-    var canSchedule = true;
+    var canSchedule = (bool)(ViewBag.CanSchedule ?? true);
     var hasSavedLayout = (bool)(ViewBag.HasSavedLayout ?? false);
     var savedLayout = ViewBag.SavedLayout as Dictionary<string, string>;
+    var storesJson = ViewBag.StoresJson as string ?? "[]";
 }
 
 <style>
@@ -188,7 +190,30 @@
             </div>
         </div>
 
-        @await Html.PartialAsync("_ItemsSelection")
+        @await Html.PartialAsync("_ItemsSelection", new ItemsSelectionConfig
+        {
+            ShowCategories = true,
+            ShowDepartments = true,
+            ShowBrands = true,
+            ShowSeasons = true,
+            ShowSuppliers = true,
+            ShowStores = true,
+            ShowCustomers = false,
+            ShowItems = true,
+            ShowUsers = false,
+            ShowZReports = false,
+            ShowModels = true,
+            ShowColours = true,
+            ShowSizes = true,
+            ShowGroupSizes = true,
+            ShowFabrics = true,
+            ShowAttributes = true,
+            ShowStockFilter = false,
+            ShowECommerce = false,
+            ShowModifiedDate = false,
+            StoresJson = storesJson,
+            ReportType = "OffersReport"
+        })
         @await Html.PartialAsync("_CustomerSelection")
         <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
             <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">

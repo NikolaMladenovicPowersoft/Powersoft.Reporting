@@ -18,6 +18,8 @@
     th.sortable:hover{background:#e2e8f0;}
     th.sortable .sort-icon{font-size:.65rem;opacity:.4;margin-left:4px;}
     th.sortable.sort-asc .sort-icon,th.sortable.sort-desc .sort-icon{opacity:1;color:#0d6efd;}
+    #resultsTable{table-layout:fixed;width:100%;}
+    #resultsTable td,#resultsTable th{overflow:hidden;text-overflow:ellipsis;}
 </style>
 
 <div class="row mb-4">
@@ -1031,7 +1033,7 @@ function renderRows(items, hasPrimary, hasSecondary) {
             else if (ef.type === 'date') html += '<td class="text-nowrap">'+(v ? new Date(v).toLocaleDateString() : '')+'</td>';
             else if (ef.type === 'num') html += '<td class="text-end">'+formatNumber(v)+'</td>';
             else if (ef.type === 'int') html += '<td class="text-end">'+(v||0)+'</td>';
-            else html += '<td style="white-space:normal;word-break:break-word;">'+escapeHtml(String(v))+'</td>';
+            else html += '<td class="text-truncate" style="max-width:180px" title="'+escapeHtml(String(v))+'">'+escapeHtml(String(v))+'</td>';
         });
         html += '</tr>';
     }

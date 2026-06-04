@@ -314,40 +314,13 @@
     </div>
 </div>
 
-<!-- Schedule Modal -->
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-clock-history me-2 text-warning"></i>Schedule Report</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="existingSchedules" class="mb-4"><p class="text-muted">Loading schedules...</p></div>
-                <hr>
-                <h6><i class="bi bi-plus-circle me-1"></i>New / Edit Schedule</h6>
-                <input type="hidden" id="schedId" value="">
-                <div class="row g-3">
-                    <div class="col-md-6"><label class="form-label">Schedule Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="schedName" placeholder="e.g. Weekly Offers Summary"></div>
-                    <div class="col-md-6"><label class="form-label">Recipients <span class="text-danger">*</span></label><input type="text" class="form-control" id="schedRecipients" placeholder="email1@@co.com, email2@@co.com"></div>
-                    <div class="col-md-3"><label class="form-label">Recurrence</label><select class="form-select" id="schedRecurrence"><option>Daily</option><option>Weekly</option><option>Monthly</option></select></div>
-                    <div class="col-md-3"><label class="form-label">Time</label><input type="time" class="form-control" id="schedTime" value="08:00"></div>
-                    <div class="col-md-3"><label class="form-label">Format</label><select class="form-select" id="schedFormat"><option>CSV</option><option>Excel</option><option>PDF</option></select></div>
-                    <div class="col-md-3 d-flex align-items-end gap-3">
-                        <div class="form-check"><input class="form-check-input" type="checkbox" id="schedSkipIfEmpty" checked><label class="form-check-label" for="schedSkipIfEmpty">Skip if empty</label></div>
-                        <div class="form-check"><input class="form-check-input" type="checkbox" id="schedIncludeAi"><label class="form-check-label" for="schedIncludeAi">AI</label></div>
-                    </div>
-                </div>
-                <div id="scheduleAlert" class="mt-3" style="display:none;"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" onclick="resetScheduleForm()">Clear</button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-warning" onclick="saveSchedule()"><i class="bi bi-save me-1"></i>Save Schedule</button>
-            </div>
-        </div>
-    </div>
-</div>
+@await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel {
+    SaveAction      = "SaveOffersReportSchedule",
+    ListAction      = "GetOffersReportSchedules",
+    ReportBadge     = "Offers Report",
+    NamePlaceholder = "e.g. Weekly Offers Summary",
+    SubjectPlaceholder = "Offers Report - {date}"
+})
 
 <!-- Send Email Modal -->
 <div class="modal fade" id="sendEmailModal" tabindex="-1" aria-hidden="true">
@@ -556,7 +529,7 @@ var _statusLookup = {};
     document.querySelectorAll('input[name="DatePreset"]').forEach(function(r) {
         r.addEventListener('change', function() { applyPresetDates(this.value); });
     });
-    document.getElementById('scheduleModal').addEventListener('show.bs.modal', function() { loadSchedules(); });
+    // schedule modal lifecycle managed by shared _Schedule.cshtml partial
     fetch('/Reports/GetAiStatus').then(r=>r.json()).then(d=>{
         if(!d.configured){var btn=document.getElementById('btnAnalyze');if(btn){btn.title='AI not configured';btn.classList.add('disabled');}}
     }).catch(()=>{});
@@ -926,81 +899,25 @@ function groupBy(arr, key) {
     return order.map(function(k) { return { key: k, items: map[k] }; });
 }
 
-// ========== SCHEDULE ==========
-function loadSchedules() {
-    fetch('@Url.Action("GetOffersReportSchedules","Reports")', { credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            var container = document.getElementById('existingSchedules');
-            var list = d.schedules || [];
-            if (!list.length) { container.innerHTML = '<p class="text-muted">No schedules configured yet.</p>'; return; }
-            var html = '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr><th>Name</th><th>Recurrence</th><th>Time</th><th>Format</th><th>Next Run</th><th></th></tr></thead><tbody>';
-            for (var i = 0; i < list.length; i++) {
-                var s = list[i];
-                html += '<tr><td>'+escapeHtml(s.scheduleName)+'</td><td>'+escapeHtml(s.recurrenceType)+'</td><td>'+escapeHtml(s.scheduleTime)+'</td><td>'+escapeHtml(s.exportFormat)+'</td><td>'+escapeHtml(s.nextRun||'-')+'</td>';
-                html += '<td class="text-nowrap"><button class="btn btn-sm btn-outline-primary me-1" onclick="loadScheduleIntoForm('+s.scheduleId+')"><i class="bi bi-pencil"></i></button>';
-                html += '<button class="btn btn-sm btn-outline-danger" onclick="deleteSchedule('+s.scheduleId+')"><i class="bi bi-trash"></i></button></td></tr>';
-            }
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        }).catch(function() { document.getElementById('existingSchedules').innerHTML = '<p class="text-danger">Failed to load schedules.</p>'; });
+// ========== SCHEDULE (shared _Schedule.cshtml partial) ==========
+// Host hook: partial calls collectScheduleParameters() to get report params.
+function collectScheduleParameters() {
+    var p = getFilterParams();
+    p.reportType = 'OffersReport';
+    return p;
 }
-function resetScheduleForm() {
-    document.getElementById('schedId').value = '';
-    document.getElementById('schedName').value = '';
-    document.getElementById('schedRecipients').value = '';
-    document.getElementById('schedRecurrence').value = 'Daily';
-    document.getElementById('schedTime').value = '08:00';
-    document.getElementById('schedFormat').value = 'CSV';
-    document.getElementById('schedSkipIfEmpty').checked = true;
-    document.getElementById('schedIncludeAi').checked = false;
-    document.getElementById('scheduleAlert').style.display = 'none';
-}
-function saveSchedule() {
-    var name = document.getElementById('schedName').value.trim();
-    var recipients = document.getElementById('schedRecipients').value.trim();
-    if (!name) { showAlert('scheduleAlert','danger','Schedule name is required.'); return; }
-    if (!recipients) { showAlert('scheduleAlert','danger','At least one recipient is required.'); return; }
-    var fd = new FormData();
-    fd.append('scheduleName',name);
-    fd.append('recurrenceType',document.getElementById('schedRecurrence').value);
-    fd.append('exportFormat',document.getElementById('schedFormat').value);
-    fd.append('scheduleTime',document.getElementById('schedTime').value);
-    fd.append('recipients',recipients);
-    fd.append('skipIfEmpty',document.getElementById('schedSkipIfEmpty').checked);
-    fd.append('includeAiAnalysis',document.getElementById('schedIncludeAi').checked);
-    var sid = document.getElementById('schedId').value;
-    if (sid) fd.append('scheduleId', sid);
-    var filterData = JSON.stringify(getFilterParams());
-    fd.append('filterJson', filterData);
-    fetch('@Url.Action("SaveOffersReportSchedule","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            if (!d.success) { showAlert('scheduleAlert','danger',d.message); return; }
-            showAlert('scheduleAlert','success','Schedule saved.');
-            resetScheduleForm(); loadSchedules();
-        }).catch(function(e) { showAlert('scheduleAlert','danger','Save failed: '+e.message); });
-}
-function loadScheduleIntoForm(id) {
-    fetch('@Url.Action("GetScheduleById","Reports")?scheduleId='+id, { credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(s) {
-            if (!s || s.error) return;
-            document.getElementById('schedId').value = s.scheduleId;
-            document.getElementById('schedName').value = s.scheduleName||'';
-            document.getElementById('schedRecipients').value = s.recipients||'';
-            document.getElementById('schedRecurrence').value = s.recurrenceType||'Daily';
-            document.getElementById('schedTime').value = s.scheduleTime||'08:00';
-            document.getElementById('schedFormat').value = s.exportFormat||'CSV';
-            document.getElementById('schedSkipIfEmpty').checked = s.skipIfEmpty !== false;
-            showAlert('scheduleAlert','info','Editing: '+escapeHtml(s.scheduleName));
-        });
-}
-function deleteSchedule(id) {
-    if (!confirm('Delete this schedule?')) return;
-    fetch('@Url.Action("DeleteSchedule","Reports")?scheduleId='+id, { method:'POST', credentials:'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.success) { loadSchedules(); resetScheduleForm(); } else showAlert('scheduleAlert','danger',d.message||'Delete failed.'); });
+// Host hook: called when loading an existing schedule into the form.
+function onScheduleParametersLoaded(p) {
+    if (!p) return;
+    if (p.dateFrom) document.getElementById('dateFrom').value = p.dateFrom;
+    if (p.dateTo) document.getElementById('dateTo').value = p.dateTo;
+    if (p.dateField) document.getElementById('dateField').value = p.dateField;
+    if (p.statusFilter) document.getElementById('statusFilter').value = p.statusFilter;
+    if (p.storeFilter) document.getElementById('storeFilter').value = p.storeFilter;
+    if (p.agentFilter) document.getElementById('agentFilter').value = p.agentFilter;
+    if (p.primaryGroup) document.getElementById('primaryGroup').value = p.primaryGroup;
+    if (p.secondaryGroup) document.getElementById('secondaryGroup').value = p.secondaryGroup;
+    if (p.maxRecords) document.getElementById('maxRecords').value = p.maxRecords;
 }
 
 // ========== SEND EMAIL ==========

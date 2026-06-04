@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
@@ -19,9 +20,10 @@ public class OffersReportRepository : IOffersReportRepository
         var (whereClause, parms) = BuildWhereAndParams(filter);
         var (l1Code, l1Descr) = ResolveGroupExpr(filter.PrimaryGroup);
         var (l2Code, l2Descr) = ResolveGroupExpr(filter.SecondaryGroup);
+        var (l3Code, l3Descr) = ResolveGroupExpr(filter.ThirdGroup);
 
         var activeSql = BuildSelect("tbl_OfferHeader", "tbl_OfferDetails",
-            l1Code, l1Descr, l2Code, l2Descr, whereClause, filter);
+            l1Code, l1Descr, l2Code, l2Descr, l3Code, l3Descr, whereClause, filter);
 
         string fullSql;
         if (filter.IncludeHistory)
@@ -29,7 +31,8 @@ public class OffersReportRepository : IOffersReportRepository
             var histWhere = ReplaceAliasesForHistory(whereClause);
             var (hl1Code, hl1Descr) = ResolveGroupExpr(filter.PrimaryGroup, "h", "sh", "hst", "hc", "hag");
             var (hl2Code, hl2Descr) = ResolveGroupExpr(filter.SecondaryGroup, "h", "sh", "hst", "hc", "hag");
-            var histSql = BuildHistorySelect(hl1Code, hl1Descr, hl2Code, hl2Descr, histWhere, filter);
+            var (hl3Code, hl3Descr) = ResolveGroupExpr(filter.ThirdGroup, "h", "sh", "hst", "hc", "hag");
+            var histSql = BuildHistorySelect(hl1Code, hl1Descr, hl2Code, hl2Descr, hl3Code, hl3Descr, histWhere, filter);
 
             fullSql = $"SELECT TOP ({filter.MaxRecords}) * FROM ({activeSql} UNION ALL {histSql}) _combined {BuildOrderByAlias(filter.SortColumn, filter.SortDirection)}";
         }
@@ -93,6 +96,8 @@ WHERE 1=1 {histCountWhere}");
         Level1Descr = GetStr(reader, "Level1Descr"),
         Level2Code = GetStr(reader, "Level2Code"),
         Level2Descr = GetStr(reader, "Level2Descr"),
+        Level3Code = GetStr(reader, "Level3Code"),
+        Level3Descr = GetStr(reader, "Level3Descr"),
         OfferNo = GetStr(reader, "OfferNo"),
         StatusName = GetStr(reader, "StatusName"),
         StatusColor = GetStr(reader, "StatusColor"),
@@ -126,6 +131,7 @@ WHERE 1=1 {histCountWhere}");
 
     private static string BuildSelect(string headerTable, string detailTable,
         string l1Code, string l1Descr, string l2Code, string l2Descr,
+        string l3Code, string l3Descr,
         string whereClause, OffersReportFilter filter)
     {
         var sourceLabel = headerTable == "tbl_OfferHeader"
@@ -140,6 +146,8 @@ SELECT {top}
     {l1Descr} AS Level1Descr,
     {l2Code} AS Level2Code,
     {l2Descr} AS Level2Descr,
+    {l3Code} AS Level3Code,
+    {l3Descr} AS Level3Descr,
     t.pk_OfferID AS OfferNo,
     ISNULL(s.OrderStatusName, '(No Status)') AS StatusName,
     ISNULL(s.OrderStatusHTML, '#999999') AS StatusColor,
@@ -192,6 +200,7 @@ WHERE 1=1 {whereClause}
     }
 
     private static string BuildHistorySelect(string l1Code, string l1Descr, string l2Code, string l2Descr,
+        string l3Code, string l3Descr,
         string whereClause, OffersReportFilter filter)
     {
         return $@"
@@ -200,6 +209,8 @@ SELECT
     {l1Descr} AS Level1Descr,
     {l2Code} AS Level2Code,
     {l2Descr} AS Level2Descr,
+    {l3Code} AS Level3Code,
+    {l3Descr} AS Level3Descr,
     h.pk_OfferID AS OfferNo,
     ISNULL(sh.OrderStatusName, '(No Status)') AS StatusName,
     ISNULL(sh.OrderStatusHTML, '#999999') AS StatusColor,
@@ -266,20 +277,48 @@ WHERE 1=1 {whereClause}";
         parms.Add(new SqlParameter("@dFrom", System.Data.SqlDbType.Date) { Value = filter.DateFrom.Date });
         parms.Add(new SqlParameter("@dTo", System.Data.SqlDbType.Date) { Value = filter.DateTo.Date });
 
-        if (!string.Equals(filter.StatusFilter, "All", StringComparison.OrdinalIgnoreCase))
+        // Status: multi-select takes precedence over single
+        if (filter.StatusCodes.Count > 0)
+        {
+            var names = filter.StatusCodes.Select((_, i) => $"@stCode{i}").ToList();
+            sb.Append($" AND s.OrderStatusCode IN ({string.Join(",", names)})");
+            for (int i = 0; i < filter.StatusCodes.Count; i++)
+                parms.Add(new SqlParameter($"@stCode{i}", System.Data.SqlDbType.NVarChar, 50) { Value = filter.StatusCodes[i] });
+        }
+        else if (!string.Equals(filter.StatusFilter, "All", StringComparison.OrdinalIgnoreCase))
         {
             sb.Append(" AND s.OrderStatusCode = @statusCode");
             parms.Add(new SqlParameter("@statusCode", System.Data.SqlDbType.NVarChar, 50) { Value = filter.StatusFilter });
         }
 
-        if (!string.Equals(filter.StoreFilter, "All", StringComparison.OrdinalIgnoreCase)
+        // Store: multi-select takes precedence
+        if (filter.StoreCodes.Count > 0)
+        {
+            var names = filter.StoreCodes.Select((_, i) => $"@storeCode{i}").ToList();
+            sb.Append($" AND t.fk_StoreCode IN ({string.Join(",", names)})");
+            for (int i = 0; i < filter.StoreCodes.Count; i++)
+                parms.Add(new SqlParameter($"@storeCode{i}", System.Data.SqlDbType.NVarChar, 50) { Value = filter.StoreCodes[i] });
+        }
+        else if (!string.Equals(filter.StoreFilter, "All", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(filter.StoreFilter))
         {
             sb.Append(" AND t.fk_StoreCode = @storeCode");
             parms.Add(new SqlParameter("@storeCode", System.Data.SqlDbType.NVarChar, 50) { Value = filter.StoreFilter });
         }
 
-        if (!string.Equals(filter.AgentFilter, "All", StringComparison.OrdinalIgnoreCase)
+        // Agent: multi-select takes precedence
+        if (filter.AgentCodes.Count > 0)
+        {
+            var validAgentIds = filter.AgentCodes.Where(a => long.TryParse(a, out _)).ToList();
+            if (validAgentIds.Count > 0)
+            {
+                var names = validAgentIds.Select((_, i) => $"@agCode{i}").ToList();
+                sb.Append($" AND t.fk_AgentID IN ({string.Join(",", names)})");
+                for (int i = 0; i < validAgentIds.Count; i++)
+                    parms.Add(new SqlParameter($"@agCode{i}", System.Data.SqlDbType.BigInt) { Value = long.Parse(validAgentIds[i]) });
+            }
+        }
+        else if (!string.Equals(filter.AgentFilter, "All", StringComparison.OrdinalIgnoreCase)
             && long.TryParse(filter.AgentFilter, out var agentId))
         {
             sb.Append(" AND t.fk_AgentID = @agentId");
@@ -304,6 +343,41 @@ WHERE 1=1 {whereClause}";
             sb.Append($" AND t.fk_CustomerCode {inOp} ({string.Join(",", paramNames)})");
             for (int i = 0; i < filter.CustomerCodes.Count; i++)
                 parms.Add(new SqlParameter($"@custCode{i}", System.Data.SqlDbType.NVarChar, 50) { Value = filter.CustomerCodes[i] });
+        }
+
+        // Items selection: filter offers that contain at least one item matching criteria
+        if (!string.IsNullOrWhiteSpace(filter.ItemsSelectionJson))
+        {
+            try
+            {
+                var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var sel = JsonSerializer.Deserialize<ItemsSelectionFilter>(filter.ItemsSelectionJson, opts);
+                if (sel != null)
+                {
+                    var itemsColMap = new DimensionFilterBuilder.ColumnMap(
+                        Category: "it.fk_CategoryID",
+                        Department: "it.fk_DepartmentID",
+                        Brand: "it.fk_BrandID",
+                        Season: "it.fk_SeasonID",
+                        Item: "it.pk_ItemID",
+                        Store: "",
+                        Supplier: "",
+                        Customer: "",
+                        Agent: "",
+                        ItemTableAlias: "it"
+                    );
+                    var (dimWhere, dimParms) = DimensionFilterBuilder.Build(sel, itemsColMap, parms.Count);
+                    if (!string.IsNullOrEmpty(dimWhere))
+                    {
+                        sb.Append($@" AND t.pk_OfferID IN (
+    SELECT DISTINCT od.fk_OfferID FROM tbl_OfferDetails od
+    JOIN tbl_Item it ON od.fk_ItemCode = it.pk_ItemCode
+    WHERE 1=1{dimWhere})");
+                        parms.AddRange(dimParms);
+                    }
+                }
+            }
+            catch { /* ignore malformed JSON */ }
         }
 
         return (sb.ToString(), parms);
@@ -356,7 +430,10 @@ WHERE 1=1 {whereClause}";
             .Replace("t.fk_AgentID", "h.fk_AgentID")
             .Replace("t.IsStandardOffer", "h.IsStandardOffer")
             .Replace("t.fk_CustomerCode", "h.fk_CustomerCode")
-            .Replace("s.OrderStatusCode", "sh.OrderStatusCode");
+            .Replace("s.OrderStatusCode", "sh.OrderStatusCode")
+            // Items selection subquery: swap active table to history variant
+            .Replace("t.pk_OfferID IN (\n    SELECT DISTINCT od.fk_OfferID FROM tbl_OfferDetails od",
+                     "h.pk_OfferID IN (\n    SELECT DISTINCT od.fk_OfferID FROM tbl_OfferDetailsHistory od");
 
     private static string BuildOrderByAlias(string sortColumn, string sortDirection)
     {

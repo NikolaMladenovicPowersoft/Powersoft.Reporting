@@ -84,15 +84,35 @@
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold">Status</label>
-                <select class="form-select" id="statusFilter">
-                    <option value="All" selected>All Statuses</option>
-                </select>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
+                            id="statusDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        <span id="statusFilterLabel">All Statuses</span>
+                    </button>
+                    <div class="dropdown-menu p-2" style="min-width:220px;max-height:280px;overflow-y:auto;" aria-labelledby="statusDropdownBtn">
+                        <div id="statusCheckboxList"></div>
+                        <div class="border-top mt-2 pt-2 d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary flex-fill"
+                                    onclick="clearMultiSelect('offerStatusCb','statusFilterLabel','Statuses')">Clear</button>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold">Store</label>
-                <select class="form-select" id="storeFilter">
-                    <option value="All" selected>All Stores</option>
-                </select>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
+                            id="storeDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        <span id="storeFilterLabel">All Stores</span>
+                    </button>
+                    <div class="dropdown-menu p-2" style="min-width:220px;max-height:280px;overflow-y:auto;" aria-labelledby="storeDropdownBtn">
+                        <div id="storeCheckboxList"></div>
+                        <div class="border-top mt-2 pt-2 d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary flex-fill"
+                                    onclick="clearMultiSelect('offerStoreCb','storeFilterLabel','Stores')">Clear</button>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold">Max Records</label>
@@ -102,9 +122,19 @@
         <div class="row g-3 mb-3 align-items-end">
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold">Agent</label>
-                <select class="form-select" id="agentFilter">
-                    <option value="All" selected>All Agents</option>
-                </select>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
+                            id="agentDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        <span id="agentFilterLabel">All Agents</span>
+                    </button>
+                    <div class="dropdown-menu p-2" style="min-width:220px;max-height:280px;overflow-y:auto;" aria-labelledby="agentDropdownBtn">
+                        <div id="agentCheckboxList"></div>
+                        <div class="border-top mt-2 pt-2 d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary flex-fill"
+                                    onclick="clearMultiSelect('offerAgentCb','agentFilterLabel','Agents')">Clear</button>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold">Offer Type</label>
@@ -132,7 +162,7 @@
                     <option value="YEAR">Year</option>
                 </select>
             </div>
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-2">
                 <label class="form-label fw-semibold">Secondary Group</label>
                 <select class="form-select" id="secondaryGroup">
                     <option value="NONE" selected>None</option>
@@ -144,9 +174,21 @@
                     <option value="YEAR">Year</option>
                 </select>
             </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label fw-semibold">Third Group</label>
+                <select class="form-select" id="thirdGroup">
+                    <option value="NONE" selected>None</option>
+                    <option value="STATUS">Status</option>
+                    <option value="STORE">Store</option>
+                    <option value="CUSTOMER">Customer</option>
+                    <option value="AGENT">Agent</option>
+                    <option value="MONTH">Month</option>
+                    <option value="YEAR">Year</option>
+                </select>
+            </div>
         </div>
 
-        @await Html.PartialAsync("_CustomerSelection")
+        @await Html.PartialAsync("_ItemsSelection")
         @await Html.PartialAsync("_CustomerSelection")
         <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
             <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
@@ -541,29 +583,32 @@ function loadFilterDropdowns() {
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (d.statuses) {
-                var sel = document.getElementById('statusFilter');
+                var list = document.getElementById('statusCheckboxList');
                 d.statuses.forEach(function(s) {
-                    var opt = document.createElement('option');
-                    opt.value = s.code; opt.textContent = s.name;
-                    sel.appendChild(opt);
                     _statusLookup[s.code] = s.color;
                     _statusLookup[s.name] = s.color;
+                    var id = 'offerSt_' + s.code.replace(/[^a-z0-9]/gi,'_');
+                    list.innerHTML += '<div class="form-check"><input class="form-check-input offerStatusCb" type="checkbox"'
+                        + ' id="'+id+'" value="'+escapeHtml(s.code)+'" onchange="updateMultiLabel(\'offerStatusCb\',\'statusFilterLabel\',\'Statuses\')">'
+                        + '<label class="form-check-label small" for="'+id+'">'+escapeHtml(s.name)+'</label></div>';
                 });
             }
             if (d.stores) {
-                var selSt = document.getElementById('storeFilter');
+                var listSt = document.getElementById('storeCheckboxList');
                 d.stores.forEach(function(s) {
-                    var opt = document.createElement('option');
-                    opt.value = s.id; opt.textContent = s.name;
-                    selSt.appendChild(opt);
+                    var id = 'offerStore_' + String(s.id).replace(/[^a-z0-9]/gi,'_');
+                    listSt.innerHTML += '<div class="form-check"><input class="form-check-input offerStoreCb" type="checkbox"'
+                        + ' id="'+id+'" value="'+escapeHtml(String(s.id))+'" onchange="updateMultiLabel(\'offerStoreCb\',\'storeFilterLabel\',\'Stores\')">'
+                        + '<label class="form-check-label small" for="'+id+'">'+escapeHtml(s.name)+'</label></div>';
                 });
             }
             if (d.agents) {
-                var selAg = document.getElementById('agentFilter');
+                var listAg = document.getElementById('agentCheckboxList');
                 d.agents.forEach(function(a) {
-                    var opt = document.createElement('option');
-                    opt.value = a.id; opt.textContent = a.name;
-                    selAg.appendChild(opt);
+                    var id = 'offerAgent_' + String(a.id).replace(/[^a-z0-9]/gi,'_');
+                    listAg.innerHTML += '<div class="form-check"><input class="form-check-input offerAgentCb" type="checkbox"'
+                        + ' id="'+id+'" value="'+escapeHtml(String(a.id))+'" onchange="updateMultiLabel(\'offerAgentCb\',\'agentFilterLabel\',\'Agents\')">'
+                        + '<label class="form-check-label small" for="'+id+'">'+escapeHtml(a.name)+'</label></div>';
                 });
             }
             @if (hasSavedLayout && savedLayout != null) {
@@ -593,13 +638,14 @@ function resetFilters() {
     document.getElementById('dateFrom').value = y+'-01-01';
     document.getElementById('dateTo').value = fmtDate(today);
     document.getElementById('dateField').value = 'DateTrans';
-    document.getElementById('statusFilter').value = 'All';
-    document.getElementById('storeFilter').value = 'All';
-    document.getElementById('agentFilter').value = 'All';
+    clearMultiSelect('offerStatusCb','statusFilterLabel','Statuses');
+    clearMultiSelect('offerStoreCb','storeFilterLabel','Stores');
+    clearMultiSelect('offerAgentCb','agentFilterLabel','Agents');
     document.getElementById('offerTypeFilter').value = 'All';
     document.getElementById('includeHistory').checked = false;
     document.getElementById('primaryGroup').value = 'NONE';
     document.getElementById('secondaryGroup').value = 'NONE';
+    document.getElementById('thirdGroup').value = 'NONE';
     document.getElementById('maxRecords').value = '50000';
     clearPreset();
     _sortCol = 'DateTrans'; _sortDir = 'DESC';
@@ -610,6 +656,7 @@ function resetFilters() {
     document.getElementById('layoutsCurrentName').textContent = 'Layouts';
     resetColumnVisibility();
     if (typeof clearCustomerSelection === 'function') clearCustomerSelection();
+    if (typeof clearItemsSelection === 'function') clearItemsSelection();
 }
 
 function applyPresetDates(preset) {
@@ -636,37 +683,74 @@ function showAlert(id, type, msg) {
     el.style.display = '';
 }
 
+function updateMultiLabel(cbClass, labelId, noun) {
+    var checked = getCheckedValues(cbClass);
+    var lbl = document.getElementById(labelId);
+    if (!lbl) return;
+    if (checked.length === 0) lbl.textContent = 'All ' + noun;
+    else if (checked.length === 1) lbl.textContent = checked[0];
+    else lbl.textContent = checked.length + ' ' + noun + ' selected';
+}
+function clearMultiSelect(cbClass, labelId, noun) {
+    document.querySelectorAll('.' + cbClass).forEach(function(cb) { cb.checked = false; });
+    var lbl = document.getElementById(labelId);
+    if (lbl) lbl.textContent = 'All ' + noun;
+}
+function getCheckedValues(cbClass) {
+    return Array.from(document.querySelectorAll('.' + cbClass + ':checked')).map(function(cb) { return cb.value; });
+}
+function setCheckedValues(cbClass, labelId, noun, values) {
+    if (!values || !values.length) { clearMultiSelect(cbClass, labelId, noun); return; }
+    document.querySelectorAll('.' + cbClass).forEach(function(cb) {
+        cb.checked = values.indexOf(cb.value) !== -1;
+    });
+    updateMultiLabel(cbClass, labelId, noun);
+}
+
 function getFilterParams() {
     var csf = typeof getCustomerSelectionFilter === 'function' ? getCustomerSelectionFilter() : {codes:[],excludeMode:false};
+    var itmSel = typeof getItemsSelectionJson === 'function' ? getItemsSelectionJson() : null;
+    var statusCodes = getCheckedValues('offerStatusCb');
+    var storeCodes  = getCheckedValues('offerStoreCb');
+    var agentCodes  = getCheckedValues('offerAgentCb');
     return {
         dateFrom: document.getElementById('dateFrom').value,
         dateTo: document.getElementById('dateTo').value,
         dateField: document.getElementById('dateField').value,
-        statusFilter: document.getElementById('statusFilter').value,
-        storeFilter: document.getElementById('storeFilter').value,
-        agentFilter: document.getElementById('agentFilter').value,
+        statusFilter: 'All',
+        storeFilter: 'All',
+        agentFilter: 'All',
         primaryGroup: document.getElementById('primaryGroup').value,
         secondaryGroup: document.getElementById('secondaryGroup').value,
+        thirdGroup: document.getElementById('thirdGroup').value,
         maxRecords: document.getElementById('maxRecords').value,
         sortColumn: _sortCol,
         sortDirection: _sortDir,
         offerType: document.getElementById('offerTypeFilter').value,
         includeHistory: document.getElementById('includeHistory').checked,
         customerCodesJson: JSON.stringify(csf.codes || []),
-        customerExcludeMode: csf.excludeMode || false
+        customerExcludeMode: csf.excludeMode || false,
+        statusCodesJson: JSON.stringify(statusCodes),
+        storeCodesJson: JSON.stringify(storeCodes),
+        agentCodesJson: JSON.stringify(agentCodes),
+        itemsSelectionJson: itmSel || ''
     };
 }
 
 function buildExportUrl(action) {
     var p = getFilterParams();
     var qs = 'dateFrom='+p.dateFrom+'&dateTo='+p.dateTo+'&dateField='+p.dateField
-        +'&statusFilter='+encodeURIComponent(p.statusFilter)+'&storeFilter='+encodeURIComponent(p.storeFilter)
-        +'&agentFilter='+encodeURIComponent(p.agentFilter)
+        +'&statusFilter=All&storeFilter=All&agentFilter=All'
         +'&primaryGroup='+p.primaryGroup+'&secondaryGroup='+p.secondaryGroup
+        +'&thirdGroup='+p.thirdGroup
         +'&maxRecords='+p.maxRecords+'&sortColumn='+p.sortColumn+'&sortDirection='+p.sortDirection
         +'&offerType='+encodeURIComponent(p.offerType)+'&includeHistory='+p.includeHistory
         +'&customerCodesJson='+encodeURIComponent(p.customerCodesJson)
-        +'&customerExcludeMode='+p.customerExcludeMode;
+        +'&customerExcludeMode='+p.customerExcludeMode
+        +'&statusCodesJson='+encodeURIComponent(p.statusCodesJson)
+        +'&storeCodesJson='+encodeURIComponent(p.storeCodesJson)
+        +'&agentCodesJson='+encodeURIComponent(p.agentCodesJson)
+        +'&itemsSelectionJson='+encodeURIComponent(p.itemsSelectionJson||'');
     return '/Reports/' + action + '?' + qs;
 }
 
@@ -703,7 +787,9 @@ function generateReport() {
     if (dateFrom > dateTo) { showAlert('reportAlert','danger','Date From cannot be after Date To.'); return; }
     var pg = document.getElementById('primaryGroup').value;
     var sg = document.getElementById('secondaryGroup').value;
+    var tg = document.getElementById('thirdGroup').value;
     if (pg !== 'NONE' && sg !== 'NONE' && pg === sg) { showAlert('reportAlert','danger','Primary and Secondary groups must be different.'); return; }
+    if (tg !== 'NONE' && (tg === pg || tg === sg)) { showAlert('reportAlert','danger','Third group must be different from Primary and Secondary.'); return; }
 
     document.getElementById('reportAlert').style.display = 'none';
     document.getElementById('reportResults').style.display = 'none';
@@ -737,6 +823,7 @@ function generateReport() {
             var badges = '';
             if (pg !== 'NONE') badges += '<span class="badge bg-secondary ms-2">Grouped by '+pg+'</span>';
             if (sg !== 'NONE') badges += '<span class="badge bg-secondary ms-1">then '+sg+'</span>';
+            if (tg !== 'NONE') badges += '<span class="badge bg-secondary ms-1">then '+tg+'</span>';
             document.getElementById('groupBadges').innerHTML = badges;
             document.getElementById('reportResults').style.display = '';
             if (_lastData.length === 0) showAlert('reportAlert','info','No offers found for the selected criteria.');
@@ -785,10 +872,12 @@ function renderKpis(data) {
 function renderTable(data) {
     var thead = document.getElementById('reportHead');
     var tbody = document.getElementById('reportBody');
-    var hasPrimary = document.getElementById('primaryGroup').value !== 'NONE';
+    var hasPrimary   = document.getElementById('primaryGroup').value !== 'NONE';
     var hasSecondary = document.getElementById('secondaryGroup').value !== 'NONE';
+    var hasTertiary  = document.getElementById('thirdGroup').value !== 'NONE';
     var pgLabel = document.getElementById('primaryGroup').selectedOptions[0].textContent;
     var sgLabel = document.getElementById('secondaryGroup').selectedOptions[0].textContent;
+    var tgLabel = document.getElementById('thirdGroup').selectedOptions[0].textContent;
 
     function sth(label, col, align, dataCol) {
         var dc = dataCol || col;
@@ -798,8 +887,9 @@ function renderTable(data) {
         return '<th data-col="'+dc+'" class="'+cls+'" onclick="sortBy(\''+col+'\')">'+label+'<i class="bi '+icon+' sort-icon"></i></th>';
     }
     var hdr = '<tr>';
-    if (hasPrimary) hdr += sth(escapeHtml(pgLabel), 'level1Descr');
+    if (hasPrimary)   hdr += sth(escapeHtml(pgLabel), 'level1Descr');
     if (hasSecondary) hdr += sth(escapeHtml(sgLabel), 'level2Descr');
+    if (hasTertiary)  hdr += sth(escapeHtml(tgLabel), 'level3Descr');
     hdr += sth('Offer No','offerNo','','OfferNo') + sth('Date','dateTrans','','DateTrans') + sth('Valid Until','validUntil','','ValidUntil');
     hdr += sth('Status','statusName','','StatusName') + sth('Customer','customerName','','CustomerName') + sth('Store','storeName','','StoreName') + sth('Agent','agentName','','AgentName');
     hdr += sth('Items','itemCount',true,'ItemCount') + sth('Qty','totalQuantity',true,'TotalQuantity');
@@ -813,14 +903,14 @@ function renderTable(data) {
     applyColumnVisibility();
 
     if (hasPrimary) {
-        tbody.innerHTML = renderGroupedRows(data, hasPrimary, hasSecondary, pgLabel, sgLabel);
+        tbody.innerHTML = renderGroupedRows(data, hasPrimary, hasSecondary, hasTertiary, pgLabel, sgLabel, tgLabel);
     } else {
-        tbody.innerHTML = renderRows(data, hasPrimary, hasSecondary);
+        tbody.innerHTML = renderRows(data, hasPrimary, hasSecondary, hasTertiary);
     }
 }
 
-function renderGroupedRows(data, hasPrimary, hasSecondary, pgLabel, sgLabel) {
-    var colCount = 20 + (hasPrimary?1:0) + (hasSecondary?1:0);
+function renderGroupedRows(data, hasPrimary, hasSecondary, hasTertiary, pgLabel, sgLabel, tgLabel) {
+    var colCount = 20 + (hasPrimary?1:0) + (hasSecondary?1:0) + (hasTertiary?1:0);
     var groups = groupBy(data, 'level1Descr');
     var html = '';
     groups.forEach(function(g) {
@@ -829,24 +919,33 @@ function renderGroupedRows(data, hasPrimary, hasSecondary, pgLabel, sgLabel) {
             var subGroups = groupBy(g.items, 'level2Descr');
             subGroups.forEach(function(sg2) {
                 html += '<tr class="group-header-row l2"><td colspan="'+colCount+'" class="ps-4"><i class="bi bi-chevron-right me-1"></i><strong>'+escapeHtml(sgLabel)+':</strong> '+escapeHtml(sg2.key)+' <span class="badge bg-info">'+sg2.items.length+'</span></td></tr>';
-                html += renderRows(sg2.items, hasPrimary, hasSecondary);
+                if (hasTertiary) {
+                    var thirdGroups = groupBy(sg2.items, 'level3Descr');
+                    thirdGroups.forEach(function(tg3) {
+                        html += '<tr class="group-header-row l3"><td colspan="'+colCount+'" class="ps-5"><i class="bi bi-chevron-double-right me-1"></i><strong>'+escapeHtml(tgLabel)+':</strong> '+escapeHtml(tg3.key)+' <span class="badge bg-warning text-dark">'+tg3.items.length+'</span></td></tr>';
+                        html += renderRows(tg3.items, hasPrimary, hasSecondary, hasTertiary);
+                    });
+                } else {
+                    html += renderRows(sg2.items, hasPrimary, hasSecondary, hasTertiary);
+                }
             });
         } else {
-            html += renderRows(g.items, hasPrimary, hasSecondary);
+            html += renderRows(g.items, hasPrimary, hasSecondary, hasTertiary);
         }
     });
     return html;
 }
 
-function renderRows(items, hasPrimary, hasSecondary) {
+function renderRows(items, hasPrimary, hasSecondary, hasTertiary) {
     var html = '';
     for (var i = 0; i < items.length; i++) {
         var r = items[i];
         var dateTr = r.dateTrans ? new Date(r.dateTrans).toLocaleDateString() : '';
         var validUntil = r.validUntil ? new Date(r.validUntil).toLocaleDateString() : '';
         html += '<tr>';
-        if (hasPrimary) html += '<td class="text-info fw-semibold">'+escapeHtml(r.level1Descr)+'</td>';
+        if (hasPrimary)   html += '<td class="text-info fw-semibold">'+escapeHtml(r.level1Descr)+'</td>';
         if (hasSecondary) html += '<td class="text-info">'+escapeHtml(r.level2Descr)+'</td>';
+        if (hasTertiary)  html += '<td class="text-info">'+escapeHtml(r.level3Descr)+'</td>';
         html += '<td class="text-nowrap">'+escapeHtml(r.offerNo)+'</td>';
         html += '<td class="text-nowrap">'+escapeHtml(dateTr)+'</td>';
         html += '<td class="text-nowrap">'+escapeHtml(validUntil)+'</td>';
@@ -912,12 +1011,19 @@ function onScheduleParametersLoaded(p) {
     if (p.dateFrom) document.getElementById('dateFrom').value = p.dateFrom;
     if (p.dateTo) document.getElementById('dateTo').value = p.dateTo;
     if (p.dateField) document.getElementById('dateField').value = p.dateField;
-    if (p.statusFilter) document.getElementById('statusFilter').value = p.statusFilter;
-    if (p.storeFilter) document.getElementById('storeFilter').value = p.storeFilter;
-    if (p.agentFilter) document.getElementById('agentFilter').value = p.agentFilter;
     if (p.primaryGroup) document.getElementById('primaryGroup').value = p.primaryGroup;
     if (p.secondaryGroup) document.getElementById('secondaryGroup').value = p.secondaryGroup;
+    if (p.thirdGroup) document.getElementById('thirdGroup').value = p.thirdGroup;
     if (p.maxRecords) document.getElementById('maxRecords').value = p.maxRecords;
+    try { if (p.statusCodesJson) setCheckedValues('offerStatusCb','statusFilterLabel','Statuses', JSON.parse(p.statusCodesJson)); } catch(e) {}
+    try { if (p.storeCodesJson)  setCheckedValues('offerStoreCb','storeFilterLabel','Stores', JSON.parse(p.storeCodesJson)); } catch(e) {}
+    try { if (p.agentCodesJson)  setCheckedValues('offerAgentCb','agentFilterLabel','Agents', JSON.parse(p.agentCodesJson)); } catch(e) {}
+    if (p.customerCodesJson && typeof reloadCustomerSelectionFromJson === 'function') {
+        try { reloadCustomerSelectionFromJson({ codes: JSON.parse(p.customerCodesJson), excludeMode: p.customerExcludeMode === 'true' || p.customerExcludeMode === true }); } catch(e) {}
+    }
+    if (p.itemsSelectionJson && typeof applyItemsSelectionJson === 'function') {
+        try { applyItemsSelectionJson(p.itemsSelectionJson); } catch(e) {}
+    }
 }
 
 // ========== SEND EMAIL ==========
@@ -1151,14 +1257,15 @@ function collectCurrentLayout() {
     function v(id) { var el = document.getElementById(id); return el ? el.value : ''; }
     var p = {};
     p['DateField'] = v('dateField');
-    p['StatusFilter'] = v('statusFilter');
-    p['StoreFilter'] = v('storeFilter');
-    p['AgentFilter'] = v('agentFilter');
     p['OfferType'] = v('offerTypeFilter');
     p['IncludeHistory'] = document.getElementById('includeHistory').checked ? 'true' : 'false';
     p['PrimaryGroup'] = v('primaryGroup');
     p['SecondaryGroup'] = v('secondaryGroup');
+    p['ThirdGroup'] = v('thirdGroup');
     p['MaxRecords'] = v('maxRecords');
+    p['StatusCodesJson'] = JSON.stringify(getCheckedValues('offerStatusCb'));
+    p['StoreCodesJson']  = JSON.stringify(getCheckedValues('offerStoreCb'));
+    p['AgentCodesJson']  = JSON.stringify(getCheckedValues('offerAgentCb'));
     var hidden = [];
     document.querySelectorAll('.col-toggle').forEach(function(cb) { if (!cb.checked) hidden.push(cb.value); });
     p['HiddenColumns'] = hidden.join(',');
@@ -1168,6 +1275,9 @@ function collectCurrentLayout() {
         var csf = getCustomerSelectionFilter();
         p['CustomerCodesJson'] = JSON.stringify(csf.codes || []);
         p['CustomerExcludeMode'] = csf.excludeMode ? 'true' : 'false';
+    }
+    if (typeof getItemsSelectionJson === 'function') {
+        p['ItemsSelectionJson'] = getItemsSelectionJson() || '';
     }
     return p;
 }
@@ -1278,12 +1388,10 @@ function loadNamedLayout(headerCode) {
 function applyLayoutParameters(parms) {
     function setVal(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
     setVal('dateField',       parms.DateField);
-    setVal('statusFilter',    parms.StatusFilter);
-    setVal('storeFilter',     parms.StoreFilter);
-    setVal('agentFilter',     parms.AgentFilter);
     setVal('offerTypeFilter', parms.OfferType);
     setVal('primaryGroup',    parms.PrimaryGroup);
     setVal('secondaryGroup',  parms.SecondaryGroup);
+    setVal('thirdGroup',      parms.ThirdGroup);
     setVal('maxRecords',      parms.MaxRecords);
     if (parms.IncludeHistory != null) document.getElementById('includeHistory').checked = parms.IncludeHistory === 'true' || parms.IncludeHistory === true;
     if (parms.HiddenColumns != null) {
@@ -1295,6 +1403,9 @@ function applyLayoutParameters(parms) {
         var r = document.querySelector('input[name="DatePreset"][value="'+parms.DatePreset+'"]');
         if (r) { r.checked = true; applyPresetDates(parms.DatePreset); }
     }
+    try { if (parms.StatusCodesJson) setCheckedValues('offerStatusCb','statusFilterLabel','Statuses', JSON.parse(parms.StatusCodesJson)); } catch(e) {}
+    try { if (parms.StoreCodesJson)  setCheckedValues('offerStoreCb', 'storeFilterLabel', 'Stores',   JSON.parse(parms.StoreCodesJson));  } catch(e) {}
+    try { if (parms.AgentCodesJson)  setCheckedValues('offerAgentCb', 'agentFilterLabel', 'Agents',   JSON.parse(parms.AgentCodesJson));  } catch(e) {}
     if (parms.CustomerCodesJson && typeof reloadCustomerSelectionFromJson === 'function') {
         try {
             reloadCustomerSelectionFromJson({
@@ -1302,6 +1413,9 @@ function applyLayoutParameters(parms) {
                 excludeMode: parms.CustomerExcludeMode === 'true'
             });
         } catch(e) {}
+    }
+    if (parms.ItemsSelectionJson && typeof applyItemsSelectionJson === 'function') {
+        try { applyItemsSelectionJson(parms.ItemsSelectionJson); } catch(e) {}
     }
 }
 

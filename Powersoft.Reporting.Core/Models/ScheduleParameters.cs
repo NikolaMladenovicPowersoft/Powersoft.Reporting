@@ -92,10 +92,14 @@ public class ScheduleParameters
     public string? OrAgentFilter { get; set; }
     public string? OrPrimaryGroup { get; set; }
     public string? OrSecondaryGroup { get; set; }
+    public string? OrThirdGroup { get; set; }
     public string? OrOfferType { get; set; }
     public bool OrIncludeHistory { get; set; }
     public string? OrCustomerCodesJson { get; set; }
     public bool OrCustomerExcludeMode { get; set; }
+    public string? OrStatusCodesJson { get; set; }
+    public string? OrStoreCodesJson { get; set; }
+    public string? OrAgentCodesJson { get; set; }
 
     // Shared
     public bool IncludeVat { get; set; }

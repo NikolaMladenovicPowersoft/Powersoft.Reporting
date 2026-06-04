@@ -873,13 +873,18 @@ public class ScheduleExecutionService
             AgentFilter    = parameters.OrAgentFilter  ?? "All",
             PrimaryGroup   = parameters.OrPrimaryGroup   ?? "NONE",
             SecondaryGroup = parameters.OrSecondaryGroup ?? "NONE",
+            ThirdGroup     = parameters.OrThirdGroup     ?? "NONE",
             MaxRecords     = parameters.MaxRecords > 0 ? parameters.MaxRecords : 50000,
             SortColumn     = parameters.SortColumn    ?? "DateTrans",
             SortDirection  = parameters.SortDirection ?? "DESC",
             OfferType           = parameters.OrOfferType   ?? "All",
             IncludeHistory      = parameters.OrIncludeHistory,
             CustomerCodes       = ParseJsonStringList(parameters.OrCustomerCodesJson),
-            CustomerExcludeMode = parameters.OrCustomerExcludeMode
+            CustomerExcludeMode = parameters.OrCustomerExcludeMode,
+            StatusCodes    = ParseJsonStringList(parameters.OrStatusCodesJson),
+            StoreCodes     = ParseJsonStringList(parameters.OrStoreCodesJson),
+            AgentCodes     = ParseJsonStringList(parameters.OrAgentCodesJson),
+            ItemsSelectionJson = string.IsNullOrWhiteSpace(parameters.ItemsSelectionJson) ? null : parameters.ItemsSelectionJson
         };
 
         var repo = _repositoryFactory.CreateOffersReportRepository(connString);

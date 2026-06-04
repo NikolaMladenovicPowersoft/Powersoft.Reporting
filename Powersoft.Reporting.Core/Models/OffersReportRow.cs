@@ -7,6 +7,8 @@ public class OffersReportRow
     public string Level1Descr { get; set; } = "";
     public string Level2Code { get; set; } = "";
     public string Level2Descr { get; set; } = "";
+    public string Level3Code { get; set; } = "";
+    public string Level3Descr { get; set; } = "";
     public string StatusName { get; set; } = "";
     public string StatusColor { get; set; } = "";
     public DateTime? DateTrans { get; set; }

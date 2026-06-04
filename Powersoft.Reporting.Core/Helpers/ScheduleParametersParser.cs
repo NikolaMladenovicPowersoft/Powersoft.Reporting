@@ -189,10 +189,14 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("agentFilter",  out var orAf) || root.TryGetProperty("OrAgentFilter",  out orAf)) p.OrAgentFilter  = AsString(orAf);
             if (root.TryGetProperty("primaryGroup", out var orPg) || root.TryGetProperty("OrPrimaryGroup", out orPg)) p.OrPrimaryGroup = AsString(orPg);
             if (root.TryGetProperty("secondaryGroup",out var orSg)|| root.TryGetProperty("OrSecondaryGroup",out orSg))p.OrSecondaryGroup = AsString(orSg);
+            if (root.TryGetProperty("thirdGroup",   out var orTg) || root.TryGetProperty("OrThirdGroup",   out orTg)) p.OrThirdGroup   = AsString(orTg);
             if (root.TryGetProperty("offerType",    out var orOt) || root.TryGetProperty("OrOfferType",    out orOt)) p.OrOfferType    = AsString(orOt);
             if (root.TryGetProperty("includeHistory",out var orIh)|| root.TryGetProperty("OrIncludeHistory",out orIh))p.OrIncludeHistory = ParseBool(orIh, false);
             if (root.TryGetProperty("customerCodesJson", out var orCcj) || root.TryGetProperty("OrCustomerCodesJson", out orCcj)) p.OrCustomerCodesJson = AsString(orCcj);
             if (root.TryGetProperty("customerExcludeMode", out var orCem) || root.TryGetProperty("OrCustomerExcludeMode", out orCem)) p.OrCustomerExcludeMode = ParseBool(orCem, false);
+            if (root.TryGetProperty("statusCodesJson", out var orScj) || root.TryGetProperty("OrStatusCodesJson", out orScj)) p.OrStatusCodesJson = AsString(orScj);
+            if (root.TryGetProperty("storeCodesJson",  out var orStcj)|| root.TryGetProperty("OrStoreCodesJson",  out orStcj))p.OrStoreCodesJson  = AsString(orStcj);
+            if (root.TryGetProperty("agentCodesJson",  out var orAcj) || root.TryGetProperty("OrAgentCodesJson",  out orAcj)) p.OrAgentCodesJson  = AsString(orAcj);
 
             // ItemsSelection dimension filter (categories/brands/suppliers/stores/items/etc.).
             // The view serialises it as a JSON *string* under "itemsSelectionJson"; older/code

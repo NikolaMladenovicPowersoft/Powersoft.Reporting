@@ -915,6 +915,13 @@ else
     ReportType = "AverageBasket"
 })
 
+@* Send Email Modal — shared partial *@
+@await Html.PartialAsync("_SendEmail", new Powersoft.Reporting.Web.ViewModels.SendEmailPartialModel {
+    SendAction = "SendReportEmail",
+    ReportType = "AverageBasket",
+    SubjectDefault = "Average Basket Report"
+})
+
 @section Scripts {
 <script>
 var _viewCost     = @(ViewBag.ViewCost     != null ? (ViewBag.ViewCost     ? "true" : "false") : "true");
@@ -1277,149 +1284,35 @@ function onScheduleParametersLoaded(p) {
 
 // autoSelectScheduleDateRange defined below (maps radio presets to shared modal date range).
 // ===== End shared schedule partial API =====
-// ==================== Send to Email ====================
+// ==================== Send to Email (shared _SendEmail partial) ====================
+// Host hooks for Views/Shared/_SendEmail.cshtml. The partial supplies the modal,
+// openSendEmailModal(), sendReportEmail(), loadEmailTemplates(), onEmailTemplateChange(),
+// validateEmailListSend() and _emailTemplatesCache. It appends recipients/cc/bcc/
+// emailSubject/exportFormat/templateId itself, then every key returned below.
+window.collectEmailParameters = function() {
+    var form = document.getElementById('reportForm');
+    var p = {};
+    p.dateFrom = (form.querySelector('[name="DateFrom"]') || {}).value || '@Model.DateFrom.ToString("yyyy-MM-dd")';
+    p.dateTo = (form.querySelector('[name="DateTo"]') || {}).value || '@Model.DateTo.ToString("yyyy-MM-dd")';
+    p.breakdown = (document.getElementById('Breakdown') || {}).value || '@Model.Breakdown';
+    p.groupBy = (document.getElementById('GroupBy') || {}).value || '@Model.GroupBy';
+    p.secondaryGroupBy = (document.getElementById('SecondaryGroupBy') || {}).value || '@Model.SecondaryGroupBy';
+    p.includeVat = document.getElementById('includeVatCheck') ? document.getElementById('includeVatCheck').checked : @(Model.IncludeVat ? "true" : "false");
+    p.compareLastYear = document.getElementById('compareLyCheck') ? document.getElementById('compareLyCheck').checked : @(Model.CompareLastYear ? "true" : "false");
+    p.storeCodes = typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : (document.getElementById('selectedStoreCodesHidden').value || '');
+    p.itemIds = typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : (document.getElementById('selectedItemIdsHidden').value || '');
+    p.ItemsSelectionJson = typeof getItemsSelectionFilter === 'function' ? JSON.stringify(getItemsSelectionFilter()) : '';
+    p.sortColumn = (document.getElementById('sortColumnHidden') || {}).value || 'Period';
+    p.sortDirection = (document.getElementById('sortDirectionHidden') || {}).value || 'ASC';
+    return p;
+};
 
-var _emailTemplatesCache = [];
-
-function openSendEmailModal() {
-    document.getElementById('sendEmailRecipients').value = '';
-    document.getElementById('sendEmailAlert').style.display = 'none';
-    document.getElementById('sendEmailRecipients').classList.remove('is-invalid');
+window.getEmailDefaultSubject = function() {
     var df = (document.querySelector('[name="DateFrom"]') || {}).value || '';
     var dt = (document.querySelector('[name="DateTo"]') || {}).value || '';
-    if (df && dt) {
-        document.getElementById('sendEmailSubject').value = 'Average Basket Report \u2014 ' + df + ' to ' + dt;
-    }
-    loadEmailTemplates();
-    var modal = new bootstrap.Modal(document.getElementById('sendEmailModal'));
-    modal.show();
-}
-
-function loadEmailTemplates() {
-    fetch('@Url.Action("GetEmailTemplates", "Reports")?reportType=AverageBasket')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            _emailTemplatesCache = data || [];
-            var sel = document.getElementById('sendEmailTemplate');
-            sel.innerHTML = '<option value="">-- No template (default) --</option>';
-            data.forEach(function(t) {
-                var opt = document.createElement('option');
-                opt.value = t.templateId;
-                opt.textContent = t.templateName + (t.isDefault ? ' (default)' : '');
-                opt.dataset.subject = t.emailSubject || '';
-                sel.appendChild(opt);
-                if (t.isDefault) opt.selected = true;
-            });
-            onEmailTemplateChange();
-        })
-        .catch(function() { /* templates table may not exist yet */ });
-}
-
-function onEmailTemplateChange() {
-    var sel = document.getElementById('sendEmailTemplate');
-    var id = parseInt(sel.value, 10);
-    var preview = document.getElementById('sendEmailBodyPreview');
-
-    if (isNaN(id) || !id) {
-        preview.innerHTML = '<em class="text-muted">Default email body will be used.</em>';
-        return;
-    }
-
-    var tmpl = _emailTemplatesCache.find(function(t) { return t.templateId === id; });
-    if (!tmpl) return;
-
-    if (tmpl.emailSubject) {
-        document.getElementById('sendEmailSubject').value = replaceMergeFieldsPreview(tmpl.emailSubject);
-    }
-
-    if (tmpl.emailBodyHtml) {
-        preview.innerHTML = replaceMergeFieldsPreview(tmpl.emailBodyHtml);
-    }
-}
-
-function replaceMergeFieldsPreview(text) {
-    return text
-        .replace(/\u00ABReportName\u00BB/g, 'Average Basket')
-        .replace(/\u00ABDatabaseName\u00BB/g, '@(Model.ConnectedDatabase ?? "Unknown")')
-        .replace(/\u00ABPeriod\u00BB/g, '@Model.DateFrom.ToString("yyyy-MM-dd") to @Model.DateTo.ToString("yyyy-MM-dd")')
-        .replace(/\u00ABRowCount\u00BB/g, '@(Model.Results?.Count ?? 0)')
-        .replace(/\u00ABExportFormat\u00BB/g, document.getElementById('sendEmailFormat').value)
-        .replace(/\u00ABGeneratedDate\u00BB/g, new Date().toLocaleString())
-        .replace(/\u00ABUserName\u00BB/g, '@(User.Identity?.Name ?? "Unknown")')
-        .replace(/\u00ABCompanyName\u00BB/g, '@(Model.ConnectedDatabase ?? "")')
-        .replace(/\u00AB/g, '').replace(/\u00BB/g, '');
-}
-
-function validateEmailList(input) {
-    if (!input || !input.trim()) return { valid: false, emails: [], errors: ['Please enter at least one email address.'] };
-    var emails = input.split(/[,;]/).map(function(e) { return e.trim(); }).filter(function(e) { return e.length > 0; });
-    var re = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
-    var invalid = emails.filter(function(e) { return !re.test(e); });
-    if (invalid.length > 0) return { valid: false, emails: emails, errors: invalid.map(function(e) { return 'Invalid: ' + e; }) };
-    return { valid: true, emails: emails, errors: [] };
-}
-
-function sendReportEmail() {
-    var recipientsInput = document.getElementById('sendEmailRecipients');
-    var alertDiv = document.getElementById('sendEmailAlert');
-    var validation = validateEmailList(recipientsInput.value);
-
-    if (!validation.valid) {
-        recipientsInput.classList.add('is-invalid');
-        document.getElementById('sendEmailRecipientsError').textContent = validation.errors.join('; ');
-        return;
-    }
-    recipientsInput.classList.remove('is-invalid');
-
-    var btn = document.getElementById('sendEmailBtn');
-    var spinner = document.getElementById('sendEmailSpinner');
-    var icon = document.getElementById('sendEmailIcon');
-    btn.disabled = true;
-    spinner.classList.remove('d-none');
-    icon.classList.add('d-none');
-
-    var formData = new FormData();
-    formData.append('recipients', recipientsInput.value.trim());
-    formData.append('cc', (document.getElementById('sendEmailCC').value || '').trim());
-    formData.append('bcc', (document.getElementById('sendEmailBCC').value || '').trim());
-    formData.append('emailSubject', document.getElementById('sendEmailSubject').value);
-    formData.append('exportFormat', document.getElementById('sendEmailFormat').value);
-    formData.append('templateId', document.getElementById('sendEmailTemplate').value || '');
-    var form = document.getElementById('reportForm');
-    formData.append('dateFrom', (form.querySelector('[name="DateFrom"]') || {}).value || '@Model.DateFrom.ToString("yyyy-MM-dd")');
-    formData.append('dateTo', (form.querySelector('[name="DateTo"]') || {}).value || '@Model.DateTo.ToString("yyyy-MM-dd")');
-    formData.append('breakdown', (document.getElementById('Breakdown') || {}).value || '@Model.Breakdown');
-    formData.append('groupBy', (document.getElementById('GroupBy') || {}).value || '@Model.GroupBy');
-    formData.append('secondaryGroupBy', (document.getElementById('SecondaryGroupBy') || {}).value || '@Model.SecondaryGroupBy');
-    formData.append('includeVat', document.getElementById('includeVatCheck') ? document.getElementById('includeVatCheck').checked : @(Model.IncludeVat ? "true" : "false"));
-    formData.append('compareLastYear', document.getElementById('compareLyCheck') ? document.getElementById('compareLyCheck').checked : @(Model.CompareLastYear ? "true" : "false"));
-    formData.append('storeCodes', typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : (document.getElementById('selectedStoreCodesHidden').value || ''));
-    formData.append('itemIds', typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : (document.getElementById('selectedItemIdsHidden').value || ''));
-    formData.append('ItemsSelectionJson', typeof getItemsSelectionFilter === 'function' ? JSON.stringify(getItemsSelectionFilter()) : '');
-    formData.append('sortColumn', (document.getElementById('sortColumnHidden') || {}).value || 'Period');
-    formData.append('sortDirection', (document.getElementById('sortDirectionHidden') || {}).value || 'ASC');
-
-    fetch('@Url.Action("SendReportEmail", "Reports")', { method: 'POST', body: formData })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            btn.disabled = false;
-            spinner.classList.add('d-none');
-            icon.classList.remove('d-none');
-            if (data.success) {
-                alertDiv.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>' + data.message + '</div>';
-            } else {
-                alertDiv.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>' + data.message + '</div>';
-            }
-            alertDiv.style.display = '';
-        })
-        .catch(function() {
-            btn.disabled = false;
-            spinner.classList.add('d-none');
-            icon.classList.remove('d-none');
-            alertDiv.innerHTML = '<div class="alert alert-danger mb-0">Network error. Please try again.</div>';
-            alertDiv.style.display = '';
-        });
-}
+    if (df && dt) return 'Average Basket Report \u2014 ' + df + ' to ' + dt;
+    return 'Average Basket Report';
+};
 
 // ==================== Searchable Column Chooser ====================
 

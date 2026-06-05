@@ -1,0 +1,207 @@
+@model Powersoft.Reporting.Web.ViewModels.SendEmailPartialModel
+@*
+    Shared "Send to Email" modal. Modelled 1:1 on the Offers / Purchases vs Sales send-email modal.
+    Host view MUST define window.collectEmailParameters() returning the report's parameters object
+    (or null to abort — the host shows its own "Generate a report first" alert). Optionally the host
+    may define window.getEmailDefaultSubject() to override the default subject when the modal opens.
+*@
+@{
+    var tplReportType = string.IsNullOrEmpty(Model.TemplatesReportType) ? Model.ReportType : Model.TemplatesReportType;
+}
+<div class="modal fade" id="sendEmailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-envelope-at me-2 text-primary"></i>Send Report via Email</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="sendEmailRecipients" placeholder="email@@example.com, ...">
+                        <div class="invalid-feedback" id="sendEmailRecipientsError"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Template</label>
+                        <select class="form-select" id="sendEmailTemplate" onchange="onEmailTemplateChange()">
+                            <option value="">-- No template (default) --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">CC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailCC" placeholder="cc@@example.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">BCC <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="text" class="form-control" id="sendEmailBCC" placeholder="bcc@@example.com">
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">Subject</label>
+                        <input type="text" class="form-control" id="sendEmailSubject" value="@Model.SubjectDefault">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Format</label>
+                        <select class="form-select" id="sendEmailFormat">
+                            <option value="Excel" selected>Excel (.xlsx)</option>
+                            <option value="PDF">PDF</option>
+                            <option value="CSV">CSV</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Email Message</label>
+                        <div class="border rounded" style="max-height:250px;overflow-y:auto;padding:12px;font-family:Arial,sans-serif;font-size:13px;background:#fafafa;" id="sendEmailBodyPreview">
+                            <em class="text-muted">Select a template to preview the email body, or the default body will be used.</em>
+                        </div>
+                    </div>
+                </div>
+                <div id="sendEmailAlert" class="mt-3" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <a asp-controller="Settings" asp-action="EmailTemplates" class="btn btn-outline-secondary me-auto" title="Manage email templates">
+                    <i class="bi bi-gear me-1"></i>Manage Templates
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="sendEmailBtn" onclick="sendReportEmail()">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="sendEmailSpinner"></span>
+                    <i class="bi bi-send me-1" id="sendEmailIcon"></i>Send
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ===== Shared send-email modal logic =====
+var SEND_EMAIL_URL = '@Url.Action(Model.SendAction, "Reports")';
+var SEND_EMAIL_TPL_URL = '@Url.Action("GetEmailTemplates", "Reports")?reportType=@tplReportType';
+var SEND_EMAIL_SUBJECT_DEFAULT = '@Html.Raw(Model.SubjectDefault.Replace("'", "\\'"))';
+var _emailTemplatesCache = [];
+var SEND_EMAIL_DEFAULT_PREVIEW =
+  '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;">' +
+  '<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+  '<td style="background-color:#1e40af;padding:20px 28px;">' +
+  '<span style="margin:0;color:#fff;font-size:17px;font-weight:600;">Powersoft Reports</span>' +
+  '</td></tr></table>' +
+  '<div style="background-color:#fff;padding:22px 28px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;">' +
+  '<h3 style="margin:0 0 6px;color:#1e40af;font-size:16px;font-weight:700;">\u00ABReportName\u00BB</h3>' +
+  '<p style="margin:0 0 16px;color:#374151;font-size:13px;">\u00ABDatabaseName\u00BB</p>' +
+  '<p style="margin:0 0 16px;color:#374151;font-size:13px;">Please find the attached <strong>\u00ABReportName\u00BB</strong> report.</p>' +
+  '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;font-size:13px;">' +
+  '<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;width:100px;">Period</td>' +
+  '<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;">\u00ABPeriod\u00BB</td></tr>' +
+  '<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Rows</td>' +
+  '<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;">\u00ABRowCount\u00BB</td></tr>' +
+  '<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;">Format</td>' +
+  '<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#111827;">\u00ABExportFormat\u00BB</td></tr>' +
+  '<tr><td style="padding:8px 12px;color:#6b7280;">Generated</td>' +
+  '<td style="padding:8px 12px;color:#111827;">\u00ABGeneratedDate\u00BB</td></tr>' +
+  '</table></div>' +
+  '<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
+  '<td style="background-color:#f3f4f6;padding:12px 28px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;">' +
+  '<p style="margin:0;color:#6b7280;font-size:10px;">Automated report by Powersoft Report Engine &bull; \u00ABDatabaseName\u00BB</p>' +
+  '</td></tr></table></div>';
+
+if (typeof escapeHtml !== 'function') {
+    window.escapeHtml = function (s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+}
+
+window.validateEmailListSend = function (input) {
+    if (!input || !input.trim()) return { valid: false, errors: ['Enter at least one email.'] };
+    var emails = input.split(/[,;]/).map(function (e) { return e.trim(); }).filter(function (e) { return e.length > 0; });
+    var re = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
+    var invalid = emails.filter(function (e) { return !re.test(e); });
+    if (invalid.length > 0) return { valid: false, errors: invalid.map(function (e) { return 'Invalid: ' + e; }) };
+    return { valid: true, emails: emails, errors: [] };
+};
+
+window.openSendEmailModal = function () {
+    // Host may abort here (e.g. no data) by returning null from collectEmailParameters().
+    if (typeof collectEmailParameters !== 'function') {
+        alert('collectEmailParameters() is not defined for this report.');
+        return;
+    }
+    if (collectEmailParameters() == null) return; // host showed its own message
+    document.getElementById('sendEmailRecipients').value = '';
+    document.getElementById('sendEmailRecipients').classList.remove('is-invalid');
+    document.getElementById('sendEmailAlert').style.display = 'none';
+    var subj = (typeof getEmailDefaultSubject === 'function') ? getEmailDefaultSubject() : SEND_EMAIL_SUBJECT_DEFAULT;
+    document.getElementById('sendEmailSubject').value = subj || SEND_EMAIL_SUBJECT_DEFAULT;
+    loadEmailTemplates();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('sendEmailModal')).show();
+};
+
+window.loadEmailTemplates = function () {
+    fetch(SEND_EMAIL_TPL_URL).then(function (r) { return r.json(); }).then(function (data) {
+        _emailTemplatesCache = data || [];
+        var sel = document.getElementById('sendEmailTemplate');
+        sel.innerHTML = '<option value="">-- No template (default) --</option>';
+        _emailTemplatesCache.forEach(function (t) {
+            var opt = document.createElement('option');
+            opt.value = t.templateId;
+            opt.textContent = t.templateName + (t.isDefault ? ' (default)' : '');
+            if (t.isDefault) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        onEmailTemplateChange();
+    }).catch(function () { });
+};
+
+window.onEmailTemplateChange = function () {
+    var sel = document.getElementById('sendEmailTemplate');
+    var id = parseInt(sel.value, 10);
+    var preview = document.getElementById('sendEmailBodyPreview');
+    if (isNaN(id) || !id) { preview.innerHTML = SEND_EMAIL_DEFAULT_PREVIEW; return; }
+    var tmpl = _emailTemplatesCache.find(function (t) { return t.templateId === id; });
+    if (!tmpl) return;
+    if (tmpl.emailSubject) document.getElementById('sendEmailSubject').value = tmpl.emailSubject;
+    if (tmpl.emailBodyHtml) preview.innerHTML = tmpl.emailBodyHtml;
+};
+
+window.sendReportEmail = function () {
+    var ri = document.getElementById('sendEmailRecipients');
+    var ad = document.getElementById('sendEmailAlert');
+    var v = validateEmailListSend(ri.value);
+    if (!v.valid) {
+        ri.classList.add('is-invalid');
+        document.getElementById('sendEmailRecipientsError').textContent = v.errors.join('; ');
+        return;
+    }
+    ri.classList.remove('is-invalid');
+
+    var params = collectEmailParameters();
+    if (params == null) return; // host aborted
+
+    var btn = document.getElementById('sendEmailBtn');
+    var sp = document.getElementById('sendEmailSpinner');
+    var ic = document.getElementById('sendEmailIcon');
+    btn.disabled = true; sp.classList.remove('d-none'); ic.classList.add('d-none');
+
+    var fd = new FormData();
+    fd.append('recipients', ri.value.trim());
+    fd.append('cc', (document.getElementById('sendEmailCC').value || '').trim());
+    fd.append('bcc', (document.getElementById('sendEmailBCC').value || '').trim());
+    fd.append('emailSubject', document.getElementById('sendEmailSubject').value);
+    fd.append('exportFormat', document.getElementById('sendEmailFormat').value);
+    fd.append('templateId', document.getElementById('sendEmailTemplate').value || '');
+    Object.keys(params).forEach(function (k) { fd.append(k, params[k]); });
+
+    fetch(SEND_EMAIL_URL, { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            btn.disabled = false; sp.classList.add('d-none'); ic.classList.remove('d-none');
+            ad.innerHTML = '<div class="alert alert-' + (d.success ? 'success' : 'danger') + ' mb-0">' +
+                (d.success ? '<i class="bi bi-check-circle me-1"></i>' : '<i class="bi bi-exclamation-triangle me-1"></i>') +
+                escapeHtml(d.message) + '</div>';
+            ad.style.display = '';
+        })
+        .catch(function () {
+            btn.disabled = false; sp.classList.add('d-none'); ic.classList.remove('d-none');
+            ad.innerHTML = '<div class="alert alert-danger mb-0">Network error.</div>';
+            ad.style.display = '';
+        });
+};
+</script>

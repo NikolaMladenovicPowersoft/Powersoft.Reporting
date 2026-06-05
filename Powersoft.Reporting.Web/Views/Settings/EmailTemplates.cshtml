@@ -72,6 +72,27 @@
                                         case "PurchasesSales":
                                             <span class="badge bg-info text-dark">Purchases vs Sales</span>
                                             break;
+                                        case "BelowMinStock":
+                                            <span class="badge bg-primary">Below Min Stock</span>
+                                            break;
+                                        case "Catalogue":
+                                            <span class="badge bg-primary">Power Reports Catalogue</span>
+                                            break;
+                                        case "CancelLog":
+                                            <span class="badge bg-primary">Cancel Log</span>
+                                            break;
+                                        case "Pareto":
+                                            <span class="badge bg-primary">Pareto 80/20</span>
+                                            break;
+                                        case "Charts":
+                                            <span class="badge bg-primary">Charts &amp; Dashboards</span>
+                                            break;
+                                        case "ProspectClients":
+                                            <span class="badge bg-primary">Prospect Clients</span>
+                                            break;
+                                        case "OffersReport":
+                                            <span class="badge bg-primary">Offers Report</span>
+                                            break;
                                         default:
                                             <span class="badge bg-secondary">All Reports</span>
                                             break;
@@ -80,18 +101,20 @@
                                 <td class="text-center">
                                     @if (t.IsDefault)
                                     {
-                                        @switch (t.ReportType)
+                                        var defReportName = t.ReportType switch
                                         {
-                                            case "AverageBasket":
-                                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Default for Average Basket</span>
-                                                break;
-                                            case "PurchasesSales":
-                                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Default for Purchases vs Sales</span>
-                                                break;
-                                            default:
-                                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Default for All Reports</span>
-                                                break;
-                                        }
+                                            "AverageBasket" => "Average Basket",
+                                            "PurchasesSales" => "Purchases vs Sales",
+                                            "BelowMinStock" => "Below Min Stock",
+                                            "Catalogue" => "Power Reports Catalogue",
+                                            "CancelLog" => "Cancel Log",
+                                            "Pareto" => "Pareto 80/20",
+                                            "Charts" => "Charts & Dashboards",
+                                            "ProspectClients" => "Prospect Clients",
+                                            "OffersReport" => "Offers Report",
+                                            _ => "All Reports"
+                                        };
+                                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Default for @defReportName</span>
                                     }
                                 </td>
                                 <td class="text-muted small">@t.CreatedDate.ToString("yyyy-MM-dd")</td>

@@ -353,6 +353,13 @@
     ReportType = "Pareto"
 })
 
+@* Send Email Modal — shared partial *@
+@await Html.PartialAsync("_SendEmail", new Powersoft.Reporting.Web.ViewModels.SendEmailPartialModel {
+    SendAction = "SendParetoEmail",
+    ReportType = "Pareto",
+    SubjectDefault = "Pareto 80/20 Report"
+})
+
 @section Scripts {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
@@ -738,124 +745,25 @@ function autoSelectScheduleDateRange() {
 
 // ===== End shared schedule partial API =====
 
-// ==================== Send Email ====================
-var _emailTemplatesCache = [];
+// ==================== Send Email (shared _SendEmail partial) ====================
+// Host hooks for Views/Shared/_SendEmail.cshtml. The partial supplies the modal,
+// openSendEmailModal(), sendReportEmail(), loadEmailTemplates(), onEmailTemplateChange(),
+// validateEmailListSend() and _emailTemplatesCache. It appends recipients/cc/bcc/
+// emailSubject/exportFormat/templateId itself, then every key returned below.
+// Mirrors what collectParetoFormData() posted to the old SendParetoEmail (collectParetoParams + itemsSelection).
+window.collectEmailParameters = function() {
+    var p = collectParetoParams();
+    var isJson = getItemsSelectionJson();
+    if (isJson) p.itemsSelection = isJson;
+    return p;
+};
 
-function openSendEmailModal() {
-    document.getElementById('sendEmailRecipients').value = '';
-    document.getElementById('sendEmailAlert').style.display = 'none';
-    document.getElementById('sendEmailRecipients').classList.remove('is-invalid');
+window.getEmailDefaultSubject = function() {
     var df = document.getElementById('dateFrom').value;
     var dt = document.getElementById('dateTo').value;
-    if (df && dt) {
-        document.getElementById('sendEmailSubject').value = 'Pareto 80/20 Report \u2014 ' + df + ' to ' + dt;
-    }
-    loadEmailTemplates();
-    var modal = new bootstrap.Modal(document.getElementById('sendEmailModal'));
-    modal.show();
-}
-
-function loadEmailTemplates() {
-    fetch('@Url.Action("GetEmailTemplates", "Reports")?reportType=Pareto')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            _emailTemplatesCache = data || [];
-            var sel = document.getElementById('sendEmailTemplate');
-            sel.innerHTML = '<option value="">-- No template (default) --</option>';
-            data.forEach(function(t) {
-                var opt = document.createElement('option');
-                opt.value = t.templateId;
-                opt.textContent = t.templateName + (t.isDefault ? ' (default)' : '');
-                opt.dataset.subject = t.emailSubject || '';
-                sel.appendChild(opt);
-                if (t.isDefault) opt.selected = true;
-            });
-            onEmailTemplateChange();
-        })
-        .catch(function() { /* templates may not exist yet */ });
-}
-
-function onEmailTemplateChange() {
-    var sel = document.getElementById('sendEmailTemplate');
-    var id = parseInt(sel.value, 10);
-    var preview = document.getElementById('sendEmailBodyPreview');
-    if (isNaN(id) || !id) { preview.innerHTML = '<em class="text-muted">Default email body will be used.</em>'; return; }
-    var tmpl = _emailTemplatesCache.find(function(t) { return t.templateId === id; });
-    if (!tmpl) return;
-    if (tmpl.emailSubject) document.getElementById('sendEmailSubject').value = replaceMergeFieldsPreview(tmpl.emailSubject);
-    if (tmpl.emailBodyHtml) preview.innerHTML = replaceMergeFieldsPreview(tmpl.emailBodyHtml);
-}
-
-function replaceMergeFieldsPreview(text) {
-    return text
-        .replace(/\u00ABReportName\u00BB/g, 'Pareto 80/20')
-        .replace(/\u00ABDatabaseName\u00BB/g, '@(dbName)')
-        .replace(/\u00ABPeriod\u00BB/g, document.getElementById('dateFrom').value + ' to ' + document.getElementById('dateTo').value)
-        .replace(/\u00ABRowCount\u00BB/g, (document.querySelectorAll('#paretoTable tr').length || 0).toString())
-        .replace(/\u00ABExportFormat\u00BB/g, document.getElementById('sendEmailFormat').value)
-        .replace(/\u00ABGeneratedDate\u00BB/g, new Date().toLocaleString())
-        .replace(/\u00ABUserName\u00BB/g, '@(User.Identity?.Name ?? "Unknown")')
-        .replace(/\u00ABCompanyName\u00BB/g, '@(dbName)')
-        .replace(/\u00AB/g, '').replace(/\u00BB/g, '');
-}
-
-function validateEmailList(input) {
-    if (!input || !input.trim()) return { valid: false, emails: [], errors: ['Please enter at least one email address.'] };
-    var emails = input.split(/[,;]/).map(function(e) { return e.trim(); }).filter(function(e) { return e.length > 0; });
-    var re = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
-    var invalid = emails.filter(function(e) { return !re.test(e); });
-    if (invalid.length > 0) return { valid: false, emails: emails, errors: invalid.map(function(e) { return 'Invalid: ' + e; }) };
-    return { valid: true, emails: emails, errors: [] };
-}
-
-function sendParetoEmail() {
-    var recipientsInput = document.getElementById('sendEmailRecipients');
-    var alertDiv = document.getElementById('sendEmailAlert');
-    var validation = validateEmailList(recipientsInput.value);
-
-    if (!validation.valid) {
-        recipientsInput.classList.add('is-invalid');
-        document.getElementById('sendEmailRecipientsError').textContent = validation.errors.join('; ');
-        return;
-    }
-    recipientsInput.classList.remove('is-invalid');
-
-    var btn = document.getElementById('sendEmailBtn');
-    var spinner = document.getElementById('sendEmailSpinner');
-    var icon = document.getElementById('sendEmailIcon');
-    btn.disabled = true;
-    spinner.classList.remove('d-none');
-    icon.classList.add('d-none');
-
-    var formData = collectParetoFormData();
-    formData.append('recipients', recipientsInput.value.trim());
-    formData.append('cc', (document.getElementById('sendEmailCC').value || '').trim());
-    formData.append('bcc', (document.getElementById('sendEmailBCC').value || '').trim());
-    formData.append('emailSubject', document.getElementById('sendEmailSubject').value);
-    formData.append('exportFormat', document.getElementById('sendEmailFormat').value);
-    formData.append('templateId', document.getElementById('sendEmailTemplate').value || '');
-
-    fetch('@Url.Action("SendParetoEmail", "Reports")', { method: 'POST', body: formData })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            btn.disabled = false;
-            spinner.classList.add('d-none');
-            icon.classList.remove('d-none');
-            if (data.success) {
-                alertDiv.innerHTML = '<div class="alert alert-success mb-0"><i class="bi bi-check-circle me-1"></i>' + data.message + '</div>';
-            } else {
-                alertDiv.innerHTML = '<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>' + data.message + '</div>';
-            }
-            alertDiv.style.display = '';
-        })
-        .catch(function() {
-            btn.disabled = false;
-            spinner.classList.add('d-none');
-            icon.classList.remove('d-none');
-            alertDiv.innerHTML = '<div class="alert alert-danger mb-0">Network error. Please try again.</div>';
-            alertDiv.style.display = '';
-        });
-}
+    if (df && dt) return 'Pareto 80/20 Report \u2014 ' + df + ' to ' + dt;
+    return 'Pareto 80/20 Report';
+};
 
 // ==================== AI Analysis ====================
 window.collectAiFormData = function() {

@@ -325,6 +325,13 @@
     ReportType = "Charts"
 })
 
+@* Send Email Modal — shared partial *@
+@await Html.PartialAsync("_SendEmail", new Powersoft.Reporting.Web.ViewModels.SendEmailPartialModel {
+    SendAction = "SendChartEmail",
+    ReportType = "Charts",
+    SubjectDefault = "Charts & Dashboards"
+})
+
 @section Scripts {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -474,6 +481,32 @@ window.collectAiFormData = function() {
     var isJson = getItemsSelectionJson();
     if (isJson) fd.append('itemsSelection', isJson);
     return fd;
+};
+
+// ==================== Send to Email (shared _SendEmail partial) ====================
+// Host hook for Views/Shared/_SendEmail.cshtml. The partial supplies the modal,
+// openSendEmailModal(), sendReportEmail(), loadEmailTemplates(), onEmailTemplateChange(),
+// validateEmailListSend() and _emailTemplatesCache. It appends recipients/cc/bcc/
+// emailSubject/exportFormat/templateId itself, then every key returned below.
+// Mirrors the field names posted by the export endpoints (exportChart()).
+window.collectEmailParameters = function() {
+    if (!_chart) { alert('Generate a chart first.'); return null; }
+    var p = {
+        dateFrom: document.getElementById('dateFrom').value,
+        dateTo: document.getElementById('dateTo').value,
+        mode: document.getElementById('chartMode').value,
+        dimension: document.getElementById('dimension').value,
+        metric: document.getElementById('metric').value,
+        topN: document.getElementById('topN').value,
+        showOthers: document.getElementById('showOthers').checked,
+        compareLastYear: document.getElementById('compareLastYear').checked,
+        includeVat: document.getElementById('includeVat').checked,
+        storeCodes: getSelectedStoreCodes(),
+        chartType: document.getElementById('chartType').value
+    };
+    var isJson = getItemsSelectionJson();
+    if (isJson) p.itemsSelection = isJson;
+    return p;
 };
 
 function getVsLabels(mode) {

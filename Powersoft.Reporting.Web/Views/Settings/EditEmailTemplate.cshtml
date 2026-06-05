@@ -45,6 +45,13 @@
                                 <option value="">All Reports</option>
                                 <option value="AverageBasket">Average Basket</option>
                                 <option value="PurchasesSales">Purchases vs Sales</option>
+                                <option value="BelowMinStock">Below Min Stock</option>
+                                <option value="Catalogue">Power Reports Catalogue</option>
+                                <option value="CancelLog">Cancel Log</option>
+                                <option value="Pareto">Pareto 80/20</option>
+                                <option value="Charts">Charts &amp; Dashboards</option>
+                                <option value="ProspectClients">Prospect Clients</option>
+                                <option value="OffersReport">Offers Report</option>
                             </select>
                             <small class="text-muted">Leave empty to apply to all report types</small>
                         </div>
@@ -87,6 +94,9 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <span><i class="bi bi-body-text me-1"></i>Email Message</span>
                         <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="loadStarterTemplate()" title="Pre-fill editor with the styled Powersoft Reports layout">
+                                <i class="bi bi-layout-text-sidebar me-1"></i>Load Starter Template
+                            </button>
                             <!-- Formatting toolbar -->
                             <div class="btn-group btn-group-sm">
                                 <button type="button" class="btn btn-outline-secondary" onclick="formatCmd('bold')" title="Bold"><i class="bi bi-type-bold"></i></button>
@@ -162,6 +172,10 @@ function syncEditorToHidden() {
 
 document.addEventListener('DOMContentLoaded', function() {
     syncEditorToHidden();
+    @if (!isEdit)
+    {
+        <text>loadStarterTemplate(true);</text>
+    }
 });
 
 function formatCmd(cmd) {
@@ -205,6 +219,36 @@ function insertFieldInto(inputId, field) {
     input.value = input.value.substring(0, pos) + field + input.value.substring(pos);
     input.focus();
     input.setSelectionRange(pos + field.length, pos + field.length);
+}
+
+function loadStarterTemplate(force) {
+    if (!force && document.getElementById('emailBodyEditor').textContent.trim() !== '' &&
+        !confirm('This will replace the current content with the starter template. Continue?')) return;
+    var html = [
+        '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,sans-serif;max-width:600px;">',
+        '  <tr><td style="background:#1e40af;padding:24px 32px;">',
+        '    <span style="color:#ffffff;font-size:20px;font-weight:bold;">Powersoft Reports</span>',
+        '  </td></tr>',
+        '  <tr><td style="padding:24px 32px;">',
+        '    <h2 style="color:#1e40af;margin:0 0 4px;">\u00ABReportName\u00BB</h2>',
+        '    <p style="color:#6b7280;margin:0 0 16px;">\u00ABDatabaseName\u00BB</p>',
+        '    <p>Please find the attached <strong>\u00ABReportName\u00BB</strong> report.</p>',
+        '    <table width="100%" cellpadding="8" cellspacing="0" border="0" style="border-collapse:collapse;margin:16px 0;">',
+        '      <tr><td style="border-bottom:1px solid #e5e7eb;color:#6b7280;width:140px;">Period</td>',
+        '          <td style="border-bottom:1px solid #e5e7eb;"><strong>\u00ABPeriod\u00BB</strong></td></tr>',
+        '      <tr><td style="border-bottom:1px solid #e5e7eb;color:#6b7280;">Rows</td>',
+        '          <td style="border-bottom:1px solid #e5e7eb;">\u00ABRowCount\u00BB</td></tr>',
+        '      <tr><td style="border-bottom:1px solid #e5e7eb;color:#6b7280;">Format</td>',
+        '          <td style="border-bottom:1px solid #e5e7eb;">\u00ABExportFormat\u00BB</td></tr>',
+        '      <tr><td style="border-bottom:1px solid #e5e7eb;color:#6b7280;">Generated</td>',
+        '          <td style="border-bottom:1px solid #e5e7eb;">\u00ABGeneratedDate\u00BB</td></tr>',
+        '    </table>',
+        '    <p style="color:#6b7280;font-size:12px;">Automated report by Powersoft Report Engine &bull; \u00ABDatabaseName\u00BB</p>',
+        '  </td></tr>',
+        '</table>'
+    ].join('\n');
+    document.getElementById('emailBodyEditor').innerHTML = html;
+    syncEditorToHidden();
 }
 </script>
 }

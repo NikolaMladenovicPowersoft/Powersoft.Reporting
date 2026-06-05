@@ -1374,21 +1374,6 @@ public class ReportsController : Controller
         string? storeCodes, string? itemIds,
         string sortColumn = "Period", string sortDirection = "ASC", string? ItemsSelectionJson = null)
     {
-        if (string.IsNullOrWhiteSpace(recipients))
-            return Json(new { success = false, message = "Please enter at least one email address." });
-
-        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
-        if (invalidEmails.Length > 0)
-            return Json(new { success = false, message = $"Invalid email format: {string.Join(", ", invalidEmails)}" });
-
-        var ccList = ParseAndValidateEmailList(cc);
-        var bccList = ParseAndValidateEmailList(bcc);
-        if (ccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid CC email: {string.Join(", ", ccList.invalid)}" });
-        if (bccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid BCC email: {string.Join(", ", bccList.invalid)}" });
-
         var result = await RunExportQuery(dateFrom, dateTo, breakdown, groupBy, secondaryGroupBy,
             includeVat, compareLastYear, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson);
         if (result == null)
@@ -1425,43 +1410,6 @@ public class ReportsController : Controller
         var userName = User.Identity?.Name ?? "Unknown";
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
 
-        // Load template body if selected
-        string? templateBody = null;
-        string? templateSubject = null;
-        if (templateId.HasValue && templateId > 0)
-        {
-            try
-            {
-                var tenantConnString = GetTenantConnectionString();
-                if (!string.IsNullOrEmpty(tenantConnString))
-                {
-                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
-                    if (tmpl != null)
-                    {
-                        templateBody = tmpl.EmailBodyHtml;
-                        templateSubject = tmpl.EmailSubject;
-                    }
-                }
-            }
-            catch { /* fall back to default */ }
-        }
-
-        string ReplaceMergeFields(string text) => text
-            .Replace("\u00ABReportName\u00BB", "Average Basket")
-            .Replace("\u00ABDatabaseName\u00BB", dbName)
-            .Replace("\u00ABPeriod\u00BB", period)
-            .Replace("\u00ABRowCount\u00BB", result.Value.rows.Count.ToString())
-            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
-            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
-            .Replace("\u00ABUserName\u00BB", userName)
-            .Replace("\u00ABCompanyName\u00BB", dbName)
-            .Replace("\u00AB", "").Replace("\u00BB", "");
-
-        var subject = string.IsNullOrWhiteSpace(emailSubject)
-            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Average Basket Report — {period}")
-            : emailSubject;
-
         var selectionLines = new List<string>
         {
             $"Breakdown: {breakdown}",
@@ -1476,36 +1424,161 @@ public class ReportsController : Controller
             $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
             $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
 
-        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
-            ? ReplaceMergeFields(templateBody)
-            : $@"
-<div style='font-family: Arial, sans-serif; max-width: 600px;'>
-    <h2 style='color: #2563eb;'>Average Basket Report</h2>
-    <table style='border-collapse: collapse; width: 100%; margin: 16px 0;'>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Database</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Period</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{period}</td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Rows</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{result.Value.rows.Count}</td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Format</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{exportFormat}</td></tr>
-    </table>
-    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
-    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
-    <p style='color: #6b7280; font-size: 13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
-</div>";
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Average Basket", dbName, period, result.Value.rows.Count, exportFormat, userName, "Rows", selectionsHtml);
 
         var selectionsText = string.Join("\n", selectionLines);
-        var textBody = $"Average Basket Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+        var defaultTextBody = $"Average Basket Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+
+        var tokens = BuildEmailTokens("Average Basket", dbName, period, result.Value.rows.Count, exportFormat, userName);
+
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "AverageBasket", templateId,
+            fileBytes, fileName, contentType,
+            $"Average Basket Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
+    }
+
+    /// <summary>
+    /// Builds the standard merge-field dictionary shared by every report email. Keys match the
+    /// <c>\u00AB..\u00BB</c> placeholders documented in the email-template editor.
+    /// </summary>
+    private static Dictionary<string, string> BuildEmailTokens(
+        string reportName, string dbName, string period, int rowCount, string? exportFormat, string userName)
+        => new()
+        {
+            ["ReportName"] = reportName,
+            ["DatabaseName"] = dbName,
+            ["CompanyName"] = dbName,
+            ["Period"] = period,
+            ["RowCount"] = rowCount.ToString(),
+            ["ExportFormat"] = exportFormat ?? "Excel",
+            ["GeneratedDate"] = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+            ["UserName"] = userName,
+        };
+
+    /// <summary>
+    /// Builds the default HTML email body — mirrors <c>ScheduleExecutionService.BuildEmailHtml</c>
+    /// so manual and scheduled emails look identical.
+    /// </summary>
+    private static string BuildDefaultEmailHtmlBody(
+        string reportName, string dbName, string period,
+        int rowCount, string exportFormat, string userName,
+        string rowCountLabel = "Rows",
+        string? selectionsHtml = null)
+    {
+        var selSection = !string.IsNullOrEmpty(selectionsHtml)
+            ? $@"
+    <h4 style='margin:16px 0 8px;color:#374151;font-size:14px;font-weight:600;'>Selections for this report:</h4>
+    <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin:0 0 16px;font-size:14px;'>{selectionsHtml}</table>"
+            : "";
+        return $@"
+<div style='font-family:Segoe UI,Arial,sans-serif;max-width:640px;margin:0 auto;'>
+  <table width='100%' cellpadding='0' cellspacing='0' border='0'><tr>
+    <td style='background-color:#1e40af;padding:24px 32px;'>
+      <h1 style='margin:0;color:#ffffff;font-size:20px;font-weight:600;'>Powersoft Reports</h1>
+    </td>
+  </tr></table>
+  <div style='background-color:#ffffff;padding:28px 32px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;'>
+    <h2 style='margin:0 0 8px;color:#1e40af;font-size:18px;font-weight:700;'>{reportName}</h2>
+    <p style='margin:0 0 20px;color:#374151;font-size:14px;'>{dbName}</p>
+    <p style='margin:0 0 20px;color:#374151;font-size:14px;'>Please find the attached <strong>{reportName}</strong> report.</p>
+    <table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin:0 0 20px;font-size:14px;'>
+      <tr>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;width:120px;'>Period</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;'>{period}</td>
+      </tr>
+      <tr>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>{rowCountLabel}</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;'>{rowCount}</td>
+      </tr>
+      <tr>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
+        <td style='padding:10px 14px;border-bottom:1px solid #e5e7eb;color:#111827;'>{exportFormat}</td>
+      </tr>
+      <tr>
+        <td style='padding:10px 14px;color:#6b7280;'>Generated</td>
+        <td style='padding:10px 14px;color:#111827;'>{DateTime.Now:yyyy-MM-dd HH:mm}</td>
+      </tr>
+    </table>{selSection}
+  </div>
+  <table width='100%' cellpadding='0' cellspacing='0' border='0'><tr>
+    <td style='background-color:#f3f4f6;padding:16px 32px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;'>
+      <p style='margin:0;color:#6b7280;font-size:11px;'>
+        Automated report by Powersoft Report Engine &bull; {dbName}
+      </p>
+    </td>
+  </tr></table>
+</div>";
+    }
+
+    /// <summary>
+    /// Shared "send report email" tail used by every <c>SendXxxReportEmail</c> action. Owns everything
+    /// that is identical across reports: recipient/CC/BCC validation, template resolution (by id; falls
+    /// back to the supplied built-in default body when no template is chosen), merge-field substitution,
+    /// attachment building and the per-recipient send loop. Per-report actions still own the
+    /// "collect params -> run query -> produce export bytes -> build a default body" step and pass the
+    /// results in here.
+    /// </summary>
+    private async Task<IActionResult> SendReportEmailCore(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string reportType, int? templateId,
+        byte[] fileBytes, string fileName, string contentType,
+        string defaultSubject, string defaultHtmlBody, string defaultTextBody,
+        IDictionary<string, string> tokens)
+    {
+        if (string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Please enter at least one email address." });
+
+        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
+        if (invalidEmails.Length > 0)
+            return Json(new { success = false, message = $"Invalid email format: {string.Join(", ", invalidEmails)}" });
+
+        var ccList = ParseAndValidateEmailList(cc);
+        var bccList = ParseAndValidateEmailList(bcc);
+        if (ccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid CC email: {string.Join(", ", ccList.invalid)}" });
+        if (bccList.invalid.Length > 0)
+            return Json(new { success = false, message = $"Invalid BCC email: {string.Join(", ", bccList.invalid)}" });
+
+        // Resolve the chosen template by id only. Selecting "-- No template (default) --" must honor the
+        // built-in default body, so we never silently substitute the DB default here.
+        string? templateBody = null;
+        string? templateSubject = null;
+        if (templateId.HasValue && templateId.Value > 0)
+        {
+            try
+            {
+                var conn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(conn))
+                {
+                    var schedRepo = _repositoryFactory.CreateScheduleRepository(conn);
+                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
+                    if (tmpl != null) { templateBody = tmpl.EmailBodyHtml; templateSubject = tmpl.EmailSubject; }
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Could not load email template {Id} — falling back to default body", templateId); }
+        }
+
+        string Merge(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? "";
+            foreach (var kv in tokens)
+                text = text!.Replace("\u00AB" + kv.Key + "\u00BB", kv.Value ?? "");
+            return text!.Replace("\u00AB", "").Replace("\u00BB", "");
+        }
+
+        var subject = !string.IsNullOrWhiteSpace(emailSubject)
+            ? Merge(emailSubject)
+            : (templateSubject != null ? Merge(templateSubject) : Merge(defaultSubject));
+
+        var htmlBody = !string.IsNullOrWhiteSpace(templateBody) ? Merge(templateBody) : defaultHtmlBody;
+        var textBody = defaultTextBody ?? "";
 
         var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
-        var sentCount = 0;
-        var errors = new List<string>();
-
         var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
         var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
 
+        var sentCount = 0;
+        var errors = new List<string>();
         foreach (var email in emails)
         {
             try
@@ -1515,7 +1588,7 @@ public class ReportsController : Controller
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send report email to {Email}", email);
+                _logger.LogError(ex, "Failed to send {ReportType} email to {Email}", reportType, email);
                 errors.Add(email);
             }
         }
@@ -1523,12 +1596,8 @@ public class ReportsController : Controller
         if (errors.Count > 0 && sentCount == 0)
             return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", errors)}" });
 
-        var msg = sentCount == 1
-            ? $"Report sent to {emails[0]}"
-            : $"Report sent to {sentCount} recipient(s)";
-        if (errors.Count > 0)
-            msg += $" (failed: {string.Join(", ", errors)})";
-
+        var msg = sentCount == 1 ? $"Report sent to {emails[0]}" : $"Report sent to {sentCount} recipient(s)";
+        if (errors.Count > 0) msg += $" (failed: {string.Join(", ", errors)})";
         return Json(new { success = true, message = msg });
     }
 
@@ -1896,21 +1965,6 @@ public class ReportsController : Controller
         bool showOnOrder = false, bool showReservation = false,
         bool showAvailable = false, bool includeAdditionalCharges = true)
     {
-        if (string.IsNullOrWhiteSpace(recipients))
-            return Json(new { success = false, message = "Please enter at least one email address." });
-
-        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
-        if (invalidEmails.Length > 0)
-            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
-
-        var ccList = ParseAndValidateEmailList(cc);
-        var bccList = ParseAndValidateEmailList(bcc);
-        if (ccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
-        if (bccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
-
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
             includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
             showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
@@ -1945,42 +1999,6 @@ public class ReportsController : Controller
         var userName = User.Identity?.Name ?? "Unknown";
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
 
-        string? templateBody = null;
-        string? templateSubject = null;
-        if (templateId.HasValue && templateId > 0)
-        {
-            try
-            {
-                var tenantConnString = GetTenantConnectionString();
-                if (!string.IsNullOrEmpty(tenantConnString))
-                {
-                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
-                    if (tmpl != null)
-                    {
-                        templateBody = tmpl.EmailBodyHtml;
-                        templateSubject = tmpl.EmailSubject;
-                    }
-                }
-            }
-            catch { /* fall back to default */ }
-        }
-
-        string ReplaceMergeFields(string text) => text
-            .Replace("\u00ABReportName\u00BB", "Purchases vs Sales")
-            .Replace("\u00ABDatabaseName\u00BB", dbName)
-            .Replace("\u00ABPeriod\u00BB", period)
-            .Replace("\u00ABRowCount\u00BB", result.Value.rows.Count.ToString())
-            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
-            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
-            .Replace("\u00ABUserName\u00BB", userName)
-            .Replace("\u00ABCompanyName\u00BB", dbName)
-            .Replace("\u00AB", "").Replace("\u00BB", "");
-
-        var subject = string.IsNullOrWhiteSpace(emailSubject)
-            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Purchases vs Sales Report — {period}")
-            : emailSubject;
-
         var selectionLines = new List<string>
         {
             $"Mode: {reportMode}",
@@ -2001,54 +2019,15 @@ public class ReportsController : Controller
             $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
             $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
 
-        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
-            ? ReplaceMergeFields(templateBody)
-            : $@"
-<div style='font-family:Arial,sans-serif;max-width:600px;'>
-    <h2 style='color:#2563eb;'>Purchases vs Sales Report</h2>
-    <table style='border-collapse:collapse;width:100%;margin:16px 0;'>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Database</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Period</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{period}</td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Rows</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{result.Value.rows.Count}</td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{exportFormat}</td></tr>
-    </table>
-    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
-    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
-    <p style='color:#6b7280;font-size:13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
-</div>";
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Purchases vs Sales", dbName, period, result.Value.rows.Count, exportFormat, userName, "Rows", selectionsHtml);
         var selectionsText = string.Join("\n", selectionLines);
-        var textBody = $"Purchases vs Sales Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+        var defaultTextBody = $"Purchases vs Sales Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
 
-        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
-        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
-        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+        var tokens = BuildEmailTokens("Purchases vs Sales", dbName, period, result.Value.rows.Count, exportFormat, userName);
 
-        var sentCount = 0;
-        var sendErrors = new List<string>();
-        foreach (var email in emails)
-        {
-            try
-            {
-                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
-                sentCount++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send PS report email to {Email}", email);
-                sendErrors.Add(email);
-            }
-        }
-
-        if (sendErrors.Count > 0 && sentCount == 0)
-            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", sendErrors)}" });
-
-        var msg = sentCount == 1 ? $"Report sent to {emails[0]}" : $"Report sent to {sentCount} recipient(s)";
-        if (sendErrors.Count > 0) msg += $" (failed: {string.Join(", ", sendErrors)})";
-        return Json(new { success = true, message = msg });
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "PurchasesSales", templateId,
+            fileBytes, fileName, contentType,
+            $"Purchases vs Sales Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
     }
 
     private async Task<(List<PurchasesSalesRow> rows, PurchasesSalesTotals? totals, PurchasesSalesFilter filter)?> RunPsExportQuery(
@@ -3322,21 +3301,6 @@ public class ReportsController : Controller
         decimal priceInterval = 10, int priceOnIndex = 0, bool priceOnIncludesVat = false,
         string? itemsSelection = null)
     {
-        if (string.IsNullOrWhiteSpace(recipients))
-            return Json(new { success = false, message = "Please enter at least one email address." });
-
-        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
-        if (invalidEmails.Length > 0)
-            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
-
-        var ccList = ParseAndValidateEmailList(cc);
-        var bccList = ParseAndValidateEmailList(bcc);
-        if (ccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
-        if (bccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
-
         var result = await RunParetoQuery(dateFrom, dateTo, dimension, metric, includeVat, storeCodes,
             classAThreshold, classBThreshold, excludeNegativeAmounts, profitBasis,
             timezoneOffsetMinutes, priceInterval, priceOnIndex, priceOnIncludesVat, itemsSelection);
@@ -3374,42 +3338,6 @@ public class ReportsController : Controller
         var userName = User.Identity?.Name ?? "Unknown";
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
 
-        string? templateBody = null;
-        string? templateSubject = null;
-        if (templateId.HasValue && templateId > 0)
-        {
-            try
-            {
-                var tenantConnString = GetTenantConnectionString();
-                if (!string.IsNullOrEmpty(tenantConnString))
-                {
-                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
-                    if (tmpl != null)
-                    {
-                        templateBody = tmpl.EmailBodyHtml;
-                        templateSubject = tmpl.EmailSubject;
-                    }
-                }
-            }
-            catch { /* fall back to default */ }
-        }
-
-        string ReplaceMergeFields(string text) => text
-            .Replace("\u00ABReportName\u00BB", "Pareto 80/20")
-            .Replace("\u00ABDatabaseName\u00BB", dbName)
-            .Replace("\u00ABPeriod\u00BB", period)
-            .Replace("\u00ABRowCount\u00BB", result.Rows.Count.ToString())
-            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
-            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
-            .Replace("\u00ABUserName\u00BB", userName)
-            .Replace("\u00ABCompanyName\u00BB", dbName)
-            .Replace("\u00AB", "").Replace("\u00BB", "");
-
-        var subject = string.IsNullOrWhiteSpace(emailSubject)
-            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Pareto 80/20 Report \u2014 {period}")
-            : emailSubject;
-
         var selectionLines = new List<string>
         {
             $"Dimension: {dimension}",
@@ -3425,54 +3353,15 @@ public class ReportsController : Controller
             $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
             $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
 
-        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
-            ? ReplaceMergeFields(templateBody)
-            : $@"
-<div style='font-family:Arial,sans-serif;max-width:600px;'>
-    <h2 style='color:#2563eb;'>Pareto 80/20 Report</h2>
-    <table style='border-collapse:collapse;width:100%;margin:16px 0;'>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Database</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Period</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{period}</td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Items</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{result.Rows.Count}</td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{exportFormat}</td></tr>
-    </table>
-    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
-    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
-    <p style='color:#6b7280;font-size:13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
-</div>";
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Pareto 80/20", dbName, period, result.Rows.Count, exportFormat, userName, "Items", selectionsHtml);
         var selectionsText = string.Join("\n", selectionLines);
-        var textBody = $"Pareto 80/20 Report\nDatabase: {dbName}\nPeriod: {period}\nItems: {result.Rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+        var defaultTextBody = $"Pareto 80/20 Report\nDatabase: {dbName}\nPeriod: {period}\nItems: {result.Rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
 
-        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
-        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
-        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+        var tokens = BuildEmailTokens("Pareto 80/20", dbName, period, result.Rows.Count, exportFormat, userName);
 
-        var sentCount = 0;
-        var sendErrors = new List<string>();
-        foreach (var email in emails)
-        {
-            try
-            {
-                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
-                sentCount++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send Pareto report email to {Email}", email);
-                sendErrors.Add(email);
-            }
-        }
-
-        if (sendErrors.Count > 0 && sentCount == 0)
-            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", sendErrors)}" });
-
-        var msg = sentCount == 1 ? $"Report sent to {emails[0]}" : $"Report sent to {sentCount} recipient(s)";
-        if (sendErrors.Count > 0) msg += $" (failed: {string.Join(", ", sendErrors)})";
-        return Json(new { success = true, message = msg });
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "Pareto", templateId,
+            fileBytes, fileName, contentType,
+            $"Pareto 80/20 Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
     }
 
     // ==================== Pareto AI Analysis ====================
@@ -4088,21 +3977,6 @@ public class ReportsController : Controller
         string? storeCodes = null, string chartType = "pie",
         ChartMode mode = ChartMode.Sales, string? itemsSelection = null)
     {
-        if (string.IsNullOrWhiteSpace(recipients))
-            return Json(new { success = false, message = "Please enter at least one email address." });
-
-        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
-        if (invalidEmails.Length > 0)
-            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
-
-        var ccList = ParseAndValidateEmailList(cc);
-        var bccList = ParseAndValidateEmailList(bcc);
-        if (ccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
-        if (bccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
-
         var filter = BuildChartFilter(dateFrom, dateTo, dimension, metric, topN, showOthers, compareLastYear, includeVat, storeCodes, chartType, mode, itemsSelection);
         var data = await RunChartQuery(filter);
         if (data == null || data.Count == 0)
@@ -4136,42 +4010,6 @@ public class ReportsController : Controller
         var userName = User.Identity?.Name ?? "Unknown";
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
 
-        string? templateBody = null;
-        string? templateSubject = null;
-        if (templateId.HasValue && templateId > 0)
-        {
-            try
-            {
-                var tenantConnString = GetTenantConnectionString();
-                if (!string.IsNullOrEmpty(tenantConnString))
-                {
-                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
-                    if (tmpl != null)
-                    {
-                        templateBody = tmpl.EmailBodyHtml;
-                        templateSubject = tmpl.EmailSubject;
-                    }
-                }
-            }
-            catch { /* fall back to default */ }
-        }
-
-        string ReplaceMergeFields(string text) => text
-            .Replace("\u00ABReportName\u00BB", "Charts & Dashboards")
-            .Replace("\u00ABDatabaseName\u00BB", dbName)
-            .Replace("\u00ABPeriod\u00BB", period)
-            .Replace("\u00ABRowCount\u00BB", data.Count.ToString())
-            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
-            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
-            .Replace("\u00ABUserName\u00BB", userName)
-            .Replace("\u00ABCompanyName\u00BB", dbName)
-            .Replace("\u00AB", "").Replace("\u00BB", "");
-
-        var subject = string.IsNullOrWhiteSpace(emailSubject)
-            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Charts & Dashboards — {period}")
-            : emailSubject;
-
         var selectionLines = new List<string>
         {
             $"Mode: {mode}",
@@ -4187,59 +4025,15 @@ public class ReportsController : Controller
             $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
             $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
 
-        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
-            ? ReplaceMergeFields(templateBody)
-            : $@"
-<div style='font-family: Arial, sans-serif; max-width: 600px;'>
-    <h2 style='color: #2563eb;'>Charts & Dashboards Report</h2>
-    <table style='border-collapse: collapse; width: 100%; margin: 16px 0;'>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Database</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Period</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{period}</td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Data Points</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{data.Count}</td></tr>
-        <tr><td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb; color: #6b7280;'>Format</td>
-            <td style='padding: 6px 12px; border-bottom: 1px solid #e5e7eb;'>{exportFormat}</td></tr>
-    </table>
-    <h4 style='color:#374151;margin:16px 0 8px;'>Chart Parameters:</h4>
-    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
-    <p style='color: #6b7280; font-size: 13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
-</div>";
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Charts & Dashboards", dbName, period, data.Count, exportFormat, userName, "Data Points", selectionsHtml);
 
-        var textBody = $"Charts & Dashboards Report\nDatabase: {dbName}\nPeriod: {period}\nData Points: {data.Count}\nFormat: {exportFormat}\n\nParameters:\n{string.Join("\n", selectionLines)}";
+        var defaultTextBody = $"Charts & Dashboards Report\nDatabase: {dbName}\nPeriod: {period}\nData Points: {data.Count}\nFormat: {exportFormat}\n\nParameters:\n{string.Join("\n", selectionLines)}";
 
-        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
-        var sentCount = 0;
-        var errors = new List<string>();
+        var tokens = BuildEmailTokens("Charts & Dashboards", dbName, period, data.Count, exportFormat, userName);
 
-        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
-        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
-
-        foreach (var email in emails)
-        {
-            try
-            {
-                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
-                sentCount++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send chart email to {Email}", email);
-                errors.Add(email);
-            }
-        }
-
-        if (errors.Count > 0 && sentCount == 0)
-            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", errors)}" });
-
-        var msg = sentCount == 1
-            ? $"Report sent to {emails[0]}"
-            : $"Report sent to {sentCount} recipient(s)";
-        if (errors.Count > 0)
-            msg += $" (failed: {string.Join(", ", errors)})";
-
-        return Json(new { success = true, message = msg });
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "Charts", templateId,
+            fileBytes, fileName, contentType,
+            $"Charts & Dashboards \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
     }
 
     // ==================== Charts Layout ====================
@@ -5133,21 +4927,6 @@ public class ReportsController : Controller
         int costType = 99,
         string? columnFilters = null)
     {
-        if (string.IsNullOrWhiteSpace(recipients))
-            return Json(new { success = false, message = "Please enter at least one email address." });
-
-        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
-        if (invalidEmails.Length > 0)
-            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
-
-        var ccList = ParseAndValidateEmailList(cc);
-        var bccList = ParseAndValidateEmailList(bcc);
-        if (ccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
-        if (bccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
-
         var filter = BuildCatalogueFilterFromParams(dateFrom, dateTo, reportMode, reportOn,
             primaryGroup, secondaryGroup, thirdGroup, displayColumns, showProfit, showStock,
             storeCodes, itemsSelection, sortColumn, sortDirection, dateBasis, useDateTime, columnFilters);
@@ -5186,42 +4965,6 @@ public class ReportsController : Controller
         var userName = User.Identity?.Name ?? "Unknown";
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
 
-        string? templateBody = null;
-        string? templateSubject = null;
-        if (templateId.HasValue && templateId > 0)
-        {
-            try
-            {
-                var tenantConnString = GetTenantConnectionString();
-                if (!string.IsNullOrEmpty(tenantConnString))
-                {
-                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
-                    if (tmpl != null)
-                    {
-                        templateBody = tmpl.EmailBodyHtml;
-                        templateSubject = tmpl.EmailSubject;
-                    }
-                }
-            }
-            catch { /* fall back to default */ }
-        }
-
-        string ReplaceMergeFields(string text) => text
-            .Replace("\u00ABReportName\u00BB", "Power Reports Catalogue")
-            .Replace("\u00ABDatabaseName\u00BB", dbName)
-            .Replace("\u00ABPeriod\u00BB", period)
-            .Replace("\u00ABRowCount\u00BB", result.Value.rows.Count.ToString())
-            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
-            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
-            .Replace("\u00ABUserName\u00BB", userName)
-            .Replace("\u00ABCompanyName\u00BB", dbName)
-            .Replace("\u00AB", "").Replace("\u00BB", "");
-
-        var subject = string.IsNullOrWhiteSpace(emailSubject)
-            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Power Reports Catalogue — {period}")
-            : emailSubject;
-
         var selectionLines = new List<string>
         {
             $"Report Mode: {reportMode}",
@@ -5238,54 +4981,15 @@ public class ReportsController : Controller
             $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
             $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
 
-        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
-            ? ReplaceMergeFields(templateBody)
-            : $@"
-<div style='font-family:Arial,sans-serif;max-width:600px;'>
-    <h2 style='color:#2563eb;'>Power Reports Catalogue</h2>
-    <table style='border-collapse:collapse;width:100%;margin:16px 0;'>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Database</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Period</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{period}</td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Rows</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{result.Value.rows.Count}</td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{exportFormat}</td></tr>
-    </table>
-    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
-    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
-    <p style='color:#6b7280;font-size:13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
-</div>";
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Power Reports Catalogue", dbName, period, result.Value.rows.Count, exportFormat, userName, "Rows", selectionsHtml);
         var selectionsText = string.Join("\n", selectionLines);
-        var textBody = $"Power Reports Catalogue\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+        var defaultTextBody = $"Power Reports Catalogue\nDatabase: {dbName}\nPeriod: {period}\nRows: {result.Value.rows.Count}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
 
-        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
-        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
-        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+        var tokens = BuildEmailTokens("Power Reports Catalogue", dbName, period, result.Value.rows.Count, exportFormat, userName);
 
-        var sentCount = 0;
-        var sendErrors = new List<string>();
-        foreach (var email in emails)
-        {
-            try
-            {
-                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
-                sentCount++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send Catalogue report email to {Email}", email);
-                sendErrors.Add(email);
-            }
-        }
-
-        if (sendErrors.Count > 0 && sentCount == 0)
-            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", sendErrors)}" });
-
-        var msg = sentCount == 1 ? $"Report sent to {emails[0]}" : $"Report sent to {sentCount} recipient(s)";
-        if (sendErrors.Count > 0) msg += $" (failed: {string.Join(", ", sendErrors)})";
-        return Json(new { success = true, message = msg });
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "Catalogue", templateId,
+            fileBytes, fileName, contentType,
+            $"Power Reports Catalogue \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
     }
 
     // ==================== Catalogue Schedules ====================
@@ -5551,6 +5255,64 @@ public class ReportsController : Controller
             _logger.LogError(ex, "Error loading below-minimum stock data");
             return Json(new { success = false, message = ex.Message });
         }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendBelowMinStockEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        string? storeCodes = null, string? itemsSelection = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        List<BelowMinStockRow> data;
+        try
+        {
+            var filter = new BelowMinStockFilter
+            {
+                StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
+                    : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                ItemsSelection = ParseItemsSelection(itemsSelection),
+                SortColumn = sortColumn,
+                SortDirection = sortDirection
+            };
+            var repo = _repositoryFactory.CreateBelowMinStockRepository(tenantConnString);
+            data = await repo.GetBelowMinStockAsync(filter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating below-minimum stock data for email");
+            return Json(new { success = false, message = "Failed to generate report data." });
+        }
+
+        // Below Min Stock has no Excel/PDF exporter — the report is delivered as CSV (mirrors the scheduler).
+        var viewCost = CanViewCost();
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("ItemCode,ItemName,Store,StoreName,Category,Department,Brand,CurrentStock,MinimumStock,Difference," + (viewCost ? "Cost,StockValue," : "") + "Shelf");
+        foreach (var r in data)
+        {
+            sb.AppendLine($"\"{r.ItemCode}\",\"{r.ItemName}\",\"{r.StoreCode}\",\"{r.StoreName}\"," +
+                $"\"{r.CategoryName}\",\"{r.DepartmentName}\",\"{r.BrandName}\"," +
+                $"{r.CurrentStock},{r.MinimumStock},{r.Difference}," + (viewCost ? $"{r.Cost ?? 0},{r.StockValue ?? 0}," : "") + $"\"{r.Shelf}\"");
+        }
+        var fileBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+        var fileName = $"BelowMinStock_{DateTime.Now:yyyyMMdd}.csv";
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"As of {DateTime.Now:yyyy-MM-dd}";
+
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Below Min Stock", dbName, period, data.Count, "CSV", userName, "Items below minimum");
+        var defaultTextBody = $"Below Minimum Stock Report\nDatabase: {dbName}\n{period}\nItems below minimum: {data.Count}";
+
+        var tokens = BuildEmailTokens("Below Min Stock", dbName, period, data.Count, "CSV", userName);
+
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "BelowMinStock", templateId,
+            fileBytes, fileName, "text/csv",
+            $"Below Minimum Stock Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
     }
 
     [HttpPost]
@@ -6209,21 +5971,6 @@ public class ReportsController : Controller
         string sortDirection = "ASC",
         string? itemsSelectionJson = null)
     {
-        if (string.IsNullOrWhiteSpace(recipients))
-            return Json(new { success = false, message = "Please enter at least one email address." });
-
-        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
-        if (invalidEmails.Length > 0)
-            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
-
-        var ccList = ParseAndValidateEmailList(cc);
-        var bccList = ParseAndValidateEmailList(bcc);
-        if (ccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
-        if (bccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
-
         var result = await RunCancelLogQuery(dateFrom, dateTo, reportByDateTime, actionType, reportType,
             primaryGroup, secondaryGroup, timezoneOffsetMinutes, maxRecords,
             sortColumn, sortDirection, itemsSelectionJson);
@@ -6259,42 +6006,6 @@ public class ReportsController : Controller
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
         var rowCount = result.Value.detailed?.Count ?? result.Value.summary?.Count ?? 0;
 
-        string? templateBody = null;
-        string? templateSubject = null;
-        if (templateId.HasValue && templateId > 0)
-        {
-            try
-            {
-                var tenantConnString = GetTenantConnectionString();
-                if (!string.IsNullOrEmpty(tenantConnString))
-                {
-                    var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-                    var tmpl = await schedRepo.GetEmailTemplateByIdAsync(templateId.Value);
-                    if (tmpl != null)
-                    {
-                        templateBody = tmpl.EmailBodyHtml;
-                        templateSubject = tmpl.EmailSubject;
-                    }
-                }
-            }
-            catch { /* fall back to default */ }
-        }
-
-        string ReplaceMergeFields(string text) => text
-            .Replace("\u00ABReportName\u00BB", "Cancel Log")
-            .Replace("\u00ABDatabaseName\u00BB", dbName)
-            .Replace("\u00ABPeriod\u00BB", period)
-            .Replace("\u00ABRowCount\u00BB", rowCount.ToString())
-            .Replace("\u00ABExportFormat\u00BB", exportFormat ?? "Excel")
-            .Replace("\u00ABGeneratedDate\u00BB", DateTime.Now.ToString("yyyy-MM-dd HH:mm"))
-            .Replace("\u00ABUserName\u00BB", userName)
-            .Replace("\u00ABCompanyName\u00BB", dbName)
-            .Replace("\u00AB", "").Replace("\u00BB", "");
-
-        var subject = string.IsNullOrWhiteSpace(emailSubject)
-            ? (templateSubject != null ? ReplaceMergeFields(templateSubject) : $"Cancel Log Report \u2014 {period}")
-            : emailSubject;
-
         var selectionLines = new List<string>
         {
             $"Action Type: {actionType}",
@@ -6308,54 +6019,15 @@ public class ReportsController : Controller
             $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
             $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
 
-        var htmlBody = !string.IsNullOrWhiteSpace(templateBody)
-            ? ReplaceMergeFields(templateBody)
-            : $@"
-<div style='font-family:Arial,sans-serif;max-width:600px;'>
-    <h2 style='color:#2563eb;'>Cancel Log Report</h2>
-    <table style='border-collapse:collapse;width:100%;margin:16px 0;'>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Database</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'><strong>{dbName}</strong></td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Period</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{period}</td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Rows</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{rowCount}</td></tr>
-        <tr><td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;'>Format</td>
-            <td style='padding:6px 12px;border-bottom:1px solid #e5e7eb;'>{exportFormat}</td></tr>
-    </table>
-    <h4 style='color:#374151;margin:16px 0 8px;'>Selections for this report:</h4>
-    <table style='border-collapse:collapse;width:100%;margin:0 0 16px;'>{selectionsHtml}</table>
-    <p style='color:#6b7280;font-size:13px;'>Sent by {userName} via Powersoft Reporting Engine.</p>
-</div>";
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Cancel Log", dbName, period, rowCount, exportFormat, userName, "Rows", selectionsHtml);
         var selectionsText = string.Join("\n", selectionLines);
-        var textBody = $"Cancel Log Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {rowCount}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+        var defaultTextBody = $"Cancel Log Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {rowCount}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
 
-        var attachments = new[] { new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType } };
-        var ccJoined = ccList.valid.Length > 0 ? string.Join(";", ccList.valid) : null;
-        var bccJoined = bccList.valid.Length > 0 ? string.Join(";", bccList.valid) : null;
+        var tokens = BuildEmailTokens("Cancel Log", dbName, period, rowCount, exportFormat, userName);
 
-        var sentCount = 0;
-        var sendErrors = new List<string>();
-        foreach (var email in emails)
-        {
-            try
-            {
-                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, textBody, attachments);
-                sentCount++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send CancelLog report email to {Email}", email);
-                sendErrors.Add(email);
-            }
-        }
-
-        if (sendErrors.Count > 0 && sentCount == 0)
-            return Json(new { success = false, message = $"Failed to send to: {string.Join(", ", sendErrors)}" });
-
-        var msg = sentCount == 1 ? $"Report sent to {emails[0]}" : $"Report sent to {sentCount} recipient(s)";
-        if (sendErrors.Count > 0) msg += $" (failed: {string.Join(", ", sendErrors)})";
-        return Json(new { success = true, message = msg });
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "CancelLog", templateId,
+            fileBytes, fileName, contentType,
+            $"Cancel Log Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
     }
 
     [HttpPost]
@@ -6912,7 +6584,7 @@ public class ReportsController : Controller
     [HttpPost]
     public async Task<IActionResult> SendProspectClientsReportEmail(
         string recipients, string? cc, string? bcc, string? emailSubject,
-        string exportFormat,
+        string exportFormat, int? templateId,
         DateTime dateFrom, DateTime dateTo,
         string dateField = "RegistrationDate",
         string statusFilter = "All", string priorityFilter = "All",
@@ -6924,21 +6596,6 @@ public class ReportsController : Controller
         string statusCodesJson = "", string priorityCodesJson = "",
         string category1CodesJson = "", string category2CodesJson = "")
     {
-        if (string.IsNullOrWhiteSpace(recipients))
-            return Json(new { success = false, message = "Please enter at least one email address." });
-
-        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
-        if (invalidEmails.Length > 0)
-            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
-
-        var ccList = ParseAndValidateEmailList(cc);
-        var bccList = ParseAndValidateEmailList(bcc);
-        if (ccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
-        if (bccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
-
         var result = await RunProspectClientsQuery(dateFrom, dateTo, dateField, statusFilter, priorityFilter,
             primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection, includeHistory,
             followedByFilter, category1Filter, category2Filter, customerCodesJson, customerExcludeMode,
@@ -6975,56 +6632,15 @@ public class ReportsController : Controller
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
         var rowCount = result.Value.rows.Count;
 
-        var subject = !string.IsNullOrWhiteSpace(emailSubject) ? emailSubject
-            : $"Prospect Clients Report — {period} ({dbName})";
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Prospect Clients", dbName, period, rowCount, exportFormat, userName, "Records");
 
-        var htmlBody = $@"
-            <div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto'>
-                <h2 style='color:#1e293b'>Prospect Clients Report</h2>
-                <p>Attached is the Prospect Clients report for <strong>{period}</strong>.</p>
-                <table style='border-collapse:collapse;width:100%;margin:16px 0'>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Database</td><td style='padding:8px;border:1px solid #e2e8f0'>{dbName}</td></tr>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Period</td><td style='padding:8px;border:1px solid #e2e8f0'>{period}</td></tr>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Status</td><td style='padding:8px;border:1px solid #e2e8f0'>{result.Value.filter.StatusFilter}</td></tr>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Total Records</td><td style='padding:8px;border:1px solid #e2e8f0'>{rowCount:N0}</td></tr>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Sent By</td><td style='padding:8px;border:1px solid #e2e8f0'>{userName}</td></tr>
-                </table>
-                <p style='color:#64748b;font-size:12px'>Generated by Powersoft Reporting Engine</p>
-            </div>";
+        var defaultTextBody = $"Prospect Clients Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {rowCount}\nFormat: {exportFormat}";
 
-        var attachments = new List<EmailAttachment>
-        {
-            new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType }
-        };
+        var tokens = BuildEmailTokens("Prospect Clients", dbName, period, rowCount, exportFormat, userName);
 
-        var ccJoined = ccList.valid.Length > 0 ? string.Join(",", ccList.valid) : null;
-        var bccJoined = bccList.valid.Length > 0 ? string.Join(",", bccList.valid) : null;
-
-        int sentCount = 0;
-        var errors = new List<string>();
-        foreach (var email in emails)
-        {
-            try
-            {
-                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, "", attachments);
-                sentCount++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send Prospect Clients email to {Email}", email);
-                errors.Add($"{email}: {ex.Message}");
-            }
-        }
-
-        if (sentCount > 0)
-        {
-            _logger.LogInformation("Prospect Clients report emailed to {Count}/{Total} by {User}", sentCount, emails.Length, userName);
-            var msg = $"Report sent to {sentCount} recipient(s)";
-            if (errors.Count > 0) msg += $" ({errors.Count} failed)";
-            return Json(new { success = true, message = msg });
-        }
-
-        return Json(new { success = false, message = $"Failed to send: {string.Join("; ", errors)}" });
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "ProspectClients", templateId,
+            fileBytes, fileName, contentType,
+            $"Prospect Clients Report \u2014 {period} ({dbName})", defaultHtmlBody, defaultTextBody, tokens);
     }
 
     [HttpPost]
@@ -7697,7 +7313,7 @@ public class ReportsController : Controller
     [HttpPost]
     public async Task<IActionResult> SendOffersReportEmail(
         string recipients, string? cc, string? bcc, string? emailSubject,
-        string exportFormat,
+        string exportFormat, int? templateId,
         DateTime dateFrom, DateTime dateTo,
         string dateField = "DateTrans",
         string statusFilter = "All", string storeFilter = "All", string agentFilter = "All",
@@ -7709,21 +7325,6 @@ public class ReportsController : Controller
         string statusCodesJson = "", string storeCodesJson = "", string agentCodesJson = "",
         string itemsSelectionJson = "")
     {
-        if (string.IsNullOrWhiteSpace(recipients))
-            return Json(new { success = false, message = "Please enter at least one email address." });
-
-        var emails = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var invalidEmails = emails.Where(e => !EmailRegex.IsMatch(e)).ToArray();
-        if (invalidEmails.Length > 0)
-            return Json(new { success = false, message = $"Invalid email: {string.Join(", ", invalidEmails)}" });
-
-        var ccList = ParseAndValidateEmailList(cc);
-        var bccList = ParseAndValidateEmailList(bcc);
-        if (ccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid CC: {string.Join(", ", ccList.invalid)}" });
-        if (bccList.invalid.Length > 0)
-            return Json(new { success = false, message = $"Invalid BCC: {string.Join(", ", bccList.invalid)}" });
-
         var result = await RunOffersReportQuery(dateFrom, dateTo, dateField, statusFilter,
             storeFilter, agentFilter, primaryGroup, secondaryGroup, maxRecords, sortColumn, sortDirection,
             offerType, includeHistory, customerCodesJson, customerExcludeMode,
@@ -7760,56 +7361,15 @@ public class ReportsController : Controller
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
         var rowCount = result.Value.rows.Count;
 
-        var subject = !string.IsNullOrWhiteSpace(emailSubject) ? emailSubject
-            : $"Offers Report \u2014 {period} ({dbName})";
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Offers Report", dbName, period, rowCount, exportFormat, userName, "Records");
 
-        var htmlBody = $@"
-            <div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto'>
-                <h2 style='color:#1e293b'>Offers Report</h2>
-                <p>Attached is the Offers report for <strong>{period}</strong>.</p>
-                <table style='border-collapse:collapse;width:100%;margin:16px 0'>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Database</td><td style='padding:8px;border:1px solid #e2e8f0'>{dbName}</td></tr>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Period</td><td style='padding:8px;border:1px solid #e2e8f0'>{period}</td></tr>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Status</td><td style='padding:8px;border:1px solid #e2e8f0'>{result.Value.filter.StatusFilter}</td></tr>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Total Records</td><td style='padding:8px;border:1px solid #e2e8f0'>{rowCount:N0}</td></tr>
-                    <tr><td style='padding:8px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600'>Sent By</td><td style='padding:8px;border:1px solid #e2e8f0'>{userName}</td></tr>
-                </table>
-                <p style='color:#64748b;font-size:12px'>Generated by Powersoft Reporting Engine</p>
-            </div>";
+        var defaultTextBody = $"Offers Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {rowCount}\nFormat: {exportFormat}";
 
-        var attachments = new List<EmailAttachment>
-        {
-            new EmailAttachment { FileName = fileName, Content = fileBytes, ContentType = contentType }
-        };
+        var tokens = BuildEmailTokens("Offers Report", dbName, period, rowCount, exportFormat, userName);
 
-        var ccJoined = ccList.valid.Length > 0 ? string.Join(",", ccList.valid) : null;
-        var bccJoined = bccList.valid.Length > 0 ? string.Join(",", bccList.valid) : null;
-
-        int sentCount = 0;
-        var errors = new List<string>();
-        foreach (var email in emails)
-        {
-            try
-            {
-                await _emailSender.SendAsync(email, ccJoined, bccJoined, subject, htmlBody, "", attachments);
-                sentCount++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send Offers report email to {Email}", email);
-                errors.Add($"{email}: {ex.Message}");
-            }
-        }
-
-        if (sentCount > 0)
-        {
-            _logger.LogInformation("Offers report emailed to {Count}/{Total} by {User}", sentCount, emails.Length, userName);
-            var msg = $"Report sent to {sentCount} recipient(s)";
-            if (errors.Count > 0) msg += $" ({errors.Count} failed)";
-            return Json(new { success = true, message = msg });
-        }
-
-        return Json(new { success = false, message = $"Failed to send: {string.Join("; ", errors)}" });
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "OffersReport", templateId,
+            fileBytes, fileName, contentType,
+            $"Offers Report \u2014 {period} ({dbName})", defaultHtmlBody, defaultTextBody, tokens);
     }
 
     [HttpPost]

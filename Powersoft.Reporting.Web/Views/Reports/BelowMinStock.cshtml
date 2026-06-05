@@ -44,7 +44,10 @@
             <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
                 <i class="bi bi-clock-history me-2"></i>Schedule
             </button>
-            <div class="btn-group ms-auto">
+            <button type="button" class="btn btn-outline-primary ms-auto" onclick="openSendEmailModal()" title="Send report via email">
+                <i class="bi bi-envelope me-1"></i>Send to Email
+            </button>
+            <div class="btn-group">
                 <button type="button" class="btn btn-outline-secondary" onclick="exportCsv()" title="Export current results to CSV">
                     <i class="bi bi-filetype-csv me-1"></i>CSV
                 </button>
@@ -116,6 +119,12 @@
     ReportBadge     = "Below Min Stock",
     NamePlaceholder = "e.g. Daily Stock Alert",
     SubjectPlaceholder = "Below Min Stock Report - {date}"
+})
+
+@await Html.PartialAsync("_SendEmail", new Powersoft.Reporting.Web.ViewModels.SendEmailPartialModel {
+    SendAction = "SendBelowMinStockEmail",
+    ReportType = "BelowMinStock",
+    SubjectDefault = "Below Minimum Stock Report"
 })
 
 <script>
@@ -249,6 +258,15 @@ function collectScheduleParameters() {
 function onScheduleParametersLoaded(p) {
     // BMS has no report-specific filter controls to restore.
 }
+
+// ===== Shared send-email partial API =====
+window.collectEmailParameters = function() {
+    if (!_lastData.length) { alert('Generate a report first.'); return null; }
+    var p = { sortColumn: _sortCol, sortDirection: _sortDir };
+    if (typeof getItemsSelectionStoreCodes === 'function') p.storeCodes = getItemsSelectionStoreCodes();
+    if (typeof getItemsSelectionFilter === 'function') p.itemsSelection = JSON.stringify(getItemsSelectionFilter());
+    return p;
+};
 
 // BMS is date-independent (shows current stock), so no pre-fill needed.
 function autoSelectScheduleDateRange() {}

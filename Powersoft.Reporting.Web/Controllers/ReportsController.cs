@@ -840,7 +840,36 @@ public class ReportsController : Controller
         if (!string.IsNullOrEmpty(tenantConnString))
             await LogAiTokensAsync(tenantConnString, analysis.InputTokens, analysis.OutputTokens);
 
+        await LogAiUsageCentralAsync(reportType, analysis, estimatedCost);
+
         return new AiGuardResult { Analysis = analysis, EstimatedCost = estimatedCost };
+    }
+
+    /// <summary>
+    /// Records the analysis centrally (psCentral) so a Powersoft admin can see cross-tenant
+    /// usage in one report. Best-effort: never throws into the analysis flow.
+    /// </summary>
+    private async Task LogAiUsageCentralAsync(string reportType, ReportAnalysis analysis, decimal estimatedCost)
+    {
+        try
+        {
+            await _centralRepository.LogAiUsageAsync(new Core.Models.AiUsageLogEntry
+            {
+                DBCode = HttpContext.Session.GetString(SessionKeys.ConnectedDatabaseCode) ?? "",
+                DBName = HttpContext.Session.GetString(SessionKeys.ConnectedDatabase),
+                UserCode = GetUserCode(),
+                ReportType = reportType,
+                InputTokens = analysis.InputTokens,
+                OutputTokens = analysis.OutputTokens,
+                EstimatedCost = estimatedCost,
+                ActualCost = AiCostEstimator.ComputeCost(analysis.InputTokens, analysis.OutputTokens, _aiOptions),
+                Source = "Interactive"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to log central AI usage for {Report}", reportType);
+        }
     }
 
     // ==================== Generic Layout Endpoints (shared across all reports) ====================

@@ -44,4 +44,24 @@ public interface ICentralRepository
     /// Upserts a system setting in tbl_SystemSettings.
     /// </summary>
     Task UpsertSystemSettingAsync(string parameterCode, string description, string dataType, string value);
+
+    // ==================== AI usage tracking (cross-tenant, stored in psCentral) ====================
+
+    /// <summary>
+    /// Idempotently creates the central AI usage log table (dbo.tbl_RE_AiUsageLog) if missing.
+    /// Best-effort: called once at startup. Failures (e.g. no DDL rights) must not crash the app.
+    /// </summary>
+    Task EnsureAiUsageLogSchemaAsync();
+
+    /// <summary>
+    /// Records one AI analysis event centrally. Best-effort — callers should swallow exceptions
+    /// so that logging never breaks the analysis/email flow.
+    /// </summary>
+    Task LogAiUsageAsync(AiUsageLogEntry entry);
+
+    /// <summary>
+    /// Aggregates AI usage across all tenants for the given (inclusive) date range,
+    /// broken down by company, report type and user.
+    /// </summary>
+    Task<AiUsageReport> GetAiUsageReportAsync(DateTime dateFrom, DateTime dateTo);
 }

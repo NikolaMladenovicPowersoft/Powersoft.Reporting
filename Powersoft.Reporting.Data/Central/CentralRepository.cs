@@ -331,6 +331,151 @@ public class CentralRepository : ICentralRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // ==================== AI usage tracking (cross-tenant) ====================
+
+    public async Task EnsureAiUsageLogSchemaAsync()
+    {
+        const string sql = @"
+            IF OBJECT_ID('dbo.tbl_RE_AiUsageLog', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.tbl_RE_AiUsageLog (
+                    pk_LogID      BIGINT IDENTITY(1,1) CONSTRAINT PK_RE_AiUsageLog PRIMARY KEY,
+                    DBCode        NVARCHAR(50)  NOT NULL,
+                    DBName        NVARCHAR(200) NULL,
+                    UserCode      NVARCHAR(100) NULL,
+                    ReportType    NVARCHAR(50)  NULL,
+                    InputTokens   INT           NOT NULL CONSTRAINT DF_RE_AiUsageLog_In  DEFAULT(0),
+                    OutputTokens  INT           NOT NULL CONSTRAINT DF_RE_AiUsageLog_Out DEFAULT(0),
+                    EstimatedCost DECIMAL(18,6) NOT NULL CONSTRAINT DF_RE_AiUsageLog_Est DEFAULT(0),
+                    ActualCost    DECIMAL(18,6) NOT NULL CONSTRAINT DF_RE_AiUsageLog_Act DEFAULT(0),
+                    Source        NVARCHAR(20)  NOT NULL CONSTRAINT DF_RE_AiUsageLog_Src DEFAULT('Interactive'),
+                    AnalysisDate  DATETIME      NOT NULL CONSTRAINT DF_RE_AiUsageLog_Dt  DEFAULT(GETDATE())
+                );
+                CREATE INDEX IX_RE_AiUsageLog_Date   ON dbo.tbl_RE_AiUsageLog (AnalysisDate);
+                CREATE INDEX IX_RE_AiUsageLog_DBCode ON dbo.tbl_RE_AiUsageLog (DBCode);
+            END";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task LogAiUsageAsync(AiUsageLogEntry entry)
+    {
+        const string sql = @"
+            INSERT INTO dbo.tbl_RE_AiUsageLog
+                (DBCode, DBName, UserCode, ReportType, InputTokens, OutputTokens, EstimatedCost, ActualCost, Source, AnalysisDate)
+            VALUES
+                (@DBCode, @DBName, @UserCode, @ReportType, @InTok, @OutTok, @Est, @Act, @Source, GETDATE());";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@DBCode", (object?)entry.DBCode ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@DBName", (object?)entry.DBName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@UserCode", (object?)entry.UserCode ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ReportType", (object?)entry.ReportType ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@InTok", entry.InputTokens);
+        cmd.Parameters.AddWithValue("@OutTok", entry.OutputTokens);
+        cmd.Parameters.AddWithValue("@Est", entry.EstimatedCost);
+        cmd.Parameters.AddWithValue("@Act", entry.ActualCost);
+        cmd.Parameters.AddWithValue("@Source", string.IsNullOrEmpty(entry.Source) ? "Interactive" : entry.Source);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<AiUsageReport> GetAiUsageReportAsync(DateTime dateFrom, DateTime dateTo)
+    {
+        // Exclusive upper bound so the whole DateTo day is included regardless of time component.
+        var fromDay = dateFrom.Date;
+        var toExclusive = dateTo.Date.AddDays(1);
+
+        var report = new AiUsageReport { DateFrom = fromDay, DateTo = dateTo.Date };
+
+        const string sql = @"
+            -- 1) Totals
+            SELECT COUNT(*) AS Cnt,
+                   ISNULL(SUM(CAST(InputTokens AS BIGINT) + OutputTokens), 0) AS Tok,
+                   ISNULL(SUM(ActualCost), 0) AS Cost
+            FROM dbo.tbl_RE_AiUsageLog
+            WHERE AnalysisDate >= @From AND AnalysisDate < @ToExcl;
+
+            -- 2) By company (LEFT JOIN to resolve the customer name from the DB code)
+            SELECT COALESCE(c.CompanyName, log.DBName, log.DBCode) AS Label,
+                   COUNT(*) AS Cnt,
+                   ISNULL(SUM(CAST(log.InputTokens AS BIGINT) + log.OutputTokens), 0) AS Tok,
+                   ISNULL(SUM(log.ActualCost), 0) AS Cost
+            FROM dbo.tbl_RE_AiUsageLog log
+            LEFT JOIN tbl_DB d      ON log.DBCode = d.pk_DBCode
+            LEFT JOIN tbl_Company c ON d.fk_CompanyCode = c.pk_CompanyCode
+            WHERE log.AnalysisDate >= @From AND log.AnalysisDate < @ToExcl
+            GROUP BY COALESCE(c.CompanyName, log.DBName, log.DBCode)
+            ORDER BY Cost DESC;
+
+            -- 3) By report type
+            SELECT ISNULL(ReportType, '(unknown)') AS Label,
+                   COUNT(*) AS Cnt,
+                   ISNULL(SUM(CAST(InputTokens AS BIGINT) + OutputTokens), 0) AS Tok,
+                   ISNULL(SUM(ActualCost), 0) AS Cost
+            FROM dbo.tbl_RE_AiUsageLog
+            WHERE AnalysisDate >= @From AND AnalysisDate < @ToExcl
+            GROUP BY ISNULL(ReportType, '(unknown)')
+            ORDER BY Cost DESC;
+
+            -- 4) By user
+            SELECT ISNULL(NULLIF(UserCode, ''), '(unknown)') AS Label,
+                   COUNT(*) AS Cnt,
+                   ISNULL(SUM(CAST(InputTokens AS BIGINT) + OutputTokens), 0) AS Tok,
+                   ISNULL(SUM(ActualCost), 0) AS Cost
+            FROM dbo.tbl_RE_AiUsageLog
+            WHERE AnalysisDate >= @From AND AnalysisDate < @ToExcl
+            GROUP BY ISNULL(NULLIF(UserCode, ''), '(unknown)')
+            ORDER BY Cost DESC;";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@From", fromDay);
+        cmd.Parameters.AddWithValue("@ToExcl", toExclusive);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+
+        // Result set 1: totals
+        if (await reader.ReadAsync())
+        {
+            report.TotalAnalyses = reader.GetInt32(0);
+            report.TotalTokens = reader.GetInt64(1);
+            report.TotalCost = reader.GetDecimal(2);
+        }
+
+        await reader.NextResultAsync();
+        report.ByCompany = await ReadGroupRowsAsync(reader);
+
+        await reader.NextResultAsync();
+        report.ByReport = await ReadGroupRowsAsync(reader);
+
+        await reader.NextResultAsync();
+        report.ByUser = await ReadGroupRowsAsync(reader);
+
+        return report;
+    }
+
+    private static async Task<List<AiUsageGroupRow>> ReadGroupRowsAsync(SqlDataReader reader)
+    {
+        var rows = new List<AiUsageGroupRow>();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new AiUsageGroupRow
+            {
+                Label = reader.IsDBNull(0) ? "(unknown)" : reader.GetString(0),
+                AnalysisCount = reader.GetInt32(1),
+                TotalTokens = reader.GetInt64(2),
+                TotalCost = reader.GetDecimal(3)
+            });
+        }
+        return rows;
+    }
+
     private static Database MapDatabase(SqlDataReader reader)
     {
         return new Database

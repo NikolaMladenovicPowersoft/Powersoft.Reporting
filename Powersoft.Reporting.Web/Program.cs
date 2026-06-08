@@ -102,6 +102,27 @@ var migLogger = app.Services.GetRequiredService<ILogger<Powersoft.Reporting.Data
 Powersoft.Reporting.Data.Tenant.SchemaMigrationService.LogInfo = msg => migLogger.LogInformation(msg);
 Powersoft.Reporting.Data.Tenant.SchemaMigrationService.LogWarning = (msg, ex) => migLogger.LogWarning(ex, msg);
 
+// Ensure the central AI usage log table exists (psCentral). Best-effort: if the central
+// login lacks DDL rights the app still runs — usage logging just no-ops until the table
+// is created manually (_SQL/CreateAiUsageLog.sql).
+{
+    var startupLogger = app.Services.GetRequiredService<ILogger<Program>>();
+    var central = app.Services.GetService<ICentralRepository>();
+    if (central != null)
+    {
+        try
+        {
+            await central.EnsureAiUsageLogSchemaAsync();
+            startupLogger.LogInformation("Central AI usage log table is ready.");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex,
+                "Could not ensure central AI usage log table — run _SQL/CreateAiUsageLog.sql manually on psCentral.");
+        }
+    }
+}
+
 // Startup health check: warn loudly if e-mail delivery is not configured.
 // Without this, scheduled reports run successfully but recipients never get the mail.
 {

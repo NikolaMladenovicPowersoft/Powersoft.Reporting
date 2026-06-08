@@ -1,0 +1,161 @@
+@model Powersoft.Reporting.Core.Models.AiUsageReport
+@{
+    ViewData["Title"] = "AI Usage Report";
+
+    Func<string, string> reportLabel = code => code switch
+    {
+        "AverageBasket" => "Average Basket",
+        "PurchasesSales" => "Purchases vs Sales",
+        "BelowMinStock" => "Below Min Stock",
+        "Catalogue" => "Power Reports Catalogue",
+        "CancelLog" => "Cancel Log",
+        "Pareto" => "Pareto 80/20",
+        "Charts" => "Charts & Dashboards",
+        "ProspectClients" => "Prospect Clients",
+        "OffersReport" => "Offers Report",
+        _ => code
+    };
+}
+
+<div class="d-flex align-items-center mb-2">
+    <h2 class="mb-0"><i class="bi bi-graph-up-arrow me-2"></i>AI Usage Report</h2>
+    <span class="badge bg-secondary ms-3 fs-6">All companies</span>
+</div>
+<p class="text-muted">Cross-tenant AI analysis spend &mdash; who is using AI, on which reports, and what it costs.</p>
+
+<form method="get" asp-action="AiUsage" class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">From</label>
+                <input type="date" name="from" value="@Model.DateFrom.ToString("yyyy-MM-dd")" class="form-control" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">To</label>
+                <input type="date" name="to" value="@Model.DateTo.ToString("yyyy-MM-dd")" class="form-control" />
+            </div>
+            <div class="col-md-6">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-funnel me-1"></i>Apply</button>
+                @{
+                    var today = DateTime.Today;
+                    var thisMonthFrom = new DateTime(today.Year, today.Month, 1).ToString("yyyy-MM-dd");
+                    var lastMonthFirst = new DateTime(today.Year, today.Month, 1).AddMonths(-1);
+                    var lastMonthFrom = lastMonthFirst.ToString("yyyy-MM-dd");
+                    var lastMonthTo = lastMonthFirst.AddMonths(1).AddDays(-1).ToString("yyyy-MM-dd");
+                }
+                <a class="btn btn-outline-secondary" asp-action="AiUsage" asp-route-from="@thisMonthFrom" asp-route-to="@today.ToString("yyyy-MM-dd")">This month</a>
+                <a class="btn btn-outline-secondary" asp-action="AiUsage" asp-route-from="@lastMonthFrom" asp-route-to="@lastMonthTo">Last month</a>
+            </div>
+        </div>
+    </div>
+</form>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small text-uppercase">Analyses</div>
+                <div class="display-6 fw-bold">@Model.TotalAnalyses.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small text-uppercase">Tokens</div>
+                <div class="display-6 fw-bold">@Model.TotalTokens.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-body text-center">
+                <div class="text-muted small text-uppercase">Total Cost</div>
+                <div class="display-6 fw-bold" style="color:#6366f1;">$@Model.TotalCost.ToString("N4")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.TotalAnalyses == 0)
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>No AI analyses were recorded in this period.
+    </div>
+}
+else
+{
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header"><h5 class="mb-0"><i class="bi bi-building me-2"></i>By Company</h5></div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr><th>Company</th><th class="text-end">Analyses</th><th class="text-end">Tokens</th><th class="text-end">Cost</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.ByCompany)
+                            {
+                                <tr>
+                                    <td>@r.Label</td>
+                                    <td class="text-end">@r.AnalysisCount.ToString("N0")</td>
+                                    <td class="text-end">@r.TotalTokens.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">$@r.TotalCost.ToString("N4")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header"><h5 class="mb-0"><i class="bi bi-file-earmark-bar-graph me-2"></i>By Report</h5></div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr><th>Report</th><th class="text-end">Analyses</th><th class="text-end">Tokens</th><th class="text-end">Cost</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.ByReport)
+                            {
+                                <tr>
+                                    <td>@reportLabel(r.Label)</td>
+                                    <td class="text-end">@r.AnalysisCount.ToString("N0")</td>
+                                    <td class="text-end">@r.TotalTokens.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">$@r.TotalCost.ToString("N4")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header"><h5 class="mb-0"><i class="bi bi-person me-2"></i>By User</h5></div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr><th>User</th><th class="text-end">Analyses</th><th class="text-end">Tokens</th><th class="text-end">Cost</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.ByUser)
+                            {
+                                <tr>
+                                    <td>@r.Label</td>
+                                    <td class="text-end">@r.AnalysisCount.ToString("N0")</td>
+                                    <td class="text-end">@r.TotalTokens.ToString("N0")</td>
+                                    <td class="text-end fw-semibold">$@r.TotalCost.ToString("N4")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}

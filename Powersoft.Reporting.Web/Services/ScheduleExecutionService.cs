@@ -27,6 +27,7 @@ public class ScheduleExecutionService
     private readonly ReportAnalyzerFactory _analyzerFactory;
     private readonly ILogger<ScheduleExecutionService> _logger;
     private readonly string? _psCentralConnString;
+    private readonly Powersoft.Reporting.Web.Options.AiAnalyzerOptions _aiOptions;
 
     private const int MaxCsvBytesForAi = 100_000;
 
@@ -42,7 +43,8 @@ public class ScheduleExecutionService
         IReportStorageService storageService,
         ReportAnalyzerFactory analyzerFactory,
         ILogger<ScheduleExecutionService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        Microsoft.Extensions.Options.IOptions<Powersoft.Reporting.Web.Options.AiAnalyzerOptions> aiOptions)
     {
         _centralRepository = centralRepository;
         _repositoryFactory = repositoryFactory;
@@ -50,6 +52,7 @@ public class ScheduleExecutionService
         _storageService = storageService;
         _analyzerFactory = analyzerFactory;
         _logger = logger;
+        _aiOptions = aiOptions.Value;
         var raw = configuration.GetConnectionString("PSCentral");
         _psCentralConnString = !string.IsNullOrEmpty(raw) ? Cryptography.DecryptPasswordInConnectionString(raw) : null;
     }
@@ -256,7 +259,7 @@ public class ScheduleExecutionService
 
             if (schedule.IncludeAiAnalysis && _analyzerFactory.IsConfigured && rowCount > 0)
             {
-                aiAnalysis = await RunAiAnalysisSafe(schedule, connString, ct);
+                aiAnalysis = await RunAiAnalysisSafe(schedule, db, connString, ct);
             }
             else if (schedule.IncludeAiAnalysis && !_analyzerFactory.IsConfigured)
             {
@@ -931,7 +934,7 @@ public class ScheduleExecutionService
     }
 
     private async Task<ReportAnalysis?> RunAiAnalysisSafe(
-        ReportSchedule schedule, string connString, CancellationToken ct)
+        ReportSchedule schedule, Database db, string connString, CancellationToken ct)
     {
         try
         {
@@ -1026,7 +1029,7 @@ public class ScheduleExecutionService
                 "Schedule {Id}: AI analysis completed — {InTok}+{OutTok} tokens",
                 schedule.ScheduleId, analysis.InputTokens, analysis.OutputTokens);
 
-            // log token usage
+            // log token usage (per-tenant aggregate)
             try
             {
                 var tokenRepo = _repositoryFactory.CreateScheduleRepository(connString);
@@ -1035,6 +1038,27 @@ public class ScheduleExecutionService
             catch (Exception tokenEx)
             {
                 _logger.LogWarning(tokenEx, "Schedule {Id}: failed to log AI token usage", schedule.ScheduleId);
+            }
+
+            // log central usage (cross-tenant report)
+            try
+            {
+                await _centralRepository.LogAiUsageAsync(new AiUsageLogEntry
+                {
+                    DBCode = db.DBCode,
+                    DBName = db.DBFriendlyName,
+                    UserCode = string.IsNullOrWhiteSpace(schedule.CreatedBy) ? "(scheduler)" : schedule.CreatedBy,
+                    ReportType = reportType,
+                    InputTokens = analysis.InputTokens,
+                    OutputTokens = analysis.OutputTokens,
+                    EstimatedCost = AiCostEstimator.ComputeCost(analysis.InputTokens, analysis.OutputTokens, _aiOptions),
+                    ActualCost = AiCostEstimator.ComputeCost(analysis.InputTokens, analysis.OutputTokens, _aiOptions),
+                    Source = "Scheduled"
+                });
+            }
+            catch (Exception centralEx)
+            {
+                _logger.LogWarning(centralEx, "Schedule {Id}: failed to log central AI usage", schedule.ScheduleId);
             }
 
             return analysis;

@@ -222,6 +222,28 @@ public class SettingsController : Controller
         return View(vm);
     }
 
+    // ==================== AI Usage Report (cross-tenant — Powersoft staff only) ====================
+
+    [HttpGet]
+    public async Task<IActionResult> AiUsage(DateTime? from = null, DateTime? to = null)
+    {
+        var ranking = GetRanking();
+        if (ranking >= ModuleConstants.RankingSystemAdmin)
+        {
+            _logger.LogWarning("User {User} (ranking {Ranking}) denied access to AI usage report",
+                User.Identity?.Name, ranking);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
+        var today = DateTime.Today;
+        var dateFrom = from?.Date ?? new DateTime(today.Year, today.Month, 1);
+        var dateTo = to?.Date ?? today;
+        if (dateTo < dateFrom) dateTo = dateFrom;
+
+        var report = await _centralRepository.GetAiUsageReportAsync(dateFrom, dateTo);
+        return View(report);
+    }
+
     // ==================== Email Templates ====================
 
     [HttpGet]

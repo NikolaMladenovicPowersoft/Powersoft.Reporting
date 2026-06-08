@@ -104,6 +104,7 @@
 </div>
 
 @section Scripts {
+<script src="~/js/searchable-select.js"></script>
 <script>
     // Pre-loaded accessible databases (already filtered server-side by ranking + module + user-DB link)
     const accessibleDatabases = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
@@ -113,11 +114,16 @@
     const dbSelect = document.getElementById('databaseSelect');
     const connectBtn = document.getElementById('connectBtn');
 
+    // Enhance native selects with searchable comboboxes (type partial code/name to filter).
+    const companyCombo = SearchableSelect(companySelect, { placeholder: 'Type company code or name...' });
+    const dbCombo = SearchableSelect(dbSelect, { placeholder: 'Type database code or name...' });
+
     function loadDatabasesForCompany(companyCode) {
         if (!companyCode) {
             dbSelect.innerHTML = '<option value="">Select a company first...</option>';
             dbSelect.disabled = true;
             connectBtn.disabled = true;
+            dbCombo.refresh();
             return;
         }
 
@@ -127,6 +133,7 @@
             dbSelect.innerHTML = '<option value="">No databases available</option>';
             dbSelect.disabled = true;
             connectBtn.disabled = true;
+            dbCombo.refresh();
             return;
         }
 
@@ -151,6 +158,7 @@
             dbSelect.disabled = false;
             connectBtn.disabled = true;
         }
+        dbCombo.refresh();
     }
 
     companySelect.addEventListener('change', function() {

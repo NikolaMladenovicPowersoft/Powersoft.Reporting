@@ -39,6 +39,7 @@
         .status-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;border:1px solid rgba(0,0,0,.15);}
         .report-footer{text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;}
         .group-header td{background:#f8fafc!important;padding:6px!important;font-weight:700;font-size:11px;border-top:1px solid #94a3b8;}
+        .group-subtotal td{font-weight:600;border-top:1px solid #cbd5e1;border-bottom:1px solid #94a3b8;padding:4px 6px;background:#f8fafc;font-style:italic;color:#475569;}
         .grand-total td{font-weight:700;border-top:3px double #1e293b;padding:6px 8px;background:#f1f5f9;}
         @@media print{body{background:white;}.toolbar{display:none!important;}.paper-container{margin:0;padding:0;}.paper{box-shadow:none;padding:20px;transform:none!important;}}
     </style>
@@ -89,32 +90,70 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach(var r in rows)
+                @{
+                    int leadCols = 12 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+                    int totalCols = leadCols + 3 + (inclHistory ? 1 : 0);
+
+                    Func<ProspectClientsRow, object> rowTpl =
+                        @<tr>
+                            @if(hasL1){<td>@item.Level1Descr</td>}
+                            @if(hasL2){<td>@item.Level2Descr</td>}
+                            <td>@item.LeadNo</td>
+                            <td>@item.CompanyName</td>
+                            <td>@item.ContactPerson</td>
+                            <td><span class="status-badge" style="@BadgeStyle(item.StatusColor)">@item.StatusName</span></td>
+                            <td>@item.PriorityName</td>
+                            <td>@(item.RegistrationDate?.ToString("dd/MM/yyyy") ?? "")</td>
+                            <td>@item.Tel1</td>
+                            <td>@item.Mobile</td>
+                            <td>@item.Email</td>
+                            <td>@item.Town</td>
+                            <td>@item.FollowedBy</td>
+                            <td>@item.RecommendedBy</td>
+                            <td style="text-align:right">@item.OfferCount</td>
+                            <td style="text-align:right">@item.EmailsSent</td>
+                            <td style="text-align:right">@item.SmsSent</td>
+                            @if(inclHistory){<td>@item.Source</td>}
+                        </tr>;
+
+                    Func<Tuple<List<ProspectClientsRow>, string>, object> subTpl =
+                        @<tr class="group-subtotal">
+                            <td colspan="@leadCols">@item.Item2</td>
+                            <td style="text-align:right">@item.Item1.Sum(r => r.OfferCount)</td>
+                            <td style="text-align:right">@item.Item1.Sum(r => r.EmailsSent)</td>
+                            <td style="text-align:right">@item.Item1.Sum(r => r.SmsSent)</td>
+                            @if(inclHistory){<td></td>}
+                        </tr>;
+                }
+                @if (hasL1)
                 {
-                    <tr>
-                        @if(hasL1){<td>@r.Level1Descr</td>}
-                        @if(hasL2){<td>@r.Level2Descr</td>}
-                        <td>@r.LeadNo</td>
-                        <td>@r.CompanyName</td>
-                        <td>@r.ContactPerson</td>
-                        <td><span class="status-badge" style="@BadgeStyle(r.StatusColor)">@r.StatusName</span></td>
-                        <td>@r.PriorityName</td>
-                        <td>@(r.RegistrationDate?.ToString("dd/MM/yyyy") ?? "")</td>
-                        <td>@r.Tel1</td>
-                        <td>@r.Mobile</td>
-                        <td>@r.Email</td>
-                        <td>@r.Town</td>
-                        <td>@r.FollowedBy</td>
-                        <td>@r.RecommendedBy</td>
-                        <td style="text-align:right">@r.OfferCount</td>
-                        <td style="text-align:right">@r.EmailsSent</td>
-                        <td style="text-align:right">@r.SmsSent</td>
-                        @if(inclHistory){<td>@r.Source</td>}
-                    </tr>
+                    foreach (var l1 in rows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+                    {
+                        var l1Rows = l1.ToList();
+                        <tr class="group-header"><td colspan="@totalCols">@l1.Key</td></tr>
+                        if (hasL2)
+                        {
+                            foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                            {
+                                var l2Rows = l2.ToList();
+                                <tr class="group-header"><td colspan="@totalCols" style="padding-left:24px;">@l2.Key</td></tr>
+                                foreach (var r in l2Rows) { @rowTpl(r) }
+                                @subTpl(Tuple.Create(l2Rows, l2.Key + " subtotal"))
+                            }
+                        }
+                        else
+                        {
+                            foreach (var r in l1Rows) { @rowTpl(r) }
+                        }
+                        @subTpl(Tuple.Create(l1Rows, l1.Key + " total"))
+                    }
+                }
+                else
+                {
+                    foreach (var r in rows) { @rowTpl(r) }
                 }
                 <tr class="grand-total">
-                    <td colspan="@(3 + (hasL1?1:0) + (hasL2?1:0))">Grand Total (@rows.Count rows)</td>
-                    <td colspan="9"></td>
+                    <td colspan="@leadCols">Grand Total (@rows.Count rows)</td>
                     <td style="text-align:right">@rows.Sum(r=>r.OfferCount)</td>
                     <td style="text-align:right">@rows.Sum(r=>r.EmailsSent)</td>
                     <td style="text-align:right">@rows.Sum(r=>r.SmsSent)</td>

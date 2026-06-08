@@ -211,7 +211,7 @@
                     <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Overwrite your default layout with current parameters">
                         <i class="bi bi-save me-1"></i>Save
                     </button>
-                    <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveChartLayoutAsModal"
+                    <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveLayoutAsModal"
                             title="Save current parameters as a new named layout (optionally shared with all users)">
                         <i class="bi bi-bookmark-plus me-1"></i>Save as...
                     </button>
@@ -330,6 +330,13 @@
     SendAction = "SendChartEmail",
     ReportType = "Charts",
     SubjectDefault = "Charts & Dashboards"
+})
+
+@await Html.PartialAsync("_SaveLayout", new Powersoft.Reporting.Web.ViewModels.SaveLayoutPartialModel
+{
+    ReportType     = Powersoft.Reporting.Core.Constants.ReportTypeConstants.Charts,
+    HasSavedLayout = hasSavedLayout,
+    ReportViewUrl  = Url.Action("Charts", "Reports") ?? ""
 })
 
 @section Scripts {
@@ -758,53 +765,47 @@ function autoSelectScheduleDateRange() {
 }
 
 // ===== End shared schedule partial API =====
-// Lazy load the layouts list the first time the dropdown opens + reset Save As modal
-document.addEventListener('DOMContentLoaded', function() {
-    var btn = document.getElementById('layoutsDropdownBtn');
-    if (btn) {
-        var loadedOnce = false;
-        btn.addEventListener('show.bs.dropdown', function() {
-            if (!loadedOnce) { loadedOnce = true; loadChartLayoutsList(); }
-        });
-    }
-    var modalEl = document.getElementById('saveChartLayoutAsModal');
-    if (modalEl) {
-        modalEl.addEventListener('show.bs.modal', function() {
-            document.getElementById('saveChartLayoutAsName').value = '';
-            document.getElementById('saveChartLayoutAsPublic').checked = false;
-            var alertEl = document.getElementById('saveChartLayoutAsAlert');
-            if (alertEl) { alertEl.classList.add('d-none'); alertEl.textContent = ''; }
-        });
-    }
-});
 
-function showLayoutToast(msg, type) {
-    var existing = document.getElementById('layoutToast');
-    if (existing) existing.remove();
-    var div = document.createElement('div');
-    div.id = 'layoutToast';
-    div.className = 'alert alert-' + type + ' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';
-    div.style.zIndex = '11000';
-    div.innerHTML = '<i class="bi bi-' + (type === 'success' ? 'check-circle' : 'exclamation-triangle') + ' me-1"></i>' + msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
-    document.body.appendChild(div);
-    setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
+// ===== Layout hooks (required by _SaveLayout partial) =====
+function collectCurrentLayout() {
+    var p = {
+        mode:            document.getElementById('chartMode').value,
+        dimension:       document.getElementById('dimension').value,
+        metric:          document.getElementById('metric').value,
+        topN:            document.getElementById('topN').value,
+        chartType:       document.getElementById('chartType').value,
+        showOthers:      document.getElementById('showOthers').checked ? '1' : '0',
+        compareLastYear: document.getElementById('compareLastYear').checked ? '1' : '0',
+        includeVat:      document.getElementById('includeVat').checked ? '1' : '0'
+    };
+    var isj = getItemsSelectionJson ? getItemsSelectionJson() : '';
+    if (isj) p['itemsSelection'] = isj;
+    return p;
 }
 
-// Apply saved layout on page load
+function applyLayoutParameters(p) {
+    function sv(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
+    function sc(id, v) { var el = document.getElementById(id); if (el && v != null) el.checked = (v === '1' || v === true); }
+    sv('chartMode',      p.mode      || p.Mode);
+    sv('dimension',      p.dimension || p.Dimension);
+    sv('metric',         p.metric    || p.Metric);
+    sv('topN',           p.topN      || p.TopN);
+    sv('chartType',      p.chartType || p.ChartType);
+    sc('showOthers',     p.showOthers      !== undefined ? p.showOthers      : p.ShowOthers);
+    sc('compareLastYear',p.compareLastYear  !== undefined ? p.compareLastYear  : p.CompareLastYear);
+    sc('includeVat',     p.includeVat       !== undefined ? p.includeVat       : p.IncludeVat);
+    if (typeof onChartModeChange === 'function') onChartModeChange();
+    var isj = p.itemsSelection || p.ItemsSelectionJson;
+    if (isj && typeof reloadItemsSelectionFromJson === 'function') {
+        try { reloadItemsSelectionFromJson(typeof isj === 'string' ? JSON.parse(isj) : isj); } catch(e) {}
+    }
+}
+
 @if (savedLayout != null && savedLayout.Count > 0)
 {
     <text>
 (function() {
-    var saved = @Html.Raw(JsonSerializer.Serialize(savedLayout));
-    if (saved.mode) document.getElementById('chartMode').value = saved.mode;
-    if (saved.dimension) document.getElementById('dimension').value = saved.dimension;
-    if (saved.metric) document.getElementById('metric').value = saved.metric;
-    if (saved.topN) document.getElementById('topN').value = saved.topN;
-    if (saved.chartType) document.getElementById('chartType').value = saved.chartType;
-    if (saved.showOthers !== undefined) document.getElementById('showOthers').checked = saved.showOthers === '1';
-    if (saved.compareLastYear !== undefined) document.getElementById('compareLastYear').checked = saved.compareLastYear === '1';
-    if (saved.includeVat !== undefined) document.getElementById('includeVat').checked = saved.includeVat === '1';
-    onChartModeChange();
+    applyLayoutParameters(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(savedLayout)));
 })();
     </text>
 }

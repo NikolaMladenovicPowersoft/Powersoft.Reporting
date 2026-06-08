@@ -1,0 +1,440 @@
+@model Powersoft.Reporting.Web.ViewModels.SaveLayoutPartialModel
+@*
+    Shared Save-Layout modal + JS.
+    Host view MUST define:
+        window.collectCurrentLayout()    → plain object (params to persist)
+        window.applyLayoutParameters(p)  → restores form controls from saved params
+    Host view toolbar buttons reference these element IDs / functions directly:
+        #layoutsDropdownBtn / #layoutsDropdownMenu  — the Layouts dropdown
+        onclick="saveCurrentLayout()"               — Save button
+        data-bs-target="#saveLayoutAsModal"         — Save as... button
+        onclick="resetSavedLayout()"                — Reset Default button  (conditional on Model.HasSavedLayout)
+*@
+
+<!-- Save Layout As Modal -->
+<div class="modal fade" id="saveLayoutAsModal" tabindex="-1" aria-labelledby="saveLayoutAsLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="saveLayoutAsLabel"><i class="bi bi-bookmark-plus me-2"></i>Save Layout As</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="saveLayoutAsName" class="form-label">Layout name <span class="text-danger">*</span></label>
+                    <input type="text" id="saveLayoutAsName" class="form-control" maxlength="100"
+                           placeholder="e.g. Monthly Summary" autocomplete="off" />
+                    <div class="form-text">Used to identify the layout. You can have multiple named layouts.</div>
+                </div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="saveLayoutAsPublic" />
+                    <label class="form-check-label" for="saveLayoutAsPublic">Share with all users (public layout)</label>
+                    <div class="form-text">Public layouts are visible to everyone but can only be edited or deleted by you.</div>
+                </div>
+                <div id="saveLayoutAsAlert" class="alert d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveLayoutAsConfirmBtn" onclick="saveLayoutAsConfirm()">
+                    <span class="spinner-border spinner-border-sm d-none me-1" id="saveLayoutAsSpinner"></span>
+                    <i class="bi bi-save me-1"></i>Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== Save Layout Shared Framework ====================
+// Endpoints: all route through generic /Reports/*ReportLayout?reportType=...
+// Host hooks required: collectCurrentLayout(), applyLayoutParameters(params)
+
+(function() {
+    var _reportType      = '@Model.ReportType';
+    var _resetUrl        = '@Model.ReportViewUrl';
+    var _hasDefaultLayout = @(Model.HasSavedLayout ? "true" : "false");
+    var _lsKey           = 'lastLayout_' + _reportType;  // localStorage key: JSON {hc, name}
+    var __layoutsCache   = null;
+
+    // ---- URLs ----
+    var _urlGet    = '@Url.Action("GetReportLayout",    "Reports")';
+    var _urlSave   = '@Url.Action("SaveReportLayout",   "Reports")';
+    var _urlReset  = '@Url.Action("ResetReportLayout",  "Reports")';
+    var _urlList   = '@Url.Action("ListReportLayouts",  "Reports")';
+    var _urlSaveAs = '@Url.Action("SaveReportLayoutAs", "Reports")';
+    var _urlLoad   = '@Url.Action("LoadReportLayout",   "Reports")';
+    var _urlDelete = '@Url.Action("DeleteReportLayout", "Reports")';
+
+    function qs(extra) { return '?reportType=' + encodeURIComponent(_reportType) + (extra || ''); }
+
+    // ---- Auth redirect guard ----
+    function isAuthRedirect(r) {
+        if (!r) return false;
+        if (r.status === 401 || r.status === 403) return true;
+        if (r.redirected && /\/Account\/Login/i.test(r.url || '')) return true;
+        var ct = r.headers && r.headers.get ? r.headers.get('content-type') : '';
+        return ct && ct.indexOf('text/html') !== -1;
+    }
+    function showSessionExpiredToast() {
+        showLayoutToast('Session expired — please reload the page and sign in again.', 'warning');
+    }
+
+    // ---- Label helpers ----
+    function setActiveLabel(text, headerCode) {
+        var label = document.getElementById('layoutsCurrentName');
+        if (!label) return;
+        label.textContent = text;
+        if (headerCode) {
+            label.dataset.activeHeaderCode = headerCode;
+        } else {
+            delete label.dataset.activeHeaderCode;
+        }
+    }
+
+    function clearActiveLayoutLabel() {
+        setActiveLabel('Layouts', null);
+        try { localStorage.removeItem(_lsKey); } catch(e) {}
+    }
+
+    function lsSave(hc, name) {
+        try { localStorage.setItem(_lsKey, JSON.stringify({ hc: hc, name: name })); } catch(e) {}
+    }
+    function lsClear() {
+        try { localStorage.removeItem(_lsKey); } catch(e) {}
+    }
+    function lsRead() {
+        try { return JSON.parse(localStorage.getItem(_lsKey) || 'null'); } catch(e) { return null; }
+    }
+
+    // ---- Save default layout ----
+    window.saveCurrentLayout = function() {
+        var parms = (typeof collectCurrentLayout === 'function') ? collectCurrentLayout() : {};
+        fetch(_urlSave + qs(), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(parms)
+        })
+        .then(function(r) {
+            if (isAuthRedirect(r)) { showSessionExpiredToast(); return null; }
+            return r.json();
+        })
+        .then(function(d) {
+            if (d == null) return;
+            if (d.success) {
+                _hasDefaultLayout = true;
+                // Mark as default slot (no headerCode) and persist choice
+                setActiveLabel('My Layout', null);
+                lsSave('__default__', 'My Layout');
+                // Refresh dropdown so "My Layout" entry appears
+                window.loadLayoutsList();
+            }
+            showLayoutToast(d.success ? 'Layout saved successfully' : (d.message || 'Failed to save layout'),
+                            d.success ? 'success' : 'danger');
+        })
+        .catch(function() { showLayoutToast('Network error saving layout', 'danger'); });
+    };
+
+    // ---- Reset default layout ----
+    window.resetSavedLayout = function() {
+        if (!confirm('Reset your saved layout to factory defaults?')) return;
+        fetch(_urlReset + qs(), { method: 'POST', credentials: 'same-origin' })
+        .then(function(r) {
+            if (isAuthRedirect(r)) { showSessionExpiredToast(); return null; }
+            return r.json();
+        })
+        .then(function(d) {
+            if (d == null) return;
+            if (d.success) {
+                _hasDefaultLayout = false;
+                lsClear();
+                clearActiveLayoutLabel();
+                showLayoutToast('Layout reset — reloading...', 'success');
+                setTimeout(function() { window.location.href = _resetUrl || window.location.pathname; }, 800);
+            } else {
+                showLayoutToast(d.message || 'Failed to reset layout', 'danger');
+            }
+        })
+        .catch(function() { showLayoutToast('Network error', 'danger'); });
+    };
+
+    // ---- Load default (unnamed) layout ----
+    window.loadDefaultLayout = function() {
+        fetch(_urlGet + qs(), { credentials: 'same-origin' })
+        .then(function(r) {
+            if (isAuthRedirect(r)) { showSessionExpiredToast(); return null; }
+            return r.json();
+        })
+        .then(function(data) {
+            if (data == null) return;
+                if (data.success && data.hasSaved) {
+                if (typeof applyLayoutParameters === 'function') applyLayoutParameters(data.parameters || {});
+                setActiveLabel('My Layout', null);
+                lsSave('__default__', 'My Layout');
+                showLayoutToast('My Layout loaded — click Generate to run.', 'success');
+            } else {
+                showLayoutToast('No saved default layout found.', 'warning');
+            }
+        })
+        .catch(function() { showLayoutToast('Network error loading layout', 'danger'); });
+    };
+
+    // ---- Named layouts list ----
+    window.loadLayoutsList = function() {
+        var menu = document.getElementById('layoutsDropdownMenu');
+        if (menu) menu.innerHTML = '<li><h6 class="dropdown-header">Loading...</h6></li>';
+        return fetch(_urlList + qs(), { method: 'GET', credentials: 'same-origin' })
+            .then(function(r) {
+                if (isAuthRedirect(r)) {
+                    if (menu) menu.innerHTML = '<li><h6 class="dropdown-header text-danger">Session expired</h6></li>';
+                    showSessionExpiredToast();
+                    return null;
+                }
+                return r.json();
+            })
+            .then(function(data) {
+                if (data == null) return;
+                __layoutsCache = data && data.layouts ? data.layouts : [];
+                renderLayoutsDropdown(__layoutsCache);
+            })
+            .catch(function() {
+                if (menu) menu.innerHTML = '<li><h6 class="dropdown-header text-danger">Failed to load</h6></li>';
+            });
+    };
+
+    function renderLayoutsDropdown(layouts) {
+        var menu = document.getElementById('layoutsDropdownMenu');
+        if (!menu) return;
+
+        var own = (layouts || []).filter(function(l) { return !l.isPublic; });
+        var pub = (layouts || []).filter(function(l) { return  l.isPublic; });
+        var html = '';
+
+        // Always show "My Layout" (default slot) at top if it exists
+        if (_hasDefaultLayout) {
+            html += '<li><h6 class="dropdown-header">Default</h6></li>';
+            html += '<li class="d-flex align-items-center px-2 py-1">' +
+                        '<a href="#" class="flex-grow-1 text-decoration-none text-body" ' +
+                            'onclick="loadDefaultLayout(); return false;">' +
+                            '<i class="bi bi-bookmark-star me-1"></i>My Layout' +
+                        '</a>' +
+                    '</li>';
+        }
+
+        function renderGroup(groupLabel, items) {
+            if (!items.length) return;
+            html += '<li><h6 class="dropdown-header">' + groupLabel + '</h6></li>';
+            items.forEach(function(l) {
+                var safeName = String(l.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                var publicBadge = l.isPublic
+                    ? '<span class="badge bg-secondary ms-2" title="Visible to all users">Public</span>' : '';
+                var editorBadge = l.isPublic && l.createdBy
+                    ? '<span class="text-muted small ms-2">by ' + String(l.createdBy).replace(/</g,'&lt;') + '</span>'
+                    : '';
+                html += '<li class="d-flex align-items-center px-2 py-1">' +
+                            '<a href="#" class="flex-grow-1 text-decoration-none text-body" onclick="loadNamedLayout(\'' +
+                                String(l.headerCode).replace(/'/g, "\\'") + '\'); return false;">' +
+                                '<i class="bi bi-bookmark me-1"></i>' + safeName + publicBadge + editorBadge +
+                            '</a>';
+                if (l.canEdit) {
+                    html += '<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2" ' +
+                                'title="Delete this layout" onclick="deleteNamedLayout(\'' +
+                                String(l.headerCode).replace(/'/g, "\\'") + '\', \'' +
+                                safeName.replace(/'/g, "\\'") + '\'); return false;">' +
+                                '<i class="bi bi-trash"></i>' +
+                            '</button>';
+                }
+                html += '</li>';
+            });
+        }
+
+        renderGroup('Your layouts', own);
+        renderGroup('Public layouts', pub);
+
+        if (!_hasDefaultLayout && !layouts.length) {
+            html = '<li><h6 class="dropdown-header">No saved layouts</h6></li>' +
+                   '<li><span class="dropdown-item-text small text-muted">Use "Save as..." to create one.</span></li>';
+            clearActiveLayoutLabel();
+        }
+
+        menu.innerHTML = html;
+    }
+
+    // ---- Load named layout ----
+    window.loadNamedLayout = function(headerCode) {
+        if (!headerCode) return;
+        fetch(_urlLoad + qs('&headerCode=' + encodeURIComponent(headerCode)),
+              { method: 'POST', credentials: 'same-origin' })
+            .then(function(r) {
+                if (isAuthRedirect(r)) { showSessionExpiredToast(); return null; }
+                return r.json();
+            })
+            .then(function(data) {
+                if (data == null) return;
+                if (!data.success) { showLayoutToast(data.message || 'Failed to load layout', 'danger'); return; }
+                if (typeof applyLayoutParameters === 'function') applyLayoutParameters(data.parameters || {});
+                if (__layoutsCache) {
+                    var match = __layoutsCache.find(function(l) { return l.headerCode === headerCode; });
+                    if (match) {
+                        setActiveLabel(match.name, headerCode);
+                        lsSave(headerCode, match.name);
+                    }
+                }
+                showLayoutToast('Layout loaded — click Generate to run.', 'success');
+            })
+            .catch(function() { showLayoutToast('Network error loading layout', 'danger'); });
+    };
+
+    // ---- Save As (named / public) ----
+    window.saveLayoutAsConfirm = function() {
+        var nameEl  = document.getElementById('saveLayoutAsName');
+        var pubEl   = document.getElementById('saveLayoutAsPublic');
+        var alertEl = document.getElementById('saveLayoutAsAlert');
+        var btn     = document.getElementById('saveLayoutAsConfirmBtn');
+        var spinner = document.getElementById('saveLayoutAsSpinner');
+        if (alertEl) { alertEl.classList.add('d-none'); alertEl.textContent = ''; }
+
+        var name = (nameEl ? nameEl.value : '').trim();
+        if (!name) {
+            if (alertEl) { alertEl.textContent = 'Layout name is required.'; alertEl.className = 'alert alert-warning'; }
+            return;
+        }
+
+        btn.disabled = true; spinner.classList.remove('d-none');
+        var parms = (typeof collectCurrentLayout === 'function') ? collectCurrentLayout() : {};
+        fetch(_urlSaveAs + qs(), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, isPublic: !!(pubEl && pubEl.checked), parameters: parms })
+        })
+        .then(function(r) {
+            if (isAuthRedirect(r)) { showSessionExpiredToast(); btn.disabled = false; spinner.classList.add('d-none'); return null; }
+            return r.json();
+        })
+        .then(function(data) {
+            btn.disabled = false; spinner.classList.add('d-none');
+            if (data == null) return;
+            if (data.success) {
+                var modalEl = document.getElementById('saveLayoutAsModal');
+                if (modalEl) bootstrap.Modal.getInstance(modalEl).hide();
+                showLayoutToast('Layout saved', 'success');
+                window.loadLayoutsList();
+                setActiveLabel(name, data.headerCode || null);
+                lsSave(data.headerCode || '__default__', name);
+            } else {
+                if (alertEl) { alertEl.textContent = data.message || 'Failed to save'; alertEl.className = 'alert alert-danger'; }
+            }
+        })
+        .catch(function() {
+            btn.disabled = false; spinner.classList.add('d-none');
+            if (alertEl) { alertEl.textContent = 'Network error.'; alertEl.className = 'alert alert-danger'; }
+        });
+    };
+
+    // ---- Delete named layout ----
+    window.deleteNamedLayout = function(headerCode, displayName) {
+        // Use raw name from cache to avoid HTML-encoding mismatches in the confirm dialog
+        var rawName = displayName;
+        if (__layoutsCache) {
+            var cached = __layoutsCache.find(function(l) { return l.headerCode === headerCode; });
+            if (cached && cached.name) rawName = cached.name;
+        }
+        if (!confirm('Delete layout "' + rawName + '"?')) return;
+        fetch(_urlDelete + qs('&headerCode=' + encodeURIComponent(headerCode)),
+              { method: 'POST', credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    showLayoutToast('Layout deleted', 'success');
+                    var label = document.getElementById('layoutsCurrentName');
+                    if (label && label.dataset.activeHeaderCode === headerCode) {
+                        // Deleted the active named layout — fall back to My Layout if exists, else clear
+                        if (_hasDefaultLayout) {
+                            setActiveLabel('My Layout', null);
+                            lsSave('__default__', 'My Layout');
+                        } else {
+                            clearActiveLayoutLabel();
+                        }
+                    }
+                    window.loadLayoutsList();
+                } else {
+                    showLayoutToast(data.message || 'Failed to delete', 'danger');
+                }
+            })
+            .catch(function() { showLayoutToast('Network error', 'danger'); });
+    };
+
+    // ---- Toast ----
+    window.showLayoutToast = function(message, type) {
+        var existing = document.getElementById('layoutToast');
+        if (existing) existing.remove();
+        var div = document.createElement('div');
+        div.id = 'layoutToast';
+        div.className = 'alert alert-' + type + ' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';
+        div.style.zIndex = '9999';
+        div.innerHTML = '<i class="bi bi-' + (type === 'success' ? 'check-circle' : 'exclamation-triangle') + ' me-1"></i>' +
+                        message + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+        document.body.appendChild(div);
+        setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
+    };
+
+    // ---- DOMContentLoaded wiring ----
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-restore: try last-used layout from localStorage, then fall back to server default
+        var lsEntry = lsRead();
+        if (lsEntry && lsEntry.hc && lsEntry.hc !== '__default__') {
+            // Try to silently reload the last named layout
+            setActiveLabel(lsEntry.name || 'Loading...', lsEntry.hc);
+            fetch(_urlLoad + qs('&headerCode=' + encodeURIComponent(lsEntry.hc)),
+                  { method: 'POST', credentials: 'same-origin' })
+                .then(function(r) { return r.ok ? r.json() : null; })
+                .then(function(data) {
+                    if (data && data.success) {
+                        if (typeof applyLayoutParameters === 'function') applyLayoutParameters(data.parameters || {});
+                        // Name already set; keep it
+                    } else {
+                        // Layout no longer exists — fall back
+                        lsClear();
+                        if (_hasDefaultLayout) {
+                            setActiveLabel('My Layout', null);
+                            lsSave('__default__', 'My Layout');
+                        } else {
+                            setActiveLabel('Layouts', null);
+                        }
+                    }
+                })
+                .catch(function() {
+                    if (_hasDefaultLayout) setActiveLabel('My Layout', null);
+                    else setActiveLabel('Layouts', null);
+                });
+        } else if (_hasDefaultLayout) {
+            // Last used was default slot (or first time visiting with a saved default)
+            setActiveLabel('My Layout', null);
+            if (!lsEntry) lsSave('__default__', 'My Layout');
+        }
+        // If neither: label stays "Layouts" (the Razor-rendered default)
+
+        // Wire up dropdown lazy-load (reload every time it opens so it's always fresh)
+        var btn = document.getElementById('layoutsDropdownBtn');
+        if (btn) {
+            btn.addEventListener('show.bs.dropdown', function() {
+                window.loadLayoutsList();
+            });
+        }
+
+        // Wire up Save As modal reset
+        var modalEl = document.getElementById('saveLayoutAsModal');
+        if (modalEl) {
+            modalEl.addEventListener('show.bs.modal', function() {
+                var nameEl  = document.getElementById('saveLayoutAsName');
+                var pubEl   = document.getElementById('saveLayoutAsPublic');
+                var alertEl = document.getElementById('saveLayoutAsAlert');
+                if (nameEl)   nameEl.value = '';
+                if (pubEl)    pubEl.checked = false;
+                if (alertEl) { alertEl.classList.add('d-none'); alertEl.textContent = ''; }
+            });
+        }
+    });
+})();
+</script>

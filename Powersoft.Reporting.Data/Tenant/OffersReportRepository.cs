@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
+using Powersoft.Reporting.Core.Helpers;
 using Powersoft.Reporting.Core.Interfaces;
 using Powersoft.Reporting.Core.Models;
 
@@ -350,10 +351,15 @@ WHERE 1=1 {whereClause}";
         {
             try
             {
-                var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var sel = JsonSerializer.Deserialize<ItemsSelectionFilter>(filter.ItemsSelectionJson, opts);
+                // Use the shared parser: the JSON uses string modes ("include"/"exclude"),
+                // which a raw JsonSerializer.Deserialize into FilterMode enum cannot handle
+                // (it throws and the whole filter is silently dropped).
+                var sel = ItemsSelectionParser.Parse(filter.ItemsSelectionJson);
                 if (sel != null)
                 {
+                    // Item-level dimensions only (subquery is per offer-detail item).
+                    // Store/Supplier/GroupSize/Fabric are intentionally unmapped here —
+                    // they require header-level or extra joins and are hidden in the UI.
                     var itemsColMap = new DimensionFilterBuilder.ColumnMap(
                         Category: "it.fk_CategoryID",
                         Department: "it.fk_DepartmentID",
@@ -364,6 +370,15 @@ WHERE 1=1 {whereClause}";
                         Supplier: "",
                         Customer: "",
                         Agent: "",
+                        Model: "it.fk_ModelID",
+                        Colour: "it.fk_ColourID",
+                        Size: "it.fk_SizeID",
+                        Attr1: "it.fk_AttrID1",
+                        Attr2: "it.fk_AttrID2",
+                        Attr3: "it.fk_AttrID3",
+                        Attr4: "it.fk_AttrID4",
+                        Attr5: "it.fk_AttrID5",
+                        Attr6: "it.fk_AttrID6",
                         ItemTableAlias: "it"
                     );
                     var (dimWhere, dimParms) = DimensionFilterBuilder.Build(sel, itemsColMap, parms.Count);

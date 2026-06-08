@@ -20,10 +20,11 @@ public class PdfExportService
         ReportFilter filter)
     {
         bool hasGrouping = filter.GroupBy != Core.Enums.GroupByType.None;
+        bool hasSecondary = filter.SecondaryGroupBy != Core.Enums.GroupByType.None;
         bool includeVat = filter.IncludeVat;
         bool compareLY = filter.CompareLastYear;
 
-        int colCount = 10 + (hasGrouping ? 1 : 0) + (compareLY ? 3 : 0);
+        int colCount = 10 + (hasGrouping ? 1 : 0) + (hasSecondary ? 1 : 0) + (compareLY ? 3 : 0);
 
         using var ms = new MemoryStream();
         var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
@@ -48,11 +49,12 @@ public class PdfExportService
         };
 
         // Column widths
-        var widths = BuildColumnWidths(hasGrouping, compareLY, colCount);
+        var widths = BuildColumnWidths(hasGrouping, hasSecondary, compareLY, colCount);
         table.SetWidths(widths);
 
         // Headers
         if (hasGrouping) AddHeaderCell(table, filter.GroupBy.ToString());
+        if (hasSecondary) AddHeaderCell(table, filter.SecondaryGroupBy.ToString());
         AddHeaderCell(table, "Period");
         AddHeaderCell(table, "Invoices");
         AddHeaderCell(table, "Returns");
@@ -72,11 +74,11 @@ public class PdfExportService
 
         // Data rows
         bool alternate = false;
-        foreach (var row in rows)
+        void WriteRow(AverageBasketRow row)
         {
             var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
-            
             if (hasGrouping) AddDataCell(table, row.Level1Value ?? row.Level1 ?? "N/A", bg);
+            if (hasSecondary) AddDataCell(table, row.Level2Value ?? row.Level2 ?? "N/A", bg);
             AddDataCell(table, row.Period, bg);
             AddDataCell(table, row.CYInvoiceCount.ToString("N0"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, row.CYCreditCount.ToString("N0"), bg, Element.ALIGN_RIGHT);
@@ -87,21 +89,68 @@ public class PdfExportService
             AddDataCell(table, (includeVat ? row.CYTotalGross : row.CYTotalNet).ToString("N2"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, (includeVat ? row.CYAverageGross : row.CYAverageNet).ToString("N2"), bg, Element.ALIGN_RIGHT);
             AddDataCell(table, row.CYAverageQty.ToString("N2"), bg, Element.ALIGN_RIGHT);
-            
             if (compareLY)
             {
                 AddDataCell(table, (includeVat ? row.LYTotalGross : row.LYTotalNet).ToString("N2"), bg, Element.ALIGN_RIGHT);
                 AddDataCell(table, (includeVat ? row.LYAverageGross : row.LYAverageNet).ToString("N2"), bg, Element.ALIGN_RIGHT);
                 AddDataCell(table, $"{row.YoYChangePercent:N1}%", bg, Element.ALIGN_RIGHT);
             }
-            
             alternate = !alternate;
+        }
+
+        // Subtotal: counts/qty/sales summed; Avg Basket / Avg Qty recomputed from sums
+        // (Sales / Net Trans.) exactly like the on-screen grid.
+        var subBg = new BaseColor(238, 242, 255);
+        var subFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 7, BaseColor.DarkGray);
+        void WriteSub(List<AverageBasketRow> g)
+        {
+            int leading = (hasGrouping ? 1 : 0) + (hasSecondary ? 1 : 0) + 1; // groups + Period
+            AddSubtotalLabelCell(table, "Subtotal", leading, subBg, subFont);
+            var gTrans = g.Sum(r => r.CYTotalTransactions);
+            var gNetQty = g.Sum(r => r.CYTotalQty);
+            var gSales = g.Sum(r => includeVat ? r.CYTotalGross : r.CYTotalNet);
+            var gAvgBasket = gTrans > 0 ? gSales / gTrans : 0m;
+            var gAvgQty = gTrans > 0 ? gNetQty / gTrans : 0m;
+            AddSubtotalCell(table, g.Sum(r => r.CYInvoiceCount).ToString("N0"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, g.Sum(r => r.CYCreditCount).ToString("N0"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, gTrans.ToString("N0"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, g.Sum(r => r.CYQtySold).ToString("N0"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, g.Sum(r => r.CYQtyReturned).ToString("N0"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, gNetQty.ToString("N0"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, gSales.ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, gAvgBasket.ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, gAvgQty.ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            if (compareLY)
+            {
+                var gLyTrans = g.Sum(r => r.LYTotalTransactions);
+                var gLySales = g.Sum(r => includeVat ? r.LYTotalGross : r.LYTotalNet);
+                var gLyAvg = gLyTrans > 0 ? gLySales / gLyTrans : 0m;
+                var gYoY = gLySales != 0 ? Math.Round((gSales - gLySales) / Math.Abs(gLySales) * 100, 2) : (gSales > 0 ? 100m : 0m);
+                AddSubtotalCell(table, gLySales.ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, gLyAvg.ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, $"{gYoY:N1}%", subBg, subFont, Element.ALIGN_RIGHT);
+            }
+        }
+
+        if (hasGrouping)
+        {
+            foreach (var grp in rows.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A"))
+            {
+                var gr = grp.ToList();
+                foreach (var row in gr) WriteRow(row);
+                WriteSub(gr);
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteRow(row);
         }
 
         // Grand total
         if (grandTotals != null)
         {
             if (hasGrouping) AddTotalCell(table, "");
+            if (hasSecondary) AddTotalCell(table, "");
             AddTotalCell(table, "GRAND TOTAL");
             AddTotalCell(table, grandTotals.TotalInvoices.ToString("N0"), Element.ALIGN_RIGHT);
             AddTotalCell(table, grandTotals.TotalCredits.ToString("N0"), Element.ALIGN_RIGHT);
@@ -126,10 +175,11 @@ public class PdfExportService
         return ms.ToArray();
     }
 
-    private float[] BuildColumnWidths(bool hasGrouping, bool compareLY, int colCount)
+    private float[] BuildColumnWidths(bool hasGrouping, bool hasSecondary, bool compareLY, int colCount)
     {
         var widths = new List<float>();
         if (hasGrouping) widths.Add(12f);
+        if (hasSecondary) widths.Add(12f);
         widths.AddRange(new[] { 10f, 6f, 6f, 6f, 6f, 6f, 6f, 9f, 8f, 7f });
         if (compareLY) widths.AddRange(new[] { 9f, 8f, 6f });
         return widths.ToArray();
@@ -502,7 +552,11 @@ public class PdfExportService
         if (isDetailed)
             colCount = 17 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
         else
-            colCount = 6 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+            colCount = 7 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+
+        var subBg = new BaseColor(241, 245, 249);
+        var subFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 7, BaseColor.DarkGray);
+        int g = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
 
         using var ms = new MemoryStream();
         var pageSize = isDetailed ? PageSize.A4.Rotate() : PageSize.A4;
@@ -549,7 +603,7 @@ public class PdfExportService
             AddHeaderCell(table, "Compart.");
 
             bool alternate = false;
-            foreach (var row in detailedRows ?? new())
+            void WriteRow(CancelLogDetailedRow row)
             {
                 var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
                 AddDataCell(table, row.StoreAndStation, bg);
@@ -573,6 +627,46 @@ public class PdfExportService
                 AddDataCell(table, row.CompartmentName, bg);
                 alternate = !alternate;
             }
+
+            void WriteSub(List<CancelLogDetailedRow> grp, string label)
+            {
+                // Label spans Store/Stn..Lines (11 + group cols); then Inv Total, Qty, Amount;
+                // then 3 trailing blanks (Tbl No, Table, Compart.).
+                AddSubtotalLabelCell(table, label, 11 + g, subBg, subFont);
+                AddSubtotalCell(table, grp.Sum(x => x.InvoiceTotal).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, grp.Sum(x => x.Quantity).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, grp.Sum(x => x.Amount).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, "", subBg, subFont);
+                AddSubtotalCell(table, "", subBg, subFont);
+                AddSubtotalCell(table, "", subBg, subFont);
+            }
+
+            var det = detailedRows ?? new();
+            if (hasL1)
+            {
+                foreach (var l1 in det.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+                {
+                    var l1Rows = l1.ToList();
+                    if (hasL2)
+                    {
+                        foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                        {
+                            var l2Rows = l2.ToList();
+                            foreach (var row in l2Rows) WriteRow(row);
+                            WriteSub(l2Rows, l2.Key + " subtotal");
+                        }
+                    }
+                    else
+                    {
+                        foreach (var row in l1Rows) WriteRow(row);
+                    }
+                    WriteSub(l1Rows, l1.Key + " total");
+                }
+            }
+            else
+            {
+                foreach (var row in det) WriteRow(row);
+            }
         }
         else
         {
@@ -593,7 +687,7 @@ public class PdfExportService
             AddHeaderCell(table, "Amount");
 
             bool alternate = false;
-            foreach (var row in summaryRows ?? new())
+            void WriteRow(CancelLogSummaryRow row)
             {
                 var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
                 AddDataCell(table, row.StoreAndStation, bg);
@@ -606,6 +700,45 @@ public class PdfExportService
                 AddDataCell(table, row.Quantity.ToString("N2"), bg, Element.ALIGN_RIGHT);
                 AddDataCell(table, row.Amount.ToString("N2"), bg, Element.ALIGN_RIGHT);
                 alternate = !alternate;
+            }
+
+            void WriteSub(List<CancelLogSummaryRow> grp, string label)
+            {
+                // Label spans Store/Station + group cols; then the 6 metric columns.
+                AddSubtotalLabelCell(table, label, 1 + g, subBg, subFont);
+                AddSubtotalCell(table, grp.Sum(x => x.DeletedAction).ToString("N0"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, grp.Sum(x => x.CancelledAction).ToString("N0"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, grp.Sum(x => x.ComplimentaryAction).ToString("N0"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, grp.Sum(x => x.InvoiceTotal).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, grp.Sum(x => x.Quantity).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+                AddSubtotalCell(table, grp.Sum(x => x.Amount).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            }
+
+            var sum = summaryRows ?? new();
+            if (hasL1)
+            {
+                foreach (var l1 in sum.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+                {
+                    var l1Rows = l1.ToList();
+                    if (hasL2)
+                    {
+                        foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                        {
+                            var l2Rows = l2.ToList();
+                            foreach (var row in l2Rows) WriteRow(row);
+                            WriteSub(l2Rows, l2.Key + " subtotal");
+                        }
+                    }
+                    else
+                    {
+                        foreach (var row in l1Rows) WriteRow(row);
+                    }
+                    WriteSub(l1Rows, l1.Key + " total");
+                }
+            }
+            else
+            {
+                foreach (var row in sum) WriteRow(row);
             }
         }
 
@@ -643,6 +776,20 @@ public class PdfExportService
         {
             BackgroundColor = bg,
             HorizontalAlignment = align,
+            Padding = 3f,
+            BorderWidth = 0.5f,
+            BorderColor = new BaseColor(200, 200, 200)
+        };
+        table.AddCell(cell);
+    }
+
+    private void AddSubtotalLabelCell(PdfPTable table, string text, int colspan, BaseColor bg, Font font)
+    {
+        var cell = new PdfPCell(new Phrase(text, font))
+        {
+            BackgroundColor = bg,
+            Colspan = colspan,
+            HorizontalAlignment = Element.ALIGN_LEFT,
             Padding = 3f,
             BorderWidth = 0.5f,
             BorderColor = new BaseColor(200, 200, 200)
@@ -698,8 +845,12 @@ public class PdfExportService
             table.AddCell(cell);
         }
 
+        var subBg = new BaseColor(241, 245, 249);
+        var subFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 7, BaseColor.DarkGray);
+        int g = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+
         bool alternate = false;
-        foreach (var row in rows)
+        void WriteRow(ProspectClientsRow row)
         {
             var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
             if (hasL1) AddDataCell(table, row.Level1Descr, bg);
@@ -730,6 +881,44 @@ public class PdfExportService
             alternate = !alternate;
         }
 
+        void WriteSub(List<ProspectClientsRow> grp, string label)
+        {
+            // Label spans group cols + Lead No..Notes (18); then Offers, Offer Value, Emails, SMS;
+            // then optional Source blank.
+            AddSubtotalLabelCell(table, label, g + 18, subBg, subFont);
+            AddSubtotalCell(table, grp.Sum(x => x.OfferCount).ToString(), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, grp.Sum(x => x.TotalOfferValue).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, grp.Sum(x => x.EmailsSent).ToString(), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, grp.Sum(x => x.SmsSent).ToString(), subBg, subFont, Element.ALIGN_RIGHT);
+            if (filter.IncludeHistory) AddSubtotalCell(table, "", subBg, subFont);
+        }
+
+        if (hasL1)
+        {
+            foreach (var l1 in rows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+            {
+                var l1Rows = l1.ToList();
+                if (hasL2)
+                {
+                    foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                    {
+                        var l2Rows = l2.ToList();
+                        foreach (var row in l2Rows) WriteRow(row);
+                        WriteSub(l2Rows, l2.Key + " subtotal");
+                    }
+                }
+                else
+                {
+                    foreach (var row in l1Rows) WriteRow(row);
+                }
+                WriteSub(l1Rows, l1.Key + " total");
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteRow(row);
+        }
+
         document.Add(table);
         document.Close();
         return ms.ToArray();
@@ -740,7 +929,9 @@ public class PdfExportService
     {
         bool hasL1 = filter.PrimaryGroup != "NONE";
         bool hasL2 = filter.SecondaryGroup != "NONE";
-        int colCount = 22 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) - (viewCost ? 0 : 1);
+        bool hasL3 = filter.ThirdGroup != "NONE";
+        int g = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+        int colCount = 22 + g - (viewCost ? 0 : 1);
 
         using var ms = new MemoryStream();
         var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
@@ -765,6 +956,7 @@ public class PdfExportService
         var headers = new List<string>();
         if (hasL1) headers.Add("Group 1");
         if (hasL2) headers.Add("Group 2");
+        if (hasL3) headers.Add("Group 3");
         headers.AddRange(new[] {
             "Offer No", "Date", "Valid Until", "Status",
             "Customer", "Store", "Agent",
@@ -788,12 +980,16 @@ public class PdfExportService
             table.AddCell(cell);
         }
 
+        var subBg = new BaseColor(237, 233, 254);
+        var subFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 7, BaseColor.DarkGray);
+
         bool alternate = false;
-        foreach (var row in rows)
+        void WriteRow(OffersReportRow row)
         {
             var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
             if (hasL1) AddDataCell(table, row.Level1Descr, bg);
             if (hasL2) AddDataCell(table, row.Level2Descr, bg);
+            if (hasL3) AddDataCell(table, row.Level3Descr, bg);
             AddDataCell(table, row.OfferNo, bg);
             AddDataCell(table, row.DateTrans?.ToString("yyyy-MM-dd") ?? "", bg);
             AddDataCell(table, row.ValidUntil?.ToString("yyyy-MM-dd") ?? "", bg);
@@ -817,6 +1013,60 @@ public class PdfExportService
             AddDataCell(table, row.InternalNotes, bg);
             AddDataCell(table, row.Source, bg);
             alternate = !alternate;
+        }
+
+        void WriteSub(List<OffersReportRow> grp, string label)
+        {
+            // Label spans group cols + Offer No..Agent (7); then 6 additive metrics (+Cost);
+            // then Order % and the trailing text columns (blank).
+            AddSubtotalLabelCell(table, label, g + 7, subBg, subFont);
+            AddSubtotalCell(table, grp.Sum(x => x.ItemCount).ToString(), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, grp.Sum(x => x.TotalQuantity).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, grp.Sum(x => x.InvoiceTotal).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, grp.Sum(x => x.InvoiceTotalDiscount).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, grp.Sum(x => x.InvoiceVat).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            AddSubtotalCell(table, grp.Sum(x => x.InvoiceGrandTotal).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            if (viewCost) AddSubtotalCell(table, grp.Sum(x => x.TotalItemCost).ToString("N2"), subBg, subFont, Element.ALIGN_RIGHT);
+            // Order % + Lead, Printed, Emailed, Std Offer, Comments, Internal Notes, Source = 8 blanks
+            for (int i = 0; i < 8; i++) AddSubtotalCell(table, "", subBg, subFont);
+        }
+
+        if (hasL1)
+        {
+            foreach (var l1 in rows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+            {
+                var l1Rows = l1.ToList();
+                if (hasL2)
+                {
+                    foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                    {
+                        var l2Rows = l2.ToList();
+                        if (hasL3)
+                        {
+                            foreach (var l3 in l2Rows.GroupBy(r => r.Level3Descr ?? r.Level3Code ?? "N/A"))
+                            {
+                                var l3Rows = l3.ToList();
+                                foreach (var row in l3Rows) WriteRow(row);
+                                WriteSub(l3Rows, l3.Key + " subtotal");
+                            }
+                        }
+                        else
+                        {
+                            foreach (var row in l2Rows) WriteRow(row);
+                        }
+                        WriteSub(l2Rows, l2.Key + " subtotal");
+                    }
+                }
+                else
+                {
+                    foreach (var row in l1Rows) WriteRow(row);
+                }
+                WriteSub(l1Rows, l1.Key + " total");
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteRow(row);
         }
 
         document.Add(table);

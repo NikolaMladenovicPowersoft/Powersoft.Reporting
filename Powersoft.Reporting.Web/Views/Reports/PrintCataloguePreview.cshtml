@@ -14,11 +14,6 @@
     var displayCols = Model.GetDisplayColumns();
     bool dc(string c) => displayCols.Contains(c, StringComparer.OrdinalIgnoreCase);
 
-    // Group rows by Level1 for collapsed group headers / subtotals (mirrors PrintPsPreview).
-    var grouped = hasL1
-        ? Model.Results.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A").ToList()
-        : null;
-
     // Common export route values (re-used across PDF/Excel/CSV anchors).
     var exportRoute = new {
         dateFrom = Model.DateFrom.ToString("yyyy-MM-dd"),
@@ -174,83 +169,101 @@
                     </thead>
                     <tbody>
                     @{
-                        Func<CatalogueRow, string> renderRow = (CatalogueRow row) => "";
-                    }
-                    @if (hasL1 && grouped != null)
-                    {
-                        foreach (var group in grouped)
-                        {
-                            var groupRows = group.ToList();
-                            int totalCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
-                                + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0)
-                                + (dc("Quantity") ? 1 : 0) + (dc("Value") ? 1 : 0) + (dc("Discount") ? 1 : 0)
-                                + (dc("NetValue") ? 1 : 0) + (dc("VatAmount") ? 1 : 0) + (dc("GrossAmount") ? 1 : 0)
-                                + (dc("Profit") ? 1 : 0) + (dc("Markup") ? 1 : 0) + (dc("Margin") ? 1 : 0)
-                                + (dc("Cost") ? 1 : 0) + (dc("TotalCost") ? 1 : 0)
-                                + (dc("TotalStockQty") ? 1 : 0) + (dc("TotalStockValue") ? 1 : 0);
+                        int totalCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
+                            + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0)
+                            + (dc("Quantity") ? 1 : 0) + (dc("Value") ? 1 : 0) + (dc("Discount") ? 1 : 0)
+                            + (dc("NetValue") ? 1 : 0) + (dc("VatAmount") ? 1 : 0) + (dc("GrossAmount") ? 1 : 0)
+                            + (dc("Profit") ? 1 : 0) + (dc("Markup") ? 1 : 0) + (dc("Margin") ? 1 : 0)
+                            + (dc("Cost") ? 1 : 0) + (dc("TotalCost") ? 1 : 0)
+                            + (dc("TotalStockQty") ? 1 : 0) + (dc("TotalStockValue") ? 1 : 0);
 
-                            <tr class="group-header"><td colspan="@totalCols">@group.Key</td></tr>
-                            foreach (var row in groupRows)
-                            {
-                                <tr>
-                                    @if (hasL1) { <td class="text-left">@(row.Level1Value ?? "N/A")</td> }
-                                    @if (hasL2) { <td class="text-left">@(row.Level2Value ?? "N/A")</td> }
-                                    @if (hasL3) { <td class="text-left">@(row.Level3Value ?? "N/A")</td> }
-                                    @if (showItem && dc("ItemCode")) { <td class="text-left code">@row.ItemCode</td> }
-                                    @if (showItem && dc("ItemName")) { <td class="text-left">@row.ItemDescription</td> }
-                                    @if (dc("Quantity"))       { <td>@row.Quantity.ToString("N2")</td> }
-                                    @if (dc("Value"))          { <td>@row.ValueBeforeDiscount.ToString("N2")</td> }
-                                    @if (dc("Discount"))       { <td>@row.Discount.ToString("N2")</td> }
-                                    @if (dc("NetValue"))       { <td>@row.NetValue.ToString("N2")</td> }
-                                    @if (dc("VatAmount"))      { <td>@row.VatAmount.ToString("N2")</td> }
-                                    @if (dc("GrossAmount"))    { <td>@row.GrossAmount.ToString("N2")</td> }
-                                    @if (dc("Profit"))         { <td>@row.ProfitValue.ToString("N2")</td> }
-                                    @if (dc("Markup"))         { <td>@row.Markup.ToString("N1")%</td> }
-                                    @if (dc("Margin"))         { <td>@row.Margin.ToString("N1")%</td> }
-                                    @if (dc("Cost"))           { <td>@row.Cost.ToString("N2")</td> }
-                                    @if (dc("TotalCost"))      { <td>@row.TotalCost.ToString("N2")</td> }
-                                    @if (dc("TotalStockQty"))  { <td>@row.TotalStockQty.ToString("N0")</td> }
-                                    @if (dc("TotalStockValue")){ <td>@row.TotalStockValue.ToString("N2")</td> }
-                                </tr>
-                            }
+                        int leadingCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
+                            + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
 
-                            // Group subtotal
-                            var sQty = groupRows.Sum(r => r.Quantity);
-                            var sVal = groupRows.Sum(r => r.ValueBeforeDiscount);
-                            var sDsc = groupRows.Sum(r => r.Discount);
-                            var sNet = groupRows.Sum(r => r.NetValue);
-                            var sVat = groupRows.Sum(r => r.VatAmount);
-                            var sGrs = groupRows.Sum(r => r.GrossAmount);
-                            var sPft = groupRows.Sum(r => r.ProfitValue);
-                            var sCst = groupRows.Sum(r => r.TotalCost);
-                            var sStkQ = groupRows.Sum(r => r.TotalStockQty);
-                            var sStkV = groupRows.Sum(r => r.TotalStockValue);
-                            var sTrxCost = groupRows.Sum(r => r.TransactionCost);
-                            var sMargin = sNet != 0 ? Math.Round(sPft / sNet * 100, 1) : 0m;
-                            var sMarkup = sTrxCost != 0 ? Math.Round(sPft / sTrxCost * 100, 1) : 100m;
+                        // Data row template (shared across all nesting levels).
+                        Func<CatalogueRow, object> rowTpl =
+                            @<tr>
+                                @if (hasL1) { <td class="text-left">@(item.Level1Value ?? "N/A")</td> }
+                                @if (hasL2) { <td class="text-left">@(item.Level2Value ?? "N/A")</td> }
+                                @if (hasL3) { <td class="text-left">@(item.Level3Value ?? "N/A")</td> }
+                                @if (showItem && dc("ItemCode")) { <td class="text-left code">@item.ItemCode</td> }
+                                @if (showItem && dc("ItemName")) { <td class="text-left">@item.ItemDescription</td> }
+                                @if (dc("Quantity"))       { <td>@item.Quantity.ToString("N2")</td> }
+                                @if (dc("Value"))          { <td>@item.ValueBeforeDiscount.ToString("N2")</td> }
+                                @if (dc("Discount"))       { <td>@item.Discount.ToString("N2")</td> }
+                                @if (dc("NetValue"))       { <td>@item.NetValue.ToString("N2")</td> }
+                                @if (dc("VatAmount"))      { <td>@item.VatAmount.ToString("N2")</td> }
+                                @if (dc("GrossAmount"))    { <td>@item.GrossAmount.ToString("N2")</td> }
+                                @if (dc("Profit"))         { <td>@item.ProfitValue.ToString("N2")</td> }
+                                @if (dc("Markup"))         { <td>@item.Markup.ToString("N1")%</td> }
+                                @if (dc("Margin"))         { <td>@item.Margin.ToString("N1")%</td> }
+                                @if (dc("Cost"))           { <td>@item.Cost.ToString("N2")</td> }
+                                @if (dc("TotalCost"))      { <td>@item.TotalCost.ToString("N2")</td> }
+                                @if (dc("TotalStockQty"))  { <td>@item.TotalStockQty.ToString("N0")</td> }
+                                @if (dc("TotalStockValue")){ <td>@item.TotalStockValue.ToString("N2")</td> }
+                            </tr>;
 
-                            int leadingCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
-                                + (showItem && dc("ItemCode") ? 1 : 0) + (showItem && dc("ItemName") ? 1 : 0);
-
-                            <tr class="group-subtotal">
+                        // Subtotal template. item = Tuple(rows, label). Math via CatalogueSubtotal
+                        // so the numbers are identical to the grid (Markup/Margin recomputed from
+                        // sums, default 0; Cost and TotalStockValue left blank).
+                        Func<Tuple<List<CatalogueRow>, string>, object> subTpl =
+                            @<tr class="group-subtotal">
+                                @{
+                                    var st = CatalogueSubtotal.From(item.Item1);
+                                }
                                 @if (leadingCols > 0)
                                 {
-                                    <td colspan="@leadingCols" class="text-left">Subtotal: @group.Key</td>
+                                    <td colspan="@leadingCols" class="text-left">Subtotal: @item.Item2</td>
                                 }
-                                @if (dc("Quantity"))       { <td>@sQty.ToString("N2")</td> }
-                                @if (dc("Value"))          { <td>@sVal.ToString("N2")</td> }
-                                @if (dc("Discount"))       { <td>@sDsc.ToString("N2")</td> }
-                                @if (dc("NetValue"))       { <td>@sNet.ToString("N2")</td> }
-                                @if (dc("VatAmount"))      { <td>@sVat.ToString("N2")</td> }
-                                @if (dc("GrossAmount"))    { <td>@sGrs.ToString("N2")</td> }
-                                @if (dc("Profit"))         { <td>@sPft.ToString("N2")</td> }
-                                @if (dc("Markup"))         { <td>@sMarkup.ToString("N1")%</td> }
-                                @if (dc("Margin"))         { <td>@sMargin.ToString("N1")%</td> }
+                                @if (dc("Quantity"))       { <td>@st.Quantity.ToString("N2")</td> }
+                                @if (dc("Value"))          { <td>@st.ValueBeforeDiscount.ToString("N2")</td> }
+                                @if (dc("Discount"))       { <td>@st.Discount.ToString("N2")</td> }
+                                @if (dc("NetValue"))       { <td>@st.NetValue.ToString("N2")</td> }
+                                @if (dc("VatAmount"))      { <td>@st.VatAmount.ToString("N2")</td> }
+                                @if (dc("GrossAmount"))    { <td>@st.GrossAmount.ToString("N2")</td> }
+                                @if (dc("Profit"))         { <td>@st.ProfitValue.ToString("N2")</td> }
+                                @if (dc("Markup"))         { <td>@st.Markup.ToString("N1")%</td> }
+                                @if (dc("Margin"))         { <td>@st.Margin.ToString("N1")%</td> }
                                 @if (dc("Cost"))           { <td></td> }
-                                @if (dc("TotalCost"))      { <td>@sCst.ToString("N2")</td> }
-                                @if (dc("TotalStockQty"))  { <td>@sStkQ.ToString("N0")</td> }
-                                @if (dc("TotalStockValue")){ <td>@sStkV.ToString("N2")</td> }
-                            </tr>
+                                @if (dc("TotalCost"))      { <td>@st.TotalCost.ToString("N2")</td> }
+                                @if (dc("TotalStockQty"))  { <td>@st.TotalStockQty.ToString("N0")</td> }
+                                @if (dc("TotalStockValue")){ <td></td> }
+                            </tr>;
+                    }
+                    @if (hasL1)
+                    {
+                        foreach (var l1 in Model.Results.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A"))
+                        {
+                            var l1Rows = l1.ToList();
+                            <tr class="group-header"><td colspan="@totalCols"><strong>@Model.PrimaryGroup:</strong> @l1.Key</td></tr>
+                            if (hasL2)
+                            {
+                                foreach (var l2 in l1Rows.GroupBy(r => r.Level2Value ?? "N/A"))
+                                {
+                                    var l2Rows = l2.ToList();
+                                    <tr class="group-header"><td colspan="@totalCols" style="padding-left:18px;"><strong>@Model.SecondaryGroup:</strong> @l2.Key</td></tr>
+                                    if (hasL3)
+                                    {
+                                        foreach (var l3 in l2Rows.GroupBy(r => r.Level3Value ?? "N/A"))
+                                        {
+                                            var l3Rows = l3.ToList();
+                                            <tr class="group-header"><td colspan="@totalCols" style="padding-left:32px;"><strong>@Model.ThirdGroup:</strong> @l3.Key</td></tr>
+                                            foreach (var row in l3Rows) { @rowTpl(row) }
+                                            @subTpl(Tuple.Create(l3Rows, l3.Key + " subtotal"))
+                                        }
+                                    }
+                                    else
+                                    {
+                                        foreach (var row in l2Rows) { @rowTpl(row) }
+                                    }
+                                    @subTpl(Tuple.Create(l2Rows, l2.Key + " subtotal"))
+                                }
+                            }
+                            else
+                            {
+                                foreach (var row in l1Rows) { @rowTpl(row) }
+                            }
+                            @subTpl(Tuple.Create(l1Rows, l1.Key + " total"))
                         }
                     }
                     else

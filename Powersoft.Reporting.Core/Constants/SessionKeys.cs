@@ -89,6 +89,8 @@ public static class ModuleConstants
     public const string IniDescriptionProspectClients = "Prospect Clients Report Layout";
     public const string IniHeaderOffersReport = "OFFERS";
     public const string IniDescriptionOffersReport = "Offers Report Layout";
+    public const string IniHeaderBelowMinStock = "BELOWMIN";
+    public const string IniDescriptionBelowMinStock = "Below Min Stock Report Layout";
 
     // INI settings constants (DB-level settings, userCode = "ALL")
     public const string IniHeaderDbSettings = "DBSETTINGS";

@@ -1,12 +1,57 @@
 @using Powersoft.Reporting.Core.Models
 @model ItemsSelectionConfig
 
+<style>
+    /* Collapsible header — distinct from page background so it reads as a clickable bar. */
+    .is-collapse-header {
+        cursor: pointer;
+        background: #eef2f7;
+        border-bottom: 1px solid #d7dee8;
+        transition: background-color .12s ease-in-out;
+    }
+    .is-collapse-header:hover { background: #e2e8f1; }
+
+    /* Inactive include/exclude buttons stay coloured but lower-intensity: reduced saturation
+       (softer green/red, not gray, not "disabled-looking") + a touch of opacity. They snap to
+       full intensity on hover. No colour override, so Bootstrap's native hover fill works. */
+    .dim-col .btn-group.dim-inactive .btn {
+        filter: saturate(.55);
+        opacity: .8;
+        transition: filter .12s ease-in-out, opacity .12s ease-in-out;
+    }
+    .dim-col .btn-group.dim-inactive .btn:hover {
+        filter: none;
+        opacity: 1;
+    }
+
+    /* On hover the outline trigger fills with its colour — force the label + icons white so
+       text never sits red-on-red / green-on-green. */
+    #itemsSelectionCard .dim-col > .btn:hover .dim-text,
+    #itemsSelectionCard .dim-col > .btn:hover .bi {
+        color: #fff !important;
+    }
+
+    /* Trigger label must never blow out the row width. */
+    #itemsSelectionCard .dim-col .dim-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+    }
+
+    /* Visually de-emphasise the whole filter body when filters are paused. */
+    #itemsSelectionCard.filters-paused #isBody { opacity: .55; }
+</style>
+
 <div class="card mb-3" id="itemsSelectionCard" data-report-type="@Model.ReportType">
-    <div class="card-header bg-light py-2 d-flex align-items-center" style="cursor:pointer;"
+    <div class="card-header is-collapse-header py-2 d-flex align-items-center"
          onclick="toggleItemsSelection()">
         <i class="bi bi-funnel me-2"></i>
         <strong class="small">Items Selection</strong>
         <span id="isActiveBadge" class="badge bg-primary ms-2 d-none">0 filters</span>
+        <span id="isInactiveBadge" class="badge bg-secondary ms-2 d-none" title="Filters are kept but not applied to the report">
+            <i class="bi bi-pause-fill"></i> Not applied
+        </span>
         <span class="ms-2 me-auto" onclick="event.stopPropagation();">
             <div class="btn-group btn-group-sm">
                 <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle py-0 px-2" data-bs-toggle="dropdown" id="presetDropdown" title="Filter Presets">
@@ -19,6 +64,13 @@
             <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 ms-1" onclick="saveCurrentPreset()" title="Save current filters as preset">
                 <i class="bi bi-bookmark-plus"></i>
             </button>
+            <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 ms-1" onclick="clearAllItemsSelection()" title="Clear all filters">
+                <i class="bi bi-eraser me-1"></i><span class="small">Clear All</span>
+            </button>
+        </span>
+        <span class="form-check form-switch me-3 mb-0" onclick="event.stopPropagation();" title="When off, your selections are kept but the report runs without applying them">
+            <input class="form-check-input" type="checkbox" id="isFiltersActive" checked onchange="setFiltersActive(this.checked)">
+            <label class="form-check-label small" for="isFiltersActive">Apply filters</label>
         </span>
         <span class="small text-primary" id="isToggleText">
             <i class="bi bi-eye me-1"></i>Show Filters
@@ -164,7 +216,7 @@
 </div>
 
 <!-- Shared modal for dimension selection -->
-<div class="modal fade" id="dimModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="dimModal" tabindex="-1" aria-hidden="true" data-bs-focus="false">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header py-2">

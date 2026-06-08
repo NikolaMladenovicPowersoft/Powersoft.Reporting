@@ -7,6 +7,7 @@
     var now = DateTime.Now;
     bool hasL1 = filter.PrimaryGroup != "NONE";
     bool hasL2 = filter.SecondaryGroup != "NONE";
+    bool hasL3 = filter.ThirdGroup != "NONE";
     bool viewCost = ViewBag.ViewCost == null || (bool)ViewBag.ViewCost;
 }
 <!DOCTYPE html>
@@ -41,6 +42,7 @@
         .status-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;border:1px solid rgba(0,0,0,.15);}
         .report-footer{text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;}
         .group-header td{background:#f8fafc!important;padding:6px!important;font-weight:700;font-size:11px;border-top:1px solid #94a3b8;}
+        .group-subtotal td{font-weight:600;border-top:1px solid #cbd5e1;border-bottom:1px solid #94a3b8;padding:4px 6px;background:#f8fafc;font-style:italic;color:#475569;}
         .grand-total td{font-weight:700;border-top:3px double #1e293b;padding:6px 8px;background:#f1f5f9;}
         @@media print{body{background:white;}.toolbar{display:none!important;}.paper-container{margin:0;padding:0;}.paper{box-shadow:none;padding:20px;transform:none!important;}}
     </style>
@@ -75,6 +77,7 @@
                 @if(filter.StoreFilter != "All"){<span><strong>| Store:</strong> @filter.StoreFilter</span>}
                 @if(hasL1){<span><strong>| Group:</strong> @filter.PrimaryGroup</span>}
                 @if(hasL2){<span><strong>></strong> @filter.SecondaryGroup</span>}
+                @if(hasL3){<span><strong>></strong> @filter.ThirdGroup</span>}
             </div>
         </div>
         <table class="report-table">
@@ -82,6 +85,7 @@
                 <tr>
                     @if(hasL1){<th>Group 1</th>}
                     @if(hasL2){<th>Group 2</th>}
+                    @if(hasL3){<th>Group 3</th>}
                     <th>Offer No</th><th>Date</th><th>Valid Until</th>
                     <th>Status</th><th>Customer</th><th>Store</th><th>Agent</th>
                     <th class="num">Items</th><th class="num">Qty</th>
@@ -92,34 +96,94 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach(var r in rows)
+                @{
+                    int groupCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+                    int leadingCols = groupCols + 7; // OfferNo, Date, ValidUntil, Status, Customer, Store, Agent
+                    int totalCols = leadingCols + 6 + (viewCost ? 1 : 0) + 5; // metrics + Order% + Lead/Comments/Notes/Source
+
+                    Func<OffersReportRow, object> rowTpl =
+                        @<tr>
+                            @if(hasL1){<td>@item.Level1Descr</td>}
+                            @if(hasL2){<td>@item.Level2Descr</td>}
+                            @if(hasL3){<td>@item.Level3Descr</td>}
+                            <td>@item.OfferNo</td>
+                            <td>@(item.DateTrans?.ToString("dd/MM/yyyy") ?? "")</td>
+                            <td>@(item.ValidUntil?.ToString("dd/MM/yyyy") ?? "")</td>
+                            <td><span class="status-badge" style="@BadgeStyle(item.StatusColor)">@item.StatusName</span></td>
+                            <td>@item.CustomerName</td>
+                            <td>@item.StoreName</td>
+                            <td>@item.AgentName</td>
+                            <td class="num">@item.ItemCount</td>
+                            <td class="num">@item.TotalQuantity.ToString("N2")</td>
+                            <td class="num">@item.InvoiceTotal.ToString("N2")</td>
+                            <td class="num">@item.InvoiceTotalDiscount.ToString("N2")</td>
+                            <td class="num">@item.InvoiceVat.ToString("N2")</td>
+                            <td class="num" style="font-weight:600">@item.InvoiceGrandTotal.ToString("N2")</td>
+                            @if (viewCost) { <td class="num">@item.TotalItemCost.ToString("N2")</td> }
+                            <td class="num">@item.OrderPercentage.ToString("N1")%</td>
+                            <td>@item.LinkedLead</td>
+                            <td style="white-space:normal;word-break:break-word;">@item.Comments</td>
+                            <td style="white-space:normal;word-break:break-word;">@item.InternalNotes</td>
+                            <td>@item.Source</td>
+                        </tr>;
+
+                    // item = Tuple(rows, label). Additive metrics summed; Order% + text cols blank (matches grid).
+                    Func<Tuple<List<OffersReportRow>, string>, object> subTpl =
+                        @<tr class="group-subtotal">
+                            <td colspan="@leadingCols">Subtotal: @item.Item2</td>
+                            <td class="num">@item.Item1.Sum(x => x.ItemCount)</td>
+                            <td class="num">@item.Item1.Sum(x => x.TotalQuantity).ToString("N2")</td>
+                            <td class="num">@item.Item1.Sum(x => x.InvoiceTotal).ToString("N2")</td>
+                            <td class="num">@item.Item1.Sum(x => x.InvoiceTotalDiscount).ToString("N2")</td>
+                            <td class="num">@item.Item1.Sum(x => x.InvoiceVat).ToString("N2")</td>
+                            <td class="num">@item.Item1.Sum(x => x.InvoiceGrandTotal).ToString("N2")</td>
+                            @if (viewCost) { <td class="num">@item.Item1.Sum(x => x.TotalItemCost).ToString("N2")</td> }
+                            <td class="num"></td>
+                            <td></td><td></td><td></td><td></td>
+                        </tr>;
+                }
+                @if (hasL1)
                 {
-                    <tr>
-                        @if(hasL1){<td>@r.Level1Descr</td>}
-                        @if(hasL2){<td>@r.Level2Descr</td>}
-                        <td>@r.OfferNo</td>
-                        <td>@(r.DateTrans?.ToString("dd/MM/yyyy") ?? "")</td>
-                        <td>@(r.ValidUntil?.ToString("dd/MM/yyyy") ?? "")</td>
-                        <td><span class="status-badge" style="@BadgeStyle(r.StatusColor)">@r.StatusName</span></td>
-                        <td>@r.CustomerName</td>
-                        <td>@r.StoreName</td>
-                        <td>@r.AgentName</td>
-                        <td class="num">@r.ItemCount</td>
-                        <td class="num">@r.TotalQuantity.ToString("N2")</td>
-                        <td class="num">@r.InvoiceTotal.ToString("N2")</td>
-                        <td class="num">@r.InvoiceTotalDiscount.ToString("N2")</td>
-                        <td class="num">@r.InvoiceVat.ToString("N2")</td>
-                        <td class="num" style="font-weight:600">@r.InvoiceGrandTotal.ToString("N2")</td>
-                        @if (viewCost) { <td class="num">@r.TotalItemCost.ToString("N2")</td> }
-                        <td class="num">@r.OrderPercentage.ToString("N1")%</td>
-                        <td>@r.LinkedLead</td>
-                        <td style="white-space:normal;word-break:break-word;">@r.Comments</td>
-                        <td style="white-space:normal;word-break:break-word;">@r.InternalNotes</td>
-                        <td>@r.Source</td>
-                    </tr>
+                    foreach (var l1 in rows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+                    {
+                        var l1Rows = l1.ToList();
+                        <tr class="group-header"><td colspan="@totalCols"><strong>@filter.PrimaryGroup:</strong> @l1.Key</td></tr>
+                        if (hasL2)
+                        {
+                            foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                            {
+                                var l2Rows = l2.ToList();
+                                <tr class="group-header"><td colspan="@totalCols" style="padding-left:18px;"><strong>@filter.SecondaryGroup:</strong> @l2.Key</td></tr>
+                                if (hasL3)
+                                {
+                                    foreach (var l3 in l2Rows.GroupBy(r => r.Level3Descr ?? r.Level3Code ?? "N/A"))
+                                    {
+                                        var l3Rows = l3.ToList();
+                                        <tr class="group-header"><td colspan="@totalCols" style="padding-left:32px;"><strong>@filter.ThirdGroup:</strong> @l3.Key</td></tr>
+                                        foreach (var r2 in l3Rows) { @rowTpl(r2) }
+                                        @subTpl(Tuple.Create(l3Rows, l3.Key + " subtotal"))
+                                    }
+                                }
+                                else
+                                {
+                                    foreach (var r2 in l2Rows) { @rowTpl(r2) }
+                                }
+                                @subTpl(Tuple.Create(l2Rows, l2.Key + " subtotal"))
+                            }
+                        }
+                        else
+                        {
+                            foreach (var r2 in l1Rows) { @rowTpl(r2) }
+                        }
+                        @subTpl(Tuple.Create(l1Rows, l1.Key + " total"))
+                    }
+                }
+                else
+                {
+                    foreach (var r2 in rows) { @rowTpl(r2) }
                 }
                 <tr class="grand-total">
-                    <td colspan="@(7 + (hasL1?1:0) + (hasL2?1:0))">Grand Total (@rows.Count offers)</td>
+                    <td colspan="@leadingCols">Grand Total (@rows.Count offers)</td>
                     <td class="num">@rows.Sum(r=>r.ItemCount)</td>
                     <td class="num">@rows.Sum(r=>r.TotalQuantity).ToString("N2")</td>
                     <td class="num">@rows.Sum(r=>r.InvoiceTotal).ToString("N2")</td>

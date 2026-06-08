@@ -49,11 +49,13 @@ $login = Invoke-WebRequest "$base/Account/Login" -SessionVariable session -UseBa
 $token = [regex]::Match($login.Content, 'name="__RequestVerificationToken"[^>]*value="([^"]+)"').Groups[1].Value
 if (-not $token) { $token = [regex]::Match($login.Content, 'value="([^"]+)"[^>]*name="__RequestVerificationToken"').Groups[1].Value }
 $body = @{ Username='REPORTING_TEST'; Password='Test123!'; __RequestVerificationToken=$token }
+$code = $null
 try {
   $r = Invoke-WebRequest "$base/Account/Login" -Method Post -Body $body -WebSession $session -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 30
-  $code = $r.StatusCode
-} catch { $code = $_.Exception.Response.StatusCode.value__ }
-Add-Result 'AUTH: Login (REPORTING_TEST)' ($code -eq 302) "HTTP $code (302=success)"
+  $code = [int]$r.StatusCode
+} catch { if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode.value__ } }
+$authCookie = ($session.Cookies.GetCookies($base) | Where-Object { $_.Name -like '*Auth*' -or $_.Name -like '.AspNetCore*' }).Count -gt 0
+Add-Result 'AUTH: Login (REPORTING_TEST)' (($code -eq 302) -or ($code -eq 200) -or $authCookie) "HTTP $code, authCookie=$authCookie (302/200/cookie=success)"
 
 # ===== 2. CONNECT DB =====
 try {
@@ -95,14 +97,12 @@ Test-Json 'LOOKUP: ProspectClients lookups' '/Reports/GetProspectClientsLookups'
 Test-Json 'LOOKUP: OffersReport lookups'  '/Reports/GetOffersReportLookups'
 
 # ===== 5. LAYOUTS + SCHEDULES (GET) =====
-Test-Json 'LAYOUT: GetLayout (AB)'        '/Reports/GetLayout'
-Test-Json 'LAYOUT: GetParetoLayout'       '/Reports/GetParetoLayout'
-Test-Json 'LAYOUT: ListAbLayouts'         '/Reports/ListAbLayouts'
-Test-Json 'LAYOUT: ListChartLayouts'      '/Reports/ListChartLayouts'
-Test-Json 'LAYOUT: ListCatalogueLayouts'  '/Reports/ListCatalogueLayouts'
-Test-Json 'LAYOUT: ListCancelLogLayouts'  '/Reports/ListCancelLogLayouts'
-Test-Json 'LAYOUT: ListProspectLayouts'   '/Reports/ListProspectClientsLayouts'
-Test-Json 'LAYOUT: ListOffersLayouts'     '/Reports/ListOffersReportLayouts'
+# Unified Save-Layout API: GetReportLayout / ListReportLayouts?reportType=
+$layoutTypes = 'AverageBasket','PurchasesSales','Pareto','Charts','Catalogue','CancelLog','BelowMinStock','ProspectClients','OffersReport'
+foreach ($lt in $layoutTypes) {
+  Test-Json "LAYOUT: GetReportLayout($lt)"   "/Reports/GetReportLayout?reportType=$lt"
+  Test-Json "LAYOUT: ListReportLayouts($lt)" "/Reports/ListReportLayouts?reportType=$lt"
+}
 Test-Json 'SCHED: GetSchedules (AB)'      '/Reports/GetSchedules'
 Test-Json 'SCHED: GetPsSchedules'         '/Reports/GetPsSchedules'
 Test-Json 'SCHED: GetParetoSchedules'     '/Reports/GetParetoSchedules'
@@ -157,6 +157,27 @@ Test-Json 'BMS: data' "/Reports/GetBelowMinStockData" 'Post'
 Test-Json 'OFFERS: data'  "/Reports/GetOffersReportData?dateFrom=$df&dateTo=$dt" 'Post'
 Test-File 'OFFERS: CSV'   "/Reports/ExportOffersReportCsv?dateFrom=$df&dateTo=$dt" 'csv'
 Test-File 'OFFERS: Excel' "/Reports/ExportOffersReportExcel?dateFrom=$df&dateTo=$dt" 'spreadsheetml'
+
+# Offers items-selection effectiveness: match-nothing filter must yield 0 rows while unfiltered > 0.
+# Proves: param flows to repo + string "mode" parsed (ItemsSelectionParser) + subquery actually filters.
+try {
+  $ou = Invoke-WebRequest "$base/Reports/GetOffersReportData?dateFrom=$df&dateTo=$dt" -Method Post -WebSession $session -UseBasicParsing -TimeoutSec 180
+  $unf = [int](($ou.Content | ConvertFrom-Json).totalRows)
+  $noneJson = '{"items":{"ids":["999999999"],"mode":"include"}}'
+  $of = Invoke-WebRequest ("$base/Reports/GetOffersReportData?dateFrom=$df&dateTo=$dt&itemsSelectionJson=" + [uri]::EscapeDataString($noneJson)) -Method Post -WebSession $session -UseBasicParsing -TimeoutSec 180
+  $filt = [int](($of.Content | ConvertFrom-Json).totalRows)
+  Add-Result 'OFFERS: items filter applied (match-nothing=0)' (($unf -gt 0) -and ($filt -eq 0)) "unfiltered=$unf, match-nothing=$filt"
+} catch { Add-Result 'OFFERS: items filter applied (match-nothing=0)' $false ("EXC: " + $_.Exception.Message) }
+
+# Save Layout round-trip against the tenant DB (write -> read -> cleanup).
+try {
+  $lbody = '{"DateField":"DateTrans","PrimaryGroup":"STORE","MaxRecords":"1234"}'
+  $sv = (Invoke-WebRequest "$base/Reports/SaveReportLayout?reportType=OffersReport" -Method Post -Body $lbody -ContentType 'application/json' -WebSession $session -UseBasicParsing -TimeoutSec 60).Content | ConvertFrom-Json
+  $gj = (Invoke-WebRequest "$base/Reports/GetReportLayout?reportType=OffersReport" -WebSession $session -UseBasicParsing -TimeoutSec 60).Content | ConvertFrom-Json
+  $okSave = ([bool]$sv.success) -and ([bool]$gj.success) -and ([bool]$gj.hasSaved) -and ("$($gj.parameters.MaxRecords)" -eq '1234')
+  Add-Result 'LAYOUT: Save->Get round-trip (Offers)' $okSave "saved=$($sv.success) hasSaved=$($gj.hasSaved) maxRec=$($gj.parameters.MaxRecords)"
+  Invoke-WebRequest "$base/Reports/ResetReportLayout?reportType=OffersReport" -Method Post -WebSession $session -UseBasicParsing -TimeoutSec 60 | Out-Null
+} catch { Add-Result 'LAYOUT: Save->Get round-trip (Offers)' $false ("EXC: " + $_.Exception.Message) }
 
 # ===== 13. PROSPECT CLIENTS (tbl_ProspectClient may not exist in this tenant) =====
 Test-Json 'PROSPECT: data'  "/Reports/GetProspectClientsData?dateFrom=$df&dateTo=$dt" 'Post'

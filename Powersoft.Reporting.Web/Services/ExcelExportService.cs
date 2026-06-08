@@ -37,11 +37,13 @@ public class ExcelExportService
         int headerRow = selRow + 1;
         int col = 1;
         bool hasGrouping = filter.GroupBy != Core.Enums.GroupByType.None;
+        bool hasSecondary = filter.SecondaryGroupBy != Core.Enums.GroupByType.None;
         bool includeVat = filter.IncludeVat;
         bool compareLY = filter.CompareLastYear;
         
         // Headers
         if (hasGrouping) ws.Cell(headerRow, col++).Value = filter.GroupBy.ToString();
+        if (hasSecondary) ws.Cell(headerRow, col++).Value = filter.SecondaryGroupBy.ToString();
         ws.Cell(headerRow, col++).Value = "Period";
         ws.Cell(headerRow, col++).Value = "Invoices";
         ws.Cell(headerRow, col++).Value = "Returns";
@@ -67,14 +69,17 @@ public class ExcelExportService
         headerRange.Style.Font.FontColor = XLColor.White;
         headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
         
-        // Data rows
+        // Data rows. Avg Basket / Avg Qty are non-additive: subtotals recompute them
+        // from summed components (Sales / Net Trans.) exactly like the on-screen grid.
         int dataRow = headerRow + 1;
-        foreach (var row in rows)
+        void Money(decimal v) { ws.Cell(dataRow, col).Value = v; ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00"; }
+        void Pct(decimal v) { ws.Cell(dataRow, col).Value = v; ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.0\"%\""; }
+
+        void WriteRow(AverageBasketRow row)
         {
             col = 1;
-            if (hasGrouping)
-                ws.Cell(dataRow, col++).Value = row.Level1Value ?? row.Level1 ?? "N/A";
-            
+            if (hasGrouping) ws.Cell(dataRow, col++).Value = row.Level1Value ?? row.Level1 ?? "N/A";
+            if (hasSecondary) ws.Cell(dataRow, col++).Value = row.Level2Value ?? row.Level2 ?? "N/A";
             ws.Cell(dataRow, col++).Value = row.Period;
             ws.Cell(dataRow, col++).Value = row.CYInvoiceCount;
             ws.Cell(dataRow, col++).Value = row.CYCreditCount;
@@ -82,18 +87,70 @@ public class ExcelExportService
             ws.Cell(dataRow, col++).Value = row.CYQtySold;
             ws.Cell(dataRow, col++).Value = row.CYQtyReturned;
             ws.Cell(dataRow, col++).Value = row.CYTotalQty;
-            ws.Cell(dataRow, col++).Value = includeVat ? row.CYTotalGross : row.CYTotalNet;
-            ws.Cell(dataRow, col++).Value = includeVat ? row.CYAverageGross : row.CYAverageNet;
-            ws.Cell(dataRow, col++).Value = row.CYAverageQty;
-            
+            Money(includeVat ? row.CYTotalGross : row.CYTotalNet);
+            Money(includeVat ? row.CYAverageGross : row.CYAverageNet);
+            Money(row.CYAverageQty);
             if (compareLY)
             {
-                ws.Cell(dataRow, col++).Value = includeVat ? row.LYTotalGross : row.LYTotalNet;
-                ws.Cell(dataRow, col++).Value = includeVat ? row.LYAverageGross : row.LYAverageNet;
-                ws.Cell(dataRow, col++).Value = row.YoYChangePercent;
+                Money(includeVat ? row.LYTotalGross : row.LYTotalNet);
+                Money(includeVat ? row.LYAverageGross : row.LYAverageNet);
+                Pct(row.YoYChangePercent);
             }
-            
             dataRow++;
+        }
+
+        void WriteSub(List<AverageBasketRow> g)
+        {
+            col = 1;
+            if (hasGrouping) ws.Cell(dataRow, col++).Value = "Subtotal";
+            if (hasSecondary) ws.Cell(dataRow, col++).Value = "";
+            ws.Cell(dataRow, col++).Value = "";
+            var gInv = g.Sum(r => r.CYInvoiceCount);
+            var gCred = g.Sum(r => r.CYCreditCount);
+            var gTrans = g.Sum(r => r.CYTotalTransactions);
+            var gQtySold = g.Sum(r => r.CYQtySold);
+            var gQtyRet = g.Sum(r => r.CYQtyReturned);
+            var gNetQty = g.Sum(r => r.CYTotalQty);
+            var gSales = g.Sum(r => includeVat ? r.CYTotalGross : r.CYTotalNet);
+            var gAvgBasket = gTrans > 0 ? gSales / gTrans : 0m;
+            var gAvgQty = gTrans > 0 ? (decimal)gNetQty / gTrans : 0m;
+            ws.Cell(dataRow, col++).Value = gInv;
+            ws.Cell(dataRow, col++).Value = gCred;
+            ws.Cell(dataRow, col++).Value = gTrans;
+            ws.Cell(dataRow, col++).Value = gQtySold;
+            ws.Cell(dataRow, col++).Value = gQtyRet;
+            ws.Cell(dataRow, col++).Value = gNetQty;
+            Money(gSales);
+            Money(gAvgBasket);
+            Money(gAvgQty);
+            if (compareLY)
+            {
+                var gLyTrans = g.Sum(r => r.LYTotalTransactions);
+                var gLySales = g.Sum(r => includeVat ? r.LYTotalGross : r.LYTotalNet);
+                var gLyAvg = gLyTrans > 0 ? gLySales / gLyTrans : 0m;
+                var gYoY = gLySales != 0 ? Math.Round((gSales - gLySales) / Math.Abs(gLySales) * 100, 2) : (gSales > 0 ? 100m : 0m);
+                Money(gLySales);
+                Money(gLyAvg);
+                Pct(gYoY);
+            }
+            var rng = ws.Range(dataRow, 1, dataRow, col - 1);
+            rng.Style.Font.Bold = true;
+            rng.Style.Fill.BackgroundColor = XLColor.FromHtml("#eef2ff");
+            dataRow++;
+        }
+
+        if (hasGrouping)
+        {
+            foreach (var grp in rows.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A"))
+            {
+                var gr = grp.ToList();
+                foreach (var row in gr) WriteRow(row);
+                WriteSub(gr);
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteRow(row);
         }
         
         // Grand total row
@@ -101,6 +158,7 @@ public class ExcelExportService
         {
             col = 1;
             if (hasGrouping) ws.Cell(dataRow, col++).Value = "";
+            if (hasSecondary) ws.Cell(dataRow, col++).Value = "";
             ws.Cell(dataRow, col++).Value = "GRAND TOTAL";
             ws.Cell(dataRow, col++).Value = grandTotals.TotalInvoices;
             ws.Cell(dataRow, col++).Value = grandTotals.TotalCredits;
@@ -108,31 +166,20 @@ public class ExcelExportService
             ws.Cell(dataRow, col++).Value = grandTotals.TotalQtySold;
             ws.Cell(dataRow, col++).Value = grandTotals.TotalQtyReturned;
             ws.Cell(dataRow, col++).Value = grandTotals.NetQty;
-            ws.Cell(dataRow, col++).Value = includeVat ? grandTotals.GrossSales : grandTotals.NetSales;
-            ws.Cell(dataRow, col++).Value = includeVat ? grandTotals.AverageBasketGross : grandTotals.AverageBasketNet;
-            ws.Cell(dataRow, col++).Value = grandTotals.AverageQty;
-            
+            Money(includeVat ? grandTotals.GrossSales : grandTotals.NetSales);
+            Money(includeVat ? grandTotals.AverageBasketGross : grandTotals.AverageBasketNet);
+            Money(grandTotals.AverageQty);
             if (compareLY)
             {
-                ws.Cell(dataRow, col++).Value = includeVat ? grandTotals.LYTotalGross : grandTotals.LYTotalNet;
-                ws.Cell(dataRow, col++).Value = includeVat ? grandTotals.LYAverageBasketGross : grandTotals.LYAverageBasketNet;
-                ws.Cell(dataRow, col++).Value = grandTotals.YoYChangePercent;
+                Money(includeVat ? grandTotals.LYTotalGross : grandTotals.LYTotalNet);
+                Money(includeVat ? grandTotals.LYAverageBasketGross : grandTotals.LYAverageBasketNet);
+                Pct(grandTotals.YoYChangePercent);
             }
             
             var totalRange = ws.Range(dataRow, 1, dataRow, col - 1);
             totalRange.Style.Font.Bold = true;
             totalRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
             totalRange.Style.Border.TopBorder = XLBorderStyleValues.Medium;
-        }
-        
-        // Number formatting
-        int totalCols = col - 1;
-        int moneyStartCol = hasGrouping ? 9 : 8;
-        for (int r = headerRow + 1; r <= dataRow; r++)
-        {
-            ws.Cell(r, moneyStartCol).Style.NumberFormat.Format = "#,##0.00";
-            ws.Cell(r, moneyStartCol + 1).Style.NumberFormat.Format = "#,##0.00";
-            ws.Cell(r, moneyStartCol + 2).Style.NumberFormat.Format = "#,##0.00";
         }
         
         // Auto-fit columns
@@ -407,7 +454,8 @@ public class ExcelExportService
         }
 
         int dataRow = headerRow + 1;
-        foreach (var row in rows)
+
+        void WriteDataRow(CatalogueRow row)
         {
             for (int i = 0; i < cols.Count; i++)
             {
@@ -420,6 +468,74 @@ public class ExcelExportService
                     ws.Cell(dataRow, i + 1).Style.NumberFormat.Format = "#,##0.00";
             }
             dataRow++;
+        }
+
+        // Subtotal row: group identity already lives in the _L1/_L2/_L3 columns, so (like
+        // PurchasesSales) we emit subtotal rows only — no banner header rows. Math is delegated to
+        // CatalogueSubtotal so the numbers are identical to the grid/preview.
+        void WriteSubtotal(IEnumerable<CatalogueRow> grp, string label, int level)
+        {
+            var st = CatalogueSubtotal.From(grp);
+            int labelCol = cols.FindIndex(c => c.Key == "_L" + level);
+            string bg = level == 1 ? "#dbeafe" : level == 2 ? "#e8f0fe" : "#f0f4f8";
+            for (int i = 0; i < cols.Count; i++)
+            {
+                if (cols[i].IsNumeric)
+                {
+                    var v = st.ValueForKey(cols[i].Key);
+                    if (v.HasValue)
+                    {
+                        ws.Cell(dataRow, i + 1).Value = v.Value;
+                        ws.Cell(dataRow, i + 1).Style.NumberFormat.Format = "#,##0.00";
+                    }
+                }
+                else if (i == labelCol)
+                {
+                    ws.Cell(dataRow, i + 1).Value = label;
+                }
+            }
+            var r = ws.Range(dataRow, 1, dataRow, cols.Count);
+            r.Style.Font.Bold = true;
+            r.Style.Fill.BackgroundColor = XLColor.FromHtml(bg);
+            dataRow++;
+        }
+
+        if (hasL1)
+        {
+            foreach (var l1 in rows.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A"))
+            {
+                var l1Rows = l1.ToList();
+                if (hasL2)
+                {
+                    foreach (var l2 in l1Rows.GroupBy(r => r.Level2Value ?? "N/A"))
+                    {
+                        var l2Rows = l2.ToList();
+                        if (hasL3)
+                        {
+                            foreach (var l3 in l2Rows.GroupBy(r => r.Level3Value ?? "N/A"))
+                            {
+                                var l3Rows = l3.ToList();
+                                foreach (var row in l3Rows) WriteDataRow(row);
+                                WriteSubtotal(l3Rows, l3.Key + " subtotal", 3);
+                            }
+                        }
+                        else
+                        {
+                            foreach (var row in l2Rows) WriteDataRow(row);
+                        }
+                        WriteSubtotal(l2Rows, l2.Key + " subtotal", 2);
+                    }
+                }
+                else
+                {
+                    foreach (var row in l1Rows) WriteDataRow(row);
+                }
+                WriteSubtotal(l1Rows, l1.Key + " total", 1);
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteDataRow(row);
         }
 
         if (totals != null && cols.Count > 0)
@@ -745,10 +861,18 @@ public class ExcelExportService
         headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
         int dataRow = headerRow + 1;
+        int leading = 1 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+
+        void StyleSubtotal(int level)
+        {
+            var rng = ws.Range(dataRow, 1, dataRow, totalCols);
+            rng.Style.Font.Bold = true;
+            rng.Style.Fill.BackgroundColor = XLColor.FromHtml(level == 1 ? "#dbeafe" : "#eef2ff");
+        }
 
         if (isDetailed)
         {
-            foreach (var row in detailedRows ?? new())
+            void WriteRow(CancelLogDetailedRow row)
             {
                 col = 1;
                 ws.Cell(dataRow, col++).Value = row.StoreAndStation;
@@ -777,10 +901,50 @@ public class ExcelExportService
                 ws.Cell(dataRow, col++).Value = row.CompartmentName;
                 dataRow++;
             }
+
+            void WriteSub(List<CancelLogDetailedRow> g, string label, int level)
+            {
+                ws.Cell(dataRow, 1).Value = label;
+                ws.Cell(dataRow, leading + 11).Value = g.Sum(x => x.InvoiceTotal);
+                ws.Cell(dataRow, leading + 11).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, leading + 12).Value = g.Sum(x => x.Quantity);
+                ws.Cell(dataRow, leading + 12).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, leading + 13).Value = g.Sum(x => x.Amount);
+                ws.Cell(dataRow, leading + 13).Style.NumberFormat.Format = "#,##0.00";
+                StyleSubtotal(level);
+                dataRow++;
+            }
+
+            var det = detailedRows ?? new();
+            if (hasL1)
+            {
+                foreach (var l1 in det.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+                {
+                    var l1Rows = l1.ToList();
+                    if (hasL2)
+                    {
+                        foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                        {
+                            var l2Rows = l2.ToList();
+                            foreach (var row in l2Rows) WriteRow(row);
+                            WriteSub(l2Rows, l2.Key + " subtotal", 2);
+                        }
+                    }
+                    else
+                    {
+                        foreach (var row in l1Rows) WriteRow(row);
+                    }
+                    WriteSub(l1Rows, l1.Key + " total", 1);
+                }
+            }
+            else
+            {
+                foreach (var row in det) WriteRow(row);
+            }
         }
         else
         {
-            foreach (var row in summaryRows ?? new())
+            void WriteRow(CancelLogSummaryRow row)
             {
                 col = 1;
                 ws.Cell(dataRow, col++).Value = row.StoreAndStation;
@@ -796,6 +960,49 @@ public class ExcelExportService
                 ws.Cell(dataRow, col).Value = row.Amount;
                 ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
                 dataRow++;
+            }
+
+            void WriteSub(List<CancelLogSummaryRow> g, string label, int level)
+            {
+                ws.Cell(dataRow, 1).Value = label;
+                ws.Cell(dataRow, leading + 1).Value = g.Sum(x => x.DeletedAction);
+                ws.Cell(dataRow, leading + 2).Value = g.Sum(x => x.CancelledAction);
+                ws.Cell(dataRow, leading + 3).Value = g.Sum(x => x.ComplimentaryAction);
+                ws.Cell(dataRow, leading + 4).Value = g.Sum(x => x.InvoiceTotal);
+                ws.Cell(dataRow, leading + 4).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, leading + 5).Value = g.Sum(x => x.Quantity);
+                ws.Cell(dataRow, leading + 5).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, leading + 6).Value = g.Sum(x => x.Amount);
+                ws.Cell(dataRow, leading + 6).Style.NumberFormat.Format = "#,##0.00";
+                StyleSubtotal(level);
+                dataRow++;
+            }
+
+            var sum = summaryRows ?? new();
+            if (hasL1)
+            {
+                foreach (var l1 in sum.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+                {
+                    var l1Rows = l1.ToList();
+                    if (hasL2)
+                    {
+                        foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                        {
+                            var l2Rows = l2.ToList();
+                            foreach (var row in l2Rows) WriteRow(row);
+                            WriteSub(l2Rows, l2.Key + " subtotal", 2);
+                        }
+                    }
+                    else
+                    {
+                        foreach (var row in l1Rows) WriteRow(row);
+                    }
+                    WriteSub(l1Rows, l1.Key + " total", 1);
+                }
+            }
+            else
+            {
+                foreach (var row in sum) WriteRow(row);
             }
         }
 
@@ -895,7 +1102,9 @@ public class ExcelExportService
         headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
         int dataRow = headerRow + 1;
-        foreach (var row in rows)
+        int leading = 18 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+
+        void WriteRow(ProspectClientsRow row)
         {
             col = 1;
             if (hasL1) ws.Cell(dataRow, col++).Value = row.Level1Descr;
@@ -930,6 +1139,46 @@ public class ExcelExportService
             dataRow++;
         }
 
+        void WriteSub(List<ProspectClientsRow> grp, string label, int level)
+        {
+            ws.Cell(dataRow, 1).Value = label;
+            ws.Cell(dataRow, leading + 1).Value = grp.Sum(x => x.OfferCount);
+            ws.Cell(dataRow, leading + 2).Value = grp.Sum(x => x.TotalOfferValue);
+            ws.Cell(dataRow, leading + 2).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, leading + 3).Value = grp.Sum(x => x.EmailsSent);
+            ws.Cell(dataRow, leading + 4).Value = grp.Sum(x => x.SmsSent);
+            var rng = ws.Range(dataRow, 1, dataRow, totalCols);
+            rng.Style.Font.Bold = true;
+            rng.Style.Fill.BackgroundColor = XLColor.FromHtml(level == 1 ? "#dbeafe" : "#eef2ff");
+            dataRow++;
+        }
+
+        if (hasL1)
+        {
+            foreach (var l1 in rows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+            {
+                var l1Rows = l1.ToList();
+                if (hasL2)
+                {
+                    foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                    {
+                        var l2Rows = l2.ToList();
+                        foreach (var row in l2Rows) WriteRow(row);
+                        WriteSub(l2Rows, l2.Key + " subtotal", 2);
+                    }
+                }
+                else
+                {
+                    foreach (var row in l1Rows) WriteRow(row);
+                }
+                WriteSub(l1Rows, l1.Key + " total", 1);
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteRow(row);
+        }
+
         ws.Columns().AdjustToContents(1, 80);
         ws.SheetView.FreezeRows(headerRow);
 
@@ -943,6 +1192,7 @@ public class ExcelExportService
     {
         bool hasL1 = filter.PrimaryGroup != "NONE";
         bool hasL2 = filter.SecondaryGroup != "NONE";
+        bool hasL3 = filter.ThirdGroup != "NONE";
 
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Offers Report");
@@ -958,6 +1208,7 @@ public class ExcelExportService
         if (filter.StoreFilter != "All") ws.Cell(selRow++, 1).Value = $"Store: {filter.StoreFilter}";
         if (hasL1) ws.Cell(selRow++, 1).Value = $"Primary Group: {filter.PrimaryGroup}";
         if (hasL2) ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.SecondaryGroup}";
+        if (hasL3) ws.Cell(selRow++, 1).Value = $"Third Group: {filter.ThirdGroup}";
         ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
         for (int sr = 2; sr < selRow; sr++)
             ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
@@ -967,6 +1218,7 @@ public class ExcelExportService
 
         if (hasL1) ws.Cell(headerRow, col++).Value = "Group 1";
         if (hasL2) ws.Cell(headerRow, col++).Value = "Group 2";
+        if (hasL3) ws.Cell(headerRow, col++).Value = "Group 3";
         ws.Cell(headerRow, col++).Value = "Offer No";
         ws.Cell(headerRow, col++).Value = "Date";
         ws.Cell(headerRow, col++).Value = "Valid Until";
@@ -998,11 +1250,14 @@ public class ExcelExportService
         headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
         int dataRow = headerRow + 1;
-        foreach (var row in rows)
+        int leading = 7 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+
+        void WriteRow(OffersReportRow row)
         {
             col = 1;
             if (hasL1) ws.Cell(dataRow, col++).Value = row.Level1Descr;
             if (hasL2) ws.Cell(dataRow, col++).Value = row.Level2Descr;
+            if (hasL3) ws.Cell(dataRow, col++).Value = row.Level3Descr;
             ws.Cell(dataRow, col++).Value = row.OfferNo;
             if (row.DateTrans.HasValue) ws.Cell(dataRow, col).Value = row.DateTrans.Value;
             ws.Cell(dataRow, col++).Style.DateFormat.Format = "yyyy-MM-dd";
@@ -1039,6 +1294,67 @@ public class ExcelExportService
             ws.Cell(dataRow, col++).Value = row.InternalNotes;
             ws.Cell(dataRow, col++).Value = row.Source;
             dataRow++;
+        }
+
+        // Additive numeric columns summed; percentages (Disc %, Order %) left blank — matches grid.
+        void WriteSub(List<OffersReportRow> g, string label, int level)
+        {
+            ws.Cell(dataRow, 1).Value = label;
+            void Money(int offset, decimal v)
+            {
+                ws.Cell(dataRow, leading + offset).Value = v;
+                ws.Cell(dataRow, leading + offset).Style.NumberFormat.Format = "#,##0.00";
+            }
+            ws.Cell(dataRow, leading + 1).Value = g.Sum(x => x.ItemCount);
+            Money(2, g.Sum(x => x.TotalQuantity));
+            Money(3, g.Sum(x => x.InvoiceTotal));
+            Money(4, g.Sum(x => x.InvoiceTotalDiscount));
+            // offset 5 = Disc % — blank
+            Money(6, g.Sum(x => x.InvoiceVat));
+            Money(7, g.Sum(x => x.InvoiceGrandTotal));
+            if (viewCost) Money(8, g.Sum(x => x.TotalItemCost));
+            var rng = ws.Range(dataRow, 1, dataRow, totalCols);
+            rng.Style.Font.Bold = true;
+            rng.Style.Fill.BackgroundColor = XLColor.FromHtml(level == 1 ? "#ede9fe" : level == 2 ? "#f3effe" : "#f8f5ff");
+            dataRow++;
+        }
+
+        if (hasL1)
+        {
+            foreach (var l1 in rows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+            {
+                var l1Rows = l1.ToList();
+                if (hasL2)
+                {
+                    foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                    {
+                        var l2Rows = l2.ToList();
+                        if (hasL3)
+                        {
+                            foreach (var l3 in l2Rows.GroupBy(r => r.Level3Descr ?? r.Level3Code ?? "N/A"))
+                            {
+                                var l3Rows = l3.ToList();
+                                foreach (var row in l3Rows) WriteRow(row);
+                                WriteSub(l3Rows, l3.Key + " subtotal", 3);
+                            }
+                        }
+                        else
+                        {
+                            foreach (var row in l2Rows) WriteRow(row);
+                        }
+                        WriteSub(l2Rows, l2.Key + " subtotal", 2);
+                    }
+                }
+                else
+                {
+                    foreach (var row in l1Rows) WriteRow(row);
+                }
+                WriteSub(l1Rows, l1.Key + " total", 1);
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteRow(row);
         }
 
         ws.Columns().AdjustToContents(1, 80);

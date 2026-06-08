@@ -201,11 +201,24 @@
                     </button>
                 }
                 <div class="btn-group ms-auto">
-                    <button type="button" class="btn btn-outline-info" onclick="saveParetoLayout()" title="Save current parameters as your default layout">
-                        <i class="bi bi-save me-1"></i>Save Layout
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"
+                                title="Saved report layouts" id="layoutsDropdownBtn">
+                            <i class="bi bi-bookmark me-1"></i><span id="layoutsCurrentName">Layouts</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" id="layoutsDropdownMenu" style="min-width: 320px;">
+                            <li><h6 class="dropdown-header">Loading...</h6></li>
+                        </ul>
+                    </div>
+                    <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Overwrite your default layout with current parameters">
+                        <i class="bi bi-save me-1"></i>Save
                     </button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="resetParetoLayout()" title="Discard your saved layout and restore factory defaults">
-                        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Layout
+                    <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveLayoutAsModal"
+                            title="Save current parameters as a new named layout (optionally shared with all users)">
+                        <i class="bi bi-bookmark-plus me-1"></i>Save as...
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="resetLayoutBtn" onclick="resetSavedLayout()" title="Discard your saved default layout and restore factory defaults" style="display:none;">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Default
                     </button>
                 </div>
             </div>
@@ -358,6 +371,13 @@
     SendAction = "SendParetoEmail",
     ReportType = "Pareto",
     SubjectDefault = "Pareto 80/20 Report"
+})
+
+@await Html.PartialAsync("_SaveLayout", new Powersoft.Reporting.Web.ViewModels.SaveLayoutPartialModel
+{
+    ReportType     = Powersoft.Reporting.Core.Constants.ReportTypeConstants.Pareto,
+    HasSavedLayout = false,
+    ReportViewUrl  = Url.Action("Pareto", "Reports") ?? ""
 })
 
 @section Scripts {
@@ -788,61 +808,40 @@ function collectCurrentLayout() {
     return parms;
 }
 
-function saveParetoLayout() {
-    var parms = collectCurrentLayout();
-    fetch('@Url.Action("SaveParetoLayout", "Reports")', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(parms)
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.success) alert('Layout saved successfully.');
-        else alert('Failed: ' + data.message);
-    })
-    .catch(function() { alert('Network error saving layout.'); });
-}
-
-function resetParetoLayout() {
-    if (!confirm('Reset layout to defaults?')) return;
-    fetch('@Url.Action("ResetParetoLayout", "Reports")', { method: 'POST' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) { alert('Layout reset to defaults. Reload the page to apply.'); location.reload(); }
-            else alert(data.message);
-        })
-        .catch(function() { alert('Network error.'); });
-}
-
-function loadSavedLayout() {
-    fetch('@Url.Action("GetParetoLayout", "Reports")')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (!data.success || !data.hasSaved) return;
-            var p = data.parameters;
-            if (p.Dimension) document.getElementById('dimension').value = p.Dimension;
-            if (p.Metric) document.getElementById('metric').value = p.Metric;
-            if (p.IncludeVat) document.getElementById('includeVat').checked = p.IncludeVat === '1';
-            if (p.ExcludeNegative) document.getElementById('excludeNegative').checked = p.ExcludeNegative === '1';
-            if (p.ShowOthers) document.getElementById('showOthers').checked = p.ShowOthers === '1';
-            if (p.ProfitBasis) document.getElementById('profitBasis').value = p.ProfitBasis;
-            if (p.ClassAThreshold) {
-                document.getElementById('paretoPercValue').value = p.ClassAThreshold;
-                document.getElementById('paretoPercItems').value = 100 - parseInt(p.ClassAThreshold);
-            }
-            if (p.PriceInterval) document.getElementById('priceInterval').value = p.PriceInterval;
-            if (p.PriceOnIndex) document.getElementById('priceOnIndex').value = p.PriceOnIndex;
-            if (p.ItemsSelectionJson && typeof reloadItemsSelectionFromJson === 'function') {
-                try { reloadItemsSelectionFromJson(JSON.parse(p.ItemsSelectionJson)); } catch (e) {}
-            }
-            onDimensionChanged();
-            onMetricChanged();
-        })
-        .catch(function() {});
+function applyLayoutParameters(p) {
+    function sv(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
+    function sc(id, v) { var el = document.getElementById(id); if (el && v != null) el.checked = v === '1'; }
+    sv('dimension',        p['Dimension']);
+    sv('metric',           p['Metric']);
+    sc('includeVat',       p['IncludeVat']);
+    sc('excludeNegative',  p['ExcludeNegative']);
+    sc('showOthers',       p['ShowOthers']);
+    sv('profitBasis',      p['ProfitBasis']);
+    if (p['ClassAThreshold']) {
+        sv('paretoPercValue', p['ClassAThreshold']);
+        var percItems = document.getElementById('paretoPercItems');
+        if (percItems) percItems.value = 100 - parseInt(p['ClassAThreshold']);
+    }
+    sv('priceInterval',    p['PriceInterval']);
+    sv('priceOnIndex',     p['PriceOnIndex']);
+    if (p['ItemsSelectionJson'] && typeof reloadItemsSelectionFromJson === 'function') {
+        try { reloadItemsSelectionFromJson(JSON.parse(p['ItemsSelectionJson'])); } catch (e) {}
+    }
+    onDimensionChanged();
+    onMetricChanged();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    loadSavedLayout();
+    // Auto-load saved default layout on page open
+    fetch('@Url.Action("GetReportLayout", "Reports")?reportType=Pareto')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success || !data.hasSaved) return;
+            applyLayoutParameters(data.parameters || {});
+            var btn = document.getElementById('resetLayoutBtn');
+            if (btn) btn.style.display = '';
+        })
+        .catch(function() {});
 });
 
 // ==================== Item Detail ====================

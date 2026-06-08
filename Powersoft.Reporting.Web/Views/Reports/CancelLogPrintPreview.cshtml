@@ -357,37 +357,50 @@
                     <tbody>
                     @if (hasPG && detailedGrouped != null)
                     {
+                        Func<Tuple<List<CancelLogDetailedRow>, string, bool>, object> detSub =
+                            @<tr class="group-subtotal">
+                                <td colspan="@(hasPG ? 10 : 9)">@(item.Item3 ? item.Item2 + " total" : item.Item2 + " subtotal") (@item.Item1.Count rows)</td>
+                                <td>@item.Item1.Sum(x => x.Quantity).ToString("N2")</td>
+                                <td>@item.Item1.Sum(x => x.Amount).ToString("N2")</td>
+                                <td>@item.Item1.Sum(x => x.InvoiceTotal).ToString("N2")</td>
+                            </tr>;
+
+                        Func<CancelLogDetailedRow, object> detRow =
+                            @<tr>
+                                @if (hasPG) { <td>@item.Level2Descr</td> }
+                                <td>@(item.SessionDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "")</td>
+                                <td>@item.StoreAndStation</td>
+                                <td>@item.UserCode</td>
+                                <td class="@ActionClass(item.ActionType)">@item.ActionType</td>
+                                <td>@item.CustomerFullName</td>
+                                <td>@item.ItemCode</td>
+                                <td>@item.ItemDescr</td>
+                                <td>@item.InvoiceId</td>
+                                <td>@item.ZReport</td>
+                                <td>@item.Quantity.ToString("N2")</td>
+                                <td>@item.Amount.ToString("N2")</td>
+                                <td>@item.InvoiceTotal.ToString("N2")</td>
+                            </tr>;
+
                         @foreach (var grp in detailedGrouped)
                         {
-                            var rows = grp.ToList();
-                            var colSpan = 13;
-                            <tr class="group-header">
-                                <td colspan="@colSpan">@grp.Key</td>
-                            </tr>
-                            @foreach (var r in rows)
+                            var l1Rows = grp.ToList();
+                            <tr class="group-header"><td colspan="13">@grp.Key</td></tr>
+                            if (hasSG)
                             {
-                                <tr>
-                                    @if (hasPG) { <td>@r.Level2Descr</td> }
-                                    <td>@(r.SessionDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "")</td>
-                                    <td>@r.StoreAndStation</td>
-                                    <td>@r.UserCode</td>
-                                    <td class="@ActionClass(r.ActionType)">@r.ActionType</td>
-                                    <td>@r.CustomerFullName</td>
-                                    <td>@r.ItemCode</td>
-                                    <td>@r.ItemDescr</td>
-                                    <td>@r.InvoiceId</td>
-                                    <td>@r.ZReport</td>
-                                    <td>@r.Quantity.ToString("N2")</td>
-                                    <td>@r.Amount.ToString("N2")</td>
-                                    <td>@r.InvoiceTotal.ToString("N2")</td>
-                                </tr>
+                                foreach (var sg in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                                {
+                                    var l2Rows = sg.ToList();
+                                    <tr class="group-header"><td colspan="13" style="padding-left:24px;">@sg.Key</td></tr>
+                                    foreach (var r in l2Rows) { @detRow(r) }
+                                    @detSub(Tuple.Create(l2Rows, sg.Key, false))
+                                }
                             }
-                            <tr class="group-subtotal">
-                                <td colspan="@(hasPG ? 10 : 9)">Subtotal (@rows.Count rows)</td>
-                                <td>@rows.Sum(x => x.Quantity).ToString("N2")</td>
-                                <td>@rows.Sum(x => x.Amount).ToString("N2")</td>
-                                <td>@rows.Sum(x => x.InvoiceTotal).ToString("N2")</td>
-                            </tr>
+                            else
+                            {
+                                foreach (var r in l1Rows) { @detRow(r) }
+                            }
+                            @detSub(Tuple.Create(l1Rows, grp.Key, true))
                         }
                     }
                     else
@@ -440,36 +453,51 @@
                     <tbody>
                     @if (hasPG && summaryGrouped != null)
                     {
+                        var sumColSpan = 6 + (hasPG ? 1 : 0) + (hasSG ? 1 : 0) + 1;
+
+                        Func<Tuple<List<CancelLogSummaryRow>, string>, object> sumSub =
+                            @<tr class="group-subtotal">
+                                <td colspan="@(1 + (hasPG ? 1 : 0) + (hasSG ? 1 : 0))">@item.Item2</td>
+                                <td>@item.Item1.Sum(x => x.DeletedAction).ToString("N0")</td>
+                                <td>@item.Item1.Sum(x => x.CancelledAction).ToString("N0")</td>
+                                <td>@item.Item1.Sum(x => x.ComplimentaryAction).ToString("N0")</td>
+                                <td>@item.Item1.Sum(x => x.Quantity).ToString("N2")</td>
+                                <td>@item.Item1.Sum(x => x.Amount).ToString("N2")</td>
+                                <td>@item.Item1.Sum(x => x.InvoiceTotal).ToString("N2")</td>
+                            </tr>;
+
+                        Func<CancelLogSummaryRow, object> sumRow =
+                            @<tr>
+                                <td>@item.StoreAndStation</td>
+                                @if (hasPG) { <td>@item.Level1Descr</td> }
+                                @if (hasSG) { <td>@item.Level2Descr</td> }
+                                <td class="action-deleted">@item.DeletedAction.ToString("N0")</td>
+                                <td class="action-cancelled">@item.CancelledAction.ToString("N0")</td>
+                                <td class="action-complimentary">@item.ComplimentaryAction.ToString("N0")</td>
+                                <td>@item.Quantity.ToString("N2")</td>
+                                <td>@item.Amount.ToString("N2")</td>
+                                <td>@item.InvoiceTotal.ToString("N2")</td>
+                            </tr>;
+
                         @foreach (var grp in summaryGrouped)
                         {
-                            var rows = grp.ToList();
-                            var colSpan = 6 + (hasPG ? 1 : 0) + (hasSG ? 1 : 0) + 1;
-                            <tr class="group-header">
-                                <td colspan="@colSpan">@grp.Key</td>
-                            </tr>
-                            @foreach (var r in rows)
+                            var l1Rows = grp.ToList();
+                            <tr class="group-header"><td colspan="@sumColSpan">@grp.Key</td></tr>
+                            if (hasSG)
                             {
-                                <tr>
-                                    <td>@r.StoreAndStation</td>
-                                    @if (hasPG) { <td>@r.Level1Descr</td> }
-                                    @if (hasSG) { <td>@r.Level2Descr</td> }
-                                    <td class="action-deleted">@r.DeletedAction.ToString("N0")</td>
-                                    <td class="action-cancelled">@r.CancelledAction.ToString("N0")</td>
-                                    <td class="action-complimentary">@r.ComplimentaryAction.ToString("N0")</td>
-                                    <td>@r.Quantity.ToString("N2")</td>
-                                    <td>@r.Amount.ToString("N2")</td>
-                                    <td>@r.InvoiceTotal.ToString("N2")</td>
-                                </tr>
+                                foreach (var sg in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                                {
+                                    var l2Rows = sg.ToList();
+                                    <tr class="group-header"><td colspan="@sumColSpan" style="padding-left:24px;">@sg.Key</td></tr>
+                                    foreach (var r in l2Rows) { @sumRow(r) }
+                                    @sumSub(Tuple.Create(l2Rows, sg.Key + " subtotal"))
+                                }
                             }
-                            <tr class="group-subtotal">
-                                <td colspan="@(1 + (hasPG ? 1 : 0) + (hasSG ? 1 : 0))">Subtotal</td>
-                                <td>@rows.Sum(x => x.DeletedAction).ToString("N0")</td>
-                                <td>@rows.Sum(x => x.CancelledAction).ToString("N0")</td>
-                                <td>@rows.Sum(x => x.ComplimentaryAction).ToString("N0")</td>
-                                <td>@rows.Sum(x => x.Quantity).ToString("N2")</td>
-                                <td>@rows.Sum(x => x.Amount).ToString("N2")</td>
-                                <td>@rows.Sum(x => x.InvoiceTotal).ToString("N2")</td>
-                            </tr>
+                            else
+                            {
+                                foreach (var r in l1Rows) { @sumRow(r) }
+                            }
+                            @sumSub(Tuple.Create(l1Rows, grp.Key + " total"))
                         }
                     }
                     else

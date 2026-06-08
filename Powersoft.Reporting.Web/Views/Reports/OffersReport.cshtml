@@ -14,6 +14,9 @@
     .stat-label{font-size:.8rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:4px;}
     .group-header-row td{background:#f1f5f9!important;font-weight:600;border-top:2px solid #cbd5e1;}
     .group-header-row.l2 td{background:#e8f0fe!important;font-weight:600;border-top:1px solid #93c5fd;}
+    .group-subtotal-row td{background:#f8fafc!important;font-weight:600;font-style:italic;color:#475569;border-top:1px solid #cbd5e1;border-bottom:1px solid #94a3b8;}
+    .group-subtotal-row.sub-l2 td{background:#eef2f7!important;}
+    .group-subtotal-row.sub-l3 td{background:#f3f6fa!important;}
     .status-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:600;border:1px solid rgba(0,0,0,.15);}
     th.sortable{cursor:pointer;user-select:none;white-space:nowrap;}
     th.sortable:hover{background:#e2e8f0;}
@@ -196,8 +199,8 @@
             ShowDepartments = true,
             ShowBrands = true,
             ShowSeasons = true,
-            ShowSuppliers = true,
-            ShowStores = true,
+            ShowSuppliers = false,
+            ShowStores = false,
             ShowCustomers = false,
             ShowItems = true,
             ShowUsers = false,
@@ -205,8 +208,8 @@
             ShowModels = true,
             ShowColours = true,
             ShowSizes = true,
-            ShowGroupSizes = true,
-            ShowFabrics = true,
+            ShowGroupSizes = false,
+            ShowFabrics = false,
             ShowAttributes = true,
             ShowStockFilter = false,
             ShowECommerce = false,
@@ -401,39 +404,16 @@
     ReportType = "OffersReport"
 })
 
-<!-- Save Layout As Modal -->
-<div class="modal fade" id="saveLayoutAsModal" tabindex="-1" aria-labelledby="saveLayoutAsLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="saveLayoutAsLabel"><i class="bi bi-bookmark-plus me-2"></i>Save Layout As</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label for="saveLayoutAsName" class="form-label">Layout name <span class="text-danger">*</span></label>
-                    <input type="text" id="saveLayoutAsName" class="form-control" maxlength="100" placeholder="e.g. Approved Offers Only" autocomplete="off" />
-                    <div class="form-text">Used to identify the layout. You can have multiple named layouts.</div>
-                </div>
-                <div class="form-check form-switch mb-2">
-                    <input class="form-check-input" type="checkbox" id="saveLayoutAsPublic" />
-                    <label class="form-check-label" for="saveLayoutAsPublic">Share with all users (public layout)</label>
-                    <div class="form-text">Public layouts are visible to everyone but can only be edited or deleted by you.</div>
-                </div>
-                <div id="saveLayoutAsAlert" class="alert d-none" role="alert"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveLayoutAsConfirmBtn" onclick="saveLayoutAsConfirm()">
-                    <span class="spinner-border spinner-border-sm d-none me-1" id="saveLayoutAsSpinner"></span>
-                    <i class="bi bi-save me-1"></i>Save
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+@await Html.PartialAsync("_SaveLayout", new Powersoft.Reporting.Web.ViewModels.SaveLayoutPartialModel
+{
+    ReportType     = Powersoft.Reporting.Core.Constants.ReportTypeConstants.OffersReport,
+    HasSavedLayout = (bool)(ViewBag.HasSavedLayout ?? false),
+    ReportViewUrl  = Url.Action("OffersReport", "Reports") ?? ""
+})
 
 <script>
+var _viewCost     = @(ViewBag.ViewCost     != null ? ((bool)ViewBag.ViewCost     ? "true" : "false") : "true");
+var _viewSupplier = @(ViewBag.ViewSupplier != null ? ((bool)ViewBag.ViewSupplier ? "true" : "false") : "true");
 var _sortCol = 'DateTrans';
 var _sortDir = 'DESC';
 var _lastData = [];
@@ -583,7 +563,7 @@ function setCheckedValues(cbClass, labelId, noun, values) {
 
 function getFilterParams() {
     var csf = typeof getCustomerSelectionFilter === 'function' ? getCustomerSelectionFilter() : {codes:[],excludeMode:false};
-    var itmSel = typeof getItemsSelectionJson === 'function' ? getItemsSelectionJson() : null;
+    var itmSel = typeof getItemsSelectionFilter === 'function' ? JSON.stringify(getItemsSelectionFilter()) : null;
     var statusCodes = getCheckedValues('offerStatusCb');
     var storeCodes  = getCheckedValues('offerStoreCb');
     var agentCodes  = getCheckedValues('offerAgentCb');
@@ -798,15 +778,39 @@ function renderGroupedRows(data, hasPrimary, hasSecondary, hasTertiary, pgLabel,
                     thirdGroups.forEach(function(tg3) {
                         html += '<tr class="group-header-row l3"><td colspan="'+colCount+'" class="ps-5"><i class="bi bi-chevron-double-right me-1"></i><strong>'+escapeHtml(tgLabel)+':</strong> '+escapeHtml(tg3.key)+' <span class="badge bg-warning text-dark">'+tg3.items.length+'</span></td></tr>';
                         html += renderRows(tg3.items, hasPrimary, hasSecondary, hasTertiary);
+                        html += offersSubtotalRow(tg3.items, tg3.key + ' subtotal', 3, hasPrimary, hasSecondary, hasTertiary);
                     });
                 } else {
                     html += renderRows(sg2.items, hasPrimary, hasSecondary, hasTertiary);
                 }
+                html += offersSubtotalRow(sg2.items, sg2.key + ' subtotal', 2, hasPrimary, hasSecondary, hasTertiary);
             });
         } else {
             html += renderRows(g.items, hasPrimary, hasSecondary, hasTertiary);
         }
+        html += offersSubtotalRow(g.items, g.key + ' total', 1, hasPrimary, hasSecondary, hasTertiary);
     });
+    return html;
+}
+
+// Client-side subtotal row — mirrors export math: additive metrics summed,
+// percentages (Order %) and text columns left blank.
+function offersSubtotalRow(items, label, level, hasPrimary, hasSecondary, hasTertiary) {
+    var lead = (hasPrimary?1:0) + (hasSecondary?1:0) + (hasTertiary?1:0) + 7;
+    function sum(f) { var s = 0; for (var i = 0; i < items.length; i++) s += Number(items[i][f] || 0); return s; }
+    var cls = level === 1 ? 'sub-l1' : (level === 2 ? 'sub-l2' : 'sub-l3');
+    var html = '<tr class="group-subtotal-row ' + cls + '">';
+    html += '<td colspan="' + lead + '" class="text-end fst-italic">Subtotal: ' + escapeHtml(label) + '</td>';
+    html += '<td class="text-end">' + sum('itemCount') + '</td>';
+    html += '<td class="text-end">' + formatNumber(sum('totalQuantity')) + '</td>';
+    html += '<td class="text-end">' + formatNumber(sum('invoiceTotal')) + '</td>';
+    html += '<td class="text-end">' + formatNumber(sum('invoiceTotalDiscount')) + '</td>';
+    html += '<td class="text-end">' + formatNumber(sum('invoiceVat')) + '</td>';
+    html += '<td class="text-end">' + formatNumber(sum('invoiceGrandTotal')) + '</td>';
+    if (_viewCost) html += '<td class="text-end">' + formatNumber(sum('totalItemCost')) + '</td>';
+    html += '<td></td>'; // Order %
+    html += '<td></td><td></td><td></td><td></td>'; // Lead, Comments, Internal Notes, Source
+    html += '</tr>';
     return html;
 }
 
@@ -895,8 +899,8 @@ function onScheduleParametersLoaded(p) {
     if (p.customerCodesJson && typeof reloadCustomerSelectionFromJson === 'function') {
         try { reloadCustomerSelectionFromJson({ codes: JSON.parse(p.customerCodesJson), excludeMode: p.customerExcludeMode === 'true' || p.customerExcludeMode === true }); } catch(e) {}
     }
-    if (p.itemsSelectionJson && typeof applyItemsSelectionJson === 'function') {
-        try { applyItemsSelectionJson(p.itemsSelectionJson); } catch(e) {}
+    if (p.itemsSelectionJson && typeof reloadItemsSelectionFromJson === 'function') {
+        try { reloadItemsSelectionFromJson(typeof p.itemsSelectionJson === 'string' ? JSON.parse(p.itemsSelectionJson) : p.itemsSelectionJson); } catch(e) {}
     }
 }
 
@@ -943,114 +947,12 @@ function collectCurrentLayout() {
         p['CustomerCodesJson'] = JSON.stringify(csf.codes || []);
         p['CustomerExcludeMode'] = csf.excludeMode ? 'true' : 'false';
     }
-    if (typeof getItemsSelectionJson === 'function') {
-        p['ItemsSelectionJson'] = getItemsSelectionJson() || '';
+    if (typeof getItemsSelectionFilter === 'function') {
+        p['ItemsSelectionJson'] = JSON.stringify(getItemsSelectionFilter());
     }
     return p;
 }
 
-function saveCurrentLayout() {
-    var parms = collectCurrentLayout();
-    fetch('@Url.Action("SaveOffersReportLayout", "Reports")', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(parms)
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.success) showLayoutToast('Layout saved successfully', 'success');
-        else showLayoutToast(data.message || 'Failed to save layout', 'danger');
-    })
-    .catch(function() { showLayoutToast('Network error saving layout', 'danger'); });
-}
-
-function resetSavedLayout() {
-    if (!confirm('Reset your saved layout to factory defaults?')) return;
-    fetch('@Url.Action("ResetOffersReportLayout", "Reports")', { method: 'POST' })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.success) {
-            showLayoutToast('Layout reset \u2014 reloading...', 'success');
-            setTimeout(function() { window.location.href = '@Url.Action("OffersReport")'; }, 800);
-        } else {
-            showLayoutToast(data.message || 'Failed to reset layout', 'danger');
-        }
-    })
-    .catch(function() { showLayoutToast('Network error', 'danger'); });
-}
-
-var __layoutsCache = null;
-
-function isAuthRedirect(response) {
-    if (!response) return false;
-    if (response.status === 401 || response.status === 403) return true;
-    if (response.redirected && /\/Account\/Login/i.test(response.url || '')) return true;
-    var ct = response.headers && response.headers.get ? response.headers.get('content-type') : '';
-    if (ct && ct.indexOf('text/html') !== -1) return true;
-    return false;
-}
-function showSessionExpiredToast() { showLayoutToast('Session expired \u2014 please reload the page and sign in again.', 'warning'); }
-
-function loadLayoutsList() {
-    var menu = document.getElementById('layoutsDropdownMenu');
-    if (menu) menu.innerHTML = '<li><h6 class="dropdown-header">Loading...</h6></li>';
-    return fetch('@Url.Action("ListOffersReportLayouts", "Reports")', { method: 'GET', credentials: 'same-origin' })
-        .then(function(r) {
-            if (isAuthRedirect(r)) { if (menu) menu.innerHTML = '<li><h6 class="dropdown-header text-danger">Session expired</h6></li>'; showSessionExpiredToast(); return null; }
-            return r.json();
-        })
-        .then(function(data) {
-            if (data == null) return;
-            __layoutsCache = data && data.layouts ? data.layouts : [];
-            renderLayoutsDropdown(__layoutsCache);
-        })
-        .catch(function() { if (menu) menu.innerHTML = '<li><h6 class="dropdown-header text-danger">Failed to load</h6></li>'; });
-}
-
-function renderLayoutsDropdown(layouts) {
-    var menu = document.getElementById('layoutsDropdownMenu');
-    if (!menu) return;
-    if (!layouts || layouts.length === 0) {
-        menu.innerHTML = '<li><h6 class="dropdown-header">No saved layouts</h6></li><li><span class="dropdown-item-text small text-muted">Use "Save as..." to create one.</span></li>';
-        return;
-    }
-    var own = layouts.filter(function(l) { return !l.isPublic; });
-    var pub = layouts.filter(function(l) { return  l.isPublic; });
-    var html = '';
-    function renderGroup(label, items) {
-        if (!items.length) return;
-        html += '<li><h6 class="dropdown-header">' + label + '</h6></li>';
-        items.forEach(function(l) {
-            var safeName = String(l.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            var publicBadge = l.isPublic ? '<span class="badge bg-secondary ms-2" title="Visible to all users">Public</span>' : '';
-            var editorBadge = l.isPublic && l.createdBy ? '<span class="text-muted small ms-2">by ' + String(l.createdBy).replace(/</g,'&lt;') + '</span>' : '';
-            html += '<li class="d-flex align-items-center px-2 py-1"><a href="#" class="flex-grow-1 text-decoration-none text-body" onclick="loadNamedLayout(\''+String(l.headerCode).replace(/'/g,"\\'")+'\'); return false;"><i class="bi bi-bookmark me-1"></i>'+safeName+publicBadge+editorBadge+'</a>';
-            if (l.canEdit) html += '<button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2" title="Delete" onclick="deleteNamedLayout(\''+String(l.headerCode).replace(/'/g,"\\'")+'\', \''+safeName.replace(/'/g,"\\'")+'\'); return false;"><i class="bi bi-trash"></i></button>';
-            html += '</li>';
-        });
-    }
-    renderGroup('Your layouts', own);
-    renderGroup('Public layouts', pub);
-    menu.innerHTML = html;
-}
-
-function loadNamedLayout(headerCode) {
-    if (!headerCode) return;
-    fetch('@Url.Action("LoadOffersReportLayout", "Reports")?headerCode=' + encodeURIComponent(headerCode), { method: 'POST', credentials: 'same-origin' })
-        .then(function(r) { if (isAuthRedirect(r)) { showSessionExpiredToast(); return null; } return r.json(); })
-        .then(function(data) {
-            if (data == null) return;
-            if (!data.success) { showLayoutToast(data.message || 'Failed to load layout', 'danger'); return; }
-            applyLayoutParameters(data.parameters || {});
-            var label = document.getElementById('layoutsCurrentName');
-            if (label && __layoutsCache) {
-                var match = __layoutsCache.find(function(l) { return l.headerCode === headerCode; });
-                if (match) label.textContent = match.name;
-            }
-            showLayoutToast('Layout loaded \u2014 click Generate to run.', 'success');
-        })
-        .catch(function() { showLayoutToast('Network error loading layout', 'danger'); });
-}
 
 function applyLayoutParameters(parms) {
     function setVal(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
@@ -1081,82 +983,11 @@ function applyLayoutParameters(parms) {
             });
         } catch(e) {}
     }
-    if (parms.ItemsSelectionJson && typeof applyItemsSelectionJson === 'function') {
-        try { applyItemsSelectionJson(parms.ItemsSelectionJson); } catch(e) {}
+    if (parms.ItemsSelectionJson && typeof reloadItemsSelectionFromJson === 'function') {
+        try { reloadItemsSelectionFromJson(typeof parms.ItemsSelectionJson === 'string' ? JSON.parse(parms.ItemsSelectionJson) : parms.ItemsSelectionJson); } catch(e) {}
     }
 }
 
-function saveLayoutAsConfirm() {
-    var nameEl = document.getElementById('saveLayoutAsName');
-    var pubEl = document.getElementById('saveLayoutAsPublic');
-    var alertEl = document.getElementById('saveLayoutAsAlert');
-    var btn = document.getElementById('saveLayoutAsConfirmBtn');
-    var spinner = document.getElementById('saveLayoutAsSpinner');
-    if (alertEl) { alertEl.classList.add('d-none'); alertEl.textContent = ''; }
-    var name = (nameEl.value || '').trim();
-    if (!name) { alertEl.textContent = 'Layout name is required.'; alertEl.className = 'alert alert-warning'; return; }
-    btn.disabled = true; spinner.classList.remove('d-none');
-    var parms = collectCurrentLayout();
-    fetch('@Url.Action("SaveOffersReportLayoutAs", "Reports")', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, isPublic: !!(pubEl && pubEl.checked), parameters: parms })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        btn.disabled = false; spinner.classList.add('d-none');
-        if (data.success) {
-            bootstrap.Modal.getInstance(document.getElementById('saveLayoutAsModal')).hide();
-            showLayoutToast('Layout saved', 'success');
-            loadLayoutsList();
-            var label = document.getElementById('layoutsCurrentName');
-            if (label) label.textContent = name;
-        } else { alertEl.textContent = data.message || 'Failed to save'; alertEl.className = 'alert alert-danger'; }
-    })
-    .catch(function() { btn.disabled = false; spinner.classList.add('d-none'); alertEl.textContent = 'Network error.'; alertEl.className = 'alert alert-danger'; });
-}
-
-function deleteNamedLayout(headerCode, displayName) {
-    if (!confirm('Delete layout "' + displayName + '"?')) return;
-    fetch('@Url.Action("DeleteOffersReportLayout", "Reports")?headerCode=' + encodeURIComponent(headerCode), { method: 'POST' })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) { showLayoutToast('Layout deleted', 'success'); loadLayoutsList(); }
-            else showLayoutToast(data.message || 'Failed to delete', 'danger');
-        })
-        .catch(function() { showLayoutToast('Network error', 'danger'); });
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    var btn = document.getElementById('layoutsDropdownBtn');
-    if (!btn) return;
-    var loadedOnce = false;
-    btn.addEventListener('show.bs.dropdown', function() {
-        if (!loadedOnce) { loadedOnce = true; loadLayoutsList(); }
-    });
-    var modalEl = document.getElementById('saveLayoutAsModal');
-    if (modalEl) {
-        modalEl.addEventListener('show.bs.modal', function() {
-            document.getElementById('saveLayoutAsName').value = '';
-            document.getElementById('saveLayoutAsPublic').checked = false;
-            var alertEl = document.getElementById('saveLayoutAsAlert');
-            if (alertEl) { alertEl.classList.add('d-none'); alertEl.textContent = ''; }
-        });
-    }
-});
-
-function showLayoutToast(message, type) {
-    var existing = document.getElementById('layoutToast');
-    if (existing) existing.remove();
-    var div = document.createElement('div');
-    div.id = 'layoutToast';
-    div.className = 'alert alert-' + type + ' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';
-    div.style.zIndex = '9999';
-    div.innerHTML = '<i class="bi bi-' + (type === 'success' ? 'check-circle' : 'exclamation-triangle') + ' me-1"></i>' + message +
-        '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
-    document.body.appendChild(div);
-    setTimeout(function() { if (div.parentNode) div.remove(); }, 4000);
-}
 
 // ==================== Column Visibility ====================
 

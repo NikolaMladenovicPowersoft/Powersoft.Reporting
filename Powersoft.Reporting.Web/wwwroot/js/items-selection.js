@@ -33,6 +33,7 @@
         let _modalTempSelected = new Set();
         let _bsModal = null;
         let _showSelectedOnly = false;
+        let _filtersActive = true;
         const _summaryLoading = {};
 
         function initDim(dim) {
@@ -167,21 +168,17 @@
 
         window.setDimMode = function (dim, btn) {
             var grp = btn.closest('.btn-group');
-            var prevMode = _modes[dim];
             var mode = btn.getAttribute('data-mode');
 
-            // Meeting decision (George): switching directly between include and exclude
-            // clears the selection so the user re-picks for the new intent. Selecting from
-            // a fresh ('all') state keeps whatever was just chosen (include is the default).
-            var switchingActive = (prevMode === 'include' && mode === 'exclude') ||
-                (prevMode === 'exclude' && mode === 'include');
-            if (switchingActive) {
-                _selected[dim] = new Set();
-                _selInclude[dim] = new Set();
-                _selExclude[dim] = new Set();
-            }
-
+            // Decision (Danny, overrides earlier George meeting note): switching between
+            // include and exclude KEEPS the current selection and only flips the condition.
+            // Use case: view results for a selection, then flip to compare without it; and a
+            // misclick no longer wipes a large multi-item selection. The shared working set
+            // is _selected[dim]; we just mirror it into the matching include/exclude bucket.
             _modes[dim] = mode;
+            if (mode === 'include') _selInclude[dim] = new Set(_selected[dim]);
+            else if (mode === 'exclude') _selExclude[dim] = new Set(_selected[dim]);
+
             grp.querySelectorAll('.btn').forEach(function (b) {
                 b.classList.remove('active', 'btn-outline-secondary', 'btn-outline-success', 'btn-outline-danger',
                     'btn-secondary', 'btn-success', 'btn-danger');
@@ -210,6 +207,41 @@
             updateBadge();
         };
 
+        // Clear every dimension + property filter in one click (keeps the panel open).
+        window.clearAllItemsSelection = function () {
+            Object.keys(_modes).forEach(function (dim) {
+                _modes[dim] = 'all';
+                _selected[dim] = new Set();
+                _selInclude[dim] = new Set();
+                _selExclude[dim] = new Set();
+                var grp = document.querySelector('[data-dim="' + dim + '"] .btn-group');
+                if (grp) grp.querySelectorAll('.btn').forEach(function (b) {
+                    b.classList.remove('active', 'btn-success', 'btn-danger');
+                    b.classList.add(b.getAttribute('data-mode') === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
+                });
+                updateTrigger(dim);
+            });
+            var stockEl = document.getElementById('isPropStock');
+            if (stockEl) stockEl.value = 'all';
+            var ecomEl = document.getElementById('isPropEcommerce');
+            if (ecomEl) ecomEl.checked = false;
+            ['isPropModifiedFrom', 'isPropModifiedTo', 'isPropCreatedFrom', 'isPropCreatedTo',
+                'isPropReleasedFrom', 'isPropReleasedTo'].forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+            updateBadge();
+        };
+
+        // Master "Apply filters" switch. When off, the selections stay intact in the UI but
+        // getItemsSelectionFilter() reports nothing so the report runs unfiltered.
+        window.setFiltersActive = function (on) {
+            _filtersActive = !!on;
+            var card = document.getElementById('itemsSelectionCard');
+            if (card) card.classList.toggle('filters-paused', !_filtersActive);
+            updateBadge();
+        };
+
         var _naDims = { category: 1, department: 1, brand: 1, season: 1, supplier: 1 };
 
         function loadDimData(dim) {
@@ -235,14 +267,30 @@
             document.getElementById('dimModalList').innerHTML =
                 '<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary me-2"></span>Loading...</div>';
 
-            if (!_bsModal) _bsModal = new bootstrap.Modal(document.getElementById('dimModal'));
+            var modalEl = document.getElementById('dimModal');
+            if (!_bsModal) _bsModal = new bootstrap.Modal(modalEl);
+
+            // Attach the scroll-driven lazy loader once (the list element persists across opens).
+            var listEl = document.getElementById('dimModalList');
+            if (listEl && !listEl.__scrollLoaderAttached) {
+                listEl.__scrollLoaderAttached = true;
+                listEl.addEventListener('scroll', function () { maybeLoadMore(listEl); });
+            }
+
+            // Focus the search box only AFTER the open transition completes. Doing it earlier
+            // (setTimeout) lost the cursor because Bootstrap re-focuses the dialog on
+            // shown.bs.modal. data-bs-focus="false" on the modal stops it stealing focus back.
+            modalEl.addEventListener('shown.bs.modal', function onShown() {
+                modalEl.removeEventListener('shown.bs.modal', onShown);
+                var s = document.getElementById('dimModalSearch');
+                if (s) s.focus();
+            });
+
             _bsModal.show();
 
             loadDimData(dim).then(function () {
                 renderModalList();
                 updateModalCount();
-                var searchInput = document.getElementById('dimModalSearch');
-                if (searchInput) setTimeout(function () { searchInput.focus(); }, 100);
                 // Names are now available — refresh the selected-summary chips with real names.
                 renderSelectedSummary();
             });
@@ -292,6 +340,7 @@
             }
             if (!items.length && !html) {
                 list.innerHTML = '<div class="text-muted text-center py-4">No items found</div>';
+                updateModalCount();
                 return;
             }
 
@@ -305,6 +354,7 @@
             if (_renderedCount < items.length) {
                 appendLoadMoreSentinel(list);
             }
+            updateModalCount();
         }
 
         function appendLoadMoreSentinel(list) {
@@ -313,17 +363,22 @@
             sentinel.className = 'text-center py-2 text-muted small';
             sentinel.textContent = (_filteredItems.length - _renderedCount) + ' more — scroll to load';
             list.appendChild(sentinel);
-            var obs = new IntersectionObserver(function (entries) {
-                if (entries[0].isIntersecting) {
-                    obs.disconnect();
-                    loadMoreItems();
-                }
-            }, { root: list });
-            obs.observe(sentinel);
+        }
+
+        // Scroll-driven loader (replaces IntersectionObserver, which could stall after a few
+        // pages when a freshly-appended sentinel never re-intersected). Reliable: every scroll
+        // near the bottom pulls the next page; loadMoreItems itself keeps filling until the
+        // list is actually scrollable so we never get stuck below the fold.
+        function maybeLoadMore(list) {
+            if (_renderedCount >= _filteredItems.length) return;
+            if (list.scrollTop + list.clientHeight >= list.scrollHeight - 80) {
+                loadMoreItems();
+            }
         }
 
         function loadMoreItems() {
             var list = document.getElementById('dimModalList');
+            if (!list) return;
             var sentinel = document.getElementById('dimModalSentinel');
             if (sentinel) sentinel.remove();
             var end = Math.min(_renderedCount + _PAGE_SIZE, _filteredItems.length);
@@ -337,7 +392,14 @@
             list.appendChild(frag);
             if (_renderedCount < _filteredItems.length) {
                 appendLoadMoreSentinel(list);
+                // If this page didn't make the list scrollable yet, keep loading so the user
+                // can always reach the rest by scrolling (prevents the "stops at N" stall).
+                if (list.scrollHeight <= list.clientHeight + 4) {
+                    loadMoreItems();
+                    return;
+                }
             }
+            updateModalCount();
         }
 
         var _searchDebounce = null;
@@ -380,9 +442,15 @@
         };
 
         function updateModalCount() {
-            var total = (_dims[_modalDim] || []).length;
-            var showing = _filteredItems.length;
-            var countText = showing < total ? showing + ' / ' + total : total + ' item' + (total !== 1 ? 's' : '');
+            // "shown" grows as the user scrolls (lazy render in pages of _PAGE_SIZE); listCount is
+            // the full matching list (after any search). This makes the top counter tick up
+            // 100 → 200 → … while scrolling, then settle at the full count.
+            var listCount = _filteredItems.length;
+            var shown = Math.min(_renderedCount, listCount);
+            var selCount = 0;
+            _modalTempSelected.forEach(function (id) { if (id !== _naMarker) selCount++; });
+            var countText = (shown < listCount ? (shown + ' / ' + listCount) : listCount) + ' shown';
+            if (selCount > 0) countText += ' · ' + selCount + ' selected';
             document.getElementById('dimModalCount').textContent = countText;
 
             // A modal edits a single dimension in a single mode. A fresh ('all') dimension is
@@ -460,19 +528,22 @@
             var mode = _modes[dim];
             var trigger = document.getElementById('dimTrigger_' + dim);
             var clearBtn = document.getElementById('dimClear_' + dim);
+            var modeGroup = document.querySelector('[data-dim="' + dim + '"] .btn-group');
             trigger.classList.remove('btn-outline-secondary', 'btn-outline-success', 'btn-outline-danger');
             if (mode === 'all' || cnt === 0) {
                 txt.textContent = getDimLabel(dim);
                 txt.className = 'dim-text text-muted small';
                 trigger.classList.add('btn-outline-secondary');
                 if (clearBtn) clearBtn.classList.add('d-none');
+                if (modeGroup) modeGroup.classList.add('dim-inactive');
             } else {
-                var names = getSelectedNames(dim, 2);
-                var prefix = mode === 'include' ? '' : 'NOT ';
-                txt.textContent = names ? prefix + names : cnt + (mode === 'include' ? ' included' : ' excluded');
+                // Show only the dimension + count here; the actual chosen names are listed in
+                // the "Selected filters" chips below, so we don't duplicate (and don't overflow).
+                txt.textContent = getDimLabel(dim) + ': ' + cnt + (mode === 'include' ? ' included' : ' excluded');
                 txt.className = 'dim-text fw-semibold small ' + (mode === 'include' ? 'text-success' : 'text-danger');
                 trigger.classList.add(mode === 'include' ? 'btn-outline-success' : 'btn-outline-danger');
                 if (clearBtn) clearBtn.classList.remove('d-none');
+                if (modeGroup) modeGroup.classList.remove('dim-inactive');
             }
         }
 
@@ -502,6 +573,11 @@
                 } else {
                     badge.classList.add('d-none');
                 }
+            }
+            // "Not applied" badge: only meaningful when filters exist but are paused.
+            var inactiveBadge = document.getElementById('isInactiveBadge');
+            if (inactiveBadge) {
+                inactiveBadge.classList.toggle('d-none', !(!_filtersActive && cnt > 0));
             }
             renderSelectedSummary();
         }
@@ -582,6 +658,8 @@
         window.updatePropBadge = function () { updateBadge(); };
 
         window.getItemsSelectionFilter = function () {
+            // Paused → report runs unfiltered, but the UI selections are preserved.
+            if (!_filtersActive) return {};
             var filter = {};
             var dimKeyMap = {
                 category: 'categories', department: 'departments', brand: 'brands',
@@ -621,11 +699,13 @@
         };
 
         window.getItemsSelectionStoreCodes = function () {
+            if (!_filtersActive) return '';
             if (_modes['store'] !== 'include' || _selected['store'].size === 0) return '';
             return Array.from(_selected['store']).join(',');
         };
 
         window.getItemsSelectionItemIds = function () {
+            if (!_filtersActive) return '';
             if (_modes['item'] !== 'include' || !_selected['item'] || _selected['item'].size === 0) return '';
             return Array.from(_selected['item']).join(',');
         };

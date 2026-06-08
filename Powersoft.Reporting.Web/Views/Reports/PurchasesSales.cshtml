@@ -188,13 +188,26 @@
                     </button>
                 }
                 <div class="btn-group ms-auto">
-                    <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Save current parameters as your default layout">
-                        <i class="bi bi-save me-1"></i>Save Layout
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"
+                                title="Saved report layouts" id="layoutsDropdownBtn">
+                            <i class="bi bi-bookmark me-1"></i><span id="layoutsCurrentName">Layouts</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" id="layoutsDropdownMenu" style="min-width: 320px;">
+                            <li><h6 class="dropdown-header">Loading...</h6></li>
+                        </ul>
+                    </div>
+                    <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Overwrite your default layout with current parameters">
+                        <i class="bi bi-save me-1"></i>Save
+                    </button>
+                    <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveLayoutAsModal"
+                            title="Save current parameters as a new named layout (optionally shared with all users)">
+                        <i class="bi bi-bookmark-plus me-1"></i>Save as...
                     </button>
                     @if (Model.HasSavedLayout)
                     {
-                        <button type="button" class="btn btn-outline-secondary" onclick="resetSavedLayout()" title="Discard your saved layout and restore factory defaults">
-                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Layout
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetSavedLayout()" title="Discard your saved default layout and restore factory defaults">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Default
                         </button>
                     }
                     <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#columnSettingsModal" title="Choose which columns to show/hide">
@@ -958,6 +971,13 @@ else
     </div>
 </div>
 
+@await Html.PartialAsync("_SaveLayout", new Powersoft.Reporting.Web.ViewModels.SaveLayoutPartialModel
+{
+    ReportType     = Powersoft.Reporting.Core.Constants.ReportTypeConstants.PurchasesSales,
+    HasSavedLayout = Model.HasSavedLayout,
+    ReportViewUrl  = Url.Action("PurchasesSales", "Reports") ?? ""
+})
+
 <!-- Document Detail Modal -->
 <div class="modal fade" id="docDetailModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -1239,15 +1259,31 @@ function loadScheduleIntoForm(scheduleId){fetch('@Url.Action("GetScheduleById","
 
 function collectCurrentLayout(){var p={};var vat=document.getElementById('includeVatCheck');if(vat)p['IncludeVat']=vat.checked?'1':'0';var sp=document.getElementById('showProfitCheck');if(sp)p['ShowProfit']=sp.checked?'1':'0';var ss=document.getElementById('showStockCheck');if(ss)p['ShowStock']=ss.checked?'1':'0';var soo=document.getElementById('showOnOrderCheck');if(soo)p['ShowOnOrder']=soo.checked?'1':'0';var sr=document.getElementById('showReservationCheck');if(sr)p['ShowReservation']=sr.checked?'1':'0';var sav=document.getElementById('showAvailableCheck');if(sav)p['ShowAvailable']=sav.checked?'1':'0';var iac=document.getElementById('includeAdditionalChargesCheck');if(iac)p['IncludeAdditionalCharges']=iac.checked?'1':'0';var rm=document.getElementById('ReportMode');if(rm)p['ReportMode']=rm.options[rm.selectedIndex].text;var pg=document.getElementById('PrimaryGroup');if(pg)p['PrimaryGroup']=pg.options[pg.selectedIndex].text;var sg=document.getElementById('SecondaryGroup');if(sg)p['SecondaryGroup']=sg.options[sg.selectedIndex].text;var tg=document.getElementById('ThirdGroup');if(tg)p['ThirdGroup']=tg.options[tg.selectedIndex].text;var ps=document.getElementById('PageSize');if(ps)p['PageSize']=ps.value;var hidden=[];document.querySelectorAll('.col-toggle').forEach(function(cb){if(!cb.checked)hidden.push(cb.value);});p['HiddenColumns']=hidden.join(',');if(typeof getItemsSelectionFilter==='function')p['ItemsSelectionJson']=JSON.stringify(getItemsSelectionFilter());return p;}
 
-// Guards against 302-to-login on expired cookie (otherwise we'd try to parse the login HTML as JSON and silently fail).
-function isAuthRedirect(r){if(!r)return false;if(r.status===401||r.status===403)return true;if(r.redirected&&/\/Account\/Login/i.test(r.url||''))return true;var ct=r.headers&&r.headers.get?r.headers.get('content-type'):'';if(ct&&ct.indexOf('text/html')!==-1)return true;return false;}
-function showSessionExpiredToast(){showLayoutToast('Session expired — please reload the page and sign in again.','warning');}
-
-function saveCurrentLayout(){var p=collectCurrentLayout();fetch('@Url.Action("SavePsLayout","Reports")',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}).then(function(r){if(isAuthRedirect(r)){showSessionExpiredToast();return null;}return r.json();}).then(function(d){if(d==null)return;showLayoutToast(d.success?'Layout saved successfully':(d.message||'Failed'),d.success?'success':'danger');}).catch(function(){showLayoutToast('Network error','danger');});}
-
-function resetSavedLayout(){if(!confirm('Reset your saved layout to factory defaults?'))return;fetch('@Url.Action("ResetPsLayout","Reports")',{method:'POST',credentials:'same-origin'}).then(function(r){if(isAuthRedirect(r)){showSessionExpiredToast();return null;}return r.json();}).then(function(d){if(d==null)return;if(d.success){showLayoutToast('Layout reset — reloading...','success');setTimeout(function(){window.location.href='@Url.Action("PurchasesSales")';},800);}else{showLayoutToast(d.message||'Failed','danger');}}).catch(function(){showLayoutToast('Network error','danger');});}
-
-function showLayoutToast(msg,type){var ex=document.getElementById('layoutToast');if(ex)ex.remove();var d=document.createElement('div');d.id='layoutToast';d.className='alert alert-'+type+' alert-dismissible fade show position-fixed bottom-0 end-0 m-3 shadow';d.style.zIndex='9999';d.innerHTML='<i class="bi bi-'+(type==='success'?'check-circle':'exclamation-triangle')+' me-1"></i>'+msg+'<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';document.body.appendChild(d);setTimeout(function(){if(d.parentNode)d.remove();},4000);}
+function applyLayoutParameters(p){
+    function chk(id,v){var el=document.getElementById(id);if(el&&v!=null)el.checked=(v==='1'||v===true);}
+    function sel(id,v){var el=document.getElementById(id);if(el&&v!=null){for(var i=0;i<el.options.length;i++){if(el.options[i].text===v||el.options[i].value===v){el.selectedIndex=i;break;}};}
+    }
+    chk('includeVatCheck',p['IncludeVat']);
+    chk('showProfitCheck',p['ShowProfit']);
+    chk('showStockCheck',p['ShowStock']);
+    chk('showOnOrderCheck',p['ShowOnOrder']);
+    chk('showReservationCheck',p['ShowReservation']);
+    chk('showAvailableCheck',p['ShowAvailable']);
+    chk('includeAdditionalChargesCheck',p['IncludeAdditionalCharges']);
+    sel('ReportMode',p['ReportMode']);
+    sel('PrimaryGroup',p['PrimaryGroup']);
+    sel('SecondaryGroup',p['SecondaryGroup']);
+    sel('ThirdGroup',p['ThirdGroup']);
+    var ps=document.getElementById('PageSize');if(ps&&p['PageSize'])ps.value=p['PageSize'];
+    if(p['HiddenColumns']!=null){
+        var hidden=p['HiddenColumns'].split(',').filter(function(s){return s.trim();});
+        document.querySelectorAll('.col-toggle').forEach(function(cb){cb.checked=hidden.indexOf(cb.value)===-1;});
+        applyColumnVisibility();
+    }
+    if(p['ItemsSelectionJson']!=null&&typeof reloadItemsSelectionFromJson==='function'){
+        try{reloadItemsSelectionFromJson(JSON.parse(p['ItemsSelectionJson']));}catch(e){}
+    }
+}
 
 function initColumnVisibilityFromServer(){var hc='@(Model.HiddenColumns??"")';if(!hc)return;var hidden=hc.split(',').filter(s=>s.trim());if(hidden.length===0)return;hidden.forEach(function(col){var cb=document.querySelector('.col-toggle[value="'+col.trim()+'"]');if(cb)cb.checked=false;});applyColumnVisibility();}
 

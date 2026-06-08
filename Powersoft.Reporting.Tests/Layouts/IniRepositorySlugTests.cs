@@ -1,5 +1,6 @@
 using System.Reflection;
 using FluentAssertions;
+using Powersoft.Reporting.Core.Constants;
 using Powersoft.Reporting.Data.Tenant;
 using Xunit;
 
@@ -62,6 +63,13 @@ public class IniRepositorySlugTests
             because: "IniHeaderCode column is nvarchar(20)");
         headerCode.Should().StartWith("AVGBASKET:");
         headerCode.Should().NotEndWith("-");
+    }
+
+    [Fact]
+    public void BelowMinStock_SlugConstant_IsPresent()
+    {
+        ModuleConstants.IniHeaderBelowMinStock.Should().Be("BELOWMIN");
+        ModuleConstants.IniDescriptionBelowMinStock.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]

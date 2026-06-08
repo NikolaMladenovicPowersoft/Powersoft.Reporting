@@ -44,7 +44,28 @@
             <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
                 <i class="bi bi-clock-history me-2"></i>Schedule
             </button>
-            <button type="button" class="btn btn-outline-primary ms-auto" onclick="openSendEmailModal()" title="Send report via email">
+            <div class="btn-group ms-auto">
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"
+                            title="Saved report layouts" id="layoutsDropdownBtn">
+                        <i class="bi bi-bookmark me-1"></i><span id="layoutsCurrentName">Layouts</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" id="layoutsDropdownMenu" style="min-width: 320px;">
+                        <li><h6 class="dropdown-header">Loading...</h6></li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Overwrite your default layout with current parameters">
+                    <i class="bi bi-save me-1"></i>Save
+                </button>
+                <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveLayoutAsModal"
+                        title="Save current parameters as a new named layout (optionally shared with all users)">
+                    <i class="bi bi-bookmark-plus me-1"></i>Save as...
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="resetLayoutBtn" onclick="resetSavedLayout()" title="Discard your saved default layout and restore factory defaults" style="display:none;">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Default
+                </button>
+            </div>
+            <button type="button" class="btn btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
                 <i class="bi bi-envelope me-1"></i>Send to Email
             </button>
             <div class="btn-group">
@@ -125,6 +146,13 @@
     SendAction = "SendBelowMinStockEmail",
     ReportType = "BelowMinStock",
     SubjectDefault = "Below Minimum Stock Report"
+})
+
+@await Html.PartialAsync("_SaveLayout", new Powersoft.Reporting.Web.ViewModels.SaveLayoutPartialModel
+{
+    ReportType     = Powersoft.Reporting.Core.Constants.ReportTypeConstants.BelowMinStock,
+    HasSavedLayout = false,
+    ReportViewUrl  = Url.Action("BelowMinStock", "Reports") ?? ""
 })
 
 <script>
@@ -238,6 +266,33 @@ function exportCsv() {
 function fmt(v) { return v != null ? v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-'; }
 function fmtMoney(v) { return v != null ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'; }
 function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// ===== Layout hooks (required by _SaveLayout partial) =====
+function collectCurrentLayout() {
+    var p = {};
+    if (typeof getItemsSelectionFilter === 'function') {
+        p['ItemsSelectionJson'] = JSON.stringify(getItemsSelectionFilter());
+    }
+    return p;
+}
+
+function applyLayoutParameters(p) {
+    if (p['ItemsSelectionJson'] && typeof reloadItemsSelectionFromJson === 'function') {
+        try { reloadItemsSelectionFromJson(JSON.parse(p['ItemsSelectionJson'])); } catch (e) {}
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('@Url.Action("GetReportLayout", "Reports")?reportType=BelowMinStock')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success || !data.hasSaved) return;
+            applyLayoutParameters(data.parameters || {});
+            var btn = document.getElementById('resetLayoutBtn');
+            if (btn) btn.style.display = '';
+        })
+        .catch(function() {});
+});
 
 // ===== Shared schedule partial API =====
 

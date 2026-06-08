@@ -12,6 +12,7 @@ public class CsvExportService
         ReportFilter filter)
     {
         bool hasGrouping = filter.GroupBy != Core.Enums.GroupByType.None;
+        bool hasSecondary = filter.SecondaryGroupBy != Core.Enums.GroupByType.None;
         bool includeVat = filter.IncludeVat;
         bool compareLY = filter.CompareLastYear;
 
@@ -21,7 +22,7 @@ public class CsvExportService
         sb.AppendLine($"# Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}");
         sb.AppendLine($"# Breakdown: {filter.Breakdown}");
         sb.AppendLine($"# Group By: {filter.GroupBy}");
-        if (filter.SecondaryGroupBy != Core.Enums.GroupByType.None)
+        if (hasSecondary)
             sb.AppendLine($"# Secondary Group: {filter.SecondaryGroupBy}");
         sb.AppendLine($"# Include VAT: {(includeVat ? "Yes" : "No")}");
         if (compareLY) sb.AppendLine("# Compare Last Year: Yes");
@@ -32,6 +33,7 @@ public class CsvExportService
 
         var headers = new List<string>();
         if (hasGrouping) headers.Add(filter.GroupBy.ToString());
+        if (hasSecondary) headers.Add(filter.SecondaryGroupBy.ToString());
         headers.AddRange(new[]
         {
             "Period", "Invoices", "Returns", "Net Trans.",
@@ -45,12 +47,13 @@ public class CsvExportService
         }
         sb.AppendLine(string.Join(",", headers.Select(Escape)));
 
-        // Data rows
-        foreach (var row in rows)
+        string F2(decimal v) => v.ToString("F2", CultureInfo.InvariantCulture);
+
+        void WriteRow(AverageBasketRow row)
         {
             var cells = new List<string>();
             if (hasGrouping) cells.Add(row.Level1Value ?? row.Level1 ?? "N/A");
-
+            if (hasSecondary) cells.Add(row.Level2Value ?? row.Level2 ?? "N/A");
             cells.Add(row.Period);
             cells.Add(row.CYInvoiceCount.ToString(CultureInfo.InvariantCulture));
             cells.Add(row.CYCreditCount.ToString(CultureInfo.InvariantCulture));
@@ -58,18 +61,69 @@ public class CsvExportService
             cells.Add(row.CYQtySold.ToString(CultureInfo.InvariantCulture));
             cells.Add(row.CYQtyReturned.ToString(CultureInfo.InvariantCulture));
             cells.Add(row.CYTotalQty.ToString(CultureInfo.InvariantCulture));
-            cells.Add((includeVat ? row.CYTotalGross : row.CYTotalNet).ToString("F2", CultureInfo.InvariantCulture));
-            cells.Add((includeVat ? row.CYAverageGross : row.CYAverageNet).ToString("F2", CultureInfo.InvariantCulture));
-            cells.Add(row.CYAverageQty.ToString("F2", CultureInfo.InvariantCulture));
-
+            cells.Add(F2(includeVat ? row.CYTotalGross : row.CYTotalNet));
+            cells.Add(F2(includeVat ? row.CYAverageGross : row.CYAverageNet));
+            cells.Add(F2(row.CYAverageQty));
             if (compareLY)
             {
-                cells.Add((includeVat ? row.LYTotalGross : row.LYTotalNet).ToString("F2", CultureInfo.InvariantCulture));
-                cells.Add((includeVat ? row.LYAverageGross : row.LYAverageNet).ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(F2(includeVat ? row.LYTotalGross : row.LYTotalNet));
+                cells.Add(F2(includeVat ? row.LYAverageGross : row.LYAverageNet));
                 cells.Add(row.YoYChangePercent.ToString("F1", CultureInfo.InvariantCulture));
             }
-
             sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        // Subtotal: counts/qty/sales summed; Avg Basket / Avg Qty recomputed from sums
+        // (Sales / Net Trans.) exactly like the on-screen grid.
+        void WriteSub(List<AverageBasketRow> g)
+        {
+            var cells = new List<string>();
+            if (hasGrouping) cells.Add("Subtotal");
+            if (hasSecondary) cells.Add("");
+            cells.Add("");
+            var gInv = g.Sum(r => r.CYInvoiceCount);
+            var gCred = g.Sum(r => r.CYCreditCount);
+            var gTrans = g.Sum(r => r.CYTotalTransactions);
+            var gQtySold = g.Sum(r => r.CYQtySold);
+            var gQtyRet = g.Sum(r => r.CYQtyReturned);
+            var gNetQty = g.Sum(r => r.CYTotalQty);
+            var gSales = g.Sum(r => includeVat ? r.CYTotalGross : r.CYTotalNet);
+            var gAvgBasket = gTrans > 0 ? gSales / gTrans : 0m;
+            var gAvgQty = gTrans > 0 ? gNetQty / gTrans : 0m;
+            cells.Add(gInv.ToString(CultureInfo.InvariantCulture));
+            cells.Add(gCred.ToString(CultureInfo.InvariantCulture));
+            cells.Add(gTrans.ToString(CultureInfo.InvariantCulture));
+            cells.Add(gQtySold.ToString(CultureInfo.InvariantCulture));
+            cells.Add(gQtyRet.ToString(CultureInfo.InvariantCulture));
+            cells.Add(gNetQty.ToString(CultureInfo.InvariantCulture));
+            cells.Add(F2(gSales));
+            cells.Add(F2(gAvgBasket));
+            cells.Add(F2(gAvgQty));
+            if (compareLY)
+            {
+                var gLyTrans = g.Sum(r => r.LYTotalTransactions);
+                var gLySales = g.Sum(r => includeVat ? r.LYTotalGross : r.LYTotalNet);
+                var gLyAvg = gLyTrans > 0 ? gLySales / gLyTrans : 0m;
+                var gYoY = gLySales != 0 ? Math.Round((gSales - gLySales) / Math.Abs(gLySales) * 100, 2) : (gSales > 0 ? 100m : 0m);
+                cells.Add(F2(gLySales));
+                cells.Add(F2(gLyAvg));
+                cells.Add(gYoY.ToString("F1", CultureInfo.InvariantCulture));
+            }
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        if (hasGrouping)
+        {
+            foreach (var grp in rows.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A"))
+            {
+                var gr = grp.ToList();
+                foreach (var row in gr) WriteRow(row);
+                WriteSub(gr);
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteRow(row);
         }
 
         // Grand total row
@@ -77,6 +131,7 @@ public class CsvExportService
         {
             var cells = new List<string>();
             if (hasGrouping) cells.Add("");
+            if (hasSecondary) cells.Add("");
 
             cells.Add("GRAND TOTAL");
             cells.Add(grandTotals.TotalInvoices.ToString(CultureInfo.InvariantCulture));
@@ -335,8 +390,71 @@ public class CsvExportService
 
         sb.AppendLine(string.Join(",", cols.Select(c => Escape(c.Label))));
 
-        foreach (var row in rows)
-            sb.AppendLine(string.Join(",", cols.Select(c => Escape(c.Value(row)))));
+        string FmtCat(string key, decimal v) =>
+            (key == "Markup" || key == "Margin")
+                ? v.ToString("F1", CultureInfo.InvariantCulture)
+                : v.ToString("F2", CultureInfo.InvariantCulture);
+
+        // Subtotal row: group identity is in the _L1/_L2/_L3 columns (matches PurchasesSales).
+        // Math delegated to CatalogueSubtotal so the numbers match the grid/preview exactly.
+        void WriteSubtotal(IEnumerable<CatalogueRow> grp, string label, int level)
+        {
+            var st = CatalogueSubtotal.From(grp);
+            int labelCol = cols.FindIndex(c => c.Key == "_L" + level);
+            var cells = new List<string>(cols.Count);
+            for (int i = 0; i < cols.Count; i++)
+            {
+                if (cols[i].IsNumeric)
+                {
+                    var v = st.ValueForKey(cols[i].Key);
+                    cells.Add(v.HasValue ? FmtCat(cols[i].Key, v.Value) : "");
+                }
+                else cells.Add(i == labelCol ? label : "");
+            }
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        if (hasL1)
+        {
+            foreach (var l1 in rows.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A"))
+            {
+                var l1Rows = l1.ToList();
+                if (hasL2)
+                {
+                    foreach (var l2 in l1Rows.GroupBy(r => r.Level2Value ?? "N/A"))
+                    {
+                        var l2Rows = l2.ToList();
+                        if (hasL3)
+                        {
+                            foreach (var l3 in l2Rows.GroupBy(r => r.Level3Value ?? "N/A"))
+                            {
+                                var l3Rows = l3.ToList();
+                                foreach (var row in l3Rows)
+                                    sb.AppendLine(string.Join(",", cols.Select(c => Escape(c.Value(row)))));
+                                WriteSubtotal(l3Rows, l3.Key + " subtotal", 3);
+                            }
+                        }
+                        else
+                        {
+                            foreach (var row in l2Rows)
+                                sb.AppendLine(string.Join(",", cols.Select(c => Escape(c.Value(row)))));
+                        }
+                        WriteSubtotal(l2Rows, l2.Key + " subtotal", 2);
+                    }
+                }
+                else
+                {
+                    foreach (var row in l1Rows)
+                        sb.AppendLine(string.Join(",", cols.Select(c => Escape(c.Value(row)))));
+                }
+                WriteSubtotal(l1Rows, l1.Key + " total", 1);
+            }
+        }
+        else
+        {
+            foreach (var row in rows)
+                sb.AppendLine(string.Join(",", cols.Select(c => Escape(c.Value(row)))));
+        }
 
         if (totals != null && cols.Count > 0)
         {
@@ -509,7 +627,7 @@ public class CsvExportService
             });
             sb.AppendLine(string.Join(",", headers.Select(Escape)));
 
-            foreach (var row in detailedRows ?? new())
+            void WriteDetRow(CancelLogDetailedRow row)
             {
                 var cells = new List<string> { row.StoreAndStation };
                 if (hasL1) cells.Add(row.Level1Descr);
@@ -532,6 +650,46 @@ public class CsvExportService
                 cells.Add(row.CompartmentName);
                 sb.AppendLine(string.Join(",", cells.Select(Escape)));
             }
+
+            void WriteDetSub(List<CancelLogDetailedRow> g, string label)
+            {
+                var cells = new List<string> { label };
+                if (hasL1) cells.Add("");
+                if (hasL2) cells.Add("");
+                for (int i = 0; i < 10; i++) cells.Add(""); // Action..Total Lines
+                cells.Add(g.Sum(x => x.InvoiceTotal).ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(g.Sum(x => x.Quantity).ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(g.Sum(x => x.Amount).ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(""); cells.Add(""); cells.Add(""); // Table No, Table Name, Compartment
+                sb.AppendLine(string.Join(",", cells.Select(Escape)));
+            }
+
+            var det = detailedRows ?? new();
+            if (hasL1)
+            {
+                foreach (var l1 in det.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+                {
+                    var l1Rows = l1.ToList();
+                    if (hasL2)
+                    {
+                        foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                        {
+                            var l2Rows = l2.ToList();
+                            foreach (var row in l2Rows) WriteDetRow(row);
+                            WriteDetSub(l2Rows, l2.Key + " subtotal");
+                        }
+                    }
+                    else
+                    {
+                        foreach (var row in l1Rows) WriteDetRow(row);
+                    }
+                    WriteDetSub(l1Rows, l1.Key + " total");
+                }
+            }
+            else
+            {
+                foreach (var row in det) WriteDetRow(row);
+            }
         }
         else
         {
@@ -545,7 +703,7 @@ public class CsvExportService
             });
             sb.AppendLine(string.Join(",", headers.Select(Escape)));
 
-            foreach (var row in summaryRows ?? new())
+            void WriteSumRow(CancelLogSummaryRow row)
             {
                 var cells = new List<string> { row.StoreAndStation };
                 if (hasL1) cells.Add(row.Level1Descr);
@@ -557,6 +715,47 @@ public class CsvExportService
                 cells.Add(row.Quantity.ToString("F2", CultureInfo.InvariantCulture));
                 cells.Add(row.Amount.ToString("F2", CultureInfo.InvariantCulture));
                 sb.AppendLine(string.Join(",", cells.Select(Escape)));
+            }
+
+            void WriteSumSub(List<CancelLogSummaryRow> g, string label)
+            {
+                var cells = new List<string> { label };
+                if (hasL1) cells.Add("");
+                if (hasL2) cells.Add("");
+                cells.Add(g.Sum(x => x.DeletedAction).ToString(CultureInfo.InvariantCulture));
+                cells.Add(g.Sum(x => x.CancelledAction).ToString(CultureInfo.InvariantCulture));
+                cells.Add(g.Sum(x => x.ComplimentaryAction).ToString(CultureInfo.InvariantCulture));
+                cells.Add(g.Sum(x => x.InvoiceTotal).ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(g.Sum(x => x.Quantity).ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add(g.Sum(x => x.Amount).ToString("F2", CultureInfo.InvariantCulture));
+                sb.AppendLine(string.Join(",", cells.Select(Escape)));
+            }
+
+            var sum = summaryRows ?? new();
+            if (hasL1)
+            {
+                foreach (var l1 in sum.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+                {
+                    var l1Rows = l1.ToList();
+                    if (hasL2)
+                    {
+                        foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                        {
+                            var l2Rows = l2.ToList();
+                            foreach (var row in l2Rows) WriteSumRow(row);
+                            WriteSumSub(l2Rows, l2.Key + " subtotal");
+                        }
+                    }
+                    else
+                    {
+                        foreach (var row in l1Rows) WriteSumRow(row);
+                    }
+                    WriteSumSub(l1Rows, l1.Key + " total");
+                }
+            }
+            else
+            {
+                foreach (var row in sum) WriteSumRow(row);
             }
         }
 
@@ -586,7 +785,7 @@ public class CsvExportService
         if (filter.IncludeHistory) headers.Add("Source");
         sb.AppendLine(string.Join(",", headers.Select(Escape)));
 
-        foreach (var row in rows)
+        void WriteRow(ProspectClientsRow row)
         {
             var vals = new List<string>();
             if (hasL1) vals.Add(row.Level1Descr);
@@ -617,6 +816,45 @@ public class CsvExportService
             sb.AppendLine(string.Join(",", vals.Select(Escape)));
         }
 
+        void WriteSub(List<ProspectClientsRow> g, string label)
+        {
+            int lead = 18 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0);
+            var vals = new List<string> { label };
+            for (int i = 1; i < lead; i++) vals.Add("");
+            vals.Add(g.Sum(x => x.OfferCount).ToString());
+            vals.Add(g.Sum(x => x.TotalOfferValue).ToString("F2"));
+            vals.Add(g.Sum(x => x.EmailsSent).ToString());
+            vals.Add(g.Sum(x => x.SmsSent).ToString());
+            if (filter.IncludeHistory) vals.Add("");
+            sb.AppendLine(string.Join(",", vals.Select(Escape)));
+        }
+
+        if (hasL1)
+        {
+            foreach (var l1 in rows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+            {
+                var l1Rows = l1.ToList();
+                if (hasL2)
+                {
+                    foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                    {
+                        var l2Rows = l2.ToList();
+                        foreach (var row in l2Rows) WriteRow(row);
+                        WriteSub(l2Rows, l2.Key + " subtotal");
+                    }
+                }
+                else
+                {
+                    foreach (var row in l1Rows) WriteRow(row);
+                }
+                WriteSub(l1Rows, l1.Key + " total");
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteRow(row);
+        }
+
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
     }
 
@@ -632,12 +870,14 @@ public class CsvExportService
     {
         bool hasL1 = filter.PrimaryGroup != "NONE";
         bool hasL2 = filter.SecondaryGroup != "NONE";
+        bool hasL3 = filter.ThirdGroup != "NONE";
 
         var sb = new StringBuilder();
 
         var headers = new List<string>();
         if (hasL1) headers.Add("Group 1");
         if (hasL2) headers.Add("Group 2");
+        if (hasL3) headers.Add("Group 3");
         headers.AddRange(new[]
         {
             "Offer No", "Date", "Valid Until", "Status",
@@ -653,11 +893,12 @@ public class CsvExportService
         });
         sb.AppendLine(string.Join(",", headers.Select(Escape)));
 
-        foreach (var row in rows)
+        void WriteRow(OffersReportRow row)
         {
             var vals = new List<string>();
             if (hasL1) vals.Add(row.Level1Descr);
             if (hasL2) vals.Add(row.Level2Descr);
+            if (hasL3) vals.Add(row.Level3Descr);
             vals.Add(row.OfferNo);
             vals.Add(row.DateTrans?.ToString("yyyy-MM-dd") ?? "");
             vals.Add(row.ValidUntil?.ToString("yyyy-MM-dd") ?? "");
@@ -681,6 +922,64 @@ public class CsvExportService
             vals.Add(row.InternalNotes);
             vals.Add(row.Source);
             sb.AppendLine(string.Join(",", vals.Select(Escape)));
+        }
+
+        // Subtotal: additive numeric columns are summed; percentages (Disc %, Order %) and text
+        // columns are left blank (matches the on-screen grid).
+        void WriteSub(List<OffersReportRow> g, string label)
+        {
+            int lead = 7 + (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0); // groups + OfferNo..Agent
+            var vals = new List<string> { label };
+            for (int i = 1; i < lead; i++) vals.Add("");
+            vals.Add(g.Sum(x => x.ItemCount).ToString());
+            vals.Add(g.Sum(x => x.TotalQuantity).ToString("F2"));
+            vals.Add(g.Sum(x => x.InvoiceTotal).ToString("F2"));
+            vals.Add(g.Sum(x => x.InvoiceTotalDiscount).ToString("F2"));
+            vals.Add(""); // Disc %
+            vals.Add(g.Sum(x => x.InvoiceVat).ToString("F2"));
+            vals.Add(g.Sum(x => x.InvoiceGrandTotal).ToString("F2"));
+            if (viewCost) vals.Add(g.Sum(x => x.TotalItemCost).ToString("F2"));
+            vals.Add(""); // Order %
+            for (int i = 0; i < 6; i++) vals.Add(""); // Lead, Printed, Emailed, Comments, Internal Notes, Source
+            sb.AppendLine(string.Join(",", vals.Select(Escape)));
+        }
+
+        if (hasL1)
+        {
+            foreach (var l1 in rows.GroupBy(r => r.Level1Descr ?? r.Level1Code ?? "N/A"))
+            {
+                var l1Rows = l1.ToList();
+                if (hasL2)
+                {
+                    foreach (var l2 in l1Rows.GroupBy(r => r.Level2Descr ?? r.Level2Code ?? "N/A"))
+                    {
+                        var l2Rows = l2.ToList();
+                        if (hasL3)
+                        {
+                            foreach (var l3 in l2Rows.GroupBy(r => r.Level3Descr ?? r.Level3Code ?? "N/A"))
+                            {
+                                var l3Rows = l3.ToList();
+                                foreach (var row in l3Rows) WriteRow(row);
+                                WriteSub(l3Rows, l3.Key + " subtotal");
+                            }
+                        }
+                        else
+                        {
+                            foreach (var row in l2Rows) WriteRow(row);
+                        }
+                        WriteSub(l2Rows, l2.Key + " subtotal");
+                    }
+                }
+                else
+                {
+                    foreach (var row in l1Rows) WriteRow(row);
+                }
+                WriteSub(l1Rows, l1.Key + " total");
+            }
+        }
+        else
+        {
+            foreach (var row in rows) WriteRow(row);
         }
 
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();

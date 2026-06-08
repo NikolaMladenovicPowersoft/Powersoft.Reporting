@@ -798,138 +798,148 @@ public class ReportsController : Controller
         return (analysis, null);
     }
 
+    // ==================== Generic Layout Endpoints (shared across all reports) ====================
+
+    /// <summary>
+    /// Maps a ReportTypeConstants value to the INI header code + description used by IniRepository.
+    /// Returns null when the report type is unknown (caller should return 400/404).
+    /// </summary>
+    private static (string Header, string Description)? ResolveLayoutSlug(string reportType) =>
+        reportType switch
+        {
+            ReportTypeConstants.AverageBasket  => (ModuleConstants.IniHeaderAvgBasket,        ModuleConstants.IniDescriptionAvgBasket),
+            ReportTypeConstants.PurchasesSales => (ModuleConstants.IniHeaderPurchasesSales,   ModuleConstants.IniDescriptionPurchasesSales),
+            ReportTypeConstants.Catalogue      => (ModuleConstants.IniHeaderCatalogue,        ModuleConstants.IniDescriptionCatalogue),
+            ReportTypeConstants.Pareto         => (ModuleConstants.IniHeaderPareto,           ModuleConstants.IniDescriptionPareto),
+            ReportTypeConstants.Charts         => (ModuleConstants.IniHeaderCharts,           ModuleConstants.IniDescriptionCharts),
+            ReportTypeConstants.CancelLog      => (ModuleConstants.IniHeaderCancelLog,        ModuleConstants.IniDescriptionCancelLog),
+            ReportTypeConstants.ProspectClients=> (ModuleConstants.IniHeaderProspectClients,  ModuleConstants.IniDescriptionProspectClients),
+            ReportTypeConstants.OffersReport   => (ModuleConstants.IniHeaderOffersReport,     ModuleConstants.IniDescriptionOffersReport),
+            ReportTypeConstants.BelowMinStock  => (ModuleConstants.IniHeaderBelowMinStock,    ModuleConstants.IniDescriptionBelowMinStock),
+            _                                  => null
+        };
+
     [HttpGet]
-    public async Task<IActionResult> GetLayout()
+    public async Task<IActionResult> GetReportLayout([FromQuery] string reportType)
     {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
+        var slug = ResolveLayoutSlug(reportType);
+        if (slug == null) return Json(new { success = false, message = "Unknown report type" });
+
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return Json(new { success = false, message = "Not connected" });
 
         try
         {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var parms = await repo.GetLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderAvgBasket,
-                userCode);
-
+            var repo = _repositoryFactory.CreateIniRepository(conn);
+            var parms = await repo.GetLayoutAsync(ModuleConstants.ModuleCode, slug.Value.Header, GetUserCode());
             return Json(new { success = true, hasSaved = parms.Count > 0, parameters = parms });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading layout for user {User}", GetUserCode());
+            _logger.LogError(ex, "GetReportLayout error for {Report}/{User}", reportType, GetUserCode());
             return Json(new { success = false, message = "Failed to load layout" });
         }
     }
 
     [HttpPost]
-    public async Task<IActionResult> SaveLayout([FromBody] Dictionary<string, string> parameters)
+    public async Task<IActionResult> SaveReportLayout([FromQuery] string reportType,
+                                                       [FromBody] Dictionary<string, string> parameters)
     {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
+        var slug = ResolveLayoutSlug(reportType);
+        if (slug == null) return Json(new { success = false, message = "Unknown report type" });
+
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return Json(new { success = false, message = "Not connected" });
 
         if (parameters == null || parameters.Count == 0)
             return Json(new { success = false, message = "No parameters to save" });
 
         try
         {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            await repo.SaveLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderAvgBasket,
-                ModuleConstants.IniDescriptionAvgBasket,
-                userCode,
-                parameters);
-
+            var repo = _repositoryFactory.CreateIniRepository(conn);
+            await repo.SaveLayoutAsync(ModuleConstants.ModuleCode, slug.Value.Header,
+                slug.Value.Description, GetUserCode(), parameters);
             return Json(new { success = true, message = "Layout saved" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error saving layout for user {User}", GetUserCode());
+            _logger.LogError(ex, "SaveReportLayout error for {Report}/{User}", reportType, GetUserCode());
             return Json(new { success = false, message = "Failed to save layout" });
         }
     }
 
     [HttpPost]
-    public async Task<IActionResult> ResetLayout()
+    public async Task<IActionResult> ResetReportLayout([FromQuery] string reportType)
     {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
+        var slug = ResolveLayoutSlug(reportType);
+        if (slug == null) return Json(new { success = false, message = "Unknown report type" });
+
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return Json(new { success = false, message = "Not connected" });
 
         try
         {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var deleted = await repo.DeleteLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderAvgBasket,
-                userCode);
-
+            var repo = _repositoryFactory.CreateIniRepository(conn);
+            var deleted = await repo.DeleteLayoutAsync(ModuleConstants.ModuleCode, slug.Value.Header, GetUserCode());
             return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error resetting layout for user {User}", GetUserCode());
+            _logger.LogError(ex, "ResetReportLayout error for {Report}/{User}", reportType, GetUserCode());
             return Json(new { success = false, message = "Failed to reset layout" });
         }
     }
 
-    // ==================== Average Basket Named Layouts ====================
-
     [HttpGet]
-    public async Task<IActionResult> ListAbLayouts()
+    public async Task<IActionResult> ListReportLayouts([FromQuery] string reportType)
     {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
+        var slug = ResolveLayoutSlug(reportType);
+        if (slug == null) return Json(new { success = false, message = "Unknown report type", layouts = Array.Empty<object>() });
+
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
 
         try
         {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var layouts = await repo.ListLayoutsAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderAvgBasket,
-                userCode);
-
+            var repo = _repositoryFactory.CreateIniRepository(conn);
+            var layouts = await repo.ListLayoutsAsync(ModuleConstants.ModuleCode, slug.Value.Header, GetUserCode());
             return Json(new
             {
                 success = true,
                 layouts = layouts.Select(l => new
                 {
-                    headerCode = l.HeaderCode,
-                    name = l.Name,
-                    isPublic = l.IsPublic,
-                    createdBy = l.CreatedBy,
-                    canEdit = l.CanEdit,
+                    headerCode   = l.HeaderCode,
+                    name         = l.Name,
+                    isPublic     = l.IsPublic,
+                    createdBy    = l.CreatedBy,
+                    canEdit      = l.CanEdit,
                     lastModified = l.LastModified
                 })
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error listing AB layouts for user {User}", GetUserCode());
+            _logger.LogError(ex, "ListReportLayouts error for {Report}/{User}", reportType, GetUserCode());
             return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
         }
     }
 
-    public class SaveAbLayoutAsRequest
+    public class SaveReportLayoutAsRequest
     {
-        public string Name { get; set; } = string.Empty;
-        public bool IsPublic { get; set; }
+        public string Name       { get; set; } = string.Empty;
+        public bool   IsPublic   { get; set; }
         public Dictionary<string, string> Parameters { get; set; } = new();
     }
 
     [HttpPost]
-    public async Task<IActionResult> SaveAbLayoutAs([FromBody] SaveAbLayoutAsRequest req)
+    public async Task<IActionResult> SaveReportLayoutAs([FromQuery] string reportType,
+                                                         [FromBody] SaveReportLayoutAsRequest req)
     {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
+        var slug = ResolveLayoutSlug(reportType);
+        if (slug == null) return Json(new { success = false, message = "Unknown report type" });
+
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return Json(new { success = false, message = "Not connected" });
 
         if (req == null || string.IsNullOrWhiteSpace(req.Name))
             return Json(new { success = false, message = "Layout name is required" });
@@ -938,17 +948,10 @@ public class ReportsController : Controller
 
         try
         {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
+            var repo = _repositoryFactory.CreateIniRepository(conn);
             var headerCode = await repo.SaveNamedLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderAvgBasket,
-                ModuleConstants.IniDescriptionAvgBasket,
-                userCode,
-                req.Name,
-                req.IsPublic,
-                req.Parameters);
-
+                ModuleConstants.ModuleCode, slug.Value.Header, slug.Value.Description,
+                GetUserCode(), req.Name, req.IsPublic, req.Parameters);
             return Json(new { success = true, headerCode, message = "Layout saved" });
         }
         catch (InvalidOperationException ex)
@@ -957,53 +960,55 @@ public class ReportsController : Controller
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error saving named AB layout for user {User}", GetUserCode());
+            _logger.LogError(ex, "SaveReportLayoutAs error for {Report}/{User}", reportType, GetUserCode());
             return Json(new { success = false, message = "Failed to save layout" });
         }
     }
 
     [HttpPost]
-    public async Task<IActionResult> LoadAbLayout([FromQuery] string headerCode)
+    public async Task<IActionResult> LoadReportLayout([FromQuery] string reportType,
+                                                       [FromQuery] string headerCode)
     {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
+        var slug = ResolveLayoutSlug(reportType);
+        if (slug == null) return Json(new { success = false, message = "Unknown report type" });
+
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return Json(new { success = false, message = "Not connected" });
+
         if (string.IsNullOrWhiteSpace(headerCode))
             return Json(new { success = false, message = "headerCode is required" });
 
         try
         {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
-
-            if (parms.Count == 0)
-                return Json(new { success = false, message = "Layout not found or not visible" });
-
+            var repo = _repositoryFactory.CreateIniRepository(conn);
+            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
+            if (parms.Count == 0) return Json(new { success = false, message = "Layout not found or not visible" });
             return Json(new { success = true, parameters = parms });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error loading AB layout {Header} for user {User}", headerCode, GetUserCode());
+            _logger.LogError(ex, "LoadReportLayout error for {Report}/{Header}/{User}", reportType, headerCode, GetUserCode());
             return Json(new { success = false, message = "Failed to load layout" });
         }
     }
 
     [HttpPost]
-    public async Task<IActionResult> DeleteAbLayout([FromQuery] string headerCode)
+    public async Task<IActionResult> DeleteReportLayout([FromQuery] string reportType,
+                                                         [FromQuery] string headerCode)
     {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
+        var slug = ResolveLayoutSlug(reportType);
+        if (slug == null) return Json(new { success = false, message = "Unknown report type" });
+
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return Json(new { success = false, message = "Not connected" });
+
         if (string.IsNullOrWhiteSpace(headerCode))
             return Json(new { success = false, message = "headerCode is required" });
 
         try
         {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
-
+            var repo = _repositoryFactory.CreateIniRepository(conn);
+            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
             return Json(new
             {
                 success = deleted,
@@ -1012,7 +1017,7 @@ public class ReportsController : Controller
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting AB layout {Header} for user {User}", headerCode, GetUserCode());
+            _logger.LogError(ex, "DeleteReportLayout error for {Report}/{Header}/{User}", reportType, headerCode, GetUserCode());
             return Json(new { success = false, message = "Failed to delete layout" });
         }
     }
@@ -2168,63 +2173,6 @@ public class ReportsController : Controller
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not load PS saved layout — using defaults");
-        }
-    }
-
-    // ==================== PS Layout ====================
-
-    [HttpPost]
-    public async Task<IActionResult> SavePsLayout([FromBody] Dictionary<string, string> parameters)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        if (parameters == null || parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            await repo.SaveLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderPurchasesSales,
-                ModuleConstants.IniDescriptionPurchasesSales,
-                userCode,
-                parameters);
-
-            return Json(new { success = true, message = "Layout saved" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving PS layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> ResetPsLayout()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var deleted = await repo.DeleteLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderPurchasesSales,
-                userCode);
-
-            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error resetting PS layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to reset layout" });
         }
     }
 
@@ -3433,88 +3381,6 @@ public class ReportsController : Controller
         }
     }
 
-    // ==================== Pareto Layout ====================
-
-    [HttpGet]
-    public async Task<IActionResult> GetParetoLayout()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var parms = await repo.GetLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderPareto,
-                userCode);
-
-            return Json(new { success = true, hasSaved = parms.Count > 0, parameters = parms });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error loading Pareto layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to load layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveParetoLayout([FromBody] Dictionary<string, string> parameters)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        if (parameters == null || parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            await repo.SaveLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderPareto,
-                ModuleConstants.IniDescriptionPareto,
-                userCode,
-                parameters);
-
-            return Json(new { success = true, message = "Layout saved" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving Pareto layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> ResetParetoLayout()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var deleted = await repo.DeleteLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderPareto,
-                userCode);
-
-            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error resetting Pareto layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to reset layout" });
-        }
-    }
-
     // ==================== Charts ====================
 
     public async Task<IActionResult> Charts()
@@ -4036,202 +3902,6 @@ public class ReportsController : Controller
             $"Charts & Dashboards \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
     }
 
-    // ==================== Charts Layout ====================
-
-    [HttpPost]
-    public async Task<IActionResult> SaveChartLayout([FromBody] Dictionary<string, string> parameters)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        if (parameters == null || parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            await repo.SaveLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCharts,
-                ModuleConstants.IniDescriptionCharts,
-                userCode,
-                parameters);
-
-            return Json(new { success = true, message = "Layout saved" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving chart layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> ResetChartLayout()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var deleted = await repo.DeleteLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCharts,
-                userCode);
-
-            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error resetting chart layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to reset layout" });
-        }
-    }
-
-    // ==================== Charts named/public layouts (multi per user) ====================
-
-    [HttpGet]
-    public async Task<IActionResult> ListChartLayouts()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var layouts = await repo.ListLayoutsAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCharts,
-                userCode);
-
-            return Json(new
-            {
-                success = true,
-                layouts = layouts.Select(l => new
-                {
-                    headerCode = l.HeaderCode,
-                    name = l.Name,
-                    isPublic = l.IsPublic,
-                    createdBy = l.CreatedBy,
-                    canEdit = l.CanEdit,
-                    lastModified = l.LastModified
-                })
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error listing Chart layouts for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to load layouts", layouts = Array.Empty<object>() });
-        }
-    }
-
-    public class SaveChartLayoutAsRequest
-    {
-        public string Name { get; set; } = string.Empty;
-        public bool IsPublic { get; set; }
-        public Dictionary<string, string> Parameters { get; set; } = new();
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveChartLayoutAs([FromBody] SaveChartLayoutAsRequest req)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        if (req == null || string.IsNullOrWhiteSpace(req.Name))
-            return Json(new { success = false, message = "Layout name is required" });
-        if (req.Parameters == null || req.Parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var headerCode = await repo.SaveNamedLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCharts,
-                ModuleConstants.IniDescriptionCharts,
-                userCode,
-                req.Name,
-                req.IsPublic,
-                req.Parameters);
-
-            return Json(new { success = true, headerCode, message = "Layout saved" });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving Chart named layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> LoadChartLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
-
-            if (parms.Count == 0)
-                return Json(new { success = false, message = "Layout not found or not visible" });
-
-            return Json(new { success = true, parameters = parms });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error loading Chart layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to load layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteChartLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
-
-            return Json(new
-            {
-                success = deleted,
-                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting Chart layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to delete layout" });
-        }
-    }
-
     // ==================== Power Reports Catalogue ====================
 
     public async Task<IActionResult> Catalogue()
@@ -4324,216 +3994,6 @@ public class ReportsController : Controller
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not load Catalogue saved layout — using defaults");
-        }
-    }
-
-    // ==================== Catalogue Layout (per-user saved defaults) ====================
-
-    [HttpPost]
-    public async Task<IActionResult> SaveCatalogueLayout([FromBody] Dictionary<string, string> parameters)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        if (parameters == null || parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            await repo.SaveLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCatalogue,
-                ModuleConstants.IniDescriptionCatalogue,
-                userCode,
-                parameters);
-
-            return Json(new { success = true, message = "Layout saved" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving Catalogue layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> ResetCatalogueLayout()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var deleted = await repo.DeleteLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCatalogue,
-                userCode);
-
-            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error resetting Catalogue layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to reset layout" });
-        }
-    }
-
-    // ==================== Catalogue named/public layouts (multi per user) ====================
-
-    /// <summary>
-    /// Returns metadata for every Catalogue layout visible to the current user
-    /// (own private layouts + all public layouts). Used by the layout picker dropdown.
-    /// </summary>
-    [HttpGet]
-    public async Task<IActionResult> ListCatalogueLayouts()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var layouts = await repo.ListLayoutsAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCatalogue,
-                userCode);
-
-            return Json(new
-            {
-                success = true,
-                layouts = layouts.Select(l => new
-                {
-                    headerCode = l.HeaderCode,
-                    name = l.Name,
-                    isPublic = l.IsPublic,
-                    createdBy = l.CreatedBy,
-                    canEdit = l.CanEdit,
-                    lastModified = l.LastModified
-                })
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error listing Catalogue layouts for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
-        }
-    }
-
-    public class SaveCatalogueLayoutAsRequest
-    {
-        public string Name { get; set; } = string.Empty;
-        public bool IsPublic { get; set; }
-        public Dictionary<string, string> Parameters { get; set; } = new();
-    }
-
-    /// <summary>
-    /// Saves the form parameters as a NEW named layout (or overwrites an existing one with the
-    /// same slug owned by the same scope). Public layouts have fk_UserCode = NULL and may only
-    /// be overwritten/deleted by their original creator.
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> SaveCatalogueLayoutAs([FromBody] SaveCatalogueLayoutAsRequest req)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        if (req == null || string.IsNullOrWhiteSpace(req.Name))
-            return Json(new { success = false, message = "Layout name is required" });
-        if (req.Parameters == null || req.Parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var headerCode = await repo.SaveNamedLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCatalogue,
-                ModuleConstants.IniDescriptionCatalogue,
-                userCode,
-                req.Name,
-                req.IsPublic,
-                req.Parameters);
-
-            return Json(new { success = true, headerCode, message = "Layout saved" });
-        }
-        catch (InvalidOperationException ex)
-        {
-            // Authorisation: trying to overwrite a public layout owned by someone else.
-            return Json(new { success = false, message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving named Catalogue layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    /// <summary>
-    /// Loads a named Catalogue layout by its header code.
-    /// Returns the raw parameter dictionary; the client applies it to the form.
-    /// </summary>
-    [HttpPost]
-    public async Task<IActionResult> LoadCatalogueLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
-
-            if (parms.Count == 0)
-                return Json(new { success = false, message = "Layout not found or not visible" });
-
-            return Json(new { success = true, parameters = parms });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error loading Catalogue layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to load layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteCatalogueLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var userCode = GetUserCode();
-            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, userCode);
-
-            return Json(new
-            {
-                success = deleted,
-                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting Catalogue layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to delete layout" });
         }
     }
 
@@ -5620,179 +5080,6 @@ public class ReportsController : Controller
         catch { return Json(Array.Empty<object>()); }
     }
 
-    // ==================== CancelLog Layout (per-user saved defaults) ====================
-
-    [HttpPost]
-    public async Task<IActionResult> SaveCancelLogLayout([FromBody] Dictionary<string, string> parameters)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (parameters == null || parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            await repo.SaveLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCancelLog,
-                ModuleConstants.IniDescriptionCancelLog,
-                GetUserCode(),
-                parameters);
-            return Json(new { success = true, message = "Layout saved" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving CancelLog layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> ResetCancelLogLayout()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var deleted = await repo.DeleteLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCancelLog,
-                GetUserCode());
-            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error resetting CancelLog layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to reset layout" });
-        }
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> ListCancelLogLayouts()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var layouts = await repo.ListLayoutsAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCancelLog,
-                GetUserCode());
-            return Json(new
-            {
-                success = true,
-                layouts = layouts.Select(l => new
-                {
-                    headerCode = l.HeaderCode, name = l.Name, isPublic = l.IsPublic,
-                    createdBy = l.CreatedBy, canEdit = l.CanEdit, lastModified = l.LastModified
-                })
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error listing CancelLog layouts for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
-        }
-    }
-
-    public class SaveCancelLogLayoutAsRequest
-    {
-        public string Name { get; set; } = string.Empty;
-        public bool IsPublic { get; set; }
-        public Dictionary<string, string> Parameters { get; set; } = new();
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveCancelLogLayoutAs([FromBody] SaveCancelLogLayoutAsRequest req)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (req == null || string.IsNullOrWhiteSpace(req.Name))
-            return Json(new { success = false, message = "Layout name is required" });
-        if (req.Parameters == null || req.Parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var headerCode = await repo.SaveNamedLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderCancelLog,
-                ModuleConstants.IniDescriptionCancelLog,
-                GetUserCode(),
-                req.Name, req.IsPublic, req.Parameters);
-            return Json(new { success = true, headerCode, message = "Layout saved" });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving named CancelLog layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> LoadCancelLogLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
-            if (parms.Count == 0)
-                return Json(new { success = false, message = "Layout not found or not visible" });
-            return Json(new { success = true, parameters = parms });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error loading CancelLog layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to load layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteCancelLogLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
-            return Json(new
-            {
-                success = deleted,
-                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting CancelLog layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to delete layout" });
-        }
-    }
-
     // ==================== CancelLog Export / Email / AI ====================
 
     private async Task<(List<CancelLogDetailedRow>? detailed, List<CancelLogSummaryRow>? summary, CancelLogFilter filter)?> RunCancelLogQuery(
@@ -6258,179 +5545,6 @@ public class ReportsController : Controller
         {
             _logger.LogError(ex, "Error loading prospect clients data");
             return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    // --- Prospect Clients Layout CRUD ---
-
-    [HttpPost]
-    public async Task<IActionResult> SaveProspectClientsLayout([FromBody] Dictionary<string, string> parameters)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (parameters == null || parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            await repo.SaveLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderProspectClients,
-                ModuleConstants.IniDescriptionProspectClients,
-                GetUserCode(),
-                parameters);
-            return Json(new { success = true, message = "Layout saved" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving ProspectClients layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> ResetProspectClientsLayout()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var deleted = await repo.DeleteLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderProspectClients,
-                GetUserCode());
-            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error resetting ProspectClients layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to reset layout" });
-        }
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> ListProspectClientsLayouts()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var layouts = await repo.ListLayoutsAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderProspectClients,
-                GetUserCode());
-            return Json(new
-            {
-                success = true,
-                layouts = layouts.Select(l => new
-                {
-                    headerCode = l.HeaderCode, name = l.Name, isPublic = l.IsPublic,
-                    createdBy = l.CreatedBy, canEdit = l.CanEdit, lastModified = l.LastModified
-                })
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error listing ProspectClients layouts for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
-        }
-    }
-
-    public class SaveProspectClientsLayoutAsRequest
-    {
-        public string Name { get; set; } = string.Empty;
-        public bool IsPublic { get; set; }
-        public Dictionary<string, string> Parameters { get; set; } = new();
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveProspectClientsLayoutAs([FromBody] SaveProspectClientsLayoutAsRequest req)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (req == null || string.IsNullOrWhiteSpace(req.Name))
-            return Json(new { success = false, message = "Layout name is required" });
-        if (req.Parameters == null || req.Parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var headerCode = await repo.SaveNamedLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderProspectClients,
-                ModuleConstants.IniDescriptionProspectClients,
-                GetUserCode(),
-                req.Name, req.IsPublic, req.Parameters);
-            return Json(new { success = true, headerCode, message = "Layout saved" });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving named ProspectClients layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> LoadProspectClientsLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
-            if (parms.Count == 0)
-                return Json(new { success = false, message = "Layout not found or not visible" });
-            return Json(new { success = true, parameters = parms });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error loading ProspectClients layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to load layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteProspectClientsLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
-            return Json(new
-            {
-                success = deleted,
-                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting ProspectClients layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to delete layout" });
         }
     }
 
@@ -6984,179 +6098,6 @@ public class ReportsController : Controller
         {
             _logger.LogError(ex, "Error loading offers report data");
             return Json(new { success = false, message = ex.Message });
-        }
-    }
-
-    // --- Offers Report Layout CRUD ---
-
-    [HttpPost]
-    public async Task<IActionResult> SaveOffersReportLayout([FromBody] Dictionary<string, string> parameters)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (parameters == null || parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            await repo.SaveLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderOffersReport,
-                ModuleConstants.IniDescriptionOffersReport,
-                GetUserCode(),
-                parameters);
-            return Json(new { success = true, message = "Layout saved" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving OffersReport layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> ResetOffersReportLayout()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var deleted = await repo.DeleteLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderOffersReport,
-                GetUserCode());
-            return Json(new { success = true, message = deleted ? "Layout reset to defaults" : "No saved layout found" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error resetting OffersReport layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to reset layout" });
-        }
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> ListOffersReportLayouts()
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected", layouts = Array.Empty<object>() });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var layouts = await repo.ListLayoutsAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderOffersReport,
-                GetUserCode());
-            return Json(new
-            {
-                success = true,
-                layouts = layouts.Select(l => new
-                {
-                    headerCode = l.HeaderCode, name = l.Name, isPublic = l.IsPublic,
-                    createdBy = l.CreatedBy, canEdit = l.CanEdit, lastModified = l.LastModified
-                })
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error listing OffersReport layouts for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to list layouts", layouts = Array.Empty<object>() });
-        }
-    }
-
-    public class SaveOffersReportLayoutAsRequest
-    {
-        public string Name { get; set; } = string.Empty;
-        public bool IsPublic { get; set; }
-        public Dictionary<string, string> Parameters { get; set; } = new();
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveOffersReportLayoutAs([FromBody] SaveOffersReportLayoutAsRequest req)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (req == null || string.IsNullOrWhiteSpace(req.Name))
-            return Json(new { success = false, message = "Layout name is required" });
-        if (req.Parameters == null || req.Parameters.Count == 0)
-            return Json(new { success = false, message = "No parameters to save" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var headerCode = await repo.SaveNamedLayoutAsync(
-                ModuleConstants.ModuleCode,
-                ModuleConstants.IniHeaderOffersReport,
-                ModuleConstants.IniDescriptionOffersReport,
-                GetUserCode(),
-                req.Name, req.IsPublic, req.Parameters);
-            return Json(new { success = true, headerCode, message = "Layout saved" });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Json(new { success = false, message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving named OffersReport layout for user {User}", GetUserCode());
-            return Json(new { success = false, message = "Failed to save layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> LoadOffersReportLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var parms = await repo.GetNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
-            if (parms.Count == 0)
-                return Json(new { success = false, message = "Layout not found or not visible" });
-            return Json(new { success = true, parameters = parms });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error loading OffersReport layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to load layout" });
-        }
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> DeleteOffersReportLayout([FromQuery] string headerCode)
-    {
-        var tenantConnString = GetTenantConnectionString();
-        if (string.IsNullOrEmpty(tenantConnString))
-            return Json(new { success = false, message = "Not connected" });
-        if (string.IsNullOrWhiteSpace(headerCode))
-            return Json(new { success = false, message = "headerCode is required" });
-
-        try
-        {
-            var repo = _repositoryFactory.CreateIniRepository(tenantConnString);
-            var deleted = await repo.DeleteNamedLayoutAsync(ModuleConstants.ModuleCode, headerCode, GetUserCode());
-            return Json(new
-            {
-                success = deleted,
-                message = deleted ? "Layout deleted" : "Layout not found or you don't have permission"
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting OffersReport layout {Header} for user {User}", headerCode, GetUserCode());
-            return Json(new { success = false, message = "Failed to delete layout" });
         }
     }
 

@@ -228,7 +228,7 @@ public class SettingsController : Controller
     public async Task<IActionResult> AiUsage(DateTime? from = null, DateTime? to = null)
     {
         var ranking = GetRanking();
-        if (ranking >= ModuleConstants.RankingSystemAdmin)
+        if (ranking != ModuleConstants.RankingWebmaster)
         {
             _logger.LogWarning("User {User} (ranking {Ranking}) denied access to AI usage report",
                 User.Identity?.Name, ranking);

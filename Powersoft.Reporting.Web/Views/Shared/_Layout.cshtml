@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="en-GB" data-bs-theme="light">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -67,6 +67,9 @@
                                 {
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item" asp-controller="Settings" asp-action="System"><i class="bi bi-sliders me-2"></i>System Settings</a></li>
+                                }
+                                @if (rankingStr.HasValue && rankingStr.Value == 1)
+                                {
                                     <li><a class="dropdown-item" asp-controller="Settings" asp-action="AiUsage"><i class="bi bi-graph-up-arrow me-2"></i>AI Usage Report</a></li>
                                 }
                             </ul>

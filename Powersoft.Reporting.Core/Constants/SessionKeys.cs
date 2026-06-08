@@ -65,6 +65,8 @@ public static class ModuleConstants
     /// are system/support staff and see ALL companies and databases.
     /// Users at or above this value (15, 20, 21+) are client users and get filtered.
     /// </summary>
+    /// <summary>Ranking of the top-level Powersoft webmaster/super-admin. Only this rank can see cross-tenant reports (AI usage).</summary>
+    public const int RankingWebmaster = 1;
     public const int RankingSystemAdmin = 15;
 
     /// <summary>

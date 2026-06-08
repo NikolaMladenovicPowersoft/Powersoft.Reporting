@@ -96,6 +96,16 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
 builder.Services.AddAuthorization();
 
+// Force dd/MM/yyyy display and parsing throughout the app (per Christina's request).
+// en-GB uses day-first date format matching what Powersoft clients expect.
+var enGB = new System.Globalization.CultureInfo("en-GB");
+builder.Services.Configure<Microsoft.AspNetCore.Builder.RequestLocalizationOptions>(opts =>
+{
+    opts.DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture(enGB);
+    opts.SupportedCultures = new[] { enGB };
+    opts.SupportedUICultures = new[] { enGB };
+});
+
 var app = builder.Build();
 
 var migLogger = app.Services.GetRequiredService<ILogger<Powersoft.Reporting.Data.Tenant.SchemaMigrationService>>();
@@ -158,6 +168,7 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
+app.UseRequestLocalization();
 app.UseRouting();
 
 app.UseSession();

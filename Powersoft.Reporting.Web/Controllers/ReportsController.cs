@@ -11,6 +11,7 @@ using Powersoft.Reporting.Core.Models;
 using System.Text.Json;
 using Powersoft.Reporting.Web.Services;
 using Powersoft.Reporting.Web.Services.AI;
+using Powersoft.Reporting.Web.Options;
 using Powersoft.Reporting.Web.ViewModels;
 
 namespace Powersoft.Reporting.Web.Controllers;
@@ -24,6 +25,7 @@ public class ReportsController : Controller
     private readonly ReportAnalyzerFactory _analyzerFactory;
     private readonly IFilterPresetRepository _filterPresetRepo;
     private readonly ILogger<ReportsController> _logger;
+    private readonly AiAnalyzerOptions _aiOptions;
 
     private static readonly Regex EmailRegex = new(
         @"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -34,7 +36,8 @@ public class ReportsController : Controller
         IEmailSender emailSender,
         ReportAnalyzerFactory analyzerFactory,
         IFilterPresetRepository filterPresetRepo,
-        ILogger<ReportsController> logger)
+        ILogger<ReportsController> logger,
+        Microsoft.Extensions.Options.IOptions<Options.AiAnalyzerOptions> aiOptions)
     {
         _repositoryFactory = repositoryFactory;
         _centralRepository = centralRepository;
@@ -42,6 +45,7 @@ public class ReportsController : Controller
         _analyzerFactory = analyzerFactory;
         _filterPresetRepo = filterPresetRepo;
         _logger = logger;
+        _aiOptions = aiOptions.Value;
     }
     
     private static List<string> ParseCustomerCodesJson(string? json)
@@ -727,27 +731,6 @@ public class ReportsController : Controller
     }
 
     /// <summary>
-    /// Checks the monthly AI token budget for the current tenant.
-    /// Returns null if OK, or an error message string if budget is exceeded or check fails.
-    /// </summary>
-    private async Task<string?> CheckAiBudgetAsync(string tenantConnString)
-    {
-        try
-        {
-            var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
-            var budget = await schedRepo.GetOrCreateTokenBudgetAsync();
-            if (budget.MonthlyTokenLimit > 0 && budget.CurrentMonthUsed >= budget.MonthlyTokenLimit)
-                return $"Monthly AI token budget exceeded ({budget.CurrentMonthUsed:N0} / {budget.MonthlyTokenLimit:N0} tokens used this month).";
-            return null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Could not check AI token budget — allowing call to proceed");
-            return null; // Non-blocking: if budget check fails, allow the call
-        }
-    }
-
-    /// <summary>
     /// Logs AI token usage after a successful analysis call.
     /// </summary>
     private async Task LogAiTokensAsync(string tenantConnString, int inputTokens, int outputTokens)
@@ -763,19 +746,81 @@ public class ReportsController : Controller
         }
     }
 
-    /// <summary>
-    /// Budget check + AI call + token logging in one step.
-    /// Returns (analysis, null) on success, (null, errorMessage) on failure.
-    /// </summary>
     private const int MaxCsvBytesForAi = 100_000;
 
-    private async Task<(ReportAnalysis? analysis, string? error)> AnalyzeWithBudgetAsync(
+    /// <summary>Outcome of the pre-run AI cost/budget guard.</summary>
+    private sealed class AiGuardResult
+    {
+        public ReportAnalysis? Analysis { get; init; }
+        public string? Error { get; init; }
+        public bool NeedsConfirmation { get; init; }
+        public decimal EstimatedCost { get; init; }
+    }
+
+    /// <summary>
+    /// Converts a guard outcome into an early JSON response, or null when the analysis may proceed.
+    /// Hard cap / monthly budget → blocking error; soft threshold → needsConfirmation prompt.
+    /// </summary>
+    private IActionResult? AiGuardFailure(AiGuardResult g)
+    {
+        if (g.Error != null)
+            return Json(new { success = false, message = g.Error });
+        if (g.NeedsConfirmation)
+            return Json(new
+            {
+                success = false,
+                needsConfirmation = true,
+                estimatedCost = g.EstimatedCost,
+                message = $"This analysis is estimated to cost about ${g.EstimatedCost:0.000} (USD). Do you want to proceed?"
+            });
+        return null;
+    }
+
+    /// <summary>
+    /// Pre-run cost guard + AI call + token logging in one step. The cost is estimated on the
+    /// FULL data (worst case) BEFORE any tokens are spent, so a huge report is blocked (hard cap)
+    /// or requires confirmation (soft threshold) instead of silently burning the budget.
+    /// The client may resend with form field confirmCost=true to bypass the soft threshold.
+    /// </summary>
+    private async Task<AiGuardResult> AnalyzeWithBudgetAsync(
         string csvData, string reportType, string? locale, string? customPrompt, string? tenantConnString)
     {
+        var estimatedCost = AiCostEstimator.EstimateCost(csvData, _aiOptions);
+        var confirmed = string.Equals(Request.Form["confirmCost"], "true", StringComparison.OrdinalIgnoreCase);
+
         if (!string.IsNullOrEmpty(tenantConnString))
         {
-            var budgetError = await CheckAiBudgetAsync(tenantConnString);
-            if (budgetError != null) return (null, budgetError);
+            decimal softLimit = 0.10m, hardLimit = 0.25m;
+            try
+            {
+                var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+                var budget = await schedRepo.GetOrCreateTokenBudgetAsync();
+
+                // Monthly cumulative token budget — existing hard block.
+                if (budget.MonthlyTokenLimit > 0 && budget.CurrentMonthUsed >= budget.MonthlyTokenLimit)
+                    return new AiGuardResult
+                    {
+                        Error = $"Monthly AI token budget exceeded ({budget.CurrentMonthUsed:N0} / {budget.MonthlyTokenLimit:N0} tokens used this month)."
+                    };
+
+                softLimit = budget.SoftCostLimit;
+                hardLimit = budget.HardCostLimit;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not load AI budget/limits — using defaults");
+            }
+
+            // Hard cap: block outright, no tokens spent.
+            if (hardLimit > 0 && estimatedCost > hardLimit)
+                return new AiGuardResult
+                {
+                    Error = $"This report is too large for AI analysis (estimated ${estimatedCost:0.000}, limit ${hardLimit:0.00}). Narrow the date range or filters and try again."
+                };
+
+            // Soft threshold: require explicit confirmation.
+            if (softLimit > 0 && estimatedCost > softLimit && !confirmed)
+                return new AiGuardResult { NeedsConfirmation = true, EstimatedCost = estimatedCost };
         }
 
         if (Encoding.UTF8.GetByteCount(csvData) > MaxCsvBytesForAi)
@@ -795,7 +840,7 @@ public class ReportsController : Controller
         if (!string.IsNullOrEmpty(tenantConnString))
             await LogAiTokensAsync(tenantConnString, analysis.InputTokens, analysis.OutputTokens);
 
-        return (analysis, null);
+        return new AiGuardResult { Analysis = analysis, EstimatedCost = estimatedCost };
     }
 
     // ==================== Generic Layout Endpoints (shared across all reports) ====================
@@ -1571,9 +1616,14 @@ public class ReportsController : Controller
             return text!.Replace("\u00AB", "").Replace("\u00BB", "");
         }
 
-        var subject = !string.IsNullOrWhiteSpace(emailSubject)
+        const string emailBrand = "Powersoft 365 AI reports";
+        var rawSubject = !string.IsNullOrWhiteSpace(emailSubject)
             ? Merge(emailSubject)
             : (templateSubject != null ? Merge(templateSubject) : Merge(defaultSubject));
+        // Brand all outgoing report emails (George, 2026-06-08). Avoid double-prefixing.
+        var subject = rawSubject.Contains(emailBrand, StringComparison.OrdinalIgnoreCase)
+            ? rawSubject
+            : $"{emailBrand} - {rawSubject}";
 
         var htmlBody = !string.IsNullOrWhiteSpace(templateBody) ? Merge(templateBody) : defaultHtmlBody;
         var textBody = defaultTextBody ?? "";
@@ -2460,8 +2510,10 @@ public class ReportsController : Controller
                 result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
 
             var tenantConn4AB = GetTenantConnectionString();
-            var (analysis, budgetErr4AB) = await AnalyzeWithBudgetAsync(csvData, "AverageBasket", locale, customPrompt, tenantConn4AB);
-            if (budgetErr4AB != null) return Json(new { success = false, message = budgetErr4AB });
+            var guardAB = await AnalyzeWithBudgetAsync(csvData, "AverageBasket", locale, customPrompt, tenantConn4AB);
+            var guardFailAB = AiGuardFailure(guardAB);
+            if (guardFailAB != null) return guardFailAB;
+            var analysis = guardAB.Analysis;
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -2522,8 +2574,10 @@ public class ReportsController : Controller
                 "AI analysis [PurchasesSales]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
 
-            var (analysis, budgetErrPS) = await AnalyzeWithBudgetAsync(csvData, "PurchasesSales", locale, customPrompt, GetTenantConnectionString());
-            if (budgetErrPS != null) return Json(new { success = false, message = budgetErrPS });
+            var guardPS = await AnalyzeWithBudgetAsync(csvData, "PurchasesSales", locale, customPrompt, GetTenantConnectionString());
+            var guardFailPS = AiGuardFailure(guardPS);
+            if (guardFailPS != null) return guardFailPS;
+            var analysis = guardPS.Analysis;
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -3369,8 +3423,10 @@ public class ReportsController : Controller
                 "AI analysis [Pareto]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 result.Rows.Count, csvData.Length, locale, User.Identity?.Name);
 
-            var (analysis, budgetErrPareto) = await AnalyzeWithBudgetAsync(csvData, "Pareto", locale, customPrompt, GetTenantConnectionString());
-            if (budgetErrPareto != null) return Json(new { success = false, message = budgetErrPareto });
+            var guardPareto = await AnalyzeWithBudgetAsync(csvData, "Pareto", locale, customPrompt, GetTenantConnectionString());
+            var guardFailPareto = AiGuardFailure(guardPareto);
+            if (guardFailPareto != null) return guardFailPareto;
+            var analysis = guardPareto.Analysis;
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -3579,8 +3635,10 @@ public class ReportsController : Controller
                 "AI analysis [Chart]: {Dimension} x {Metric}, Top {TopN}, compareLY={CompareLY}, {DataPoints} points, {CsvLen} chars, user={User}",
                 dimension, metric, topN, compareLastYear, data.Count, csvData.Length, User.Identity?.Name);
 
-            var (analysis, budgetErrChart) = await AnalyzeWithBudgetAsync(csvData, reportContext, locale, customPrompt, GetTenantConnectionString());
-            if (budgetErrChart != null) return Json(new { success = false, message = budgetErrChart });
+            var guardChart = await AnalyzeWithBudgetAsync(csvData, reportContext, locale, customPrompt, GetTenantConnectionString());
+            var guardFailChart = AiGuardFailure(guardChart);
+            if (guardFailChart != null) return guardFailChart;
+            var analysis = guardChart.Analysis;
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -4647,8 +4705,10 @@ public class ReportsController : Controller
                 "AI analysis [Catalogue]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
 
-            var (analysis, budgetErrCat) = await AnalyzeWithBudgetAsync(csvData, "Catalogue", locale, customPrompt, GetTenantConnectionString());
-            if (budgetErrCat != null) return Json(new { success = false, message = budgetErrCat });
+            var guardCat = await AnalyzeWithBudgetAsync(csvData, "Catalogue", locale, customPrompt, GetTenantConnectionString());
+            var guardFailCat = AiGuardFailure(guardCat);
+            if (guardFailCat != null) return guardFailCat;
+            var analysis = guardCat.Analysis;
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -5371,8 +5431,10 @@ public class ReportsController : Controller
                 "AI analysis [CancelLog]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 rowCount, csvData.Length, locale, User.Identity?.Name);
 
-            var (analysis, budgetErrCL) = await AnalyzeWithBudgetAsync(csvData, "CancelLog", locale, customPrompt, GetTenantConnectionString());
-            if (budgetErrCL != null) return Json(new { success = false, message = budgetErrCL });
+            var guardCL = await AnalyzeWithBudgetAsync(csvData, "CancelLog", locale, customPrompt, GetTenantConnectionString());
+            var guardFailCL = AiGuardFailure(guardCL);
+            if (guardFailCL != null) return guardFailCL;
+            var analysis = guardCL.Analysis;
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -5803,8 +5865,10 @@ public class ReportsController : Controller
                 "AI analysis [ProspectClients]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 rowCount, csvData.Length, locale, User.Identity?.Name);
 
-            var (analysis, budgetErrPC) = await AnalyzeWithBudgetAsync(csvData, "ProspectClients", locale, customPrompt, GetTenantConnectionString());
-            if (budgetErrPC != null) return Json(new { success = false, message = budgetErrPC });
+            var guardPC = await AnalyzeWithBudgetAsync(csvData, "ProspectClients", locale, customPrompt, GetTenantConnectionString());
+            var guardFailPC = AiGuardFailure(guardPC);
+            if (guardFailPC != null) return guardFailPC;
+            var analysis = guardPC.Analysis;
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }
@@ -6359,8 +6423,10 @@ public class ReportsController : Controller
                 "AI analysis [OffersReport]: {Rows} data rows, {CsvLen} chars, locale={Locale}, user={User}",
                 rowCount, csvData.Length, locale, User.Identity?.Name);
 
-            var (analysis, budgetErrOR) = await AnalyzeWithBudgetAsync(csvData, "OffersReport", locale, customPrompt, GetTenantConnectionString());
-            if (budgetErrOR != null) return Json(new { success = false, message = budgetErrOR });
+            var guardOR = await AnalyzeWithBudgetAsync(csvData, "OffersReport", locale, customPrompt, GetTenantConnectionString());
+            var guardFailOR = AiGuardFailure(guardOR);
+            if (guardFailOR != null) return guardFailOR;
+            var analysis = guardOR.Analysis;
 
             return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
         }

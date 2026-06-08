@@ -168,6 +168,12 @@ BEGIN
     CREATE UNIQUE INDEX IX_AiTokenBudget_Month ON {SchemaName}.tbl_AiTokenBudget(BudgetMonth);
 END
 
+-- 8b. tbl_AiTokenBudget — add per-analysis cost guard columns if missing
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_AiTokenBudget') AND name = 'SoftCostLimit')
+    ALTER TABLE {SchemaName}.tbl_AiTokenBudget
+        ADD SoftCostLimit DECIMAL(10,4) NOT NULL DEFAULT 0.10,
+            HardCostLimit DECIMAL(10,4) NOT NULL DEFAULT 0.25;
+
 -- 9. tbl_EmailRecipientList (per-company address book)
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_EmailRecipientList') AND type = 'U')
 BEGIN

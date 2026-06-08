@@ -42,6 +42,7 @@ public interface IScheduleRepository
     Task<AiTokenBudget> GetOrCreateTokenBudgetAsync();
     Task<bool> IncrementTokenUsageAsync(int inputTokens, int outputTokens);
     Task<bool> SetMonthlyTokenLimitAsync(int limit);
+    Task<bool> SetCostLimitsAsync(decimal softLimit, decimal hardLimit);
 
     // Email templates
     Task<List<EmailTemplate>> GetEmailTemplatesAsync(string? reportType = null);

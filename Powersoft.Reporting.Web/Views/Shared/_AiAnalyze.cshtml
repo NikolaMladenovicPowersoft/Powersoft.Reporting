@@ -41,6 +41,25 @@
                     <div class="progress mx-auto" style="width:200px;height:4px;"><div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:100%"></div></div>
                 </div>
                 <div id="aiError" class="d-none p-4"><div class="alert alert-danger" id="aiErrorMsg"></div></div>
+                <div id="aiCostConfirm" class="d-none text-center py-5 px-4">
+                    <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle"
+                         style="width:72px;height:72px;background:rgba(99,102,241,0.12);">
+                        <i class="bi bi-coin" style="font-size:2rem;color:#6366f1;"></i>
+                    </div>
+                    <h5 class="mb-1 fw-semibold">Confirm AI analysis cost</h5>
+                    <p class="text-muted mb-3" id="aiCostConfirmMsg" style="max-width:440px;margin-inline:auto;"></p>
+                    <div class="fw-bold mb-1" id="aiCostConfirmAmount" style="font-size:2.2rem;color:#6366f1;"></div>
+                    <p class="text-muted small mb-4">Estimated cost &mdash; charged to this database's monthly AI budget.</p>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <button type="button" class="btn btn-outline-secondary px-4" id="aiCostCancelBtn">
+                            <i class="bi bi-x-lg me-1"></i>Cancel
+                        </button>
+                        <button type="button" class="btn text-white px-4" id="aiCostProceedBtn"
+                                style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">
+                            <i class="bi bi-check-lg me-1"></i>Proceed
+                        </button>
+                    </div>
+                </div>
                 <div id="aiPromptEditor" class="d-none border-bottom" style="background:#f8fafc;">
                     <div class="p-4">
                         <h6 class="mb-3"><i class="bi bi-pencil-square me-1"></i>AI Prompt Templates</h6>
@@ -144,7 +163,7 @@
     var _aiGetTemplatesUrl = '@Url.Action("GetAiPromptTemplates", "Reports")';
     var _aiSaveTemplateUrl = '@Url.Action("SaveAiPromptTemplate", "Reports")';
     var _aiDeleteTemplateUrl = '@Url.Action("DeleteAiPromptTemplate", "Reports")';
-    var _aiCheckUrl = '@Url.Action("CheckAiStatus", "Reports")';
+    var _aiCheckUrl = '@Url.Action("GetAiStatus", "Reports")';
     var _currentReportType = '@Model.ReportType';
 
     var _aiConversation = [];
@@ -164,6 +183,7 @@
         document.getElementById('aiError').classList.add('d-none');
         document.getElementById('aiResults').classList.add('d-none');
         document.getElementById('aiPromptEditor').classList.add('d-none');
+        document.getElementById('aiCostConfirm').classList.add('d-none');
         document.getElementById('btnReanalyze').style.display = 'none';
         modal.show();
 
@@ -182,27 +202,50 @@
         var promptTplId = document.getElementById('aiPromptTemplateSelect').value;
         if (promptTplId && promptTplId !== '0') formData.append('promptTemplateId', promptTplId);
 
-        fetch(_aiAnalyzeUrl, { method: 'POST', body: formData })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                document.getElementById('aiLoading').classList.add('d-none');
-                if (!data.success) {
-                    document.getElementById('aiError').classList.remove('d-none');
-                    document.getElementById('aiErrorMsg').textContent = data.message;
+        // Cost guard: server may answer with needsConfirmation (soft threshold) before
+        // spending tokens. We show the estimate and resend with confirmCost=true on accept.
+        function runAnalyze(confirmed) {
+            if (confirmed) formData.set('confirmCost', 'true');
+            fetch(_aiAnalyzeUrl, { method: 'POST', body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    document.getElementById('aiLoading').classList.add('d-none');
+                    if (data && data.needsConfirmation) {
+                        document.getElementById('aiCostConfirmMsg').textContent = data.message || 'This analysis may use a notable amount of tokens.';
+                        document.getElementById('aiCostConfirmAmount').textContent = '$' + (Number(data.estimatedCost) || 0).toFixed(3);
+                        document.getElementById('aiCostConfirm').classList.remove('d-none');
+                        return;
+                    }
+                    if (!data.success) {
+                        document.getElementById('aiError').classList.remove('d-none');
+                        document.getElementById('aiErrorMsg').textContent = data.message;
+                        document.getElementById('btnReanalyze').style.display = 'inline-block';
+                        return;
+                    }
+                    renderAiAnalysis(data.analysis);
+                    initAiConversation(data.analysis, data.csvPreview);
+                    document.getElementById('aiResults').classList.remove('d-none');
                     document.getElementById('btnReanalyze').style.display = 'inline-block';
-                    return;
-                }
-                renderAiAnalysis(data.analysis);
-                initAiConversation(data.analysis, data.csvPreview);
-                document.getElementById('aiResults').classList.remove('d-none');
-                document.getElementById('btnReanalyze').style.display = 'inline-block';
-            })
-            .catch(function(err) {
-                document.getElementById('aiLoading').classList.add('d-none');
-                document.getElementById('aiError').classList.remove('d-none');
-                document.getElementById('aiErrorMsg').textContent = 'Network error: ' + err.message;
-                document.getElementById('btnReanalyze').style.display = 'inline-block';
-            });
+                })
+                .catch(function(err) {
+                    document.getElementById('aiLoading').classList.add('d-none');
+                    document.getElementById('aiError').classList.remove('d-none');
+                    document.getElementById('aiErrorMsg').textContent = 'Network error: ' + err.message;
+                    document.getElementById('btnReanalyze').style.display = 'inline-block';
+                });
+        }
+
+        document.getElementById('aiCostProceedBtn').onclick = function() {
+            document.getElementById('aiCostConfirm').classList.add('d-none');
+            document.getElementById('aiLoading').classList.remove('d-none');
+            runAnalyze(true);
+        };
+        document.getElementById('aiCostCancelBtn').onclick = function() {
+            document.getElementById('aiCostConfirm').classList.add('d-none');
+            document.getElementById('btnReanalyze').style.display = 'inline-block';
+        };
+
+        runAnalyze(false);
     };
 
     // ---- render ----

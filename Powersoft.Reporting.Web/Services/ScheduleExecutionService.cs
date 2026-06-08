@@ -142,6 +142,21 @@ public class ScheduleExecutionService
         Database db, string connString, DateTime now,
         ScheduleRunSummary summary, CancellationToken ct)
     {
+        // Pre-flight connectivity probe. Some registered tenant DBs may be gone/renamed or the
+        // login may lack access (e.g. SQL 4060). Skip them with a single concise log line instead
+        // of letting EnsureSchema + GetDueSchedules each throw a full stack trace every poll cycle.
+        try
+        {
+            using var probe = new Microsoft.Data.SqlClient.SqlConnection(connString);
+            await probe.OpenAsync(ct);
+        }
+        catch (Microsoft.Data.SqlClient.SqlException ex)
+        {
+            _logger.LogWarning("Skipping DB {DB} — not accessible (SQL error {Number}): {Message}",
+                db.DBFriendlyName, ex.Number, ex.Message.Split('\n')[0]);
+            return;
+        }
+
         try
         {
             var iniRepo = _repositoryFactory.CreateIniRepository(connString);

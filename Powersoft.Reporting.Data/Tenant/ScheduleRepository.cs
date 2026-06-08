@@ -332,7 +332,7 @@ public class ScheduleRepository : IScheduleRepository
     public async Task<AiTokenBudget?> GetCurrentTokenBudgetAsync()
     {
         const string sql = @"
-            SELECT pk_BudgetID, MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated
+            SELECT pk_BudgetID, MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated, SoftCostLimit, HardCostLimit
             FROM dboReportsAI.tbl_AiTokenBudget
             WHERE BudgetMonth = DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()), 0)";
 
@@ -350,15 +350,16 @@ public class ScheduleRepository : IScheduleRepository
         // Read previous month's limit to carry forward for new month
         const string sql = @"
             DECLARE @thisMonth DATE = DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()), 0);
-            DECLARE @prevLimit INT = (
-                SELECT TOP 1 MonthlyTokenLimit FROM dboReportsAI.tbl_AiTokenBudget
-                ORDER BY BudgetMonth DESC
-            );
+            DECLARE @prevLimit INT, @prevSoft DECIMAL(10,4), @prevHard DECIMAL(10,4);
+            SELECT TOP 1 @prevLimit = MonthlyTokenLimit, @prevSoft = SoftCostLimit, @prevHard = HardCostLimit
+            FROM dboReportsAI.tbl_AiTokenBudget ORDER BY BudgetMonth DESC;
             IF @prevLimit IS NULL SET @prevLimit = 500000;
+            IF @prevSoft IS NULL SET @prevSoft = 0.10;
+            IF @prevHard IS NULL SET @prevHard = 0.25;
             IF NOT EXISTS (SELECT 1 FROM dboReportsAI.tbl_AiTokenBudget WHERE BudgetMonth = @thisMonth)
-                INSERT INTO dboReportsAI.tbl_AiTokenBudget (MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated)
-                VALUES (@prevLimit, 0, @thisMonth, GETDATE());
-            SELECT pk_BudgetID, MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated
+                INSERT INTO dboReportsAI.tbl_AiTokenBudget (MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated, SoftCostLimit, HardCostLimit)
+                VALUES (@prevLimit, 0, @thisMonth, GETDATE(), @prevSoft, @prevHard);
+            SELECT pk_BudgetID, MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated, SoftCostLimit, HardCostLimit
             FROM dboReportsAI.tbl_AiTokenBudget WHERE BudgetMonth = @thisMonth;";
 
         using var conn = new SqlConnection(_connectionString);
@@ -403,13 +404,35 @@ public class ScheduleRepository : IScheduleRepository
         return await cmd.ExecuteNonQueryAsync() > 0;
     }
 
+    public async Task<bool> SetCostLimitsAsync(decimal softLimit, decimal hardLimit)
+    {
+        const string sql = @"
+            DECLARE @thisMonth DATE = DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()), 0);
+            IF EXISTS (SELECT 1 FROM dboReportsAI.tbl_AiTokenBudget WHERE BudgetMonth = @thisMonth)
+                UPDATE dboReportsAI.tbl_AiTokenBudget
+                SET SoftCostLimit = @soft, HardCostLimit = @hard, LastUpdated = GETDATE()
+                WHERE BudgetMonth = @thisMonth;
+            ELSE
+                INSERT INTO dboReportsAI.tbl_AiTokenBudget (MonthlyTokenLimit, CurrentMonthUsed, BudgetMonth, LastUpdated, SoftCostLimit, HardCostLimit)
+                VALUES (500000, 0, @thisMonth, GETDATE(), @soft, @hard);";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@soft", softLimit);
+        cmd.Parameters.AddWithValue("@hard", hardLimit);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
     private static AiTokenBudget MapBudget(SqlDataReader r) => new()
     {
         BudgetId = r.GetInt32(0),
         MonthlyTokenLimit = r.GetInt32(1),
         CurrentMonthUsed = r.GetInt32(2),
         BudgetMonth = r.GetDateTime(3),
-        LastUpdated = r.GetDateTime(4)
+        LastUpdated = r.GetDateTime(4),
+        SoftCostLimit = r.GetDecimal(5),
+        HardCostLimit = r.GetDecimal(6)
     };
 
     // ==================== Email Templates ====================

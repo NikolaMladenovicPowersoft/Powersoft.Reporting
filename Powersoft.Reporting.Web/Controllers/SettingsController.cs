@@ -63,6 +63,8 @@ public class SettingsController : Controller
             RetentionDays = settings.RetentionDays,
             MonthlyTokenLimit = budget?.MonthlyTokenLimit ?? 500000,
             CurrentMonthUsed = budget?.CurrentMonthUsed ?? 0,
+            SoftCostLimit = budget?.SoftCostLimit ?? 0.10m,
+            HardCostLimit = budget?.HardCostLimit ?? 0.25m,
             IsSystemAdmin = ranking < ModuleConstants.RankingSystemAdmin,
             CanEdit = ranking <= ModuleConstants.RankingSystemAdmin
         };
@@ -81,6 +83,10 @@ public class SettingsController : Controller
         var connString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(connString))
             return RedirectToAction("Index", "Home");
+
+        if (vm.SoftCostLimit > vm.HardCostLimit)
+            ModelState.AddModelError(nameof(vm.SoftCostLimit),
+                "Warning threshold cannot exceed the hard limit.");
 
         if (!ModelState.IsValid)
         {
@@ -107,14 +113,39 @@ public class SettingsController : Controller
 
         var schedRepo = _repositoryFactory.CreateScheduleRepository(connString);
         await schedRepo.SetMonthlyTokenLimitAsync(vm.MonthlyTokenLimit);
+        await schedRepo.SetCostLimitsAsync(vm.SoftCostLimit, vm.HardCostLimit);
 
-        _logger.LogInformation("DB settings saved for {DB} by {User}",
-            GetConnectedDatabaseName(), User.Identity?.Name);
+        _logger.LogInformation("DB settings saved for {DB} by {User} (soft={Soft}, hard={Hard})",
+            GetConnectedDatabaseName(), User.Identity?.Name, vm.SoftCostLimit, vm.HardCostLimit);
 
+        var refreshed = await schedRepo.GetCurrentTokenBudgetAsync();
+        vm.CurrentMonthUsed = refreshed?.CurrentMonthUsed ?? vm.CurrentMonthUsed;
         vm.ConnectedDatabase = GetConnectedDatabaseName();
         vm.CanEdit = true;
         vm.SuccessMessage = "Settings saved successfully.";
         return View(vm);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetBudget()
+    {
+        var ranking = GetRanking();
+        if (ranking > ModuleConstants.RankingSystemAdmin)
+            return RedirectToAction("AccessDenied", "Account");
+
+        var connString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(connString))
+            return RedirectToAction("Index", "Home");
+
+        var schedRepo = _repositoryFactory.CreateScheduleRepository(connString);
+        await schedRepo.ResetMonthlyUsageAsync();
+
+        _logger.LogInformation("AI monthly token usage reset for {DB} by {User}",
+            GetConnectedDatabaseName(), User.Identity?.Name);
+
+        TempData["Success"] = "Monthly AI token usage has been reset to 0.";
+        return RedirectToAction(nameof(Database));
     }
 
     // ==================== System Settings (psCentral — Powersoft staff only) ====================

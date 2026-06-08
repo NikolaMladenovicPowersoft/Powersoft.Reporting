@@ -424,6 +424,20 @@ public class ScheduleRepository : IScheduleRepository
         return await cmd.ExecuteNonQueryAsync() > 0;
     }
 
+    public async Task<bool> ResetMonthlyUsageAsync()
+    {
+        const string sql = @"
+            DECLARE @thisMonth DATE = DATEADD(MONTH, DATEDIFF(MONTH, 0, GETDATE()), 0);
+            UPDATE dboReportsAI.tbl_AiTokenBudget
+            SET CurrentMonthUsed = 0, LastUpdated = GETDATE()
+            WHERE BudgetMonth = @thisMonth;";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        return await cmd.ExecuteNonQueryAsync() > 0;
+    }
+
     private static AiTokenBudget MapBudget(SqlDataReader r) => new()
     {
         BudgetId = r.GetInt32(0),

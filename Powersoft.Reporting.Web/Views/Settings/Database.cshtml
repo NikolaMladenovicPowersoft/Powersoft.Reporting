@@ -26,6 +26,14 @@
             </div>
         }
 
+        @if (TempData["Success"] is string okMsg)
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle me-2"></i>@okMsg
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
+
         @if (TempData["Error"] is string errorMsg)
         {
             <div class="alert alert-danger alert-dismissible fade show" role="alert">
@@ -149,6 +157,57 @@
                             <div class="progress" style="height: 10px;">
                                 <div class="progress-bar @barClass" role="progressbar" style="width: @usedPct%;"></div>
                             </div>
+                            @if (Model.CanEdit)
+                            {
+                                <button type="submit" asp-action="ResetBudget" formnovalidate
+                                        class="btn btn-sm btn-outline-warning mt-2"
+                                        onclick="return confirm('Reset this month\'s AI token usage back to 0?');">
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset monthly usage
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <hr class="my-3" />
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <h6 class="text-muted mb-1"><i class="bi bi-shield-check me-1"></i>Per-analysis cost guard</h6>
+                            <p class="form-text mt-0 mb-2">
+                                Before each AI analysis we estimate its cost. The warning prompt appears above the
+                                first threshold; analyses above the hard limit are blocked outright (no tokens spent).
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="SoftCostLimit" class="form-label"></label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                @if (isReadOnly)
+                                {
+                                    <input asp-for="SoftCostLimit" class="form-control" type="number" step="0.001" disabled />
+                                }
+                                else
+                                {
+                                    <input asp-for="SoftCostLimit" class="form-control" type="number" step="0.001" min="0.001" max="100" />
+                                }
+                            </div>
+                            <span asp-validation-for="SoftCostLimit" class="text-danger small"></span>
+                            <div class="form-text">Show a confirmation prompt when an analysis is estimated above this amount. Default $0.10.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label asp-for="HardCostLimit" class="form-label"></label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                @if (isReadOnly)
+                                {
+                                    <input asp-for="HardCostLimit" class="form-control" type="number" step="0.001" disabled />
+                                }
+                                else
+                                {
+                                    <input asp-for="HardCostLimit" class="form-control" type="number" step="0.001" min="0.001" max="100" />
+                                }
+                            </div>
+                            <span asp-validation-for="HardCostLimit" class="text-danger small"></span>
+                            <div class="form-text">Block any analysis estimated above this amount. Default $0.25.</div>
                         </div>
                     </div>
                 </div>

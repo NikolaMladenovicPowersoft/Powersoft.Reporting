@@ -27,6 +27,14 @@ public class DatabaseSettingsViewModel
 
     public int CurrentMonthUsed { get; set; }
 
+    [Range(0.001, 100, ErrorMessage = "Must be between 0.001 and 100")]
+    [Display(Name = "Warning Cost Threshold (USD)")]
+    public decimal SoftCostLimit { get; set; } = 0.10m;
+
+    [Range(0.001, 100, ErrorMessage = "Must be between 0.001 and 100")]
+    [Display(Name = "Hard Cost Limit (USD)")]
+    public decimal HardCostLimit { get; set; } = 0.25m;
+
     public bool IsSystemAdmin { get; set; }
     public bool CanEdit { get; set; }
     public string? SuccessMessage { get; set; }

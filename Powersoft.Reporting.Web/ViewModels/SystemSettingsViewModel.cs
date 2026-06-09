@@ -25,6 +25,10 @@ public class SystemSettingsViewModel
     [Display(Name = "SMTP From Name")]
     public string? DefaultSmtpFromName { get; set; } = "Powersoft Reports";
 
+    [Display(Name = "AI Cost Billing Markup")]
+    [Range(1.0, 100.0, ErrorMessage = "Markup must be between 1 and 100.")]
+    public decimal AiCostMarkup { get; set; } = 1.0m;
+
     public string? SuccessMessage { get; set; }
     public string? ErrorMessage { get; set; }
 }

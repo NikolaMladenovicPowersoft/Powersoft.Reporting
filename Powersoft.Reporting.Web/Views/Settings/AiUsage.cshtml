@@ -1,6 +1,8 @@
 @model Powersoft.Reporting.Core.Models.AiUsageReport
 @{
     ViewData["Title"] = "AI Usage Report";
+    decimal markup = (decimal)(ViewBag.AiCostMarkup ?? 1.0m);
+    bool hasMarkup = markup > 1.0m;
 
     Func<string, string> reportLabel = code => code switch
     {
@@ -13,6 +15,8 @@
         "Charts" => "Charts & Dashboards",
         "ProspectClients" => "Prospect Clients",
         "OffersReport" => "Offers Report",
+        "TrialBalance" => "Trial Balance",
+        "ProfitLoss" => "Profit & Loss",
         _ => code
     };
 }
@@ -22,6 +26,13 @@
     <span class="badge bg-secondary ms-3 fs-6">All companies</span>
 </div>
 <p class="text-muted">Cross-tenant AI analysis spend &mdash; who is using AI, on which reports, and what it costs.</p>
+@if (hasMarkup)
+{
+    <div class="alert alert-info py-2 d-flex align-items-center gap-2">
+        <i class="bi bi-info-circle"></i>
+        <span>Billing markup is set to <strong>@markup.ToString("G29")×</strong>. "API Cost" = raw OpenAI cost. "Billed" = API Cost × @markup.ToString("G29"). Configure in <a asp-controller="Settings" asp-action="System">System Settings</a>.</span>
+    </div>
+}
 
 <form method="get" asp-action="AiUsage" class="card shadow-sm mb-4">
     <div class="card-body">
@@ -70,11 +81,22 @@
     <div class="col-md-4">
         <div class="card shadow-sm h-100">
             <div class="card-body text-center">
-                <div class="text-muted small text-uppercase">Total Cost</div>
+                <div class="text-muted small text-uppercase">@(hasMarkup ? "API Cost (raw)" : "Total Cost")</div>
                 <div class="display-6 fw-bold" style="color:#6366f1;">$@Model.TotalCost.ToString("N4")</div>
             </div>
         </div>
     </div>
+    @if (hasMarkup)
+    {
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100" style="border-color:#6366f1;">
+            <div class="card-body text-center">
+                <div class="text-muted small text-uppercase">Billed (@markup.ToString("G29")×)</div>
+                <div class="display-6 fw-bold" style="color:#6366f1;">$@((Model.TotalCost * markup).ToString("N4"))</div>
+            </div>
+        </div>
+    </div>
+    }
 </div>
 
 @if (Model.TotalAnalyses == 0)
@@ -92,7 +114,7 @@ else
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0 align-middle">
                         <thead class="table-light">
-                            <tr><th>Company</th><th class="text-end">Analyses</th><th class="text-end">Tokens</th><th class="text-end">Cost</th></tr>
+                            <tr><th>Company</th><th class="text-end">Analyses</th><th class="text-end">Tokens</th><th class="text-end">API Cost</th>@if(hasMarkup){<th class="text-end">Billed</th>}</tr>
                         </thead>
                         <tbody>
                             @foreach (var r in Model.ByCompany)
@@ -102,6 +124,7 @@ else
                                     <td class="text-end">@r.AnalysisCount.ToString("N0")</td>
                                     <td class="text-end">@r.TotalTokens.ToString("N0")</td>
                                     <td class="text-end fw-semibold">$@r.TotalCost.ToString("N4")</td>
+                                    @if(hasMarkup){<td class="text-end fw-semibold" style="color:#6366f1;">$@((r.TotalCost*markup).ToString("N4"))</td>}
                                 </tr>
                             }
                         </tbody>
@@ -116,7 +139,7 @@ else
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0 align-middle">
                         <thead class="table-light">
-                            <tr><th>Report</th><th class="text-end">Analyses</th><th class="text-end">Tokens</th><th class="text-end">Cost</th></tr>
+                            <tr><th>Report</th><th class="text-end">Analyses</th><th class="text-end">Tokens</th><th class="text-end">API Cost</th>@if(hasMarkup){<th class="text-end">Billed</th>}</tr>
                         </thead>
                         <tbody>
                             @foreach (var r in Model.ByReport)
@@ -126,6 +149,7 @@ else
                                     <td class="text-end">@r.AnalysisCount.ToString("N0")</td>
                                     <td class="text-end">@r.TotalTokens.ToString("N0")</td>
                                     <td class="text-end fw-semibold">$@r.TotalCost.ToString("N4")</td>
+                                    @if(hasMarkup){<td class="text-end fw-semibold" style="color:#6366f1;">$@((r.TotalCost*markup).ToString("N4"))</td>}
                                 </tr>
                             }
                         </tbody>
@@ -140,7 +164,7 @@ else
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0 align-middle">
                         <thead class="table-light">
-                            <tr><th>User</th><th class="text-end">Analyses</th><th class="text-end">Tokens</th><th class="text-end">Cost</th></tr>
+                            <tr><th>User</th><th class="text-end">Analyses</th><th class="text-end">Tokens</th><th class="text-end">API Cost</th>@if(hasMarkup){<th class="text-end">Billed</th>}</tr>
                         </thead>
                         <tbody>
                             @foreach (var r in Model.ByUser)
@@ -150,6 +174,7 @@ else
                                     <td class="text-end">@r.AnalysisCount.ToString("N0")</td>
                                     <td class="text-end">@r.TotalTokens.ToString("N0")</td>
                                     <td class="text-end fw-semibold">$@r.TotalCost.ToString("N4")</td>
+                                    @if(hasMarkup){<td class="text-end fw-semibold" style="color:#6366f1;">$@((r.TotalCost*markup).ToString("N4"))</td>}
                                 </tr>
                             }
                         </tbody>

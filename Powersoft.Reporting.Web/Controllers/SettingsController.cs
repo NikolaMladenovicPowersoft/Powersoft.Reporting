@@ -171,7 +171,8 @@ public class SettingsController : Controller
             GlobalMaxSchedulesPerReport = settings.GlobalMaxSchedulesPerReport,
             DefaultRetentionDays = settings.DefaultRetentionDays,
             DefaultSmtpFromEmail = settings.DefaultSmtpFromEmail,
-            DefaultSmtpFromName = settings.DefaultSmtpFromName
+            DefaultSmtpFromName = settings.DefaultSmtpFromName,
+            AiCostMarkup = settings.AiCostMarkup
         };
 
         return View(vm);
@@ -202,7 +203,8 @@ public class SettingsController : Controller
                 GlobalMaxSchedulesPerReport = vm.GlobalMaxSchedulesPerReport,
                 DefaultRetentionDays = vm.DefaultRetentionDays,
                 DefaultSmtpFromEmail = vm.DefaultSmtpFromEmail ?? "",
-                DefaultSmtpFromName = vm.DefaultSmtpFromName ?? ""
+                DefaultSmtpFromName = vm.DefaultSmtpFromName ?? "",
+                AiCostMarkup = vm.AiCostMarkup < 1m ? 1m : vm.AiCostMarkup
             };
 
             foreach (var (code, (desc, dataType, value)) in settings.ToSettingsList())
@@ -241,6 +243,9 @@ public class SettingsController : Controller
         if (dateTo < dateFrom) dateTo = dateFrom;
 
         var report = await _centralRepository.GetAiUsageReportAsync(dateFrom, dateTo);
+        var dict = await _centralRepository.GetSystemSettingsAsync("RE_");
+        var settings = SystemSettings.FromDictionary(dict);
+        ViewBag.AiCostMarkup = settings.AiCostMarkup;
         return View(report);
     }
 

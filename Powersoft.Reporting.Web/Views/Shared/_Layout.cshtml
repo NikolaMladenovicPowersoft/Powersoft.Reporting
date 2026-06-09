@@ -45,6 +45,15 @@
                             <li><a class="dropdown-item" asp-controller="Reports" asp-action="OffersReport"><i class="bi bi-file-earmark-text me-2"></i>Offers Report</a></li>
                         </ul>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-calculator me-1"></i> Accounting
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" asp-controller="Reports" asp-action="TrialBalance"><i class="bi bi-shuffle me-2"></i>Trial Balance</a></li>
+                            <li><a class="dropdown-item" asp-controller="Reports" asp-action="ProfitLoss"><i class="bi bi-graph-up-arrow me-2"></i>Profit &amp; Loss</a></li>
+                        </ul>
+                    </li>
                     @{
                         var rankingStr = Context.Session.GetInt32("Ranking");
                         var showSettings = rankingStr.HasValue && rankingStr.Value <= 15;

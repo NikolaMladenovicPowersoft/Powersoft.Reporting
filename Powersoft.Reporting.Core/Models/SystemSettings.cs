@@ -8,6 +8,7 @@ public class SystemSettings
     public int DefaultRetentionDays { get; set; } = 7;
     public string DefaultSmtpFromEmail { get; set; } = "";
     public string DefaultSmtpFromName { get; set; } = "Powersoft Reports";
+    public decimal AiCostMarkup { get; set; } = 1.0m;
 
     private const string Prefix = "RE_";
 
@@ -26,6 +27,8 @@ public class SystemSettings
             s.DefaultSmtpFromEmail = v5;
         if (dict.TryGetValue(Prefix + "SmtpFromName", out var v6))
             s.DefaultSmtpFromName = v6;
+        if (dict.TryGetValue(Prefix + "AiCostMarkup", out var v7) && decimal.TryParse(v7, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var n7))
+            s.AiCostMarkup = n7 < 1m ? 1m : n7;
         return s;
     }
 
@@ -39,6 +42,7 @@ public class SystemSettings
             [Prefix + "DefaultRetentionDays"] = ("Report Engine — Default file retention days", "int", DefaultRetentionDays.ToString()),
             [Prefix + "SmtpFromEmail"] = ("Report Engine — Sender email address", "nvarchar", DefaultSmtpFromEmail),
             [Prefix + "SmtpFromName"] = ("Report Engine — Sender display name", "nvarchar", DefaultSmtpFromName),
+            [Prefix + "AiCostMarkup"] = ("Report Engine — AI cost billing markup factor (1.0 = raw cost, 5.0 = 5× markup)", "decimal", AiCostMarkup.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
     }
 }

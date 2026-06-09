@@ -11,6 +11,8 @@
     bool canViewCancelLog = ViewBag.CanViewCancelLog ?? true;
     bool canViewPC        = ViewBag.CanViewPC        ?? true;
     bool canViewOffers    = ViewBag.CanViewOffers    ?? true;
+    bool canViewTrialBalance = ViewBag.CanViewTrialBalance ?? true;
+    bool canViewProfitLoss = ViewBag.CanViewProfitLoss ?? true;
 }
 
 <div class="row">
@@ -82,10 +84,16 @@
                 <i class="bi bi-folder me-2"></i>Accounting
             </h6>
             <nav class="nav flex-column">
-                <a class="nav-link disabled" href="#">
-                    <i class="bi bi-receipt me-2"></i>P&L Report
-                    <span class="badge bg-secondary ms-auto">Soon</span>
+                @if (canViewTrialBalance) {
+                <a class="nav-link" asp-action="TrialBalance">
+                    <i class="bi bi-shuffle me-2"></i>Trial Balance
                 </a>
+                }
+                @if (canViewProfitLoss) {
+                <a class="nav-link" asp-action="ProfitLoss">
+                    <i class="bi bi-graph-up-arrow me-2"></i>Profit &amp; Loss
+                </a>
+                }
             </nav>
         </div>
     </div>
@@ -334,30 +342,54 @@
                     <i class="bi bi-calculator me-1"></i>Accounting
                 </h6>
                 <div class="row g-4">
+                    @if (canViewTrialBalance) {
                     <div class="col-md-6 col-lg-4">
-                        <div class="card h-100 border-secondary" style="opacity:0.7;">
+                        <div class="card h-100" style="border-color:#16a34a;">
                             <div class="card-body d-flex flex-column">
                                 <div class="d-flex align-items-center mb-3">
-                                    <div class="bg-secondary bg-opacity-10 rounded-circle p-3 me-3">
-                                        <i class="bi bi-receipt text-secondary" style="font-size: 1.5rem;"></i>
+                                    <div class="rounded-circle p-3 me-3" style="background:rgba(22,163,74,0.10);">
+                                        <i class="bi bi-shuffle" style="font-size: 1.5rem; color:#16a34a;"></i>
                                     </div>
                                     <div>
-                                        <h5 class="card-title mb-1">P&amp;L Report
-                                            <span class="badge bg-secondary ms-1">Soon</span>
-                                        </h5>
-                                        <p class="text-muted small mb-0">Profit &amp; Loss statement</p>
+                                        <h5 class="card-title mb-1">Trial Balance</h5>
+                                        <p class="text-muted small mb-0">Opening, movements &amp; closing balances</p>
                                     </div>
                                 </div>
                                 <p class="card-text text-muted small flex-grow-1">
-                                    Period-based Profit &amp; Loss statement with revenue, COGS,
-                                    operating expenses, and net income. Currently in development.
+                                    Per-account opening balance, period debits/credits and closing balance as at a date,
+                                    grouped by chart-of-accounts header. Detailed or summary, with header selection &amp; suppression.
                                 </p>
-                                <button class="btn btn-outline-secondary mt-auto" disabled>
-                                    <i class="bi bi-hourglass-split me-1"></i>Coming Soon
-                                </button>
+                                <a asp-action="TrialBalance" class="btn mt-auto text-white" style="background:#16a34a;">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
                             </div>
                         </div>
                     </div>
+                    }
+                    @if (canViewProfitLoss) {
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100" style="border-color:#16a34a;">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="rounded-circle p-3 me-3" style="background:rgba(22,163,74,0.10);">
+                                        <i class="bi bi-graph-up-arrow" style="font-size: 1.5rem; color:#16a34a;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Profit &amp; Loss</h5>
+                                        <p class="text-muted small mb-0">Sales, cost of sales, income &amp; expenses</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Period-based Profit &amp; Loss statement grouped into Sales, Cost of Sales, Income
+                                    and Expenses, with Gross &amp; Net Profit and an optional prior-year comparison column.
+                                </p>
+                                <a asp-action="ProfitLoss" class="btn mt-auto text-white" style="background:#16a34a;">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    }
                 </div>
 
                 <hr class="my-4">

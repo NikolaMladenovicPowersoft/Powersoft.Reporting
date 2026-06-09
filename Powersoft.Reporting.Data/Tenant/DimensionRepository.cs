@@ -48,7 +48,7 @@ public class DimensionRepository : IDimensionRepository
         const string sql = @"
             SELECT CAST(pk_SeasonID AS NVARCHAR(20)), SeasonCode, SeasonDesc
             FROM tbl_Season
-            ORDER BY SeasonCode";
+            ORDER BY pk_SeasonID DESC";
 
         return await ExecuteListQueryAsync(sql);
     }

@@ -1,0 +1,249 @@
+@model Powersoft.Reporting.Web.ViewModels.TrialBalanceViewModel
+@{
+    Layout = null;
+    var db = Model.ConnectedDatabase ?? "Unknown";
+    var now = DateTime.Now;
+    var isSummary = Model.IsSummary;
+    var embedded = Context.Request.Query.ContainsKey("embedded");
+    var groups = Model.Rows
+        .GroupBy(r => new { r.HeaderKey, r.HeaderCode, r.HeaderName, r.HeaderCodeSort })
+        .OrderBy(g => g.Key.HeaderCodeSort, StringComparer.Ordinal)
+        .ToList();
+
+    string D(decimal v) => v == 0 ? "" : v.ToString("#,##0.00");
+}
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+    <meta charset="utf-8" />
+    <title>Trial Balance - Print Preview</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+
+        body {
+            font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+            background:#525659;
+            color:#1e293b;
+        }
+
+        /* ── Fixed toolbar ── */
+        .toolbar {
+            position:fixed; top:0; left:0; right:0; z-index:100;
+            background:#2c3e50; color:#fff;
+            padding:6px 16px;
+            display:flex; align-items:center; gap:12px;
+            box-shadow:0 2px 8px rgba(0,0,0,.3);
+            font-size:13px;
+        }
+        .toolbar .title { font-weight:600; margin-right:auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .toolbar button {
+            background:none; border:1px solid rgba(255,255,255,.25); color:#fff;
+            padding:5px 12px; border-radius:4px; cursor:pointer; font-size:13px;
+            display:flex; align-items:center; gap:5px; white-space:nowrap;
+        }
+        .toolbar button:hover { background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.4); }
+        .zoom-controls { display:flex; align-items:center; gap:4px; }
+        .zoom-controls button { padding:5px 8px; }
+        .zoom-level { min-width:42px; text-align:center; font-size:12px; color:rgba(255,255,255,.8); }
+        .toolbar .sep { width:1px; height:24px; background:rgba(255,255,255,.2); }
+
+        /* ── Paper ── */
+        .paper-container { margin:56px auto 40px; padding:20px; }
+        .paper {
+            background:#fff;
+            margin:0 auto;
+            padding:40px 48px;
+            box-shadow:0 2px 12px rgba(0,0,0,.3);
+            transform-origin:top center;
+            transition:transform .15s ease;
+            max-width:1200px;
+        }
+
+        /* ── Report header ── */
+        .rpt-header { text-align:center; margin-bottom:20px; padding-bottom:12px; border-bottom:2px solid #1e293b; }
+        .rpt-company { font-size:18px; font-weight:700; }
+        .rpt-title { font-size:14px; font-weight:600; color:#475569; margin-top:2px; }
+        .rpt-meta { display:flex; justify-content:space-between; font-size:10px; color:#64748b; margin-bottom:14px; }
+        .rpt-meta .meta-r { text-align:right; }
+
+        /* ── Table ── */
+        .report-table { width:100%; border-collapse:collapse; font-size:9.5px; }
+        .report-table thead th {
+            background:#e2e8f0; padding:4px 6px;
+            text-align:right; font-weight:700; font-size:9px;
+            text-transform:uppercase; letter-spacing:.3px; color:#334155;
+            border-bottom:2px solid #94a3b8; white-space:nowrap;
+        }
+        .report-table thead th.l { text-align:left; }
+        .report-table tbody td { padding:3px 6px; text-align:right; border-bottom:1px solid #f1f5f9; color:#334155; }
+        .report-table tbody td.l { text-align:left; }
+        .report-table .grp td { background:#f8fafc; padding:5px 6px 3px; font-weight:700; font-size:10px; color:#1e293b; border-top:1px solid #94a3b8; }
+        .report-table .sub td { font-weight:600; border-top:1px solid #cbd5e1; border-bottom:1px solid #94a3b8; padding:3px 6px; background:#f8fafc; font-style:italic; color:#475569; }
+        .report-table .tot td { font-weight:700; border-top:3px double #1e293b; padding:5px 6px; background:#f1f5f9; font-size:10px; }
+        .report-table tbody tr:hover td { background:#fafbfd; }
+
+        .rpt-footer { text-align:center; margin-top:20px; padding-top:10px; border-top:1px solid #e2e8f0; font-size:9px; color:#94a3b8; }
+
+        /* ── Embedded in iframe: hide toolbar, reduce top margin ── */
+        body.embedded .toolbar { display:none; }
+        body.embedded .paper-container { margin-top:12px; }
+
+        /* ── Print ── */
+        @@media print {
+            body { background:#fff; }
+            .toolbar { display:none !important; }
+            .paper-container { margin:0; padding:0; }
+            .paper { box-shadow:none; padding:20px; transform:none !important; }
+            .report-table { page-break-inside:auto; }
+            .report-table tr { page-break-inside:avoid; }
+            .report-table .grp { page-break-after:avoid; }
+            .rpt-footer { page-break-before:avoid; }
+        }
+    </style>
+</head>
+<body class="@(embedded ? "embedded" : "")">
+
+    <div class="toolbar">
+        <span class="title"><i class="bi bi-shuffle me-1"></i>Trial Balance &mdash; @db</span>
+        <div class="zoom-controls">
+            <button onclick="zoomOut()" title="Zoom out"><i class="bi bi-zoom-out"></i></button>
+            <span class="zoom-level" id="zoomLabel">100%</span>
+            <button onclick="zoomIn()" title="Zoom in"><i class="bi bi-zoom-in"></i></button>
+            <button onclick="zoomReset()" title="Fit to width" style="font-size:11px;">Fit</button>
+        </div>
+        <div class="sep"></div>
+        <button onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+    </div>
+
+    <div class="paper-container">
+        <div class="paper" id="paper">
+            <div class="rpt-header">
+                <div class="rpt-company">@db</div>
+                <div class="rpt-title">Trial Balance &mdash; @(isSummary ? "Summary" : "Detailed")</div>
+            </div>
+            <div class="rpt-meta">
+                <div>
+                    <strong>As at:</strong> @Model.AsAt.ToString("dd/MM/yyyy")<br />
+                    <strong>Printed:</strong> @now.ToString("dd/MM/yyyy HH:mm")
+                </div>
+                <div class="meta-r">
+                    <strong>Accounts:</strong> @Model.Rows.Count.ToString("N0")
+                </div>
+            </div>
+
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        @if (isSummary)
+                        {
+                            <th class="l">Header Code</th>
+                            <th class="l">Header</th>
+                        }
+                        else
+                        {
+                            <th class="l">Header</th>
+                            <th class="l">Acc. Code</th>
+                            <th class="l">Account</th>
+                        }
+                        <th>Opening DR</th><th>Opening CR</th>
+                        <th>Debit</th><th>Credit</th>
+                        <th>Closing DR</th><th>Closing CR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var g in groups)
+                {
+                    var items = g.ToList();
+                    decimal odr = items.Where(r => r.OpeningBalanceType == "DR").Sum(r => r.OpeningBalance);
+                    decimal ocr = items.Where(r => r.OpeningBalanceType == "CR").Sum(r => r.OpeningBalance);
+                    decimal dr  = items.Sum(r => r.DebitMovement);
+                    decimal cr  = items.Sum(r => r.CreditMovement);
+                    decimal cdr = items.Where(r => r.ClosingBalanceType == "DR").Sum(r => r.ClosingBalance);
+                    decimal ccr = items.Where(r => r.ClosingBalanceType == "CR").Sum(r => r.ClosingBalance);
+
+                    if (isSummary)
+                    {
+                        <tr>
+                            <td class="l">@g.Key.HeaderCode</td>
+                            <td class="l">@g.Key.HeaderName</td>
+                            <td>@D(odr)</td><td>@D(ocr)</td>
+                            <td>@D(dr)</td><td>@D(cr)</td>
+                            <td>@D(cdr)</td><td>@D(ccr)</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        <tr class="grp"><td colspan="9">@g.Key.HeaderCode &mdash; @g.Key.HeaderName</td></tr>
+                        foreach (var r in items.Where(r => !r.Suppressed))
+                        {
+                            <tr>
+                                <td></td>
+                                <td class="l">@r.AccountCode</td>
+                                <td class="l">@r.AccountName</td>
+                                <td>@D(r.OpeningBalanceType == "DR" ? r.OpeningBalance : 0)</td>
+                                <td>@D(r.OpeningBalanceType == "CR" ? r.OpeningBalance : 0)</td>
+                                <td>@D(r.DebitMovement)</td>
+                                <td>@D(r.CreditMovement)</td>
+                                <td>@D(r.ClosingBalanceType == "DR" ? r.ClosingBalance : 0)</td>
+                                <td>@D(r.ClosingBalanceType == "CR" ? r.ClosingBalance : 0)</td>
+                            </tr>
+                        }
+                        <tr class="sub">
+                            <td colspan="3" class="l">@g.Key.HeaderCode @g.Key.HeaderName subtotal</td>
+                            <td>@D(odr)</td><td>@D(ocr)</td>
+                            <td>@D(dr)</td><td>@D(cr)</td>
+                            <td>@D(cdr)</td><td>@D(ccr)</td>
+                        </tr>
+                    }
+                }
+                <tr class="tot">
+                    <td colspan="@(isSummary ? 2 : 3)" class="l">GRAND TOTAL</td>
+                    <td>@D(Model.TotalOpeningDr)</td><td>@D(Model.TotalOpeningCr)</td>
+                    <td>@D(Model.TotalDebit)</td><td>@D(Model.TotalCredit)</td>
+                    <td>@D(Model.TotalClosingDr)</td><td>@D(Model.TotalClosingCr)</td>
+                </tr>
+                </tbody>
+            </table>
+
+            <div class="rpt-footer">
+                End of Report &mdash; Trial Balance &mdash; @db<br />
+                &copy; @now.Year Power Soft Ltd.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var currentZoom = 100;
+        var paper = document.getElementById('paper');
+
+        function setZoom(val) {
+            currentZoom = Math.max(40, Math.min(200, val));
+            paper.style.transform = 'scale(' + (currentZoom / 100) + ')';
+            paper.style.transformOrigin = 'top center';
+            document.getElementById('zoomLabel').textContent = currentZoom + '%';
+        }
+
+        function zoomIn()    { setZoom(currentZoom + 10); }
+        function zoomOut()   { setZoom(currentZoom - 10); }
+        function zoomReset() { setZoom(100); }
+
+        // Auto-fit on load to ensure the table is visible
+        (function autoFit() {
+            var containerW = document.querySelector('.paper-container').clientWidth - 40;
+            var paperW = paper.scrollWidth;
+            if (paperW > containerW) {
+                var fit = Math.floor((containerW / paperW) * 100);
+                setZoom(fit);
+            }
+        })();
+
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'p') { e.preventDefault(); window.print(); }
+            if (e.ctrlKey && e.key === '+') { e.preventDefault(); zoomIn(); }
+            if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoomOut(); }
+            if (e.ctrlKey && e.key === '0') { e.preventDefault(); zoomReset(); }
+        });
+    </script>
+</body>
+</html>

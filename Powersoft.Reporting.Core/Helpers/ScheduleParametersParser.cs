@@ -136,6 +136,30 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("maxRecords", out var clmr) || root.TryGetProperty("MaxRecords", out clmr))
                 p.MaxRecords = ParseInt(clmr, 50000);
 
+            // Trial Balance specific (keys from collectScheduleParameters() in TrialBalance.cshtml)
+            if (root.TryGetProperty("tbReportMode", out var tbrm) || root.TryGetProperty("TbReportMode", out tbrm))
+                p.TbReportMode = AsString(tbrm);
+            if (root.TryGetProperty("tbIncludeZeroMovements", out var tbiz) || root.TryGetProperty("TbIncludeZeroMovements", out tbiz))
+                p.TbIncludeZeroMovements = ParseBool(tbiz, false);
+            if (root.TryGetProperty("tbSelectedAccounts", out var tbsa) || root.TryGetProperty("TbSelectedAccounts", out tbsa))
+                p.TbSelectedAccounts = AsString(tbsa);
+            if (root.TryGetProperty("tbSelectedHeaders", out var tbsh) || root.TryGetProperty("TbSelectedHeaders", out tbsh))
+                p.TbSelectedHeaders = AsString(tbsh);
+            if (root.TryGetProperty("tbSuppressedHeaders", out var tbsup) || root.TryGetProperty("TbSuppressedHeaders", out tbsup))
+                p.TbSuppressedHeaders = AsString(tbsup);
+
+            // Profit & Loss specific (keys from collectProfitLossParams() in ProfitLoss.cshtml).
+            if (root.TryGetProperty("headerLevel", out var plhl) || root.TryGetProperty("PlHeaderLevel", out plhl))
+                p.PlHeaderLevel = ParseBool(plhl, false);
+            if (root.TryGetProperty("compareToLastYear", out var plcmp) || root.TryGetProperty("PlCompareToLastYear", out plcmp))
+                p.PlCompareToLastYear = ParseBool(plcmp, false);
+            if (root.TryGetProperty("openingStockValue", out var plos) || root.TryGetProperty("PlOpeningStockValue", out plos))
+                p.PlOpeningStockValue = ParseDecimal(plos, 0);
+            if (root.TryGetProperty("closingStockValue", out var plcs) || root.TryGetProperty("PlClosingStockValue", out plcs))
+                p.PlClosingStockValue = ParseDecimal(plcs, 0);
+            if (root.TryGetProperty("suppressedHeaders", out var plsup) || root.TryGetProperty("PlSuppressedHeaders", out plsup))
+                p.PlSuppressedHeaders = AsString(plsup);
+
             // Catalogue specific (keys from collectCatalogueParams() in Catalogue.cshtml).
             // reportMode/primaryGroup/etc. share key names with PS but carry CatalogueGroupBy
             // values; captured into distinct Cat* fields so the Catalogue handler reads the

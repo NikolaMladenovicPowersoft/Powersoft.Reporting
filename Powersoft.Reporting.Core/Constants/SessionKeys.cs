@@ -55,6 +55,10 @@ public static class ModuleConstants
     public const int ActionScheduleBelowMinStock = 6040;
     public const int ActionViewCancelLog = 6041;
     public const int ActionScheduleCancelLog = 6042;
+    public const int ActionViewTrialBalance = 6043;
+    public const int ActionScheduleTrialBalance = 6044;
+    public const int ActionViewProfitLoss = 6045;
+    public const int ActionScheduleProfitLoss = 6046;
 
     // Legacy Powersoft365 cross-module actions (already exist in psCentral — do NOT seed)
     public const int ActionViewCost = 6015;
@@ -93,6 +97,10 @@ public static class ModuleConstants
     public const string IniDescriptionOffersReport = "Offers Report Layout";
     public const string IniHeaderBelowMinStock = "BELOWMIN";
     public const string IniDescriptionBelowMinStock = "Below Min Stock Report Layout";
+    public const string IniHeaderTrialBalance = "TRIALBAL";
+    public const string IniDescriptionTrialBalance = "Trial Balance Report Layout";
+    public const string IniHeaderProfitLoss = "PROFITLOSS";
+    public const string IniDescriptionProfitLoss = "Profit & Loss Report Layout";
 
     // INI settings constants (DB-level settings, userCode = "ALL")
     public const string IniHeaderDbSettings = "DBSETTINGS";

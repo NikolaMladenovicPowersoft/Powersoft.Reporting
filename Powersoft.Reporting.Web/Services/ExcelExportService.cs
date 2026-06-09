@@ -1364,5 +1364,222 @@ public class ExcelExportService
         workbook.SaveAs(stream);
         return stream.ToArray();
     }
+
+    public byte[] GenerateTrialBalanceExcel(List<TrialBalanceRow> rows, TrialBalanceFilter filter)
+    {
+        rows ??= new();
+        bool isSummary = filter.ReportMode == TrialBalanceReportMode.Summary;
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Trial Balance");
+
+        ws.Cell(1, 1).Value = "Trial Balance";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"As At: {filter.AsAt:dd/MM/yyyy}";
+        ws.Cell(selRow++, 1).Value = $"Report Mode: {filter.ReportMode}";
+        ws.Cell(selRow++, 1).Value = $"Include Zero Movements: {(filter.IncludeZeroMovements ? "Yes" : "No")}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        int headerRow = selRow + 1;
+        int col = 1;
+        ws.Cell(headerRow, col++).Value = "Header Code";
+        ws.Cell(headerRow, col++).Value = "Header";
+        if (!isSummary)
+        {
+            ws.Cell(headerRow, col++).Value = "Account Code";
+            ws.Cell(headerRow, col++).Value = "Account";
+        }
+        ws.Cell(headerRow, col++).Value = "Opening DR";
+        ws.Cell(headerRow, col++).Value = "Opening CR";
+        ws.Cell(headerRow, col++).Value = "Debit";
+        ws.Cell(headerRow, col++).Value = "Credit";
+        ws.Cell(headerRow, col++).Value = "Closing DR";
+        ws.Cell(headerRow, col++).Value = "Closing CR";
+
+        int totalCols = col - 1;
+        var headerRange = ws.Range(headerRow, 1, headerRow, totalCols);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+        int firstNumCol = isSummary ? 3 : 5;
+
+        void PutNum(int r, int c, decimal v)
+        {
+            if (v != 0)
+            {
+                ws.Cell(r, c).Value = v;
+                ws.Cell(r, c).Style.NumberFormat.Format = "#,##0.00";
+            }
+        }
+
+        if (isSummary)
+        {
+            foreach (var g in rows.GroupBy(r => new { r.HeaderKey, r.HeaderCode, r.HeaderName })
+                                   .OrderBy(g => g.First().HeaderCodeSort, StringComparer.Ordinal))
+            {
+                var list = g.ToList();
+                ws.Cell(dataRow, 1).Value = g.Key.HeaderCode;
+                ws.Cell(dataRow, 2).Value = g.Key.HeaderName;
+                PutNum(dataRow, 3, list.Where(r => r.OpeningBalanceType == "DR").Sum(r => r.OpeningBalance));
+                PutNum(dataRow, 4, list.Where(r => r.OpeningBalanceType == "CR").Sum(r => r.OpeningBalance));
+                PutNum(dataRow, 5, list.Sum(r => r.DebitMovement));
+                PutNum(dataRow, 6, list.Sum(r => r.CreditMovement));
+                PutNum(dataRow, 7, list.Where(r => r.ClosingBalanceType == "DR").Sum(r => r.ClosingBalance));
+                PutNum(dataRow, 8, list.Where(r => r.ClosingBalanceType == "CR").Sum(r => r.ClosingBalance));
+                dataRow++;
+            }
+        }
+        else
+        {
+            foreach (var row in rows)
+            {
+                ws.Cell(dataRow, 1).Value = row.HeaderCode;
+                ws.Cell(dataRow, 2).Value = row.HeaderName;
+                ws.Cell(dataRow, 3).Value = row.AccountCode;
+                ws.Cell(dataRow, 4).Value = row.AccountName;
+                PutNum(dataRow, 5, row.OpeningBalanceType == "DR" ? row.OpeningBalance : 0);
+                PutNum(dataRow, 6, row.OpeningBalanceType == "CR" ? row.OpeningBalance : 0);
+                PutNum(dataRow, 7, row.DebitMovement);
+                PutNum(dataRow, 8, row.CreditMovement);
+                PutNum(dataRow, 9, row.ClosingBalanceType == "DR" ? row.ClosingBalance : 0);
+                PutNum(dataRow, 10, row.ClosingBalanceType == "CR" ? row.ClosingBalance : 0);
+                dataRow++;
+            }
+        }
+
+        // Grand totals row.
+        ws.Cell(dataRow, 1).Value = "TOTAL";
+        PutNum(dataRow, firstNumCol,     rows.Where(r => r.OpeningBalanceType == "DR").Sum(r => r.OpeningBalance));
+        PutNum(dataRow, firstNumCol + 1, rows.Where(r => r.OpeningBalanceType == "CR").Sum(r => r.OpeningBalance));
+        PutNum(dataRow, firstNumCol + 2, rows.Sum(r => r.DebitMovement));
+        PutNum(dataRow, firstNumCol + 3, rows.Sum(r => r.CreditMovement));
+        PutNum(dataRow, firstNumCol + 4, rows.Where(r => r.ClosingBalanceType == "DR").Sum(r => r.ClosingBalance));
+        PutNum(dataRow, firstNumCol + 5, rows.Where(r => r.ClosingBalanceType == "CR").Sum(r => r.ClosingBalance));
+        var totalRange = ws.Range(dataRow, 1, dataRow, totalCols);
+        totalRange.Style.Font.Bold = true;
+        totalRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
+
+        ws.Columns().AdjustToContents(1, 80);
+        ws.SheetView.FreezeRows(headerRow);
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    public byte[] GenerateProfitLossExcel(List<ProfitLossRow> rows, ProfitLossFilter filter)
+    {
+        rows ??= new();
+        bool compare = filter.CompareToLastYear;
+        var visible = rows.Where(r => !r.Suppressed).ToList();
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Profit & Loss");
+
+        ws.Cell(1, 1).Value = "Profit & Loss";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:dd/MM/yyyy} - {filter.DateTo:dd/MM/yyyy}";
+        ws.Cell(selRow++, 1).Value = $"Header Level: {(filter.HeaderLevel ? "Yes" : "No")}";
+        if (compare)
+            ws.Cell(selRow++, 1).Value = $"Comparison Period: {filter.PriorDateFrom:dd/MM/yyyy} - {filter.PriorDateTo:dd/MM/yyyy}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        int headerRow = selRow + 1;
+        int col = 1;
+        ws.Cell(headerRow, col++).Value = "Group";
+        ws.Cell(headerRow, col++).Value = "Account Code";
+        ws.Cell(headerRow, col++).Value = "Account";
+        ws.Cell(headerRow, col++).Value = "Amount";
+        if (compare)
+        {
+            ws.Cell(headerRow, col++).Value = "Prior Year";
+            ws.Cell(headerRow, col++).Value = "Variance";
+            ws.Cell(headerRow, col++).Value = "Variance %";
+        }
+        int totalCols = col - 1;
+        var headerRange = ws.Range(headerRow, 1, headerRow, totalCols);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+        void PutNum(int r, int c, decimal v)
+        {
+            ws.Cell(r, c).Value = v;
+            ws.Cell(r, c).Style.NumberFormat.Format = "#,##0.00";
+        }
+
+        foreach (var grp in visible.GroupBy(r => r.Group).OrderBy(g => (int)g.Key))
+        {
+            var list = grp.ToList();
+            foreach (var row in list)
+            {
+                ws.Cell(dataRow, 1).Value = row.GroupName;
+                ws.Cell(dataRow, 2).Value = row.AccountCode;
+                ws.Cell(dataRow, 3).Value = row.AccountName;
+                PutNum(dataRow, 4, row.Balance);
+                if (compare)
+                {
+                    PutNum(dataRow, 5, row.PriorBalance);
+                    PutNum(dataRow, 6, row.Variance);
+                    if (row.VariancePercent.HasValue) PutNum(dataRow, 7, row.VariancePercent.Value);
+                }
+                dataRow++;
+            }
+
+            ws.Cell(dataRow, 1).Value = list[0].GroupName + " subtotal";
+            PutNum(dataRow, 4, list.Sum(r => r.Balance));
+            if (compare)
+            {
+                PutNum(dataRow, 5, list.Sum(r => r.PriorBalance));
+                PutNum(dataRow, 6, list.Sum(r => r.Variance));
+            }
+            ws.Range(dataRow, 1, dataRow, totalCols).Style.Font.Italic = true;
+            ws.Range(dataRow, 1, dataRow, totalCols).Style.Fill.BackgroundColor = XLColor.FromHtml("#f1f5f9");
+            dataRow++;
+        }
+
+        decimal Tot(ProfitLossGroup g) => visible.Where(r => r.Group == g).Sum(r => r.Balance);
+        decimal PriorTot(ProfitLossGroup g) => visible.Where(r => r.Group == g).Sum(r => r.PriorBalance);
+        decimal gross = Tot(ProfitLossGroup.Sales) - Tot(ProfitLossGroup.CostOfSales);
+        decimal net = gross + Tot(ProfitLossGroup.Income) - Tot(ProfitLossGroup.Expenses);
+        decimal pGross = PriorTot(ProfitLossGroup.Sales) - PriorTot(ProfitLossGroup.CostOfSales);
+        decimal pNet = pGross + PriorTot(ProfitLossGroup.Income) - PriorTot(ProfitLossGroup.Expenses);
+
+        dataRow++;
+        void SummaryRow(string label, decimal cur, decimal prior)
+        {
+            ws.Cell(dataRow, 1).Value = label;
+            PutNum(dataRow, 4, cur);
+            if (compare) { PutNum(dataRow, 5, prior); PutNum(dataRow, 6, cur - prior); }
+            var rng = ws.Range(dataRow, 1, dataRow, totalCols);
+            rng.Style.Font.Bold = true;
+            rng.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
+            dataRow++;
+        }
+        SummaryRow("GROSS PROFIT", gross, pGross);
+        SummaryRow("NET PROFIT", net, pNet);
+
+        ws.Columns().AdjustToContents(1, 80);
+        ws.SheetView.FreezeRows(headerRow);
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
 }
 

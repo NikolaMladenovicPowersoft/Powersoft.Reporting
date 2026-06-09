@@ -246,11 +246,13 @@ public class ReportsController : Controller
             ViewBag.CanViewCancelLog  = true;
             ViewBag.CanViewPC         = true;
             ViewBag.CanViewOffers     = true;
+            ViewBag.CanViewTrialBalance = true;
+            ViewBag.CanViewProfitLoss = true;
         }
         else
         {
             var roleId = GetRoleID();
-            // Run all 9 checks concurrently — single await at end
+            // Run all checks concurrently — single await at end
             var t1  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewAvgBasket);
             var t2  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewPurchasesSales);
             var t3  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewPareto);
@@ -260,7 +262,9 @@ public class ReportsController : Controller
             var t7  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewCancelLog);
             var t8  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewProspectClients);
             var t9  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewOffersReport);
-            await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8, t9);
+            var t10 = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewTrialBalance);
+            var t11 = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewProfitLoss);
+            await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11);
 
             ViewBag.CanViewAB         = t1.Result;
             ViewBag.CanViewPS         = t2.Result && CanViewCost();
@@ -271,6 +275,8 @@ public class ReportsController : Controller
             ViewBag.CanViewCancelLog  = t7.Result;
             ViewBag.CanViewPC         = t8.Result;
             ViewBag.CanViewOffers     = t9.Result;
+            ViewBag.CanViewTrialBalance = t10.Result;
+            ViewBag.CanViewProfitLoss = t11.Result;
         }
 
         ViewBag.ViewCost     = CanViewCost();
@@ -890,6 +896,8 @@ public class ReportsController : Controller
             ReportTypeConstants.ProspectClients=> (ModuleConstants.IniHeaderProspectClients,  ModuleConstants.IniDescriptionProspectClients),
             ReportTypeConstants.OffersReport   => (ModuleConstants.IniHeaderOffersReport,     ModuleConstants.IniDescriptionOffersReport),
             ReportTypeConstants.BelowMinStock  => (ModuleConstants.IniHeaderBelowMinStock,    ModuleConstants.IniDescriptionBelowMinStock),
+            ReportTypeConstants.TrialBalance   => (ModuleConstants.IniHeaderTrialBalance,     ModuleConstants.IniDescriptionTrialBalance),
+            ReportTypeConstants.ProfitLoss     => (ModuleConstants.IniHeaderProfitLoss,       ModuleConstants.IniDescriptionProfitLoss),
             _                                  => null
         };
 
@@ -5470,6 +5478,901 @@ public class ReportsController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error analyzing Cancel Log report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    // ==================== Trial Balance ====================
+
+    public async Task<IActionResult> TrialBalance()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewTrialBalance))
+        {
+            _logger.LogWarning("User {User} denied access to TrialBalance (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewTrialBalance);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
+        try
+        {
+            var repo = _repositoryFactory.CreateTrialBalanceRepository(tenantConnString);
+            var headers = await repo.GetHeadersAsync();
+            ViewBag.HeadersJson = System.Text.Json.JsonSerializer.Serialize(
+                headers.Select(h => new { key = h.Key, code = h.Code, name = h.Name }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load COA headers for Trial Balance");
+            ViewBag.HeadersJson = "[]";
+        }
+
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+
+        bool hasSavedLayout = false;
+        Dictionary<string, string>? savedLayout = null;
+        try
+        {
+            var iniRepo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            savedLayout = await iniRepo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderTrialBalance,
+                GetUserCode());
+            hasSavedLayout = savedLayout.Count > 0;
+        }
+        catch { /* first time — no layout */ }
+
+        ViewBag.HasSavedLayout = hasSavedLayout;
+        ViewBag.SavedLayout    = savedLayout;
+        ViewBag.CanSchedule    = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleTrialBalance);
+        return View();
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetTrialBalanceAccounts(string? headers = null)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(Array.Empty<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateTrialBalanceRepository(tenantConnString);
+            var accounts = await repo.GetAccountsAsync(headers);
+            return Json(accounts.Select(a => new { code = a.Code, name = a.Name, headerKey = a.HeaderKey }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Trial Balance accounts");
+            return Json(Array.Empty<object>());
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetTrialBalanceData(
+        DateTime asAt,
+        bool includeZeroMovements = false,
+        string reportMode = "Detailed",
+        string? selectedAccounts = null,
+        string? selectedHeaders = null,
+        string? suppressedHeaders = null,
+        string sortColumn = "AccountCode",
+        string sortDirection = "ASC")
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        try
+        {
+            var filter = BuildTrialBalanceFilter(asAt, includeZeroMovements, reportMode,
+                selectedAccounts, selectedHeaders, suppressedHeaders, sortColumn, sortDirection);
+
+            var repo = _repositoryFactory.CreateTrialBalanceRepository(tenantConnString);
+            var (rows, fiscalYearFound) = await repo.GenerateAsync(filter);
+
+            if (!fiscalYearFound)
+                return Json(new { success = false, message = "The selected date does not fall within a defined fiscal year (tbl_acperiod)." });
+
+            return Json(new { success = true, data = rows, totalRows = rows.Count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Trial Balance data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveTrialBalanceSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected." });
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleTrialBalance))
+            return Json(new { success = false, message = "Not authorized to schedule this report." });
+
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                }
+                else
+                {
+                    nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+            {
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            }
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.TrialBalance,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty,
+                IsActive = true
+            };
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.TrialBalance);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving Trial Balance schedule");
+            return Json(new { success = false, message = "Failed to save schedule. The schedule tables may not exist yet." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetTrialBalanceSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(Array.Empty<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.TrialBalance);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                s.SkipIfEmpty
+            }));
+        }
+        catch { return Json(Array.Empty<object>()); }
+    }
+
+    private static TrialBalanceFilter BuildTrialBalanceFilter(
+        DateTime asAt, bool includeZeroMovements, string reportMode,
+        string? selectedAccounts, string? selectedHeaders, string? suppressedHeaders,
+        string sortColumn, string sortDirection) => new()
+        {
+            AsAt = asAt,
+            IncludeZeroMovements = includeZeroMovements,
+            ReportMode = Enum.TryParse<TrialBalanceReportMode>(reportMode, true, out var rm) ? rm : TrialBalanceReportMode.Detailed,
+            SelectedAccounts = selectedAccounts ?? "",
+            SelectedHeaders = selectedHeaders ?? "",
+            SuppressedHeaders = suppressedHeaders ?? "",
+            SortColumn = sortColumn,
+            SortDirection = sortDirection
+        };
+
+    private async Task<(List<TrialBalanceRow> rows, TrialBalanceFilter filter)?> RunTrialBalanceQuery(
+        DateTime asAt, bool includeZeroMovements, string reportMode,
+        string? selectedAccounts, string? selectedHeaders, string? suppressedHeaders,
+        string sortColumn, string sortDirection)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var filter = BuildTrialBalanceFilter(asAt, includeZeroMovements, reportMode,
+            selectedAccounts, selectedHeaders, suppressedHeaders, sortColumn, sortDirection);
+
+        try
+        {
+            var repo = _repositoryFactory.CreateTrialBalanceRepository(tenantConnString);
+            var (rows, _) = await repo.GenerateAsync(filter);
+            return (rows, filter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error running Trial Balance query");
+            return null;
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportTrialBalanceCsv(
+        DateTime asAt, bool includeZeroMovements = false, string reportMode = "Detailed",
+        string? selectedAccounts = null, string? selectedHeaders = null, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunTrialBalanceQuery(asAt, includeZeroMovements, reportMode,
+            selectedAccounts, selectedHeaders, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("TrialBalance");
+
+        var bytes = new CsvExportService().GenerateTrialBalanceCsv(result.Value.rows, result.Value.filter);
+        return File(bytes, "text/csv", $"TrialBalance_{asAt:yyyyMMdd}.csv");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportTrialBalanceExcel(
+        DateTime asAt, bool includeZeroMovements = false, string reportMode = "Detailed",
+        string? selectedAccounts = null, string? selectedHeaders = null, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunTrialBalanceQuery(asAt, includeZeroMovements, reportMode,
+            selectedAccounts, selectedHeaders, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("TrialBalance");
+
+        var bytes = new ExcelExportService().GenerateTrialBalanceExcel(result.Value.rows, result.Value.filter);
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"TrialBalance_{asAt:yyyyMMdd}.xlsx");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportTrialBalancePdf(
+        DateTime asAt, bool includeZeroMovements = false, string reportMode = "Detailed",
+        string? selectedAccounts = null, string? selectedHeaders = null, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunTrialBalanceQuery(asAt, includeZeroMovements, reportMode,
+            selectedAccounts, selectedHeaders, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("TrialBalance");
+
+        var bytes = new PdfExportService().GenerateTrialBalancePdf(result.Value.rows, result.Value.filter);
+        return File(bytes, "application/pdf", $"TrialBalance_{asAt:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> TrialBalancePrintPreview(
+        DateTime asAt, bool includeZeroMovements = false, string reportMode = "Detailed",
+        string? selectedAccounts = null, string? selectedHeaders = null, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunTrialBalanceQuery(asAt, includeZeroMovements, reportMode,
+            selectedAccounts, selectedHeaders, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("TrialBalance");
+
+        var model = new ViewModels.TrialBalanceViewModel
+        {
+            AsAt = asAt,
+            IncludeZeroMovements = includeZeroMovements,
+            ReportMode = reportMode,
+            SortColumn = sortColumn,
+            SortDirection = sortDirection,
+            ConnectedDatabase = GetConnectedDatabaseName(),
+            Rows = result.Value.rows
+        };
+
+        return View(model);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendTrialBalanceReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime asAt, bool includeZeroMovements = false, string reportMode = "Detailed",
+        string? selectedAccounts = null, string? selectedHeaders = null, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunTrialBalanceQuery(asAt, includeZeroMovements, reportMode,
+            selectedAccounts, selectedHeaders, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateTrialBalancePdf(result.Value.rows, result.Value.filter);
+                fileName = $"TrialBalance_{asAt:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateTrialBalanceCsv(result.Value.rows, result.Value.filter);
+                fileName = $"TrialBalance_{asAt:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateTrialBalanceExcel(result.Value.rows, result.Value.filter);
+                fileName = $"TrialBalance_{asAt:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"As at {asAt:dd/MM/yyyy}";
+        var rowCount = result.Value.rows.Count;
+
+        var selectionLines = new List<string>
+        {
+            $"As At: {asAt:dd/MM/yyyy}",
+            $"Report Mode: {reportMode}",
+            $"Include Zero Movements: {(includeZeroMovements ? "Yes" : "No")}"
+        };
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Trial Balance", dbName, period, rowCount, exportFormat, userName, "Accounts", selectionsHtml);
+        var selectionsText = string.Join("\n", selectionLines);
+        var defaultTextBody = $"Trial Balance Report\nDatabase: {dbName}\nPeriod: {period}\nAccounts: {rowCount}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+
+        var tokens = BuildEmailTokens("Trial Balance", dbName, period, rowCount, exportFormat, userName);
+
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "TrialBalance", templateId,
+            fileBytes, fileName, contentType,
+            $"Trial Balance Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeTrialBalanceReport(
+        DateTime asAt, bool includeZeroMovements = false, string reportMode = "Detailed",
+        string? selectedAccounts = null, string? selectedHeaders = null, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC",
+        string? locale = "el", int? promptTemplateId = null)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var result = await RunTrialBalanceQuery(asAt, includeZeroMovements, reportMode,
+            selectedAccounts, selectedHeaders, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        if (result.Value.rows.Count == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvBytes = new CsvExportService().GenerateTrialBalanceCsv(result.Value.rows, result.Value.filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
+            _logger.LogInformation(
+                "AI analysis [TrialBalance]: {Rows} rows, {CsvLen} chars, locale={Locale}, user={User}",
+                result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
+
+            var guardTb = await AnalyzeWithBudgetAsync(csvData, "TrialBalance", locale, customPrompt, GetTenantConnectionString());
+            var guardFailTb = AiGuardFailure(guardTb);
+            if (guardFailTb != null) return guardFailTb;
+            var analysis = guardTb.Analysis;
+
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Trial Balance report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    // ==================== Profit & Loss ====================
+
+    public async Task<IActionResult> ProfitLoss()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewProfitLoss))
+        {
+            _logger.LogWarning("User {User} denied access to ProfitLoss (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewProfitLoss);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
+        try
+        {
+            var repo = _repositoryFactory.CreateProfitLossRepository(tenantConnString);
+            var headers = await repo.GetHeadersAsync();
+            ViewBag.HeadersJson = System.Text.Json.JsonSerializer.Serialize(
+                headers.Select(h => new { key = h.Key, code = h.Code, name = h.Name }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load COA headers for Profit & Loss");
+            ViewBag.HeadersJson = "[]";
+        }
+
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+
+        bool hasSavedLayout = false;
+        Dictionary<string, string>? savedLayout = null;
+        try
+        {
+            var iniRepo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            savedLayout = await iniRepo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderProfitLoss,
+                GetUserCode());
+            hasSavedLayout = savedLayout.Count > 0;
+        }
+        catch { /* first time — no layout */ }
+
+        ViewBag.HasSavedLayout = hasSavedLayout;
+        ViewBag.SavedLayout    = savedLayout;
+        ViewBag.CanSchedule    = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleProfitLoss);
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetProfitLossData(
+        DateTime dateFrom, DateTime dateTo,
+        bool headerLevel = false, bool compareToLastYear = false,
+        decimal openingStockValue = 0, decimal closingStockValue = 0,
+        string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        try
+        {
+            var filter = BuildProfitLossFilter(dateFrom, dateTo, headerLevel, compareToLastYear,
+                openingStockValue, closingStockValue, suppressedHeaders, sortColumn, sortDirection);
+
+            if (!filter.IsValid())
+                return Json(new { success = false, message = "From date must be on or before To date." });
+
+            var repo = _repositoryFactory.CreateProfitLossRepository(tenantConnString);
+            var (rows, configError) = await repo.GenerateAsync(filter);
+
+            if (configError != null)
+                return Json(new { success = false, message = configError });
+
+            var vm = BuildProfitLossViewModel(filter, rows);
+
+            return Json(new
+            {
+                success = true,
+                data = rows,
+                totalRows = rows.Count(r => !r.Suppressed),
+                compareToLastYear,
+                totals = new
+                {
+                    sales = vm.TotalSales, costOfSales = vm.TotalCostOfSales,
+                    income = vm.TotalIncome, expenses = vm.TotalExpenses,
+                    grossProfit = vm.GrossProfit, netProfit = vm.NetProfit,
+                    priorSales = vm.PriorSales, priorCostOfSales = vm.PriorCostOfSales,
+                    priorIncome = vm.PriorIncome, priorExpenses = vm.PriorExpenses,
+                    priorGrossProfit = vm.PriorGrossProfit, priorNetProfit = vm.PriorNetProfit
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Profit & Loss data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveProfitLossSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected." });
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleProfitLoss))
+            return Json(new { success = false, message = "Not authorized to schedule this report." });
+
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                }
+                else
+                {
+                    nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+            {
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            }
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.ProfitLoss,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty,
+                IsActive = true
+            };
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.ProfitLoss);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving Profit & Loss schedule");
+            return Json(new { success = false, message = "Failed to save schedule. The schedule tables may not exist yet." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetProfitLossSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(Array.Empty<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.ProfitLoss);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                s.SkipIfEmpty
+            }));
+        }
+        catch { return Json(Array.Empty<object>()); }
+    }
+
+    private static ProfitLossFilter BuildProfitLossFilter(
+        DateTime dateFrom, DateTime dateTo, bool headerLevel, bool compareToLastYear,
+        decimal openingStockValue, decimal closingStockValue,
+        string? suppressedHeaders, string sortColumn, string sortDirection) => new()
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            HeaderLevel = headerLevel,
+            CompareToLastYear = compareToLastYear,
+            OpeningStockValue = openingStockValue,
+            ClosingStockValue = closingStockValue,
+            SuppressedHeaders = suppressedHeaders ?? "",
+            SortColumn = sortColumn,
+            SortDirection = sortDirection
+        };
+
+    private ProfitLossViewModel BuildProfitLossViewModel(ProfitLossFilter filter, List<ProfitLossRow> rows) => new()
+    {
+        DateFrom = filter.DateFrom,
+        DateTo = filter.DateTo,
+        HeaderLevel = filter.HeaderLevel,
+        CompareToLastYear = filter.CompareToLastYear,
+        OpeningStockValue = filter.OpeningStockValue,
+        ClosingStockValue = filter.ClosingStockValue,
+        SuppressedHeaders = filter.SuppressedHeaders,
+        SortColumn = filter.SortColumn,
+        SortDirection = filter.SortDirection,
+        ConnectedDatabase = GetConnectedDatabaseName(),
+        Rows = rows
+    };
+
+    private async Task<(List<ProfitLossRow> rows, ProfitLossFilter filter)?> RunProfitLossQuery(
+        DateTime dateFrom, DateTime dateTo, bool headerLevel, bool compareToLastYear,
+        decimal openingStockValue, decimal closingStockValue,
+        string? suppressedHeaders, string sortColumn, string sortDirection)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var filter = BuildProfitLossFilter(dateFrom, dateTo, headerLevel, compareToLastYear,
+            openingStockValue, closingStockValue, suppressedHeaders, sortColumn, sortDirection);
+
+        try
+        {
+            var repo = _repositoryFactory.CreateProfitLossRepository(tenantConnString);
+            var (rows, _) = await repo.GenerateAsync(filter);
+            return (rows, filter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error running Profit & Loss query");
+            return null;
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportProfitLossCsv(
+        DateTime dateFrom, DateTime dateTo, bool headerLevel = false, bool compareToLastYear = false,
+        decimal openingStockValue = 0, decimal closingStockValue = 0, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunProfitLossQuery(dateFrom, dateTo, headerLevel, compareToLastYear,
+            openingStockValue, closingStockValue, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("ProfitLoss");
+
+        var bytes = new CsvExportService().GenerateProfitLossCsv(result.Value.rows, result.Value.filter);
+        return File(bytes, "text/csv", $"ProfitLoss_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportProfitLossExcel(
+        DateTime dateFrom, DateTime dateTo, bool headerLevel = false, bool compareToLastYear = false,
+        decimal openingStockValue = 0, decimal closingStockValue = 0, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunProfitLossQuery(dateFrom, dateTo, headerLevel, compareToLastYear,
+            openingStockValue, closingStockValue, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("ProfitLoss");
+
+        var bytes = new ExcelExportService().GenerateProfitLossExcel(result.Value.rows, result.Value.filter);
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"ProfitLoss_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportProfitLossPdf(
+        DateTime dateFrom, DateTime dateTo, bool headerLevel = false, bool compareToLastYear = false,
+        decimal openingStockValue = 0, decimal closingStockValue = 0, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunProfitLossQuery(dateFrom, dateTo, headerLevel, compareToLastYear,
+            openingStockValue, closingStockValue, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("ProfitLoss");
+
+        var bytes = new PdfExportService().GenerateProfitLossPdf(result.Value.rows, result.Value.filter);
+        return File(bytes, "application/pdf", $"ProfitLoss_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ProfitLossPrintPreview(
+        DateTime dateFrom, DateTime dateTo, bool headerLevel = false, bool compareToLastYear = false,
+        decimal openingStockValue = 0, decimal closingStockValue = 0, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunProfitLossQuery(dateFrom, dateTo, headerLevel, compareToLastYear,
+            openingStockValue, closingStockValue, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null) return RedirectToAction("ProfitLoss");
+
+        var model = BuildProfitLossViewModel(result.Value.filter, result.Value.rows);
+        return View(model);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendProfitLossReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo, bool headerLevel = false, bool compareToLastYear = false,
+        decimal openingStockValue = 0, decimal closingStockValue = 0, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC")
+    {
+        var result = await RunProfitLossQuery(dateFrom, dateTo, headerLevel, compareToLastYear,
+            openingStockValue, closingStockValue, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateProfitLossPdf(result.Value.rows, result.Value.filter);
+                fileName = $"ProfitLoss_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateProfitLossCsv(result.Value.rows, result.Value.filter);
+                fileName = $"ProfitLoss_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateProfitLossExcel(result.Value.rows, result.Value.filter);
+                fileName = $"ProfitLoss_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:dd/MM/yyyy} \u2014 {dateTo:dd/MM/yyyy}";
+        var rowCount = result.Value.rows.Count(r => !r.Suppressed);
+
+        var selectionLines = new List<string>
+        {
+            $"Period: {period}",
+            $"Header Level: {(headerLevel ? "Yes" : "No")}",
+            $"Compare To Last Year: {(compareToLastYear ? "Yes" : "No")}"
+        };
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Profit & Loss", dbName, period, rowCount, exportFormat, userName, "Accounts", selectionsHtml);
+        var selectionsText = string.Join("\n", selectionLines);
+        var defaultTextBody = $"Profit & Loss Report\nDatabase: {dbName}\nPeriod: {period}\nAccounts: {rowCount}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+
+        var tokens = BuildEmailTokens("Profit & Loss", dbName, period, rowCount, exportFormat, userName);
+
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "ProfitLoss", templateId,
+            fileBytes, fileName, contentType,
+            $"Profit & Loss Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeProfitLossReport(
+        DateTime dateFrom, DateTime dateTo, bool headerLevel = false, bool compareToLastYear = false,
+        decimal openingStockValue = 0, decimal closingStockValue = 0, string? suppressedHeaders = null,
+        string sortColumn = "AccountCode", string sortDirection = "ASC",
+        string? locale = "el", int? promptTemplateId = null)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var result = await RunProfitLossQuery(dateFrom, dateTo, headerLevel, compareToLastYear,
+            openingStockValue, closingStockValue, suppressedHeaders, sortColumn, sortDirection);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        if (result.Value.rows.Count == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvBytes = new CsvExportService().GenerateProfitLossCsv(result.Value.rows, result.Value.filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
+            _logger.LogInformation(
+                "AI analysis [ProfitLoss]: {Rows} rows, {CsvLen} chars, locale={Locale}, user={User}",
+                result.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
+
+            var guardPl = await AnalyzeWithBudgetAsync(csvData, "ProfitLoss", locale, customPrompt, GetTenantConnectionString());
+            var guardFailPl = AiGuardFailure(guardPl);
+            if (guardFailPl != null) return guardFailPl;
+            var analysis = guardPl.Analysis;
+
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Profit & Loss report with AI");
             return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
         }
     }

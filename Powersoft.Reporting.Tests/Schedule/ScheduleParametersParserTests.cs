@@ -190,6 +190,29 @@ public class ScheduleParametersParserTests
         filter!.Categories.Ids.Should().ContainSingle().Which.Should().Be("7");
     }
 
+    // Mirrors collectScheduleParameters() in TrialBalance.cshtml. Before the TB scheduler handler
+    // was added, a scheduled Trial Balance would have dropped mode/zero-movement/header selections.
+    private const string TrialBalanceParametersJson =
+        "{\"reportDateRange\":{\"type\":\"AsAt\",\"value\":0}," +
+        "\"tbReportMode\":\"Summary\",\"tbIncludeZeroMovements\":true," +
+        "\"tbSelectedAccounts\":\"1001,1002\",\"tbSelectedHeaders\":\"10,20\"," +
+        "\"tbSuppressedHeaders\":\"30\",\"reportType\":\"TrialBalance\"}";
+
+    [Fact]
+    public void Parse_ReadsTrialBalanceFields()
+    {
+        var p = ScheduleParametersParser.Parse(TrialBalanceParametersJson);
+
+        p.TbReportMode.Should().Be("Summary");
+        p.TbIncludeZeroMovements.Should().BeTrue();
+        p.TbSelectedAccounts.Should().Be("1001,1002");
+        p.TbSelectedHeaders.Should().Be("10,20");
+        p.TbSuppressedHeaders.Should().Be("30");
+
+        Enum.TryParse<TrialBalanceReportMode>(p.TbReportMode, true, out var rm).Should().BeTrue();
+        rm.Should().Be(TrialBalanceReportMode.Summary);
+    }
+
     // The handler relies on Enum.TryParse turning these numeric strings into the right members.
     [Fact]
     public void Parse_CatalogueEnumStrings_RoundTripToEnumMembers()

@@ -101,6 +101,20 @@ public class ScheduleParameters
     public string? OrStoreCodesJson { get; set; }
     public string? OrAgentCodesJson { get; set; }
 
+    // Trial Balance specific (distinct Tb* keys to avoid clashing with shared params)
+    public string? TbReportMode { get; set; }
+    public bool TbIncludeZeroMovements { get; set; }
+    public string? TbSelectedAccounts { get; set; }
+    public string? TbSelectedHeaders { get; set; }
+    public string? TbSuppressedHeaders { get; set; }
+
+    // Profit & Loss specific (distinct Pl* keys)
+    public bool PlHeaderLevel { get; set; }
+    public bool PlCompareToLastYear { get; set; }
+    public decimal PlOpeningStockValue { get; set; }
+    public decimal PlClosingStockValue { get; set; }
+    public string? PlSuppressedHeaders { get; set; }
+
     // Shared
     public bool IncludeVat { get; set; }
     public List<string>? StoreCodes { get; set; }

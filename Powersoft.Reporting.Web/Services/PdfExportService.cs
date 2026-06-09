@@ -1073,4 +1073,193 @@ public class PdfExportService
         document.Close();
         return ms.ToArray();
     }
+
+    public byte[] GenerateTrialBalancePdf(List<TrialBalanceRow> rows, TrialBalanceFilter filter)
+    {
+        rows ??= new();
+        bool isSummary = filter.ReportMode == TrialBalanceReportMode.Summary;
+        int colCount = isSummary ? 8 : 10;
+
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Trial Balance", TitleFont));
+        document.Add(new Paragraph($"As At: {filter.AsAt:dd/MM/yyyy}", SubtitleFont));
+        document.Add(new Paragraph($"Report Mode: {filter.ReportMode} | Include Zero Movements: {(filter.IncludeZeroMovements ? "Yes" : "No")}", SubtitleFont));
+        document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var table = new PdfPTable(colCount) { WidthPercentage = 100, SpacingBefore = 5f };
+        table.SetWidths(isSummary
+            ? new float[] { 12, 30, 12, 12, 12, 12, 12, 12 }
+            : new float[] { 10, 22, 10, 22, 9, 9, 9, 9, 9, 9 });
+
+        AddHeaderCell(table, "Header Code");
+        AddHeaderCell(table, "Header");
+        if (!isSummary)
+        {
+            AddHeaderCell(table, "Account Code");
+            AddHeaderCell(table, "Account");
+        }
+        AddHeaderCell(table, "Opening DR");
+        AddHeaderCell(table, "Opening CR");
+        AddHeaderCell(table, "Debit");
+        AddHeaderCell(table, "Credit");
+        AddHeaderCell(table, "Closing DR");
+        AddHeaderCell(table, "Closing CR");
+
+        static string Num(decimal v) => v == 0 ? "" : v.ToString("N2");
+        bool alternate = false;
+
+        if (isSummary)
+        {
+            foreach (var g in rows.GroupBy(r => new { r.HeaderKey, r.HeaderCode, r.HeaderName })
+                                   .OrderBy(g => g.First().HeaderCodeSort, StringComparer.Ordinal))
+            {
+                var list = g.ToList();
+                var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+                AddDataCell(table, g.Key.HeaderCode, bg);
+                AddDataCell(table, g.Key.HeaderName, bg);
+                AddDataCell(table, Num(list.Where(r => r.OpeningBalanceType == "DR").Sum(r => r.OpeningBalance)), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(list.Where(r => r.OpeningBalanceType == "CR").Sum(r => r.OpeningBalance)), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(list.Sum(r => r.DebitMovement)), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(list.Sum(r => r.CreditMovement)), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(list.Where(r => r.ClosingBalanceType == "DR").Sum(r => r.ClosingBalance)), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(list.Where(r => r.ClosingBalanceType == "CR").Sum(r => r.ClosingBalance)), bg, Element.ALIGN_RIGHT);
+                alternate = !alternate;
+            }
+        }
+        else
+        {
+            foreach (var row in rows)
+            {
+                var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+                AddDataCell(table, row.HeaderCode, bg);
+                AddDataCell(table, row.HeaderName, bg);
+                AddDataCell(table, row.AccountCode, bg);
+                AddDataCell(table, row.AccountName, bg);
+                AddDataCell(table, Num(row.OpeningBalanceType == "DR" ? row.OpeningBalance : 0), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(row.OpeningBalanceType == "CR" ? row.OpeningBalance : 0), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(row.DebitMovement), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(row.CreditMovement), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(row.ClosingBalanceType == "DR" ? row.ClosingBalance : 0), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(row.ClosingBalanceType == "CR" ? row.ClosingBalance : 0), bg, Element.ALIGN_RIGHT);
+                alternate = !alternate;
+            }
+        }
+
+        // Grand totals.
+        AddTotalCell(table, "TOTAL");
+        AddTotalCell(table, "");
+        if (!isSummary) { AddTotalCell(table, ""); AddTotalCell(table, ""); }
+        AddTotalCell(table, Num(rows.Where(r => r.OpeningBalanceType == "DR").Sum(r => r.OpeningBalance)), Element.ALIGN_RIGHT);
+        AddTotalCell(table, Num(rows.Where(r => r.OpeningBalanceType == "CR").Sum(r => r.OpeningBalance)), Element.ALIGN_RIGHT);
+        AddTotalCell(table, Num(rows.Sum(r => r.DebitMovement)), Element.ALIGN_RIGHT);
+        AddTotalCell(table, Num(rows.Sum(r => r.CreditMovement)), Element.ALIGN_RIGHT);
+        AddTotalCell(table, Num(rows.Where(r => r.ClosingBalanceType == "DR").Sum(r => r.ClosingBalance)), Element.ALIGN_RIGHT);
+        AddTotalCell(table, Num(rows.Where(r => r.ClosingBalanceType == "CR").Sum(r => r.ClosingBalance)), Element.ALIGN_RIGHT);
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
+
+    public byte[] GenerateProfitLossPdf(List<ProfitLossRow> rows, ProfitLossFilter filter)
+    {
+        rows ??= new();
+        bool compare = filter.CompareToLastYear;
+        var visible = rows.Where(r => !r.Suppressed).ToList();
+        int colCount = compare ? 5 : 3;
+
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4, 24, 24, 30, 24);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Profit & Loss", TitleFont));
+        document.Add(new Paragraph($"Period: {filter.DateFrom:dd/MM/yyyy} - {filter.DateTo:dd/MM/yyyy}", SubtitleFont));
+        document.Add(new Paragraph($"Header Level: {(filter.HeaderLevel ? "Yes" : "No")}", SubtitleFont));
+        if (compare)
+            document.Add(new Paragraph($"Comparison Period: {filter.PriorDateFrom:dd/MM/yyyy} - {filter.PriorDateTo:dd/MM/yyyy}", SubtitleFont));
+        document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var table = new PdfPTable(colCount) { WidthPercentage = 100, SpacingBefore = 5f };
+        table.SetWidths(compare
+            ? new float[] { 34, 14, 14, 14, 14 }
+            : new float[] { 60, 20, 20 });
+
+        AddHeaderCell(table, "Account");
+        AddHeaderCell(table, "Amount");
+        if (compare)
+        {
+            AddHeaderCell(table, "Prior Year");
+            AddHeaderCell(table, "Variance");
+            AddHeaderCell(table, "Variance %");
+        }
+
+        static string Num(decimal v) => v == 0 ? "" : v.ToString("N2");
+        static string Pct(decimal? v) => v.HasValue ? v.Value.ToString("N2") + "%" : "";
+        bool alternate = false;
+
+        foreach (var grp in visible.GroupBy(r => r.Group).OrderBy(g => (int)g.Key))
+        {
+            var list = grp.ToList();
+
+            // Group header row.
+            var hc = new PdfPCell(new Phrase(list[0].GroupName, SubtitleFont)) { Colspan = colCount, BackgroundColor = new BaseColor(226, 232, 240), Padding = 4f };
+            table.AddCell(hc);
+
+            foreach (var row in list)
+            {
+                var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+                AddDataCell(table, "    " + (string.IsNullOrEmpty(row.AccountCode) ? row.AccountName : row.AccountCode + " - " + row.AccountName), bg);
+                AddDataCell(table, Num(row.Balance), bg, Element.ALIGN_RIGHT);
+                if (compare)
+                {
+                    AddDataCell(table, Num(row.PriorBalance), bg, Element.ALIGN_RIGHT);
+                    AddDataCell(table, Num(row.Variance), bg, Element.ALIGN_RIGHT);
+                    AddDataCell(table, Pct(row.VariancePercent), bg, Element.ALIGN_RIGHT);
+                }
+                alternate = !alternate;
+            }
+
+            // Group subtotal.
+            AddTotalCell(table, list[0].GroupName + " subtotal");
+            AddTotalCell(table, Num(list.Sum(r => r.Balance)), Element.ALIGN_RIGHT);
+            if (compare)
+            {
+                AddTotalCell(table, Num(list.Sum(r => r.PriorBalance)), Element.ALIGN_RIGHT);
+                AddTotalCell(table, Num(list.Sum(r => r.Variance)), Element.ALIGN_RIGHT);
+                AddTotalCell(table, "", Element.ALIGN_RIGHT);
+            }
+        }
+
+        decimal Tot(ProfitLossGroup g) => visible.Where(r => r.Group == g).Sum(r => r.Balance);
+        decimal PriorTot(ProfitLossGroup g) => visible.Where(r => r.Group == g).Sum(r => r.PriorBalance);
+        decimal gross = Tot(ProfitLossGroup.Sales) - Tot(ProfitLossGroup.CostOfSales);
+        decimal net = gross + Tot(ProfitLossGroup.Income) - Tot(ProfitLossGroup.Expenses);
+        decimal pGross = PriorTot(ProfitLossGroup.Sales) - PriorTot(ProfitLossGroup.CostOfSales);
+        decimal pNet = pGross + PriorTot(ProfitLossGroup.Income) - PriorTot(ProfitLossGroup.Expenses);
+
+        void SummaryRow(string label, decimal cur, decimal prior)
+        {
+            AddTotalCell(table, label);
+            AddTotalCell(table, Num(cur), Element.ALIGN_RIGHT);
+            if (compare)
+            {
+                AddTotalCell(table, Num(prior), Element.ALIGN_RIGHT);
+                AddTotalCell(table, Num(cur - prior), Element.ALIGN_RIGHT);
+                AddTotalCell(table, "", Element.ALIGN_RIGHT);
+            }
+        }
+        SummaryRow("GROSS PROFIT", gross, pGross);
+        SummaryRow("NET PROFIT", net, pNet);
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
 }

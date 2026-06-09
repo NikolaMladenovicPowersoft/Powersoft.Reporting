@@ -73,6 +73,51 @@ public class IniRepositorySlugTests
     }
 
     [Fact]
+    public void TrialBalance_SlugConstant_IsPresent()
+    {
+        ModuleConstants.IniHeaderTrialBalance.Should().Be("TRIALBAL");
+        ModuleConstants.IniHeaderTrialBalance.Length.Should().BeLessThanOrEqualTo(20,
+            because: "IniHeaderCode column is nvarchar(20) and the slug suffix needs room");
+        ModuleConstants.IniDescriptionTrialBalance.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void TrialBalance_NamedHeaderCode_FitsWithin20Chars()
+    {
+        var longName = new string('a', 200);
+        var slug = Slug(longName);
+        var m = typeof(IniRepository).GetMethod("BuildNamedHeaderCode",
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("BuildNamedHeaderCode not found");
+        var headerCode = (string)m.Invoke(null, new object[] { ModuleConstants.IniHeaderTrialBalance, slug })!;
+        headerCode.Length.Should().BeLessThanOrEqualTo(20);
+        headerCode.Should().StartWith("TRIALBAL:");
+    }
+
+    [Fact]
+    public void ProfitLoss_SlugConstant_IsPresent()
+    {
+        ModuleConstants.IniHeaderProfitLoss.Should().Be("PROFITLOSS");
+        ModuleConstants.IniHeaderProfitLoss.Length.Should().BeLessThanOrEqualTo(20,
+            because: "IniHeaderCode column is nvarchar(20) and the slug suffix needs room");
+        ModuleConstants.IniDescriptionProfitLoss.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void ProfitLoss_NamedHeaderCode_FitsWithin20Chars()
+    {
+        var longName = new string('a', 200);
+        var slug = Slug(longName);
+        var m = typeof(IniRepository).GetMethod("BuildNamedHeaderCode",
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("BuildNamedHeaderCode not found");
+        var headerCode = (string)m.Invoke(null, new object[] { ModuleConstants.IniHeaderProfitLoss, slug })!;
+        headerCode.Length.Should().BeLessThanOrEqualTo(20);
+        headerCode.Should().StartWith("PROFITLOSS:");
+        headerCode.Should().NotEndWith("-");
+    }
+
+    [Fact]
     public void Slugify_IsIdempotent()
     {
         var first = Slug("Quarterly Stock Report — 2026");

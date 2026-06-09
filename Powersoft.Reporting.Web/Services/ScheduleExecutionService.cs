@@ -332,6 +332,12 @@ public class ScheduleExecutionService
         if (string.Equals(reportType, ReportTypeConstants.CancelLog, StringComparison.OrdinalIgnoreCase))
             return await GenerateCancelLogReportAsync(schedule, connString);
 
+        if (string.Equals(reportType, ReportTypeConstants.TrialBalance, StringComparison.OrdinalIgnoreCase))
+            return await GenerateTrialBalanceReportAsync(schedule, connString);
+
+        if (string.Equals(reportType, ReportTypeConstants.ProfitLoss, StringComparison.OrdinalIgnoreCase))
+            return await GenerateProfitLossReportAsync(schedule, connString);
+
         if (string.Equals(reportType, ReportTypeConstants.Catalogue, StringComparison.OrdinalIgnoreCase))
             return await GenerateCatalogueReportAsync(schedule, connString);
 
@@ -416,6 +422,112 @@ public class ScheduleExecutionService
         }
 
         var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        return (rowCount, fileBytes, fileName, contentType, period);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateTrialBalanceReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (_, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+        var asAt = dateTo.Date; // Trial Balance is "as at" the end of the resolved range.
+
+        var filter = new TrialBalanceFilter
+        {
+            AsAt = asAt,
+            IncludeZeroMovements = parameters.TbIncludeZeroMovements,
+            ReportMode = Enum.TryParse<TrialBalanceReportMode>(parameters.TbReportMode, true, out var rm) ? rm : TrialBalanceReportMode.Detailed,
+            SelectedAccounts = parameters.TbSelectedAccounts ?? "",
+            SelectedHeaders = parameters.TbSelectedHeaders ?? "",
+            SuppressedHeaders = parameters.TbSuppressedHeaders ?? ""
+        };
+
+        _logger.LogInformation(
+            "TrialBalance schedule {Id}: asAt={AsAt:yyyy-MM-dd}, mode={Mode}, includeZero={Zero}",
+            schedule.ScheduleId, asAt, filter.ReportMode, filter.IncludeZeroMovements);
+
+        var repo = _repositoryFactory.CreateTrialBalanceRepository(connString);
+        var (rows, _) = await repo.GenerateAsync(filter);
+        int rowCount = rows.Count;
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateTrialBalancePdf(rows, filter);
+                fileName = $"TrialBalance_{asAt:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateTrialBalanceCsv(rows, filter);
+                fileName = $"TrialBalance_{asAt:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateTrialBalanceExcel(rows, filter);
+                fileName = $"TrialBalance_{asAt:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"As at {asAt:yyyy-MM-dd}";
+        return (rowCount, fileBytes, fileName, contentType, period);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateProfitLossReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        var filter = new ProfitLossFilter
+        {
+            DateFrom = dateFrom.Date,
+            DateTo = dateTo.Date,
+            HeaderLevel = parameters.PlHeaderLevel,
+            CompareToLastYear = parameters.PlCompareToLastYear,
+            OpeningStockValue = parameters.PlOpeningStockValue,
+            ClosingStockValue = parameters.PlClosingStockValue,
+            SuppressedHeaders = parameters.PlSuppressedHeaders ?? ""
+        };
+
+        _logger.LogInformation(
+            "ProfitLoss schedule {Id}: {From:yyyy-MM-dd}..{To:yyyy-MM-dd}, headerLevel={HL}, compare={Cmp}",
+            schedule.ScheduleId, filter.DateFrom, filter.DateTo, filter.HeaderLevel, filter.CompareToLastYear);
+
+        var repo = _repositoryFactory.CreateProfitLossRepository(connString);
+        var (rows, _) = await repo.GenerateAsync(filter);
+        int rowCount = rows.Count(r => !r.Suppressed);
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateProfitLossPdf(rows, filter);
+                fileName = $"ProfitLoss_{filter.DateFrom:yyyyMMdd}_{filter.DateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateProfitLossCsv(rows, filter);
+                fileName = $"ProfitLoss_{filter.DateFrom:yyyyMMdd}_{filter.DateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateProfitLossExcel(rows, filter);
+                fileName = $"ProfitLoss_{filter.DateFrom:yyyyMMdd}_{filter.DateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"{filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
         return (rowCount, fileBytes, fileName, contentType, period);
     }
 
@@ -1152,6 +1264,8 @@ Time: {(analysis.DurationMs / 1000.0):F1}s</p>");
         var reportDisplayName = schedule.ReportType switch
         {
             ReportTypeConstants.PurchasesSales => "Purchases vs Sales",
+            ReportTypeConstants.TrialBalance => "Trial Balance",
+            ReportTypeConstants.ProfitLoss => "Profit & Loss",
             _ => "Average Basket"
         };
         var mergeValues = new Dictionary<string, string>

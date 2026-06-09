@@ -992,6 +992,149 @@ public class CsvExportService
         return Encoding.UTF8.GetString(bytes);
     }
 
+    public byte[] GenerateTrialBalanceCsv(List<TrialBalanceRow> rows, TrialBalanceFilter filter)
+    {
+        rows ??= new();
+        bool isSummary = filter.ReportMode == TrialBalanceReportMode.Summary;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# Trial Balance");
+        sb.AppendLine($"# As At: {filter.AsAt:dd/MM/yyyy}");
+        sb.AppendLine($"# Report Mode: {filter.ReportMode}");
+        sb.AppendLine($"# Include Zero Movements: {(filter.IncludeZeroMovements ? "Yes" : "No")}");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
+        static string Num(decimal v) => v == 0 ? "" : v.ToString("F2", CultureInfo.InvariantCulture);
+
+        if (isSummary)
+        {
+            sb.AppendLine(string.Join(",", new[]
+            {
+                "Header Code", "Header", "Opening DR", "Opening CR",
+                "Debit", "Credit", "Closing DR", "Closing CR"
+            }.Select(Escape)));
+
+            foreach (var g in rows.GroupBy(r => new { r.HeaderKey, r.HeaderCode, r.HeaderName })
+                                   .OrderBy(g => g.First().HeaderCodeSort, StringComparer.Ordinal))
+            {
+                var list = g.ToList();
+                var cells = new List<string>
+                {
+                    g.Key.HeaderCode,
+                    g.Key.HeaderName,
+                    Num(list.Where(r => r.OpeningBalanceType == "DR").Sum(r => r.OpeningBalance)),
+                    Num(list.Where(r => r.OpeningBalanceType == "CR").Sum(r => r.OpeningBalance)),
+                    Num(list.Sum(r => r.DebitMovement)),
+                    Num(list.Sum(r => r.CreditMovement)),
+                    Num(list.Where(r => r.ClosingBalanceType == "DR").Sum(r => r.ClosingBalance)),
+                    Num(list.Where(r => r.ClosingBalanceType == "CR").Sum(r => r.ClosingBalance))
+                };
+                sb.AppendLine(string.Join(",", cells.Select(Escape)));
+            }
+        }
+        else
+        {
+            sb.AppendLine(string.Join(",", new[]
+            {
+                "Header Code", "Header", "Account Code", "Account",
+                "Opening DR", "Opening CR", "Debit", "Credit", "Closing DR", "Closing CR"
+            }.Select(Escape)));
+
+            foreach (var row in rows)
+            {
+                var cells = new List<string>
+                {
+                    row.HeaderCode,
+                    row.HeaderName,
+                    row.AccountCode,
+                    row.AccountName,
+                    Num(row.OpeningBalanceType == "DR" ? row.OpeningBalance : 0),
+                    Num(row.OpeningBalanceType == "CR" ? row.OpeningBalance : 0),
+                    Num(row.DebitMovement),
+                    Num(row.CreditMovement),
+                    Num(row.ClosingBalanceType == "DR" ? row.ClosingBalance : 0),
+                    Num(row.ClosingBalanceType == "CR" ? row.ClosingBalance : 0)
+                };
+                sb.AppendLine(string.Join(",", cells.Select(Escape)));
+            }
+        }
+
+        // Grand totals (suppressed rows still count, mirroring legacy report totals).
+        sb.AppendLine();
+        var totalCells = new List<string> { "TOTAL", "" };
+        if (!isSummary) { totalCells.Add(""); totalCells.Add(""); }
+        totalCells.Add(Num(rows.Where(r => r.OpeningBalanceType == "DR").Sum(r => r.OpeningBalance)));
+        totalCells.Add(Num(rows.Where(r => r.OpeningBalanceType == "CR").Sum(r => r.OpeningBalance)));
+        totalCells.Add(Num(rows.Sum(r => r.DebitMovement)));
+        totalCells.Add(Num(rows.Sum(r => r.CreditMovement)));
+        totalCells.Add(Num(rows.Where(r => r.ClosingBalanceType == "DR").Sum(r => r.ClosingBalance)));
+        totalCells.Add(Num(rows.Where(r => r.ClosingBalanceType == "CR").Sum(r => r.ClosingBalance)));
+        sb.AppendLine(string.Join(",", totalCells.Select(Escape)));
+
+        return Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
+    public byte[] GenerateProfitLossCsv(List<ProfitLossRow> rows, ProfitLossFilter filter)
+    {
+        rows ??= new();
+        bool compare = filter.CompareToLastYear;
+        var visible = rows.Where(r => !r.Suppressed).ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# Profit & Loss");
+        sb.AppendLine($"# Period: {filter.DateFrom:dd/MM/yyyy} - {filter.DateTo:dd/MM/yyyy}");
+        sb.AppendLine($"# Header Level: {(filter.HeaderLevel ? "Yes" : "No")}");
+        if (compare)
+            sb.AppendLine($"# Comparison Period: {filter.PriorDateFrom:dd/MM/yyyy} - {filter.PriorDateTo:dd/MM/yyyy}");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
+        static string Num(decimal v) => v.ToString("F2", CultureInfo.InvariantCulture);
+        static string Pct(decimal? v) => v.HasValue ? v.Value.ToString("F2", CultureInfo.InvariantCulture) : "";
+
+        var header = new List<string> { "Group", "Account Code", "Account", "Amount" };
+        if (compare) { header.Add("Prior Year"); header.Add("Variance"); header.Add("Variance %"); }
+        sb.AppendLine(string.Join(",", header.Select(Escape)));
+
+        foreach (var grp in visible.GroupBy(r => r.Group).OrderBy(g => (int)g.Key))
+        {
+            var list = grp.ToList();
+            foreach (var row in list)
+            {
+                var cells = new List<string>
+                {
+                    row.GroupName, row.AccountCode, row.AccountName, Num(row.Balance)
+                };
+                if (compare) { cells.Add(Num(row.PriorBalance)); cells.Add(Num(row.Variance)); cells.Add(Pct(row.VariancePercent)); }
+                sb.AppendLine(string.Join(",", cells.Select(Escape)));
+            }
+
+            var sub = new List<string> { list[0].GroupName + " subtotal", "", "", Num(list.Sum(r => r.Balance)) };
+            if (compare) { sub.Add(Num(list.Sum(r => r.PriorBalance))); sub.Add(Num(list.Sum(r => r.Variance))); sub.Add(""); }
+            sb.AppendLine(string.Join(",", sub.Select(Escape)));
+        }
+
+        decimal Tot(ProfitLossGroup g) => visible.Where(r => r.Group == g).Sum(r => r.Balance);
+        decimal PriorTot(ProfitLossGroup g) => visible.Where(r => r.Group == g).Sum(r => r.PriorBalance);
+        decimal gross = Tot(ProfitLossGroup.Sales) - Tot(ProfitLossGroup.CostOfSales);
+        decimal net = gross + Tot(ProfitLossGroup.Income) - Tot(ProfitLossGroup.Expenses);
+        decimal pGross = PriorTot(ProfitLossGroup.Sales) - PriorTot(ProfitLossGroup.CostOfSales);
+        decimal pNet = pGross + PriorTot(ProfitLossGroup.Income) - PriorTot(ProfitLossGroup.Expenses);
+
+        sb.AppendLine();
+        void Summary(string label, decimal cur, decimal prior)
+        {
+            var cells = new List<string> { label, "", "", Num(cur) };
+            if (compare) { cells.Add(Num(prior)); cells.Add(Num(cur - prior)); cells.Add(""); }
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+        Summary("GROSS PROFIT", gross, pGross);
+        Summary("NET PROFIT", net, pNet);
+
+        return Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
     private static string Escape(string value)
     {
         if (string.IsNullOrEmpty(value)) return "";

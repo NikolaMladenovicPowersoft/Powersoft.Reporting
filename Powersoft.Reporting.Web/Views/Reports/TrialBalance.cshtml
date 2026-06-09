@@ -1,0 +1,627 @@
+@using Powersoft.Reporting.Core.Models
+@{
+    ViewData["Title"] = "Trial Balance";
+    var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
+    var headersJson = ViewBag.HeadersJson as string ?? "[]";
+    var canSchedule = true;
+    var hasSavedLayout = (bool)(ViewBag.HasSavedLayout ?? false);
+    var savedLayout = ViewBag.SavedLayout as Dictionary<string, string>;
+}
+
+<style>
+    .stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;}
+    .stat-value{font-size:clamp(1rem,1.6vw,1.5rem);font-weight:700;color:#1e293b;line-height:1.15;overflow-wrap:anywhere;}
+    .stat-label{font-size:.8rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:4px;}
+    .group-header-row td{background:#f1f5f9!important;font-weight:600;border-top:2px solid #cbd5e1;}
+    .group-subtotal-row td{background:#f8fafc!important;border-top:1px solid #cbd5e1;border-bottom:1px solid #94a3b8;font-style:italic;color:#475569;}
+    .grand-total-row td{background:#dbeafe!important;font-weight:700;border-top:2px solid #2563eb;}
+    /* picker dropdown scroll list */
+    .picker-scroll { max-height:200px; overflow-y:auto; }
+</style>
+
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-start">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
+                    <li class="breadcrumb-item">Financial</li>
+                    <li class="breadcrumb-item active">Trial Balance</li>
+                </ol>
+            </nav>
+            <h2 class="mb-0"><i class="bi bi-shuffle me-2 text-success"></i>Trial Balance</h2>
+            <p class="text-muted mb-0">Opening balance, period movements and closing balance per account, as at a date</p>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-funnel me-2"></i>Report Parameters</div>
+    <div class="card-body">
+        <div class="row g-3 mb-3 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold">As At <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="asAt">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold">Report Mode</label>
+                <select class="form-select" id="reportMode">
+                    <option value="Detailed" selected>Detailed (per account)</option>
+                    <option value="Summary">Summary (per header)</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <div class="form-check mt-4">
+                    <input class="form-check-input" type="checkbox" id="includeZero">
+                    <label class="form-check-label" for="includeZero">Include zero movements</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-3 align-items-start">
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">Header selection <small class="text-muted fw-normal">(empty = all)</small></label>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center text-start" type="button"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside" style="min-height:38px;">
+                        <span id="hdrLabel" class="text-truncate small">All Headers</span>
+                        <i class="bi bi-chevron-down flex-shrink-0 ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2" style="min-width:300px;">
+                        <input type="text" class="form-control form-control-sm mb-2" placeholder="Search headers..." oninput="filterPickerItems('hdr-chk',this.value)">
+                        <div id="hdrItems" class="picker-scroll"></div>
+                        <hr class="my-1">
+                        <button type="button" class="btn btn-link btn-sm p-0 text-muted" onclick="clearMultiSelect('hdr-chk','hdrLabel','Header');loadAccounts()">Clear</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">Account selection <small class="text-muted fw-normal">(empty = all)</small></label>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center text-start" type="button"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside" style="min-height:38px;">
+                        <span id="accLabel" class="text-truncate small">All Accounts</span>
+                        <i class="bi bi-chevron-down flex-shrink-0 ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2" style="min-width:300px;">
+                        <input type="text" class="form-control form-control-sm mb-2" placeholder="Search accounts..." oninput="filterPickerItems('acc-chk',this.value)">
+                        <div id="accItems" class="picker-scroll">
+                            <div class="text-muted small p-2">Loading...</div>
+                        </div>
+                        <hr class="my-1">
+                        <button type="button" class="btn btn-link btn-sm p-0 text-muted" onclick="clearMultiSelect('acc-chk','accLabel','Account')">Clear</button>
+                    </div>
+                </div>
+                <small class="text-muted">Filtered by header selection above.</small>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-semibold">Suppress headers <small class="text-muted fw-normal">(hidden, still totalled)</small></label>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary w-100 d-flex justify-content-between align-items-center text-start" type="button"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside" style="min-height:38px;">
+                        <span id="supLabel" class="text-truncate small">None suppressed</span>
+                        <i class="bi bi-chevron-down flex-shrink-0 ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2" style="min-width:300px;">
+                        <input type="text" class="form-control form-control-sm mb-2" placeholder="Search headers..." oninput="filterPickerItems('sup-chk',this.value)">
+                        <div id="supItems" class="picker-scroll"></div>
+                        <hr class="my-1">
+                        <button type="button" class="btn btn-link btn-sm p-0 text-muted" onclick="clearMultiSelect('sup-chk','supLabel','Header')">Clear</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
+            <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
+                <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
+                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            </button>
+            @if (canSchedule)
+            {
+                <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                    <i class="bi bi-clock-history me-2"></i>Schedule
+                </button>
+            }
+            <div class="btn-group ms-auto">
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"
+                            title="Saved report layouts" id="layoutsDropdownBtn">
+                        <i class="bi bi-bookmark me-1"></i><span id="layoutsCurrentName">Layouts</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" id="layoutsDropdownMenu" style="min-width: 320px;">
+                        <li><h6 class="dropdown-header">Loading...</h6></li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Overwrite your default layout with current parameters">
+                    <i class="bi bi-save me-1"></i>Save
+                </button>
+                <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveLayoutAsModal"
+                        title="Save current parameters as a new named layout">
+                    <i class="bi bi-bookmark-plus me-1"></i>Save as...
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="resetSavedLayout()" title="Discard your saved default layout and restore defaults">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Default
+                </button>
+            </div>
+            <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()" title="Clear all header, account and suppressed header selections">
+                <i class="bi bi-funnel me-1"></i>Clear Filters
+            </button>
+        </div>
+        @if (hasSavedLayout)
+        {
+            <div class="mt-2"><small class="text-info"><i class="bi bi-check-circle me-1"></i>Saved layout loaded</small></div>
+        }    </div>
+</div>
+
+<div id="reportAlert" style="display:none;"></div>
+
+<div id="reportLoading" style="display:none;" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2 text-muted">Loading report data...</p>
+</div>
+
+<div id="kpiCards" class="row mb-4 g-3" style="display:none;"></div>
+
+<div id="reportResults" style="display:none;">
+    <div class="card" id="results">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-table me-2"></i>Results: <span id="rowCountInfo">0</span> accounts</span>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()" id="previewToggleBtn" title="Toggle document preview">
+                    <i class="bi bi-eye me-1"></i>Preview
+                </button>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-success" onclick="exportServerCsv()" title="Export CSV"><i class="bi bi-filetype-csv me-1"></i>CSV</button>
+                    <button class="btn btn-outline-success" onclick="exportServerExcel()" title="Export Excel"><i class="bi bi-filetype-xlsx me-1"></i>Excel</button>
+                    <button class="btn btn-outline-danger" onclick="exportServerPdf()" title="Export PDF"><i class="bi bi-filetype-pdf me-1"></i>PDF</button>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email"><i class="bi bi-envelope me-1"></i>Send to Email</button>
+                <button class="btn btn-sm btn-outline-info" onclick="if(!_lastData.length){alert('Generate a report first.');return;}openAiAnalysis()" title="AI-powered report analysis" id="btnAnalyze"><i class="bi bi-stars me-1"></i>AI Analyze</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0" id="reportTable">
+                    <thead class="table-light" id="reportHead"></thead>
+                    <tbody id="reportBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="previewPanel" style="display:none;" class="mt-3">
+    <div class="card border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+            <span><i class="bi bi-file-earmark-text me-2"></i>Document Preview</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-light" onclick="printPreview()" title="Print"><i class="bi bi-printer me-1"></i>Print</button>
+                <button class="btn btn-sm btn-outline-light" onclick="togglePreview()" title="Close preview"><i class="bi bi-x-lg me-1"></i>Back to Grid</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <iframe id="previewFrame" style="width:100%; border:none; min-height:700px; background:#525659;"></iframe>
+        </div>
+    </div>
+</div>
+
+@await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel
+{
+    SaveAction = "SaveTrialBalanceSchedule",
+    ListAction = "GetTrialBalanceSchedules",
+    ReportBadge = "Trial Balance",
+    NamePlaceholder = "e.g. Monthly Trial Balance",
+    SubjectPlaceholder = "Trial Balance Report - {date}"
+})
+
+@await Html.PartialAsync("_SendEmail", new Powersoft.Reporting.Web.ViewModels.SendEmailPartialModel {
+    SendAction = "SendTrialBalanceReportEmail",
+    ReportType = "TrialBalance",
+    SubjectDefault = "Trial Balance Report"
+})
+
+@await Html.PartialAsync("_AiAnalyze", new Powersoft.Reporting.Web.ViewModels.AiAnalyzePartialModel {
+    AnalyzeActionUrl = Url.Action("AnalyzeTrialBalanceReport", "Reports"),
+    ReportType = "TrialBalance"
+})
+
+@await Html.PartialAsync("_SaveLayout", new Powersoft.Reporting.Web.ViewModels.SaveLayoutPartialModel
+{
+    ReportType     = Powersoft.Reporting.Core.Constants.ReportTypeConstants.TrialBalance,
+    HasSavedLayout = (bool)(ViewBag.HasSavedLayout ?? false),
+    ReportViewUrl  = Url.Action("TrialBalance", "Reports") ?? ""
+})
+
+<script>
+var _headers = @Html.Raw(headersJson);
+var _sortCol = 'AccountCode';
+var _sortDir = 'ASC';
+var _lastData = [];
+var _lastReportMode = 'Detailed';
+
+// ===== ProspectClients-style multi-select helpers =====
+function updateMultiLabel(cbClass, labelId, noun) {
+    var checked = Array.from(document.querySelectorAll('.' + cbClass + ':checked'));
+    var el = document.getElementById(labelId);
+    if (!el) return;
+    if (checked.length === 0) { el.textContent = noun === 'Header' && labelId === 'supLabel' ? 'None suppressed' : 'All ' + noun + 's'; return; }
+    if (checked.length === 1) { var lbl = checked[0].closest('.form-check').querySelector('label'); el.textContent = lbl ? lbl.textContent.trim() : checked[0].value; return; }
+    el.textContent = checked.length + ' selected';
+}
+function clearMultiSelect(cbClass, labelId, noun) {
+    document.querySelectorAll('.' + cbClass).forEach(function(cb) { cb.checked = false; });
+    updateMultiLabel(cbClass, labelId, noun);
+}
+function getCheckedValues(cbClass) {
+    return Array.from(document.querySelectorAll('.' + cbClass + ':checked')).map(function(cb) { return cb.value; });
+}
+function setCheckedValues(cbClass, labelId, noun, values) {
+    document.querySelectorAll('.' + cbClass).forEach(function(cb) { cb.checked = values.indexOf(cb.value) !== -1; });
+    updateMultiLabel(cbClass, labelId, noun);
+}
+
+// Filter items inside a picker dropdown by search text
+function filterPickerItems(cbClass, q) {
+    q = (q || '').toLowerCase();
+    document.querySelectorAll('.' + cbClass).forEach(function(cb) {
+        var row = cb.closest('.form-check');
+        if (!row) return;
+        var lbl = row.querySelector('label');
+        var text = lbl ? lbl.textContent.toLowerCase() : '';
+        row.style.display = (!q || text.indexOf(q) >= 0) ? '' : 'none';
+    });
+}
+
+// Populate a picker container with dynamic items (for headers and accounts)
+function populatePicker(containerId, cbClass, labelId, noun, items, onChange) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    var prevSelected = getCheckedValues(cbClass);
+    container.innerHTML = '';
+    items.forEach(function(item, i) {
+        var id = cbClass + '_' + i;
+        var div = document.createElement('div');
+        div.className = 'form-check';
+        var cb = document.createElement('input');
+        cb.className = 'form-check-input ' + cbClass;
+        cb.type = 'checkbox';
+        cb.id = id;
+        cb.value = item.value;
+        cb.checked = prevSelected.indexOf(String(item.value)) >= 0;
+        cb.addEventListener('change', function() {
+            updateMultiLabel(cbClass, labelId, noun);
+            if (onChange) onChange();
+        });
+        var lbl = document.createElement('label');
+        lbl.className = 'form-check-label small';
+        lbl.setAttribute('for', id);
+        lbl.textContent = item.label;
+        div.appendChild(cb);
+        div.appendChild(lbl);
+        container.appendChild(div);
+    });
+    updateMultiLabel(cbClass, labelId, noun);
+}
+
+// ===== Init ==========
+(function init() {
+    var t = new Date();
+    document.getElementById('asAt').value = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+
+    var hdrItems = _headers.map(function(h) { return { value: h.key, label: (h.code ? h.code + ' - ' : '') + h.name }; });
+    populatePicker('hdrItems', 'hdr-chk', 'hdrLabel', 'Header', hdrItems, function() { loadAccounts(); });
+    populatePicker('supItems', 'sup-chk', 'supLabel', 'Header', hdrItems, null);
+
+    loadAccounts();
+})();
+
+function escapeHtml(s) { if (s==null) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmtDec(v) { if (v==null || v==0) return ''; return Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+function showAlert(id, type, msg) {
+    var el = document.getElementById(id);
+    el.innerHTML = '<div class="alert alert-'+type+' alert-dismissible fade show"><i class="bi bi-info-circle me-2"></i>'+escapeHtml(msg)+'<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    el.style.display = '';
+}
+
+function selectedValues(id) {
+    var map = { 'selectedHeaders': 'hdr-chk', 'selectedAccounts': 'acc-chk', 'suppressedHeaders': 'sup-chk' };
+    return getCheckedValues(map[id] || id);
+}
+
+function loadAccounts() {
+    var hdrs = getCheckedValues('hdr-chk').join(',');
+    fetch('@Url.Action("GetTrialBalanceAccounts","Reports")' + '?headers=' + encodeURIComponent(hdrs), { credentials:'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(list) {
+            var items = list.map(function(a) { return { value: a.code, label: a.code + ' - ' + a.name }; });
+            populatePicker('accItems', 'acc-chk', 'accLabel', 'Account', items, null);
+        })
+        .catch(function(){});
+}
+
+function clearFilters() {
+    clearMultiSelect('hdr-chk', 'hdrLabel', 'Header');
+    clearMultiSelect('sup-chk', 'supLabel', 'Header');
+    loadAccounts(); // also clears acc-chk via repopulate
+}
+
+function getFilterParams() {
+    return {
+        asAt: document.getElementById('asAt').value,
+        includeZeroMovements: document.getElementById('includeZero').checked,
+        reportMode: document.getElementById('reportMode').value,
+        selectedAccounts: getCheckedValues('acc-chk').join(','),
+        selectedHeaders: getCheckedValues('hdr-chk').join(','),
+        suppressedHeaders: getCheckedValues('sup-chk').join(','),
+        sortColumn: _sortCol,
+        sortDirection: _sortDir
+    };
+}
+
+function buildExportUrl(action) {
+    var p = getFilterParams();
+    return '/Reports/' + action
+        + '?asAt=' + p.asAt
+        + '&includeZeroMovements=' + p.includeZeroMovements
+        + '&reportMode=' + p.reportMode
+        + '&selectedAccounts=' + encodeURIComponent(p.selectedAccounts)
+        + '&selectedHeaders=' + encodeURIComponent(p.selectedHeaders)
+        + '&suppressedHeaders=' + encodeURIComponent(p.suppressedHeaders)
+        + '&sortColumn=' + p.sortColumn + '&sortDirection=' + p.sortDirection;
+}
+
+function exportServerCsv() { if (!_lastData.length) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportTrialBalanceCsv'); }
+function exportServerExcel() { if (!_lastData.length) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportTrialBalanceExcel'); }
+function exportServerPdf() { if (!_lastData.length) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportTrialBalancePdf'); }
+
+var previewOpen = false;
+function togglePreview() {
+    if (!_lastData.length) { alert('Generate a report first.'); return; }
+    var panel = document.getElementById('previewPanel');
+    var gridCard = document.getElementById('results');
+    var kpis = document.getElementById('kpiCards');
+    var btn = document.getElementById('previewToggleBtn');
+    previewOpen = !previewOpen;
+    if (previewOpen) {
+        gridCard.style.display = 'none';
+        kpis.style.display = 'none';
+        panel.style.display = 'block';
+        btn.innerHTML = '<i class="bi bi-table me-1"></i>Grid';
+        btn.classList.remove('btn-outline-primary'); btn.classList.add('btn-outline-warning');
+        var frame = document.getElementById('previewFrame');
+        frame.src = buildExportUrl('TrialBalancePrintPreview') + '&embedded=true';
+        frame.onload = function() {
+            try { var h = frame.contentDocument.body.scrollHeight + 40; frame.style.height = Math.max(h, 700) + 'px'; }
+            catch (e) { frame.style.height = '900px'; }
+        };
+    } else {
+        panel.style.display = 'none';
+        gridCard.style.display = '';
+        kpis.style.display = '';
+        btn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+        btn.classList.remove('btn-outline-warning'); btn.classList.add('btn-outline-primary');
+    }
+}
+
+function printPreview() {
+    var frame = document.getElementById('previewFrame');
+    if (frame && frame.contentWindow) frame.contentWindow.print();
+}
+
+function generateReport() {
+    var asAt = document.getElementById('asAt').value;
+    if (!asAt) { showAlert('reportAlert','danger','Please select an "As At" date.'); return; }
+
+    document.getElementById('reportAlert').style.display = 'none';
+    document.getElementById('reportResults').style.display = 'none';
+    document.getElementById('kpiCards').style.display = 'none';
+    document.getElementById('reportLoading').style.display = '';
+
+    var btn = document.getElementById('generateBtn');
+    btn.querySelector('.btn-text').classList.add('d-none');
+    btn.querySelector('.spinner-border').classList.remove('d-none');
+    btn.disabled = true;
+
+    var fd = new FormData();
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+
+    fetch('@Url.Action("GetTrialBalanceData","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            if (!d.success) { showAlert('reportAlert','danger',d.message); return; }
+            _lastData = d.data || [];
+            _lastReportMode = p.reportMode;
+            renderKpis(_lastData);
+            renderTable(_lastData, p.reportMode);
+            document.getElementById('rowCountInfo').textContent = _lastData.length + ' account(s)';
+            document.getElementById('reportResults').style.display = '';
+            if (_lastData.length === 0) showAlert('reportAlert','info','No accounts found for the selected criteria.');
+        })
+        .catch(function(e) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            showAlert('reportAlert','danger','Request failed: '+e.message);
+        });
+}
+
+function totals(data) {
+    var t = { odr:0, ocr:0, dr:0, cr:0, cdr:0, ccr:0 };
+    data.forEach(function(r) {
+        if (r.openingBalanceType === 'DR') t.odr += +r.openingBalance || 0;
+        if (r.openingBalanceType === 'CR') t.ocr += +r.openingBalance || 0;
+        t.dr += +r.debitMovement || 0;
+        t.cr += +r.creditMovement || 0;
+        if (r.closingBalanceType === 'DR') t.cdr += +r.closingBalance || 0;
+        if (r.closingBalanceType === 'CR') t.ccr += +r.closingBalance || 0;
+    });
+    return t;
+}
+
+function renderKpis(data) {
+    var cards = document.getElementById('kpiCards');
+    if (!data.length) { cards.style.display = 'none'; return; }
+    var t = totals(data);
+    var balanced = Math.abs(t.cdr - t.ccr) < 0.01;
+    cards.innerHTML =
+        '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value">'+fmtDec(t.dr)+'</div><div class="stat-label">Total Debit</div></div></div>' +
+        '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value">'+fmtDec(t.cr)+'</div><div class="stat-label">Total Credit</div></div></div>' +
+        '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value text-primary">'+fmtDec(t.cdr)+'</div><div class="stat-label">Closing DR</div></div></div>' +
+        '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value '+(balanced?'text-success':'text-danger')+'">'+fmtDec(t.ccr)+'</div><div class="stat-label">Closing CR '+(balanced?'(balanced)':'(check!)')+'</div></div></div>';
+    cards.style.display = '';
+}
+
+function num6() { return '<th class="text-end">Opening DR</th><th class="text-end">Opening CR</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Closing DR</th><th class="text-end">Closing CR</th>'; }
+
+function cellNums(odr, ocr, dr, cr, cdr, ccr) {
+    return '<td class="text-end">'+fmtDec(odr)+'</td>'
+         + '<td class="text-end">'+fmtDec(ocr)+'</td>'
+         + '<td class="text-end">'+fmtDec(dr)+'</td>'
+         + '<td class="text-end">'+fmtDec(cr)+'</td>'
+         + '<td class="text-end">'+fmtDec(cdr)+'</td>'
+         + '<td class="text-end">'+fmtDec(ccr)+'</td>';
+}
+
+function groupByHeader(data) {
+    var map = {}, order = [];
+    data.forEach(function(r) {
+        var k = r.headerCodeSort + '||' + r.headerKey;
+        if (!map[k]) { map[k] = { code:r.headerCode, name:r.headerName, items:[] }; order.push(k); }
+        map[k].items.push(r);
+    });
+    order.sort();
+    return order.map(function(k){ return map[k]; });
+}
+
+function headerSubtotal(g, colspanLead) {
+    var t = totals(g.items);
+    return '<tr class="group-subtotal-row"><td colspan="'+colspanLead+'" class="fw-semibold text-uppercase text-muted">'+escapeHtml(g.code+' '+g.name)+' subtotal</td>'+cellNums(t.odr,t.ocr,t.dr,t.cr,t.cdr,t.ccr)+'</tr>';
+}
+
+function renderTable(data, mode) {
+    var thead = document.getElementById('reportHead');
+    var tbody = document.getElementById('reportBody');
+    var groups = groupByHeader(data);
+    var html = '';
+
+    if (mode === 'Summary') {
+        thead.innerHTML = '<tr><th>Header Code</th><th>Header</th>'+num6()+'</tr>';
+        groups.forEach(function(g) {
+            var t = totals(g.items);
+            html += '<tr><td class="text-nowrap">'+escapeHtml(g.code)+'</td><td>'+escapeHtml(g.name)+'</td>'+cellNums(t.odr,t.ocr,t.dr,t.cr,t.cdr,t.ccr)+'</tr>';
+        });
+        html += grandTotalRow(data, 2);
+    } else {
+        thead.innerHTML = '<tr><th>Header</th><th>Account Code</th><th>Account</th>'+num6()+'</tr>';
+        groups.forEach(function(g) {
+            html += '<tr class="group-header-row"><td colspan="9"><i class="bi bi-diagram-3 me-2"></i><strong>'+escapeHtml(g.code+' - '+g.name)+'</strong></td></tr>';
+            g.items.forEach(function(r) {
+                if (r.suppressed) return;
+                html += '<tr><td></td><td class="text-nowrap">'+escapeHtml(r.accountCode)+'</td><td>'+escapeHtml(r.accountName)+'</td>'
+                     + cellNums(r.openingBalanceType==='DR'?r.openingBalance:0, r.openingBalanceType==='CR'?r.openingBalance:0,
+                                r.debitMovement, r.creditMovement,
+                                r.closingBalanceType==='DR'?r.closingBalance:0, r.closingBalanceType==='CR'?r.closingBalance:0)
+                     + '</tr>';
+            });
+            html += headerSubtotal(g, 3);
+        });
+        html += grandTotalRow(data, 3);
+    }
+    tbody.innerHTML = html;
+}
+
+function grandTotalRow(data, lead) {
+    var t = totals(data);
+    return '<tr class="grand-total-row"><td colspan="'+lead+'" class="text-uppercase">Grand total</td>'+cellNums(t.odr,t.ocr,t.dr,t.cr,t.cdr,t.ccr)+'</tr>';
+}
+
+// ========== SCHEDULE ==========
+function autoSelectScheduleDateRange() {
+    var asAt = document.getElementById('asAt').value;
+    if (!asAt) return;
+    var sel = document.getElementById('schedDateRangeType');
+    if (!sel) return;
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === 'Custom') { sel.selectedIndex = i; break; }
+    }
+    var schedFrom = document.getElementById('schedDateFrom');
+    var schedTo = document.getElementById('schedDateTo');
+    if (schedFrom) schedFrom.value = asAt;
+    if (schedTo) schedTo.value = asAt;
+    if (typeof onSchedDateRangeTypeChange === 'function') onSchedDateRangeTypeChange();
+}
+
+function collectScheduleParameters() {
+    var p = getFilterParams();
+    return {
+        reportType: 'TrialBalance',
+        tbReportMode: p.reportMode,
+        tbIncludeZeroMovements: p.includeZeroMovements,
+        tbSelectedAccounts: p.selectedAccounts,
+        tbSelectedHeaders: p.selectedHeaders,
+        tbSuppressedHeaders: p.suppressedHeaders
+    };
+}
+
+function onScheduleParametersLoaded(p) {
+    if (!p) return;
+    if (p.tbReportMode) document.getElementById('reportMode').value = p.tbReportMode;
+    if (typeof p.tbIncludeZeroMovements !== 'undefined') document.getElementById('includeZero').checked = (p.tbIncludeZeroMovements === true || p.tbIncludeZeroMovements === 'true');
+}
+
+// ========== SEND EMAIL ==========
+window.collectEmailParameters = function() {
+    if (!_lastData.length) { alert('Generate a report first.'); return null; }
+    return getFilterParams();
+};
+window.getEmailDefaultSubject = function() {
+    return 'Trial Balance Report \u2014 as at ' + document.getElementById('asAt').value;
+};
+
+// ========== AI ANALYSIS ==========
+function collectAiFormData() {
+    if (!_lastData.length) { alert('Generate a report first.'); return null; }
+    var fd = new FormData();
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+    return fd;
+}
+
+// ========== Save / Reset Layout ==========
+function collectCurrentLayout() {
+    function v(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    var p = {};
+    p['ReportMode'] = v('reportMode');
+    p['IncludeZero'] = document.getElementById('includeZero').checked ? 'Y' : 'N';
+    p['SelectedHeaders'] = getCheckedValues('hdr-chk').join(',');
+    p['SuppressedHeaders'] = getCheckedValues('sup-chk').join(',');
+    return p;
+}
+
+function applyLayoutParameters(parms) {
+    function setVal(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
+    setVal('reportMode', parms.ReportMode);
+    if (parms.IncludeZero != null) document.getElementById('includeZero').checked = (parms.IncludeZero === 'Y');
+    if (parms.SelectedHeaders) setCheckedValues('hdr-chk', 'hdrLabel', 'Header', parms.SelectedHeaders.split(',').map(function(s){return s.trim();}));
+    if (parms.SuppressedHeaders) setCheckedValues('sup-chk', 'supLabel', 'Header', parms.SuppressedHeaders.split(',').map(function(s){return s.trim();}));
+    loadAccounts();
+}
+
+@if (hasSavedLayout && savedLayout != null)
+{
+    <text>
+    (function() {
+        var parms = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(savedLayout));
+        applyLayoutParameters(parms);
+    })();
+    </text>
+}
+</script>

@@ -64,4 +64,10 @@ public interface ICentralRepository
     /// broken down by company, report type and user.
     /// </summary>
     Task<AiUsageReport> GetAiUsageReportAsync(DateTime dateFrom, DateTime dateTo);
+
+    /// <summary>
+    /// Returns users (with email) who have access to a specific database.
+    /// Used for populating email recipient pickers.
+    /// </summary>
+    Task<List<(string UserCode, string DisplayName, string Email)>> GetUsersForDatabaseAsync(string dbCode);
 }

@@ -1,0 +1,116 @@
+@{
+    ViewData["Title"] = "All Schedules";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <h2 class="mb-0"><i class="bi bi-calendar-check me-2"></i>All Schedules</h2>
+        <p class="text-muted mb-0">Every scheduled report for <strong>@ViewBag.ConnectedDatabase</strong></p>
+    </div>
+    <a asp-action="ScheduleLogs" class="btn btn-outline-secondary btn-sm"><i class="bi bi-clock-history me-1"></i>Run Logs</a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0" id="schedulesTable">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:110px;">Rating</th>
+                    <th>Name</th>
+                    <th>Report</th>
+                    <th>Recurrence</th>
+                    <th>Format</th>
+                    <th>Next Run</th>
+                    <th>Last Run</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="schedulesBody">
+                <tr><td colspan="9" class="text-center py-4 text-muted"><i class="bi bi-hourglass-split me-1"></i>Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function() {
+    var reportLabels = {
+        'AverageBasket':'Average Basket','PurchasesSales':'Purchases vs Sales',
+        'BelowMinStock':'Below Min Stock','Catalogue':'Catalogue','CancelLog':'Cancel Log',
+        'Pareto':'Pareto 80/20','Charts':'Charts','ProspectClients':'Prospect Clients',
+        'OffersReport':'Offers','TrialBalance':'Trial Balance','ProfitLoss':'Profit & Loss'
+    };
+
+    function starHtml(rating, scheduleId) {
+        var html = '<span class="star-rating" data-id="' + scheduleId + '">';
+        for (var i = 1; i <= 5; i++) {
+            var cls = (rating && i <= rating) ? 'bi-star-fill text-warning' : 'bi-star text-muted';
+            html += '<i class="bi ' + cls + ' star-btn" data-val="' + i + '" style="cursor:pointer;font-size:14px;"></i>';
+        }
+        html += '</span>';
+        return html;
+    }
+
+    function loadSchedules() {
+        fetch('/Reports/GetAllSchedules')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var tbody = document.getElementById('schedulesBody');
+                if (!data.length) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">No schedules found for this database.</td></tr>';
+                    return;
+                }
+                var html = '';
+                data.forEach(function(s) {
+                    var statusBadge = s.isActive
+                        ? '<span class="badge bg-success">Active</span>'
+                        : '<span class="badge bg-secondary">Inactive</span>';
+                    html += '<tr>'
+                        + '<td>' + starHtml(s.starRating, s.id) + '</td>'
+                        + '<td class="fw-semibold">' + escHtml(s.name) + '</td>'
+                        + '<td><span class="badge bg-primary bg-opacity-10 text-primary">' + (reportLabels[s.reportType] || s.reportType) + '</span></td>'
+                        + '<td>' + s.recurrenceType + '</td>'
+                        + '<td>' + s.exportFormat + '</td>'
+                        + '<td>' + (s.nextRun || '<span class="text-muted">—</span>') + '</td>'
+                        + '<td>' + (s.lastRun || '<span class="text-muted">—</span>') + '</td>'
+                        + '<td class="small text-muted">' + s.createdDate + '<br/>' + escHtml(s.createdBy) + '</td>'
+                        + '<td>' + statusBadge + '</td>'
+                        + '</tr>';
+                });
+                tbody.innerHTML = html;
+                attachStarEvents();
+            });
+    }
+
+    function attachStarEvents() {
+        document.querySelectorAll('.star-btn').forEach(function(star) {
+            star.addEventListener('click', function() {
+                var container = this.closest('.star-rating');
+                var id = container.dataset.id;
+                var val = parseInt(this.dataset.val);
+                var currentVal = parseInt(container.dataset.current || '0');
+                var newVal = (val === currentVal) ? 0 : val;
+                container.dataset.current = newVal;
+
+                container.querySelectorAll('.star-btn').forEach(function(s, idx) {
+                    if (idx < newVal) { s.className = 'bi bi-star-fill text-warning star-btn'; }
+                    else { s.className = 'bi bi-star text-muted star-btn'; }
+                });
+
+                fetch('/Reports/UpdateScheduleRating', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'scheduleId=' + id + '&rating=' + (newVal || '')
+                });
+            });
+        });
+    }
+
+    function escHtml(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+    loadSchedules();
+})();
+</script>
+}

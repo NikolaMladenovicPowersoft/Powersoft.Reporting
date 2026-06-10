@@ -1326,6 +1326,73 @@ public class ReportsController : Controller
     }
 
     [HttpGet]
+    public IActionResult AllSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+        {
+            TempData["Warning"] = "Please select and connect to a database first.";
+            return RedirectToAction("Index", "Home");
+        }
+        ViewBag.ConnectedDatabase = HttpContext.Session.GetString(SessionKeys.ConnectedDatabase);
+        return View();
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAllSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new List<object>());
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var all = await repo.GetAllSchedulesAsync();
+            return Json(all.Select(s => new
+            {
+                id = s.Id, reportType = s.ReportType, name = s.Name,
+                createdBy = s.CreatedBy, createdDate = s.CreatedDate.ToString("dd/MM/yyyy"),
+                isActive = s.IsActive, recurrenceType = s.RecurrenceType,
+                nextRun = s.NextRun?.ToString("dd/MM/yyyy HH:mm"),
+                lastRun = s.LastRun?.ToString("dd/MM/yyyy HH:mm"),
+                exportFormat = s.ExportFormat, recipients = s.Recipients,
+                starRating = s.StarRating
+            }));
+        }
+        catch { return Json(new List<object>()); }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> UpdateScheduleRating(int scheduleId, byte? rating)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false });
+        try
+        {
+            if (rating.HasValue && (rating < 1 || rating > 5)) rating = null;
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            await repo.UpdateStarRatingAsync(scheduleId, rating);
+            return Json(new { success = true });
+        }
+        catch { return Json(new { success = false }); }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetDatabaseUsers()
+    {
+        var dbCode = HttpContext.Session.GetString(SessionKeys.ConnectedDatabaseCode);
+        if (string.IsNullOrEmpty(dbCode))
+            return Json(new List<object>());
+        try
+        {
+            var users = await _centralRepository.GetUsersForDatabaseAsync(dbCode);
+            return Json(users.Select(u => new { code = u.UserCode, name = u.DisplayName, email = u.Email }));
+        }
+        catch { return Json(new List<object>()); }
+    }
+
+    [HttpGet]
     public async Task<IActionResult> GetScheduleLogs(int? scheduleId = null)
     {
         var tenantConnString = GetTenantConnectionString();

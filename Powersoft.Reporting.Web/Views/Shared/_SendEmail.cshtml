@@ -21,6 +21,11 @@
                         <label class="form-label fw-semibold">Recipients <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="sendEmailRecipients" placeholder="email@@example.com, ...">
                         <div class="invalid-feedback" id="sendEmailRecipientsError"></div>
+                        <div class="mt-1">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="showUserPicker('sendEmailRecipients')">
+                                <i class="bi bi-people me-1"></i>Add from users
+                            </button>
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Template</label>
@@ -81,7 +86,7 @@ var SEND_EMAIL_DEFAULT_PREVIEW =
   '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;">' +
   '<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
   '<td style="background-color:#1e40af;padding:20px 28px;">' +
-  '<span style="margin:0;color:#fff;font-size:17px;font-weight:600;">Powersoft Reports</span>' +
+  '<span style="margin:0;color:#fff;font-size:17px;font-weight:600;">PowerSoft 365 AI Reports</span>' +
   '</td></tr></table>' +
   '<div style="background-color:#fff;padding:22px 28px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;">' +
   '<h3 style="margin:0 0 6px;color:#1e40af;font-size:16px;font-weight:700;">\u00ABReportName\u00BB</h3>' +
@@ -99,7 +104,7 @@ var SEND_EMAIL_DEFAULT_PREVIEW =
   '</table></div>' +
   '<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>' +
   '<td style="background-color:#f3f4f6;padding:12px 28px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;">' +
-  '<p style="margin:0;color:#6b7280;font-size:10px;">Automated report by Powersoft Report Engine &bull; \u00ABDatabaseName\u00BB</p>' +
+  '<p style="margin:0;color:#6b7280;font-size:10px;">Automated report by PowerSoft 365 AI Reports &bull; \u00ABDatabaseName\u00BB</p>' +
   '</td></tr></table></div>';
 
 if (typeof escapeHtml !== 'function') {
@@ -203,5 +208,54 @@ window.sendReportEmail = function () {
             ad.innerHTML = '<div class="alert alert-danger mb-0">Network error.</div>';
             ad.style.display = '';
         });
+};
+
+// ===== User Picker for Email Recipients =====
+var _dbUsersCache = null;
+window.showUserPicker = function(targetInputId) {
+    var existing = document.getElementById('userPickerModal');
+    if (!existing) {
+        var html = '<div class="modal fade" id="userPickerModal" tabindex="-1" aria-hidden="true">'
+            + '<div class="modal-dialog modal-sm"><div class="modal-content">'
+            + '<div class="modal-header py-2"><h6 class="modal-title"><i class="bi bi-people me-1"></i>Database Users</h6>'
+            + '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>'
+            + '<div class="modal-body p-2" id="userPickerBody"><div class="text-center py-3 text-muted">Loading...</div></div>'
+            + '<div class="modal-footer py-1"><button type="button" class="btn btn-sm btn-primary" onclick="applyUserPicker()">Add Selected</button></div>'
+            + '</div></div></div>';
+        document.body.insertAdjacentHTML('beforeend', html);
+    }
+    document.getElementById('userPickerModal').dataset.target = targetInputId;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('userPickerModal')).show();
+
+    if (_dbUsersCache) { renderUserPicker(_dbUsersCache); return; }
+    fetch('/Reports/GetDatabaseUsers').then(function(r){return r.json();}).then(function(data){
+        _dbUsersCache = data;
+        renderUserPicker(data);
+    }).catch(function(){ document.getElementById('userPickerBody').innerHTML = '<div class="text-muted p-2">Unable to load users.</div>'; });
+};
+
+function renderUserPicker(users) {
+    var body = document.getElementById('userPickerBody');
+    if (!users.length) { body.innerHTML = '<div class="text-muted p-2">No users with email found.</div>'; return; }
+    var html = '<div class="list-group list-group-flush" style="max-height:250px;overflow-y:auto;">';
+    users.forEach(function(u){
+        html += '<label class="list-group-item list-group-item-action py-1 d-flex align-items-center">'
+            + '<input type="checkbox" class="form-check-input me-2 user-pick-cb" value="' + escapeHtml(u.email) + '"/>'
+            + '<span class="small">' + escapeHtml(u.name) + ' <span class="text-muted">(' + escapeHtml(u.email) + ')</span></span></label>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+}
+
+window.applyUserPicker = function() {
+    var modal = document.getElementById('userPickerModal');
+    var targetId = modal.dataset.target;
+    var input = document.getElementById(targetId);
+    var checked = modal.querySelectorAll('.user-pick-cb:checked');
+    if (!checked.length) return;
+    var existing = input.value ? input.value.split(/[,;]/).map(function(e){return e.trim();}).filter(function(e){return e;}) : [];
+    checked.forEach(function(cb){ if (existing.indexOf(cb.value) === -1) existing.push(cb.value); });
+    input.value = existing.join(', ');
+    bootstrap.Modal.getInstance(modal).hide();
 };
 </script>

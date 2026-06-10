@@ -1413,7 +1413,7 @@ Time: {(analysis.DurationMs / 1000.0):F1}s</p>");
 <div style='font-family:Segoe UI,Arial,sans-serif;max-width:640px;margin:0 auto;'>
   <table width='100%' cellpadding='0' cellspacing='0' border='0'><tr>
     <td style='background-color:#1e40af;padding:24px 32px;'>
-      <h1 style='margin:0;color:#ffffff;font-size:20px;font-weight:600;'>Powersoft Reports</h1>
+      <h1 style='margin:0;color:#ffffff;font-size:20px;font-weight:600;'>PowerSoft 365 AI Reports</h1>
     </td>
   </tr></table>
   <div style='background-color:#ffffff;padding:28px 32px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;'>
@@ -1445,7 +1445,7 @@ Time: {(analysis.DurationMs / 1000.0):F1}s</p>");
   <table width='100%' cellpadding='0' cellspacing='0' border='0'><tr>
     <td style='background-color:#f3f4f6;padding:16px 32px;border-left:1px solid #d1d5db;border-right:1px solid #d1d5db;border-bottom:1px solid #d1d5db;'>
       <p style='margin:0;color:#6b7280;font-size:11px;'>
-        Automated report by Powersoft Report Engine &bull; {db.DBFriendlyName}<br/>
+        Automated report by PowerSoft 365 AI Reports &bull; {db.DBFriendlyName}<br/>
         To modify or stop this schedule, log in to the Reporting dashboard.
       </p>
     </td>
@@ -1468,7 +1468,7 @@ Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
         if (!string.IsNullOrEmpty(downloadUrl))
             text += $"\n\nDownload: {downloadUrl}\n(Link valid for 7 days)";
 
-        text += "\n\nThis is an automated report from Powersoft Reporting Engine.";
+        text += "\n\nThis is an automated report from PowerSoft 365 AI Reports.";
         return text;
     }
 }

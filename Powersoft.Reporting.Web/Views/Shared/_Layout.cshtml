@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect fill='%232563eb' width='6' height='12' x='4' y='16'/><rect fill='%232563eb' width='6' height='18' x='13' y='10'/><rect fill='%231d4ed8' width='6' height='22' x='22' y='6'/></svg>" />
-    <title>@ViewData["Title"] - Powersoft Reporting</title>
+    <title>@ViewData["Title"] - PowerSoft 365 AI Reports</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link href="~/css/site.css" rel="stylesheet">
@@ -14,7 +14,7 @@
         <div class="container">
             <a class="navbar-brand" href="/">
                 <i class="bi bi-bar-chart-fill me-2"></i>
-                Powersoft Reporting
+                PowerSoft 365 AI Reports
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -58,6 +58,11 @@
                         var rankingStr = Context.Session.GetInt32("Ranking");
                         var showSettings = rankingStr.HasValue && rankingStr.Value <= 15;
                     }
+                    <li class="nav-item">
+                        <a class="nav-link" asp-controller="Reports" asp-action="AllSchedules">
+                            <i class="bi bi-calendar-check me-1"></i> Schedules
+                        </a>
+                    </li>
                     <li class="nav-item">
                         <a class="nav-link" asp-controller="Reports" asp-action="ScheduleLogs">
                             <i class="bi bi-clock-history me-1"></i> Logs
@@ -105,6 +110,13 @@
                 
                 @if (User.Identity?.IsAuthenticated == true)
                 {
+                    @if (!string.IsNullOrEmpty(connectedDb))
+                    {
+                    <div id="aiBudgetBtn" class="me-3" style="display:none;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.18);cursor:pointer;transition:background .2s,transform .15s,box-shadow .2s;user-select:none;">
+                        <i class="bi bi-lightning-charge" id="aiBudgetIcon" style="font-size:14px;transition:color .2s;"></i>
+                        <span id="aiBudgetChipPct" style="font-size:12px;font-weight:700;color:#fff;letter-spacing:.3px;"></span>
+                    </div>
+                    }
                     <div class="dropdown">
                         <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
                             <i class="bi bi-person-circle me-1"></i>
@@ -133,7 +145,7 @@
     </div>
 
     <footer class="text-center text-muted py-4 mt-5">
-        <small>&copy; @DateTime.Now.Year Powersoft Reporting Engine</small>
+        <small>&copy; @DateTime.Now.Year PowerSoft 365 AI Reports</small>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -142,6 +154,64 @@
 
     @if (User.Identity?.IsAuthenticated == true && !string.IsNullOrEmpty(Context.Session.GetString("ConnectedDatabase")))
     {
+        <script>
+        (function(){
+            var btn = document.getElementById('aiBudgetBtn');
+            if (!btn) return;
+            fetch('/Reports/GetTokenBudget')
+                .then(function(r){return r.json();})
+                .then(function(d){
+                    if (!d.monthlyTokenLimit) return;
+                    var pct = Math.min(100, Math.round((d.currentMonthUsed / d.monthlyTokenLimit) * 100));
+                    var color = pct >= 80 ? '#ef4444' : pct >= 50 ? '#f59e0b' : '#4ade80';
+                    var icon = document.getElementById('aiBudgetIcon');
+                    icon.style.color = color;
+                    document.getElementById('aiBudgetChipPct').textContent = pct + '%';
+
+                    // Hover microinteraction: outline -> fill icon, lift, brighter bg
+                    btn.addEventListener('mouseenter', function(){
+                        icon.classList.replace('bi-lightning-charge', 'bi-lightning-charge-fill');
+                        btn.style.background = 'rgba(255,255,255,0.24)';
+                        btn.style.transform = 'translateY(-1px)';
+                        btn.style.boxShadow = '0 3px 10px rgba(0,0,0,0.25)';
+                    });
+                    btn.addEventListener('mouseleave', function(){
+                        icon.classList.replace('bi-lightning-charge-fill', 'bi-lightning-charge');
+                        btn.style.background = 'rgba(255,255,255,0.12)';
+                        btn.style.transform = '';
+                        btn.style.boxShadow = '';
+                    });
+
+                    // SVG ring inside the hover card
+                    var circ = 99.9;
+                    var arc = ((pct / 100) * circ).toFixed(1);
+                    var ringColor = pct >= 80 ? '#ef4444' : pct >= 50 ? '#f59e0b' : '#22c55e';
+                    var svgRing = '<svg width="84" height="84" viewBox="0 0 36 36" style="display:block;margin:0 auto 10px;">'
+                        + '<circle cx="18" cy="18" r="15.9" fill="none" stroke="#e5e7eb" stroke-width="2.5"/>'
+                        + '<circle cx="18" cy="18" r="15.9" fill="none" stroke="' + ringColor + '" stroke-width="2.5"'
+                        + ' stroke-dasharray="' + arc + ' ' + circ + '" stroke-linecap="round" transform="rotate(-90 18 18)"/>'
+                        + '<text x="18" y="16.5" text-anchor="middle" font-size="6.5" font-weight="700" fill="#111827">' + pct + '%</text>'
+                        + '<text x="18" y="22" text-anchor="middle" font-size="3.2" fill="#6b7280">used</text>'
+                        + '</svg>';
+
+                    var content = '<div style="text-align:center;padding:12px 14px;min-width:170px;">'
+                        + svgRing
+                        + '<div style="font-weight:700;font-size:12px;color:#111827;margin-bottom:3px;">AI Token Budget</div>'
+                        + '<div style="font-size:11px;color:#6b7280;margin-bottom:8px;">' + d.currentMonthUsed.toLocaleString() + ' / ' + d.monthlyTokenLimit.toLocaleString() + ' tokens</div>'
+                        + '<div style="background:#e5e7eb;border-radius:99px;height:5px;overflow:hidden;">'
+                        + '<div style="background:' + ringColor + ';height:5px;width:' + pct + '%;border-radius:99px;"></div></div>'
+                        + '</div>';
+
+                    btn.style.display = 'inline-flex';
+                    new bootstrap.Popover(btn, {
+                        content: content, html: true, sanitize: false,
+                        trigger: 'hover focus', placement: 'bottom',
+                        title: ''
+                    });
+                })
+                .catch(function(){});
+        })();
+        </script>
         @await Html.PartialAsync("_DataChatWidget")
     }
 </body>

@@ -78,6 +78,53 @@ public class ScheduleRepository : IScheduleRepository
         return schedules;
     }
 
+    public async Task<List<(int Id, string ReportType, string Name, string CreatedBy, DateTime CreatedDate,
+        bool IsActive, string RecurrenceType, DateTime? NextRun, DateTime? LastRun,
+        string ExportFormat, string Recipients, byte? StarRating)>> GetAllSchedulesAsync()
+    {
+        const string sql = @"
+            SELECT pk_ScheduleID, ReportType, ScheduleName, CreatedBy, CreatedDate, IsActive,
+                   RecurrenceType, NextRunDate, LastRunDate, ExportFormat, Recipients,
+                   StarRating
+            FROM dboReportsAI.tbl_ReportSchedule
+            ORDER BY IsActive DESC, ISNULL(StarRating,0) DESC, CreatedDate DESC";
+
+        var list = new List<(int, string, string, string, DateTime, bool, string, DateTime?, DateTime?, string, string, byte?)>();
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            list.Add((
+                reader.GetInt32(reader.GetOrdinal("pk_ScheduleID")),
+                reader.GetString(reader.GetOrdinal("ReportType")),
+                reader.GetString(reader.GetOrdinal("ScheduleName")),
+                reader.IsDBNull(reader.GetOrdinal("CreatedBy")) ? "" : reader.GetString(reader.GetOrdinal("CreatedBy")),
+                reader.GetDateTime(reader.GetOrdinal("CreatedDate")),
+                reader.GetBoolean(reader.GetOrdinal("IsActive")),
+                reader.GetString(reader.GetOrdinal("RecurrenceType")),
+                reader.IsDBNull(reader.GetOrdinal("NextRunDate")) ? null : reader.GetDateTime(reader.GetOrdinal("NextRunDate")),
+                reader.IsDBNull(reader.GetOrdinal("LastRunDate")) ? null : reader.GetDateTime(reader.GetOrdinal("LastRunDate")),
+                reader.IsDBNull(reader.GetOrdinal("ExportFormat")) ? "Excel" : reader.GetString(reader.GetOrdinal("ExportFormat")),
+                reader.IsDBNull(reader.GetOrdinal("Recipients")) ? "" : reader.GetString(reader.GetOrdinal("Recipients")),
+                reader.IsDBNull(reader.GetOrdinal("StarRating")) ? null : (byte?)reader.GetByte(reader.GetOrdinal("StarRating"))
+            ));
+        }
+        return list;
+    }
+
+    public async Task UpdateStarRatingAsync(int scheduleId, byte? rating)
+    {
+        const string sql = "UPDATE dboReportsAI.tbl_ReportSchedule SET StarRating = @Rating WHERE pk_ScheduleID = @Id";
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Id", scheduleId);
+        cmd.Parameters.AddWithValue("@Rating", rating.HasValue ? (object)rating.Value : DBNull.Value);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     public async Task<ReportSchedule?> GetScheduleByIdAsync(int scheduleId)
     {
         const string sql = @"

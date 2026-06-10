@@ -187,6 +187,10 @@ BEGIN
     );
     CREATE UNIQUE INDEX IX_EmailRecipient_Email ON {SchemaName}.tbl_EmailRecipientList(EmailAddress) WHERE IsActive = 1;
 END
+
+-- 10. tbl_ReportSchedule — add StarRating column if missing (1-5, NULL = not rated)
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_ReportSchedule') AND name = 'StarRating')
+    ALTER TABLE {SchemaName}.tbl_ReportSchedule ADD StarRating TINYINT NULL;
 ";
 
     public static async Task EnsureSchemaAsync(string connectionString)

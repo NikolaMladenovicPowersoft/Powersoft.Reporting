@@ -60,4 +60,10 @@ public interface IScheduleRepository
     Task<int> CreateAiPromptTemplateAsync(AiPromptTemplate template);
     Task<bool> UpdateAiPromptTemplateAsync(AiPromptTemplate template);
     Task<bool> DeleteAiPromptTemplateAsync(int templateId);
+
+    // All Schedules (cross-report)
+    Task<List<(int Id, string ReportType, string Name, string CreatedBy, DateTime CreatedDate,
+        bool IsActive, string RecurrenceType, DateTime? NextRun, DateTime? LastRun,
+        string ExportFormat, string Recipients, byte? StarRating)>> GetAllSchedulesAsync();
+    Task UpdateStarRatingAsync(int scheduleId, byte? rating);
 }

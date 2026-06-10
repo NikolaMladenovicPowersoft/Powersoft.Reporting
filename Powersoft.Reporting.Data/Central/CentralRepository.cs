@@ -492,4 +492,32 @@ public class CentralRepository : ICentralRepository
             CompanyName = reader.IsDBNull(9) ? null : reader.GetString(9)
         };
     }
+
+    public async Task<List<(string UserCode, string DisplayName, string Email)>> GetUsersForDatabaseAsync(string dbCode)
+    {
+        const string sql = @"
+            SELECT u.pk_UserCode, ISNULL(u.UserDesc, u.pk_UserCode) AS DisplayName, ISNULL(u.UserEmail,'') AS Email
+            FROM tbl_User u
+            INNER JOIN tbl_RelUserDB rud ON u.pk_UserCode = rud.fk_UserCode
+            WHERE rud.fk_DBCode = @DBCode
+              AND u.UserActive = 1
+              AND u.UserEmail IS NOT NULL AND u.UserEmail <> ''
+            ORDER BY u.UserDesc";
+
+        var results = new List<(string, string, string)>();
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@DBCode", dbCode);
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add((
+                reader.GetString(0).Trim(),
+                reader.GetString(1).Trim(),
+                reader.GetString(2).Trim()
+            ));
+        }
+        return results;
+    }
 }

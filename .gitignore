@@ -78,3 +78,8 @@ _DOCS/
 # DataProtection keys (per-machine; regenerated on first run if missing)
 Powersoft.Reporting.Web/dp-keys/
 publish_deploy/dp-keys/
+
+# Internal/local files — NEVER commit
+DEPLOY_RULES_FOR_AI.md
+_ftp_deploy_curl.ps1
+*.credentials

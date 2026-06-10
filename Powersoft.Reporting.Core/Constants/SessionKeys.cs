@@ -65,6 +65,12 @@ public static class ModuleConstants
     public const int ActionViewSupplierList = 1200;
 
     /// <summary>
+    /// Legacy generic "View PowerReports" action (pk_ActionID=5100 in tbl_Action).
+    /// If a role has this, grant access to ALL reports in our app.
+    /// </summary>
+    public const int ActionViewPowerReportsLegacy = 5100;
+
+    /// <summary>
     /// Ranking threshold for DB filtering. Users with Ranking below this value (1, 5, 10)
     /// are system/support staff and see ALL companies and databases.
     /// Users at or above this value (15, 20, 21+) are client users and get filtered.

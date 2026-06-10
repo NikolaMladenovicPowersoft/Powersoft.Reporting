@@ -169,7 +169,13 @@ public class ReportsController : Controller
 
         // Custom roles: check per-action permission
         var roleId = GetRoleID();
-        return await _centralRepository.IsActionAuthorizedAsync(roleId, actionId);
+
+        // First check the specific RENGINEAI action
+        if (await _centralRepository.IsActionAuthorizedAsync(roleId, actionId))
+            return true;
+
+        // Fallback: legacy "View PowerReports" (5100) grants access to all reports
+        return await _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewPowerReportsLegacy);
     }
 
     /// <summary>

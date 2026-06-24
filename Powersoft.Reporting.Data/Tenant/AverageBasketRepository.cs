@@ -59,7 +59,7 @@ public class AverageBasketRepository : IAverageBasketRepository
             SELECT COUNT(*) FROM Data d{filterWhere}";
         
         var totalsSql = BuildGrandTotalsQuery(storeFilter, itemFilter, filter, dimJoin, dimWhere);
-        
+
         using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
         

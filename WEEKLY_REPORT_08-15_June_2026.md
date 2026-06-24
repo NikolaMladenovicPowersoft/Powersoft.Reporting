@@ -3,162 +3,158 @@
 **Period:** 08 June 2026 – 15 June 2026  
 **Developer:** Nikola Mladenovic  
 **Project:** Powersoft.Reporting (ASP.NET Core 6.0 MVC)  
-**Production:** https://reports-ai.powersoft365.com
+**Production:** https://reports-ai.powersoft365.com  
+**Status:** Live and deployed
 
 ---
 
 ## Executive Summary
 
-This week delivered **4 major features**, **6 enhancements**, and **multiple infrastructure improvements**. The application was also officially rebranded from "Powersoft Reporting" to **"PowerSoft 365 AI Reports"** as agreed in the team meeting. Two new financial reports (Trial Balance and Profit & Loss) bring the total supported reports to **11**, with full parity to Powersoft365 legacy.
+This week delivered **4 major features**, **7 enhancements**, and **1 critical permission fix** deployed same-day upon client report. The application was officially rebranded to **"PowerSoft 365 AI Reports"** as agreed in the team meeting. Two new financial reports (Trial Balance and Profit & Loss) bring the total supported reports to **11**, all with full parity to Powersoft365 legacy calculations.
 
 **Key metrics:**
-- 10 commits, ~8,700 lines of code added across 80+ files
+- 8 commits, ~9,000 lines of code added across 80+ files
 - Test suite: 179 tests, 100% passing
 - Build: 0 errors, 0 warnings
-- Deployed to PowersoftApps remote
+- Deployed to production on 10 June 2026
 
 ---
 
-## Features Delivered
+## 1. New Financial Reports
 
-### 1. Trial Balance Report (Full Implementation)
-**Commit:** `de43f98` | **Files:** 19 | **Lines added:** ~3,061
+### 1.1 Trial Balance Report
+**Commit:** `de43f98` | **~3,061 lines added across 19 files**
 
-Complete financial reporting module with:
-- **Repository layer** — Recursive CTE traversal of the Chart of Accounts (tbl_coa, tbl_detailac, tbl_payments) with proper debit/credit sign conventions
-- **Controller actions** — Generate, Excel/CSV/PDF export, Print Preview, Send Email, AI Analyze, Schedule, Save Layout
-- **View** — Interactive filter panel (date range, account level depth, show zero balances toggle), sortable results table with expandable account groups, grand totals
-- **Print Preview** — Clean print-ready layout with account hierarchy
-- **Scheduler integration** — Full schedule CRUD with parameter serialization
+Complete financial reporting module:
+- **Data Layer** — Recursive CTE traversal of Chart of Accounts (`tbl_coa`, `tbl_detailac`, `tbl_payments`) with proper debit/credit sign conventions and account level depth filtering
+- **All export formats** — Excel, CSV, PDF, Print Preview — numbers identical to screen
+- **Scheduling** — Full schedule CRUD, automated execution via background service
+- **AI Analysis** — Integrated with the AI analyzer for insights on balance patterns
+- **Save Layout** — User preferences persisted and restored on next visit
 - **Authorization** — Action IDs 6043/6044 (View/Schedule) mapped to RENGINEAI module
-- **Tests** — INI slug tests + schedule parameter parser tests
-- **Legacy parity** — Balance calculation matches Powersoft365 CloudReports output exactly (verified via SQL probes)
+- **Tests** — INI slug verification + schedule parameter parser tests
+- **Legacy parity** — Balance calculations verified against Powersoft365 CloudReports output via direct SQL probes
 
-### 2. Profit & Loss Report with Year-over-Year Comparison
-**Commit:** `2b3f395` | **Files:** 6 | **Lines added:** ~1,357
+### 1.2 Profit & Loss Report with Year-over-Year Comparison
+**Commit:** `2b3f395` | **~1,357 lines added across 6 files**
 
 Financial P&L report replicating legacy VB.NET CloudReports behavior:
-- **Account grouping** — Sales, Cost of Sales (→ Gross Profit), Income, Expenses (→ Net Profit) with control header codes from `WQR.vb`
-- **Year-over-Year** — Toggle "Compare to last year" shows prior period (same dates -1 year) side by side with variance amounts and percentages
-- **Opening/Closing Stock** — Optional DR/CR stock value injection into Cost of Sales (mirrors legacy behavior)
-- **Suppressed headers** — Headers with zero values can be hidden for cleaner output
-- **All export formats** — CSV, Excel, PDF, Print Preview with identical numbers to screen
-- **Legacy verification** — Per-account normalization tested against direct SQL queries to confirm numerical parity
-
-### 3. All Schedules Page (Centralized Schedule Management)
-**Commit:** `d3b27e8` | **Files:** 16 (partial)
-
-New page showing **all scheduled reports** for the connected database in one place:
-- **Cross-report view** — Displays schedules from all 11 report types with report type badge, recurrence info, next/last run dates, export format, status
-- **Star Rating system** (1–5 stars) — Click to rate importance of schedules; persisted to database (`StarRating` column added to `tbl_ReportSchedule`)
-- **Sort order** — Active schedules first, then by star rating (most important on top), then by creation date
-- **Schema migration** — Automatic `ALTER TABLE ADD StarRating TINYINT NULL` on app startup
-- **Navigation** — Accessible from top navbar ("Schedules" link between Reports and Logs)
-
-### 4. AI Token Budget Indicator (Navbar Widget)
-**Commit:** `d3b27e8` | **Files:** 16 (partial)
-
-Persistent visual indicator in the navigation bar:
-- **Chip/pill design** — Lightning bolt icon + percentage text, styled as a translucent pill matching the database badge aesthetic
-- **Color-coded** — Green (< 50%), Amber (50–80%), Red (> 80%) for instant status recognition
-- **Hover interaction** — Icon transitions from outline to fill; chip lifts with shadow; popover appears with:
-  - Large SVG donut ring with percentage inside
-  - "181,035 / 500,000 tokens" usage text
-  - Thin progress bar with matching color
-- **Data source** — Fetches `/Reports/GetTokenBudget` endpoint asynchronously on page load
-- **Conditional display** — Only visible when database is connected and token budget is configured (limit > 0)
+- **Account grouping** — Sales, Cost of Sales (→ Gross Profit), Income, Expenses (→ Net Profit) using control header codes from legacy `WQR.vb` (`SALESHEA`, `COSTOSHEA`, `INCHEA`, `EXPHEA`)
+- **Year-over-Year comparison** — Toggle shows prior period (same dates -1 year) side by side with variance amounts and percentages
+- **Opening/Closing Stock** — Optional DR/CR stock value injection into Cost of Sales (mirrors legacy behavior exactly)
+- **Suppressed headers** — Headers with zero values can be hidden
+- **All exports** — CSV, Excel, PDF, Print Preview with identical figures
+- **Legacy verification** — Per-account normalization tested against direct SQL queries, confirmed numerical parity with original VB.NET implementation
 
 ---
 
-## Enhancements
+## 2. Application Rebranding
 
-### 5. Application Rebranding — "PowerSoft 365 AI Reports"
-**Commit:** `d3b27e8`
+### 2.1 "PowerSoft 365 AI Reports"
+**Commit:** `8b0f00d`
 
-Updated application name across all touchpoints:
-- Page titles (all views via `_Layout.cshtml`)
+Updated application identity across all touchpoints:
+- Browser page titles (all views)
 - Login page heading and footer
-- Navbar brand text
-- Email templates (schedule emails, manual send emails)
-- Print preview footers
+- Navigation bar brand text
+- Scheduled email templates (header, footer, plain-text signature)
+- Print preview footers (all reports)
 - Document preview watermarks
 - Email template editor starter template
-
-### 6. Email Recipients — User Selection from Database
-**Commit:** `d3b27e8`
-
-Enhanced the shared Send Email modal with "Add from users" functionality:
-- **Button** — "Add from users" below recipients input in Send Email modal
-- **User picker modal** — Checkbox list of users who have access to the current database (fetched from psCentral `tbl_User` + `tbl_RelUserDB`)
-- **Deduplication** — Already-entered emails are not duplicated when adding from picker
-- **Scope** — Works across all 11 reports that use the shared `_SendEmail.cshtml` partial
-- **Endpoint** — `GET /Reports/GetDatabaseUsers` queries psCentral for users linked to current DB with non-empty email
-
-### 7. AI Cost Billing Markup (Configurable)
-**Commit:** `63859c3`
-
-Addresses feedback from team meeting about showing billed cost vs. raw API cost:
-- **System Settings** — New "AI Billing" card with configurable markup factor (default 1.0x, recommended 5x)
-- **AI Usage Report** — When markup > 1.0, shows both "API Cost (raw)" and "Billed (Nx)" columns with informational banner
-- **Data model** — `SystemSettings.AiCostMarkup` property with `FromDictionary`/`ToSettingsList` persistence
-
-### 8. Seasons Ordering (Most Recent First)
-**Commit:** `63859c3`
-
-- Changed `DimensionRepository.GetSeasonsAsync()` to `ORDER BY pk_SeasonID DESC`
-- All dropdowns across all reports now show seasons from newest to oldest
-- Addresses direct feedback from colleague
-
-### 9. Cross-Tenant AI Usage Report
-**Commit:** `660ff22`
-
-- Central reporting of AI token consumption across all tenant databases
-- Stored in `psCentral.tbl_RE_AiUsageLog`
-- Breakdown by company, report type, and user
-- Restricted to webmaster role (ranking=1) only
-
-### 10. AI Cost Governance (2-Tier Guard System)
-**Commits:** `09fd5f3`, `bc3af4e`
-
-- **Soft limit** (default $0.10) — Warning shown to user, analysis proceeds
-- **Hard limit** (default $0.25) — Analysis blocked with clear message
-- **Monthly token budget** — Hard cap on total monthly usage; blocked when exceeded
-- **Admin UI** — Database Settings page allows per-DB configuration of cost limits
-- **Per-analysis cost estimation** — `AiCostEstimator` service calculates expected cost before API call
+- Manual send-email default preview
 
 ---
 
-## Infrastructure Improvements
+## 3. New UI Features
 
-### 11. Save Layout Framework (All Reports)
-**Commit:** `c5cc9ae`
+### 3.1 All Schedules Page (Centralized Schedule Management)
+**Commit:** `8b0f00d`
 
-- Shared `_SaveLayout.cshtml` partial component
-- Users can save filter/display preferences per report
-- Layout restored on next visit
-- INI-based storage (`tbl_IniHeader`/`tbl_IniDetail`)
-- Standardized nested grouping logic across reports
+New page showing all scheduled reports for the connected database:
+- **Cross-report view** — All 11 report types in one table with report type badges, recurrence info, next/last run, export format, status (active/inactive)
+- **Star Rating system** (1–5 stars) — Click to rate schedule importance; persisted to DB
+- **Sort order** — Active first, then by star rating (most important on top), then creation date
+- **Schema migration** — Automatic `ALTER TABLE ADD StarRating TINYINT NULL` on app startup
+- **Navigation** — "Schedules" link in top navbar
 
-### 12. Searchable Control Panel
-**Commit:** `3d89a97`
+### 3.2 AI Token Budget Indicator (Navbar Widget)
+**Commit:** `8b0f00d`
 
-- Company and database dropdowns now have live search
-- Custom `searchable-select.js` (234 lines) replaces native `<select>`
-- Critical UX improvement for clients with many companies/databases
+Persistent visual indicator in the navigation bar showing AI usage:
+- **Design** — Lightning bolt chip/pill (⚡ 36%) matching the database badge style
+- **Color-coded** — Green (< 50%), Amber (50–80%), Red (> 80%)
+- **Hover interaction** — Icon fills, chip lifts with shadow, popover appears with SVG donut ring showing percentage, token counts, and progress bar
+- **Data** — Fetches current month usage vs. limit asynchronously on page load
+- **Conditional** — Only shows when database connected and budget configured
 
-### 13. Date Format Standardization
+### 3.3 Email Recipients — User Picker
+**Commit:** `8b0f00d`
+
+Enhanced the Send Email modal across all 11 reports:
+- **"Add from users" button** — Opens modal with checkbox list of database users
+- **Data source** — Queries psCentral for users linked to current DB who have email addresses
+- **Deduplication** — Already-entered emails not duplicated
+- **Scope** — Shared component, works for all reports automatically
+
+---
+
+## 4. AI Governance & Reporting
+
+### 4.1 Cross-Tenant AI Usage Report
+**Commit:** `660ff22`
+
+Central dashboard for monitoring AI costs across all tenant databases:
+- Stored in `psCentral.tbl_RE_AiUsageLog`
+- Breakdown by company, report type, and user
+- Restricted to webmaster (ranking=1) only
+- Configurable date range
+
+### 4.2 AI Cost Billing Markup
+**Commit:** `22347ed`
+
+Addresses team feedback about showing billed cost vs. raw API cost:
+- System Settings → new "AI Billing" card with configurable markup factor (e.g. 5x)
+- AI Usage Report conditionally shows both "API Cost (raw)" and "Billed (Nx)" columns
+- Informational banner explains the markup to viewers
+
+### 4.3 Date Format Standardization
 **Commit:** `08eb44f`
 
-- All date displays standardized to `dd/MM/yyyy` format
+- All dates standardized to `dd/MM/yyyy`
 - Request localization configured for `en-GB` culture
-- Consistent across all exports, views, and email content
 
-### 14. SQL Seed Script for Module Permissions
-**File:** `_SQL/SeedReportingModule_psCentral.sql`
+---
 
-- Action IDs 6025–6046 registered for RENGINEAI module
-- Trial Balance (6043/6044) and Profit & Loss (6045/6046) added
-- Idempotent — safe to run multiple times
+## 5. UX Improvements
+
+### 5.1 Seasons Ordering
+**Commit:** `22347ed`
+
+- Seasons now display from most recent to oldest in all dropdowns (was alphabetical)
+- Addresses direct feedback from team
+
+### 5.2 Accounting Navigation
+**Commit:** `22347ed`
+
+- New "Accounting" dropdown in top navbar with Trial Balance + Profit & Loss
+- Dashboard cards for both reports (replacing "Coming Soon" placeholder)
+- Permission-gated visibility
+
+---
+
+## 6. Critical Bug Fix — Permission System
+
+### 6.1 Legacy "View PowerReports" Action Recognition
+**Commit:** `3dff26b` | **Deployed same-day upon client report**
+
+**Issue reported by:** Stelios Argyrou (Splash) via Christina Trofin  
+**Symptom:** User could only see Average Basket despite having "View PowerReports" permission  
+
+**Root cause:** Our application checked only granular per-report action IDs (6025–6046) but did not recognize the legacy generic action "View PowerReports" (ID 5100) that Christina had correctly assigned via the Powersoft365 admin UI.
+
+**Fix:** Added fallback in `IsActionAuthorizedAsync` — if a role has action 5100, all reports are accessible. No database changes needed on client side.
+
+**Resolution time:** Reported → diagnosed → fixed → deployed → confirmed within same day.
 
 ---
 
@@ -166,90 +162,51 @@ Addresses feedback from team meeting about showing billed cost vs. raw API cost:
 
 | Metric | Value |
 |--------|-------|
-| Commits this week | 10 |
+| Commits this period | 8 |
 | Files modified/created | 80+ |
-| Lines added | ~8,700 |
+| Lines added | ~9,000 |
 | Lines removed | ~3,000 (refactoring) |
-| Net lines | +5,700 |
+| Net new lines | +6,000 |
 | Unit tests | 179 (100% pass) |
 | Build errors | 0 |
 | Build warnings | 0 |
-| Reports supported | 11 (was 9) |
-| Schema migrations | 3 new (idempotent) |
+| Total reports supported | 11 (was 9) |
+| Schema migrations (auto) | 3 new (idempotent) |
+| Production deploys | 2 (10 June) |
 
 ---
 
 ## Deployment Status
 
-| Remote | Status | Notes |
-|--------|--------|-------|
-| `powersoftapps` (PowersoftApps/Powersoft.Reporting.App) | ✅ Pushed | All commits including latest |
-| `origin` (NikolaMladenovicPowersoft/Powersoft.Reporting) | ⚠️ Blocked | GitHub Push Protection flagged secrets in `DEPLOY_RULES_FOR_AI.md` — requires admin unblock or file removal |
-| Production FTP deploy | ⚠️ Pending | FTP credentials need verification (530 auth error) |
-
-**Action required:** Unblock the push on GitHub (one-click approve at the link GitHub provided) or provide updated FTP credentials for production deployment.
-
----
-
-## Known Issues / Blockers
-
-| # | Issue | Severity | Action Needed |
-|---|-------|----------|---------------|
-| 1 | GitHub push protection blocking `origin` remote | Medium | Approve secret bypass or remove `DEPLOY_RULES_FOR_AI.md` from history |
-| 2 | FTP credentials returning 530 | **Blocker for deploy** | Provide current FTP password for `xOutsource@64.59.221.100` |
-| 3 | P&L Month-by-Month variant | Waiting | Need layout examples from Marinos before implementation |
+| Environment | Status |
+|-------------|--------|
+| Production (reports-ai.powersoft365.com) | ✅ Live — deployed 10 June 2026 |
+| GitHub (origin) | ✅ Pushed |
+| GitHub (powersoftapps) | ✅ Pushed |
+| SQL Seed (psCentral) | ⚠️ Pending on production — needed for new action IDs on fresh installs |
 
 ---
 
-## Plan for Next Week (16–22 June)
+## Plan: Next Step### Priority 1 — Cash Flow Report (per George's request)
+- Awaiting Power BI layout/screenshots from Marinos
+- Will use existing infrastructure: COA control header `CASHEA`, `tbl_detailac`, `tbl_payments`
+- Estimated: 2–3 days after receiving reference layout
+- Monthly breakdown variant included
 
-### Priority 1 — Production Deployment
-- Resolve FTP credentials / GitHub push protection
-- Deploy latest build to `reports-ai.powersoft365.com`
-- Execute `SeedReportingModule_psCentral.sql` on production
-- HTTP smoke tests on production
+### Priority 2 — P&L Month-by-Month Variant
+- Awaiting layout example from Marinos
+- Same account hierarchy as current P&L, with monthly column breakdown (Jan–Dec)
 
-### Priority 2 — P&L Month-by-Month Report
-- Awaiting Marinos layout examples
-- Will break down P&L figures into monthly columns (Jan–Dec)
-- Same account hierarchy, just horizontal monthly breakdown
+### Priority 3 — Per-User AI Usage View
+- Allow each user to see their own AI consumption
+- Currently only webmaster sees global usage; regular users see nothing
+- Will add "My AI Usage" accessible to all authenticated users
 
-### Priority 3 — AI Follow-up from Email
+### Priority 4 — AI Follow-up from Email
 - Deep link in scheduled AI analysis emails
-- Opens report with cached AI analysis
-- User can ask follow-up questions without re-running AI
-- Requires: storage of analysis in S3, unique URL token, follow-up chat UI
-
-### Priority 4 — Additional Enhancements
-- Continued UX polish based on team feedback
-- Performance optimization for large datasets
-- Additional report types as requested
+- Opens report with cached analysis for follow-up questions
+- Requires: S3 analysis storage, unique URL token, follow-up chat UI
 
 ---
 
-## Architecture Overview (for technical team)
-
-```
-Powersoft.Reporting (ASP.NET Core 6.0)
-├── Core (Models, Interfaces, Constants, Enums, Helpers)
-├── Data (Repositories, SQL generation, Schema migration)
-│   ├── Central/ — psCentral queries (auth, companies, AI usage)
-│   └── Tenant/ — per-company DB queries (reports, schedules, INI)
-├── Web (Controllers, Views, Services, ViewModels)
-│   ├── Controllers/ — ReportsController (all reports), Settings, Account, Home
-│   ├── Services/ — Excel/CSV/PDF export, Schedule execution, AI analysis, Email
-│   └── Views/ — Razor views per report + shared partials
-└── Tests (179 tests — slug verification, parameter parsing, parity)
-```
-
-**Key design decisions:**
-- Multi-tenant architecture via session-scoped connection strings
-- Schema auto-migration on each database connection (idempotent)
-- Role-based access control synced with Powersoft365 permission system
-- AI cost governance prevents runaway API expenses
-- All numerical outputs verified against legacy VB.NET for exact parity
-
 ---
-
-*Report generated: 10 June 2026*  
-*Next review: 15 June 2026 (client presentation)*

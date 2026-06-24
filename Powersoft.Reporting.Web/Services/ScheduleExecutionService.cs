@@ -1084,6 +1084,59 @@ public class ScheduleExecutionService
                 var result = await repo.GetPurchasesSalesDataAsync(filter);
                 csvBytes = new CsvExportService().GeneratePurchasesSalesCsv(result.Items, result.PsTotals, filter);
             }
+            else if (string.Equals(reportType, ReportTypeConstants.ProfitLoss, StringComparison.OrdinalIgnoreCase))
+            {
+                var filter = new ProfitLossFilter
+                {
+                    DateFrom = dateFrom.Date, DateTo = dateTo.Date,
+                    HeaderLevel = parameters.PlHeaderLevel,
+                    CompareToLastYear = parameters.PlCompareToLastYear,
+                    SuppressedHeaders = parameters.PlSuppressedHeaders ?? ""
+                };
+                var repo = _repositoryFactory.CreateProfitLossRepository(connString);
+                var (rows, _) = await repo.GenerateAsync(filter);
+                csvBytes = new CsvExportService().GenerateProfitLossCsv(rows, filter);
+            }
+            else if (string.Equals(reportType, ReportTypeConstants.TrialBalance, StringComparison.OrdinalIgnoreCase))
+            {
+                var asAt = dateTo.Date;
+                var filter = new TrialBalanceFilter
+                {
+                    AsAt = asAt,
+                    IncludeZeroMovements = parameters.TbIncludeZeroMovements,
+                    ReportMode = Enum.TryParse<TrialBalanceReportMode>(parameters.TbReportMode, true, out var rm) ? rm : TrialBalanceReportMode.Detailed,
+                    SelectedAccounts = parameters.TbSelectedAccounts ?? "",
+                    SelectedHeaders = parameters.TbSelectedHeaders ?? "",
+                    SuppressedHeaders = parameters.TbSuppressedHeaders ?? ""
+                };
+                var repo = _repositoryFactory.CreateTrialBalanceRepository(connString);
+                var (rows, _) = await repo.GenerateAsync(filter);
+                csvBytes = new CsvExportService().GenerateTrialBalanceCsv(rows, filter);
+            }
+            else if (string.Equals(reportType, ReportTypeConstants.Catalogue, StringComparison.OrdinalIgnoreCase))
+            {
+                var filter = new CatalogueFilter
+                {
+                    DateFrom = dateFrom, DateTo = dateTo,
+                    ReportMode = Enum.TryParse<CatalogueReportMode>(parameters.CatReportMode, true, out var crm) ? crm : CatalogueReportMode.Detailed,
+                    ReportOn = Enum.TryParse<CatalogueReportOn>(parameters.CatReportOn, true, out var cro) ? cro : CatalogueReportOn.Sale,
+                    PrimaryGroup = Enum.TryParse<CatalogueGroupBy>(parameters.CatPrimaryGroup, true, out var cpg) ? cpg : CatalogueGroupBy.None,
+                    SecondaryGroup = Enum.TryParse<CatalogueGroupBy>(parameters.CatSecondaryGroup, true, out var csg) ? csg : CatalogueGroupBy.None,
+                    ThirdGroup = Enum.TryParse<CatalogueGroupBy>(parameters.CatThirdGroup, true, out var ctg) ? ctg : CatalogueGroupBy.None,
+                    ShowProfit = parameters.ShowProfit,
+                    ShowStock = parameters.ShowStock,
+                    StoreCodes = parameters.StoreCodes ?? new(),
+                    ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
+                    SortColumn = string.IsNullOrWhiteSpace(parameters.SortColumn) ? "ItemCode" : parameters.SortColumn,
+                    SortDirection = string.IsNullOrWhiteSpace(parameters.SortDirection) ? "ASC" : parameters.SortDirection,
+                    PageSize = int.MaxValue
+                };
+                if (filter.ItemsSelection?.Stores is { HasFilter: true, Mode: FilterMode.Include })
+                    filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+                var repo = _repositoryFactory.CreateCatalogueRepository(connString);
+                var result = await repo.GetCatalogueDataAsync(filter);
+                csvBytes = new CsvExportService().GenerateCatalogueCsv(result.Items, result.CatalogueTotals, filter, false);
+            }
             else
             {
                 var filter = new ReportFilter

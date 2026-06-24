@@ -4887,6 +4887,64 @@ public class ReportsController : Controller
         }
     }
 
+    private async Task<List<BelowMinStockRow>?> RunBmsExportQuery(
+        string? storeCodes, string? itemsSelection,
+        string sortColumn, string sortDirection)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var filter = new BelowMinStockFilter
+        {
+            StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? null
+                : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            ItemsSelection = ParseItemsSelection(itemsSelection),
+            SortColumn = sortColumn,
+            SortDirection = sortDirection
+        };
+
+        var repo = _repositoryFactory.CreateBelowMinStockRepository(tenantConnString);
+        return await repo.GetBelowMinStockAsync(filter);
+    }
+
+    public async Task<IActionResult> ExportBmsCsv(
+        string? storeCodes = null, string? itemsSelection = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var data = await RunBmsExportQuery(storeCodes, itemsSelection, sortColumn, sortDirection);
+        if (data == null) return RedirectToAction("BelowMinStock");
+
+        var service = new CsvExportService();
+        var bytes = service.GenerateBelowMinStockCsv(data, new BelowMinStockFilter(), CanViewCost());
+        return File(bytes, "text/csv", $"BelowMinStock_{DateTime.Now:yyyyMMdd}.csv");
+    }
+
+    public async Task<IActionResult> ExportBmsExcel(
+        string? storeCodes = null, string? itemsSelection = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var data = await RunBmsExportQuery(storeCodes, itemsSelection, sortColumn, sortDirection);
+        if (data == null) return RedirectToAction("BelowMinStock");
+
+        var service = new ExcelExportService();
+        var bytes = service.GenerateBelowMinStockExcel(data, new BelowMinStockFilter(), CanViewCost());
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"BelowMinStock_{DateTime.Now:yyyyMMdd}.xlsx");
+    }
+
+    public async Task<IActionResult> ExportBmsPdf(
+        string? storeCodes = null, string? itemsSelection = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var data = await RunBmsExportQuery(storeCodes, itemsSelection, sortColumn, sortDirection);
+        if (data == null) return RedirectToAction("BelowMinStock");
+
+        var service = new PdfExportService();
+        var bytes = service.GenerateBelowMinStockPdf(data, new BelowMinStockFilter(), CanViewCost());
+        return File(bytes, "application/pdf", $"BelowMinStock_{DateTime.Now:yyyyMMdd}.pdf");
+    }
+
     [HttpPost]
     public async Task<IActionResult> SendBelowMinStockEmail(
         string recipients, string? cc, string? bcc, string? emailSubject,

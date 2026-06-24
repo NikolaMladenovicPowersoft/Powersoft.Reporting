@@ -69,8 +69,14 @@
                 <i class="bi bi-envelope me-1"></i>Send to Email
             </button>
             <div class="btn-group">
-                <button type="button" class="btn btn-outline-secondary" onclick="exportCsv()" title="Export current results to CSV">
+                <button type="button" class="btn btn-outline-success" onclick="exportBms('excel')" title="Export to Excel">
+                    <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="exportBms('csv')" title="Export to CSV">
                     <i class="bi bi-filetype-csv me-1"></i>CSV
+                </button>
+                <button type="button" class="btn btn-outline-danger" onclick="exportBms('pdf')" title="Export to PDF">
+                    <i class="bi bi-filetype-pdf me-1"></i>PDF
                 </button>
             </div>
         </div>
@@ -248,19 +254,20 @@ function sortBy(col) {
     generateReport();
 }
 
-function exportCsv() {
-    if (!_lastData.length) return;
-    var csv = 'ItemCode,ItemName,Store,StoreName,Category,Department,Brand,CurrentStock,MinStock,Difference,' + (_viewCost ? 'Cost,StockValue,' : '') + 'Shelf\n';
-    _lastData.forEach(function(r) {
-        csv += '"' + (r.itemCode||'') + '","' + (r.itemName||'') + '","' + (r.storeCode||'') + '","' + (r.storeName||'') + '",' +
-            '"' + (r.categoryName||'') + '","' + (r.departmentName||'') + '","' + (r.brandName||'') + '",' +
-            r.currentStock + ',' + r.minimumStock + ',' + r.difference + ',' + (_viewCost ? ((r.cost||0) + ',' + (r.stockValue||0) + ',') : '') + '"' + (r.shelf||'') + '"\n';
-    });
-    var blob = new Blob([csv], { type: 'text/csv' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'BelowMinStock_' + new Date().toISOString().slice(0,10) + '.csv';
-    a.click();
+function exportBms(format) {
+    var actions = { csv: '@Url.Action("ExportBmsCsv")', excel: '@Url.Action("ExportBmsExcel")', pdf: '@Url.Action("ExportBmsPdf")' };
+    var url = actions[format];
+    if (!url) return;
+    var params = new URLSearchParams({ sortColumn: _sortCol, sortDirection: _sortDir });
+    if (typeof getItemsSelectionStoreCodes === 'function') {
+        var sc = getItemsSelectionStoreCodes();
+        if (sc) params.append('storeCodes', sc);
+    }
+    if (typeof getItemsSelectionFilter === 'function') {
+        var f = getItemsSelectionFilter();
+        if (f) params.append('itemsSelection', JSON.stringify(f));
+    }
+    window.location.href = url + '?' + params.toString();
 }
 
 function fmt(v) { return v != null ? v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-'; }

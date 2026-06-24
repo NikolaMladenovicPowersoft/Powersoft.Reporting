@@ -1135,6 +1135,42 @@ public class CsvExportService
         return Encoding.UTF8.GetBytes(sb.ToString());
     }
 
+    public byte[] GenerateBelowMinStockCsv(List<BelowMinStockRow> rows, BelowMinStockFilter filter, bool viewCost = true)
+    {
+        rows ??= new();
+        var sb = new StringBuilder();
+        sb.AppendLine("# Below Minimum Stock Report");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine($"# Total Items: {rows.Count}");
+        sb.AppendLine();
+
+        var header = new List<string> { "Item Code", "Item Name", "Store", "Store Name", "Category", "Department", "Brand", "Current Stock", "Minimum Stock", "Difference" };
+        if (viewCost) { header.Add("Cost"); header.Add("Stock Value"); }
+        header.Add("Shelf");
+        sb.AppendLine(string.Join(",", header.Select(Escape)));
+
+        foreach (var r in rows)
+        {
+            var cells = new List<string>
+            {
+                r.ItemCode, r.ItemName, r.StoreCode, r.StoreName,
+                r.CategoryName ?? "", r.DepartmentName ?? "", r.BrandName ?? "",
+                r.CurrentStock.ToString("F0", CultureInfo.InvariantCulture),
+                r.MinimumStock.ToString("F0", CultureInfo.InvariantCulture),
+                r.Difference.ToString("F0", CultureInfo.InvariantCulture)
+            };
+            if (viewCost)
+            {
+                cells.Add((r.Cost ?? 0).ToString("F2", CultureInfo.InvariantCulture));
+                cells.Add((r.StockValue ?? 0).ToString("F2", CultureInfo.InvariantCulture));
+            }
+            cells.Add(r.Shelf ?? "");
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        return Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
     private static string Escape(string value)
     {
         if (string.IsNullOrEmpty(value)) return "";

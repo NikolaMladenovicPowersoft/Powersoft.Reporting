@@ -1147,7 +1147,29 @@ function goToPage(p){document.getElementById('pageNumberHidden').value=p;submitT
 function sortBy(col){var curCol=document.getElementById('sortColumnHidden').value;var curDir=document.getElementById('sortDirectionHidden').value;document.getElementById('sortColumnHidden').value=col;document.getElementById('sortDirectionHidden').value=(col===curCol&&curDir==='ASC')?'DESC':'ASC';document.getElementById('pageNumberHidden').value=1;submitToResults();}
 
 function getItemsSelectionJsonValue(){populateItemsSelectionHidden();return document.getElementById('itemsSelectionJsonHidden').value||'';}
-function exportPsReport(format){var actions={csv:'@Url.Action("ExportPsCsv")',excel:'@Url.Action("ExportPsExcel")',pdf:'@Url.Action("ExportPsPdf")'};var url=actions[format];if(!url)return;var f=document.createElement('form');f.method='POST';f.action=url;f.style.display='none';var fields={dateFrom:'@Model.DateFrom.ToString("yyyy-MM-dd")',dateTo:'@Model.DateTo.ToString("yyyy-MM-dd")',reportMode:'@Model.ReportMode',primaryGroup:'@Model.PrimaryGroup',secondaryGroup:'@Model.SecondaryGroup',thirdGroup:'@Model.ThirdGroup',includeVat:'@Model.IncludeVat',showProfit:'@Model.ShowProfit',showStock:'@Model.ShowStock',showOnOrder:'@Model.ShowOnOrder',showReservation:'@Model.ShowReservation',showAvailable:'@Model.ShowAvailable',includeAdditionalCharges:'@Model.IncludeAdditionalCharges',storeCodes:'@(Model.SelectedStoreCodesString??"")',itemIds:'@(Model.SelectedItemIdsString??"")',sortColumn:'@Model.SortColumn',sortDirection:'@Model.SortDirection',ItemsSelectionJson:getItemsSelectionJsonValue()};Object.keys(fields).forEach(function(k){var inp=document.createElement('input');inp.type='hidden';inp.name=k;inp.value=fields[k];f.appendChild(inp);});document.body.appendChild(f);f.submit();document.body.removeChild(f);}
+function collectPsParams(){
+    return {
+        dateFrom: document.getElementById('DateFrom').value,
+        dateTo: document.getElementById('DateTo').value,
+        reportMode: document.getElementById('ReportMode').value,
+        primaryGroup: document.getElementById('PrimaryGroup').value,
+        secondaryGroup: document.getElementById('SecondaryGroup').value,
+        thirdGroup: document.getElementById('ThirdGroup').value,
+        includeVat: document.getElementById('includeVatCheck').checked,
+        showProfit: document.getElementById('showProfitCheck').checked,
+        showStock: document.getElementById('showStockCheck').checked,
+        showOnOrder: document.getElementById('showOnOrderCheck').checked,
+        showReservation: document.getElementById('showReservationCheck').checked,
+        showAvailable: document.getElementById('showAvailableCheck').checked,
+        includeAdditionalCharges: document.getElementById('includeAdditionalChargesCheck').checked,
+        storeCodes: (typeof getItemsSelectionStoreCodes==='function'?getItemsSelectionStoreCodes():'')||document.getElementById('selectedStoreCodesHidden').value||'',
+        itemIds: (typeof getItemsSelectionItemIds==='function'?getItemsSelectionItemIds():'')||document.getElementById('selectedItemIdsHidden').value||'',
+        sortColumn: document.getElementById('sortColumnHidden').value,
+        sortDirection: document.getElementById('sortDirectionHidden').value,
+        ItemsSelectionJson: getItemsSelectionJsonValue()
+    };
+}
+function exportPsReport(format){var actions={csv:'@Url.Action("ExportPsCsv")',excel:'@Url.Action("ExportPsExcel")',pdf:'@Url.Action("ExportPsPdf")'};var url=actions[format];if(!url)return;var f=document.createElement('form');f.method='POST';f.action=url;f.style.display='none';var fields=collectPsParams();Object.keys(fields).forEach(function(k){var inp=document.createElement('input');inp.type='hidden';inp.name=k;inp.value=fields[k];f.appendChild(inp);});document.body.appendChild(f);f.submit();document.body.removeChild(f);}
 
 function togglePreview(){
     var panel=document.getElementById('previewPanel');
@@ -1166,26 +1188,7 @@ function togglePreview(){
         form.action='@Url.Action("PrintPsPreview")';
         form.target='previewFrame';
         form.style.display='none';
-        var fields={
-            dateFrom:'@Model.DateFrom.ToString("yyyy-MM-dd")',
-            dateTo:'@Model.DateTo.ToString("yyyy-MM-dd")',
-            reportMode:'@Model.ReportMode',
-            primaryGroup:'@Model.PrimaryGroup',
-            secondaryGroup:'@Model.SecondaryGroup',
-            thirdGroup:'@Model.ThirdGroup',
-            includeVat:'@Model.IncludeVat',
-            showProfit:'@Model.ShowProfit',
-            showStock:'@Model.ShowStock',
-            showOnOrder:'@Model.ShowOnOrder',
-            showReservation:'@Model.ShowReservation',
-            showAvailable:'@Model.ShowAvailable',
-            includeAdditionalCharges:'@Model.IncludeAdditionalCharges',
-            storeCodes:getItemsSelectionStoreCodes()||'@(Model.SelectedStoreCodesString??"")',
-            itemIds:getItemsSelectionItemIds()||'@(Model.SelectedItemIdsString??"")',
-            sortColumn:'@Model.SortColumn',
-            sortDirection:'@Model.SortDirection',
-            ItemsSelectionJson:getItemsSelectionJsonValue()
-        };
+        var fields=collectPsParams();
         Object.keys(fields).forEach(function(k){
             var inp=document.createElement('input');
             inp.type='hidden';inp.name=k;inp.value=fields[k]||'';
@@ -1212,29 +1215,9 @@ function validateEmailList(input){if(!input||!input.trim())return{valid:false,er
 // Returns the same report params the old sendReportEmail() appended (recipients/cc/bcc/
 // emailSubject/exportFormat/templateId are added by the partial). No emptiness guard:
 // the original openSendEmailModal had none (this report is server-rendered).
-window.collectEmailParameters = function(){
-    return {
-        dateFrom: '@Model.DateFrom.ToString("yyyy-MM-dd")',
-        dateTo: '@Model.DateTo.ToString("yyyy-MM-dd")',
-        reportMode: '@Model.ReportMode',
-        primaryGroup: '@Model.PrimaryGroup',
-        secondaryGroup: '@Model.SecondaryGroup',
-        thirdGroup: '@Model.ThirdGroup',
-        includeVat: '@Model.IncludeVat',
-        showProfit: '@Model.ShowProfit',
-        showStock: '@Model.ShowStock',
-        showOnOrder: '@Model.ShowOnOrder',
-        showReservation: '@Model.ShowReservation',
-        showAvailable: '@Model.ShowAvailable',
-        includeAdditionalCharges: '@Model.IncludeAdditionalCharges',
-        storeCodes: (typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : ''),
-        sortColumn: '@Model.SortColumn',
-        sortDirection: '@Model.SortDirection',
-        ItemsSelectionJson: getItemsSelectionJsonValue()
-    };
-};
+window.collectEmailParameters = function(){ return collectPsParams(); };
 window.getEmailDefaultSubject = function(){
-    return 'Purchases vs Sales Report \u2014 @Model.DateFrom.ToString("yyyy-MM-dd") to @Model.DateTo.ToString("yyyy-MM-dd")';
+    return 'Purchases vs Sales Report \u2014 ' + document.getElementById('DateFrom').value + ' to ' + document.getElementById('DateTo').value;
 };
 
 function filterColumnList(){var el=document.getElementById('colSearchInput');if(!el)return;var s=el.value.toLowerCase().trim();document.querySelectorAll('#colToggleList label').forEach(function(lbl){if(!s){lbl.classList.remove('d-none');return;}var name=(lbl.getAttribute('data-col-name')||'').toLowerCase();var text=lbl.querySelector('span')?lbl.querySelector('span').textContent.toLowerCase():'';var match=name.indexOf(s)!==-1||text.indexOf(s)!==-1;if(match)lbl.classList.remove('d-none');else lbl.classList.add('d-none');});}
@@ -1323,8 +1306,8 @@ function drillDown(itemCode, type) {
 
     var url = '/Reports/GetTransactionDetails?itemCode=' + encodeURIComponent(itemCode)
         + '&type=' + type
-        + '&dateFrom=@Model.DateFrom.ToString("yyyy-MM-dd")'
-        + '&dateTo=@Model.DateTo.ToString("yyyy-MM-dd")'
+        + '&dateFrom=' + encodeURIComponent(document.getElementById('DateFrom').value)
+        + '&dateTo=' + encodeURIComponent(document.getElementById('DateTo').value)
         + '&storeCodes=' + (typeof getItemsSelectionStoreCodes === 'function' ? encodeURIComponent(getItemsSelectionStoreCodes()) : '');
 
     fetch(url)
@@ -1411,8 +1394,8 @@ function collectAiFormData() {
     var formData = new FormData(form);
     formData.append('storeCodes', typeof getItemsSelectionStoreCodes === 'function' ? getItemsSelectionStoreCodes() : '');
     formData.append('itemIds', typeof getItemsSelectionItemIds === 'function' ? getItemsSelectionItemIds() : '');
-    formData.append('sortColumn', '@Model.SortColumn');
-    formData.append('sortDirection', '@Model.SortDirection');
+    formData.append('sortColumn', document.getElementById('sortColumnHidden').value);
+    formData.append('sortDirection', document.getElementById('sortDirectionHidden').value);
     return formData;
 }
 

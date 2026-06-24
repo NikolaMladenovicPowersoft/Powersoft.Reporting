@@ -1581,5 +1581,68 @@ public class ExcelExportService
         workbook.SaveAs(stream);
         return stream.ToArray();
     }
+
+    public byte[] GenerateBelowMinStockExcel(List<BelowMinStockRow> rows, BelowMinStockFilter filter, bool viewCost = true)
+    {
+        rows ??= new();
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Below Min Stock");
+
+        ws.Cell(1, 1).Value = "Below Minimum Stock Report";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+        ws.Cell(2, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        ws.Cell(3, 1).Value = $"Total Items: {rows.Count}";
+
+        int headerRow = 5;
+        int col = 1;
+        var headers = new List<string> { "Item Code", "Item Name", "Store", "Store Name", "Category", "Department", "Brand", "Current Stock", "Minimum Stock", "Difference" };
+        if (viewCost) { headers.Add("Cost"); headers.Add("Stock Value"); }
+        headers.Add("Shelf");
+
+        foreach (var h in headers)
+        {
+            ws.Cell(headerRow, col).Value = h;
+            ws.Cell(headerRow, col).Style.Font.Bold = true;
+            ws.Cell(headerRow, col).Style.Fill.BackgroundColor = XLColor.FromHtml("#1a365d");
+            ws.Cell(headerRow, col).Style.Font.FontColor = XLColor.White;
+            col++;
+        }
+
+        int dataRow = headerRow + 1;
+        foreach (var r in rows)
+        {
+            col = 1;
+            ws.Cell(dataRow, col++).Value = r.ItemCode;
+            ws.Cell(dataRow, col++).Value = r.ItemName;
+            ws.Cell(dataRow, col++).Value = r.StoreCode;
+            ws.Cell(dataRow, col++).Value = r.StoreName;
+            ws.Cell(dataRow, col++).Value = r.CategoryName ?? "";
+            ws.Cell(dataRow, col++).Value = r.DepartmentName ?? "";
+            ws.Cell(dataRow, col++).Value = r.BrandName ?? "";
+            ws.Cell(dataRow, col).Value = r.CurrentStock; ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0";
+            ws.Cell(dataRow, col).Value = r.MinimumStock; ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0";
+            ws.Cell(dataRow, col).Value = r.Difference; ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0";
+            if (viewCost)
+            {
+                ws.Cell(dataRow, col).Value = r.Cost ?? 0; ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+                ws.Cell(dataRow, col).Value = r.StockValue ?? 0; ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            }
+            ws.Cell(dataRow, col++).Value = r.Shelf ?? "";
+
+            if (r.Difference < 0)
+            {
+                ws.Range(dataRow, 1, dataRow, headers.Count).Style.Font.FontColor = XLColor.Red;
+            }
+            dataRow++;
+        }
+
+        ws.Columns().AdjustToContents(1, 80);
+        ws.SheetView.FreezeRows(headerRow);
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
 }
 

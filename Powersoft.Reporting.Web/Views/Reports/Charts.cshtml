@@ -266,6 +266,9 @@
                         <i class="bi bi-filetype-pdf me-1"></i>PDF
                     </button>
                 </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="printChartPreview()" title="Print preview">
+                    <i class="bi bi-printer me-1"></i>Print
+                </button>
                 <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
                     <i class="bi bi-envelope me-1"></i>Send to Email
                 </button>
@@ -428,6 +431,26 @@ function exportChart(format) {
 
     var action = format === 'excel' ? 'ExportChartExcel' : format === 'pdf' ? 'ExportChartPdf' : 'ExportChartCsv';
     window.location.href = '/Reports/' + action + '?' + params.toString();
+}
+
+function printChartPreview() {
+    var dateFrom = document.getElementById('dateFrom').value;
+    var dateTo = document.getElementById('dateTo').value;
+    if (!dateFrom || !dateTo) { alert('Please select dates first.'); return; }
+    var params = new URLSearchParams({
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        dimension: document.getElementById('dimension').value,
+        metric: document.getElementById('metric').value,
+        topN: document.getElementById('topN').value,
+        showOthers: document.getElementById('showOthers').checked,
+        compareLastYear: document.getElementById('compareLastYear').checked,
+        includeVat: document.getElementById('includeVat').checked,
+        storeCodes: getSelectedStoreCodes()
+    });
+    var isJson = getItemsSelectionJson();
+    if (isJson) params.append('itemsSelection', isJson);
+    window.open('/Reports/PrintChartPreview?' + params.toString(), '_blank');
 }
 
 function loadChart() {

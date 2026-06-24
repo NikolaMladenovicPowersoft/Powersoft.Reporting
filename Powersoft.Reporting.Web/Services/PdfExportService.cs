@@ -1262,4 +1262,80 @@ public class PdfExportService
         document.Close();
         return ms.ToArray();
     }
+
+    public byte[] GenerateBelowMinStockPdf(List<BelowMinStockRow> rows, BelowMinStockFilter filter, bool viewCost = true)
+    {
+        rows ??= new();
+        int colCount = 10 + (viewCost ? 2 : 0) + 1;
+
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Below Minimum Stock Report", TitleFont));
+        document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}  |  Items: {rows.Count}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var table = new PdfPTable(colCount) { WidthPercentage = 100, SpacingBefore = 5f };
+        var widths = new List<float> { 7f, 12f, 5f, 10f, 8f, 8f, 8f, 6f, 6f, 6f };
+        if (viewCost) { widths.Add(6f); widths.Add(7f); }
+        widths.Add(5f);
+        table.SetWidths(widths.ToArray());
+
+        var headers = new List<string> { "Item Code", "Item Name", "Store", "Store Name", "Category", "Department", "Brand", "Current", "Minimum", "Difference" };
+        if (viewCost) { headers.Add("Cost"); headers.Add("Stock Value"); }
+        headers.Add("Shelf");
+
+        foreach (var h in headers)
+        {
+            var cell = new PdfPCell(new Phrase(h, HeaderFont))
+            {
+                BackgroundColor = HeaderBg,
+                HorizontalAlignment = Element.ALIGN_CENTER,
+                Padding = 4f
+            };
+            table.AddCell(cell);
+        }
+
+        var redFont = FontFactory.GetFont(FontFactory.HELVETICA, 7, BaseColor.Red);
+
+        foreach (var r in rows)
+        {
+            var font = r.Difference < 0 ? redFont : CellFont;
+            void AddText(string v, int align = Element.ALIGN_LEFT)
+            {
+                table.AddCell(new PdfPCell(new Phrase(v, font))
+                {
+                    HorizontalAlignment = align,
+                    Padding = 3f
+                });
+            }
+            void AddNum(decimal v, string fmt = "N0")
+            {
+                table.AddCell(new PdfPCell(new Phrase(v.ToString(fmt), font))
+                {
+                    HorizontalAlignment = Element.ALIGN_RIGHT,
+                    Padding = 3f
+                });
+            }
+
+            AddText(r.ItemCode);
+            AddText(r.ItemName);
+            AddText(r.StoreCode);
+            AddText(r.StoreName);
+            AddText(r.CategoryName ?? "");
+            AddText(r.DepartmentName ?? "");
+            AddText(r.BrandName ?? "");
+            AddNum(r.CurrentStock);
+            AddNum(r.MinimumStock);
+            AddNum(r.Difference);
+            if (viewCost) { AddNum(r.Cost ?? 0, "N2"); AddNum(r.StockValue ?? 0, "N2"); }
+            AddText(r.Shelf ?? "");
+        }
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
 }

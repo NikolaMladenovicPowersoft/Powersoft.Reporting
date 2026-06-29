@@ -83,3 +83,11 @@ publish_deploy/dp-keys/
 DEPLOY_RULES_FOR_AI.md
 _ftp_deploy_curl.ps1
 *.credentials
+
+# QA test output artifacts
+_test_*.html
+_test_*.csv
+_test_*.xlsx
+_test_*.pdf
+_test_*.txt
+_test_*.json

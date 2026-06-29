@@ -21,6 +21,9 @@ public static class DateRangeResolver
             ReportDateRangeType.LastNDays =>
                 (today.AddDays(-(Math.Max(option.Value, 1) - 1)), today),
 
+            ReportDateRangeType.Today =>
+                (today, today),
+
             ReportDateRangeType.Yesterday =>
                 (today.AddDays(-1), today.AddDays(-1)),
 

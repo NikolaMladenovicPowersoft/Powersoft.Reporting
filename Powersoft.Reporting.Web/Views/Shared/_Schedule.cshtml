@@ -22,6 +22,8 @@
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Period type</label>
                         <select class="form-select" id="schedDateRangeType" onchange="onSchedDateRangeTypeChange()">
+                            <option value="Today">Today</option>
+                            <option value="Yesterday">Yesterday</option>
                             <option value="LastNDays" data-value="7">Last 7 days</option>
                             <option value="LastNDays" data-value="30">Last 30 days</option>
                             <option value="ThisMonth">This month (to today)</option>
@@ -463,6 +465,51 @@ document.addEventListener('DOMContentLoaded', function () {
             if (schedAi) { schedAi.disabled = true; if (schedAi.parentElement) schedAi.parentElement.title = 'AI not configured — set API key in Settings'; }
         }
     }).catch(function () { });
+
+    var urlSchedId = new URLSearchParams(window.location.search).get('scheduleId');
+    if (urlSchedId) {
+        history.replaceState(null, '', window.location.pathname);
+        fetch('@Url.Action("GetScheduleById", "Reports")?scheduleId=' + urlSchedId)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || !data.success || !data.schedule) return;
+                var s = data.schedule;
+                var p = {};
+                try { p = typeof s.parametersJson === 'string' ? JSON.parse(s.parametersJson) : (s.parametersJson || {}); } catch (e) { }
+                var rdr = p.reportDateRange || {};
+                var resolved = _resolveSchedDates(rdr);
+                var dfEl = document.getElementById('dateFrom') || document.getElementById('DateFrom');
+                var dtEl = document.getElementById('dateTo') || document.getElementById('DateTo');
+                var asAtEl = document.getElementById('asAt');
+                if (dfEl) dfEl.value = resolved.from;
+                if (dtEl) dtEl.value = resolved.to;
+                if (asAtEl) asAtEl.value = resolved.to;
+                if (typeof onScheduleParametersLoaded === 'function') onScheduleParametersLoaded(p);
+                setTimeout(function () {
+                    var btn = document.getElementById('generateBtn');
+                    if (btn) btn.click();
+                }, 300);
+            }).catch(function () { });
+    }
+
+    function _resolveSchedDates(rdr) {
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        function addD(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+        function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+        var f, t;
+        switch (rdr.type) {
+            case 'Today': f = t = today; break;
+            case 'Yesterday': f = t = addD(today, -1); break;
+            case 'LastNDays': f = addD(today, -(Math.max(rdr.value || 7, 1) - 1)); t = today; break;
+            case 'ThisMonth': f = new Date(today.getFullYear(), today.getMonth(), 1); t = today; break;
+            case 'LastMonth': f = new Date(today.getFullYear(), today.getMonth() - 1, 1); t = new Date(today.getFullYear(), today.getMonth(), 0); break;
+            case 'YearToDate': f = new Date(today.getFullYear(), 0, 1); t = today; break;
+            case 'LastYear': f = new Date(today.getFullYear() - 1, 0, 1); t = new Date(today.getFullYear() - 1, 11, 31); break;
+            case 'Custom': return { from: rdr.dateFrom || fmt(addD(today, -29)), to: rdr.dateTo || fmt(today) };
+            default: f = addD(today, -29); t = today;
+        }
+        return { from: fmt(f), to: fmt(t) };
+    }
 });
 
 // ── Address Book ─────────────────────────────────────────────────────────────

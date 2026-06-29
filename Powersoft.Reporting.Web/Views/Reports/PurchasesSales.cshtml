@@ -557,6 +557,9 @@
                                                 var l3QS = l3Rows.Sum(r => r.QuantitySold);
                                                 var l3VS = l3Rows.Sum(r => useGross ? r.GrossSoldValue : r.NetSoldValue);
                                                 var l3Profit = l3Rows.Sum(r => r.Profit);
+                                                var l3QtyP = l3QP != 0 ? Math.Round((double)l3QS / (double)l3QP * 100, 1) : 100;
+                                                var l3ValP = l3VP != 0 ? Math.Round((double)l3VS / (double)l3VP * 100, 1) : 100;
+                                                var l3Stock = l3Rows.Sum(r => r.TotalStockQty);
                                                 <tr class="group-subtotal-row" style="background:#f0f4f8;">
                                                     @for (int i = 0; i < (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0); i++) { <td></td> }
                                                     @if (showItem) { <td class="fw-semibold text-muted small">@l3Group.Key subtotal</td><td></td> }
@@ -565,8 +568,9 @@
                                                     <td class="text-end fw-semibold">@l3QS.ToString("N0")</td>
                                                     <td class="text-end fw-semibold">@l3VS.ToString("N2")</td>
                                                     @if (Model.ShowProfit) { <td class="text-end fw-semibold">@l3Profit.ToString("N2")</td> }
-                                                    <td class="text-end">-</td><td class="text-end">-</td>
-                                                    @if (Model.ShowStock) { <td></td> }
+                                                    <td class="text-end fw-semibold">@l3QtyP.ToString("N1")%</td>
+                                                    <td class="text-end fw-semibold">@l3ValP.ToString("N1")%</td>
+                                                    @if (Model.ShowStock) { <td class="text-end">@l3Stock.ToString("N0")</td> }
                                                     @if (Model.ShowOnOrder) { <td></td> }
                                                     @if (Model.ShowReservation) { <td></td> }
                                                     @if (Model.ShowAvailable) { <td></td> }
@@ -600,6 +604,9 @@
                                         var l2QS = l2Rows.Sum(r => r.QuantitySold);
                                         var l2VS = l2Rows.Sum(r => useGross ? r.GrossSoldValue : r.NetSoldValue);
                                         var l2Profit = l2Rows.Sum(r => r.Profit);
+                                        var l2QtyP = l2QP != 0 ? Math.Round((double)l2QS / (double)l2QP * 100, 1) : 100;
+                                        var l2ValP = l2VP != 0 ? Math.Round((double)l2VS / (double)l2VP * 100, 1) : 100;
+                                        var l2Stock = l2Rows.Sum(r => r.TotalStockQty);
                                         <tr class="group-subtotal-row" style="background:#e8f0fe;">
                                             @for (int i = 0; i < (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0); i++) { <td></td> }
                                             @if (showItem) { <td class="fw-semibold text-muted">@l2Group.Key subtotal</td><td></td> }
@@ -608,11 +615,12 @@
                                             <td class="text-end fw-semibold">@l2QS.ToString("N0")</td>
                                             <td class="text-end fw-semibold">@l2VS.ToString("N2")</td>
                                             @if (Model.ShowProfit) { <td class="text-end fw-semibold">@l2Profit.ToString("N2")</td> }
-                                            <td class="text-end">-</td><td class="text-end">-</td>
-                                            @if (Model.ShowStock) { <td></td> }
+                                            <td class="text-end fw-semibold">@l2QtyP.ToString("N1")%</td>
+                                            <td class="text-end fw-semibold">@l2ValP.ToString("N1")%</td>
+                                            @if (Model.ShowStock) { <td class="text-end">@l2Stock.ToString("N0")</td> }
                                             @if (Model.ShowOnOrder) { <td></td> }
                                             @if (Model.ShowReservation) { <td></td> }
-                                                    @if (Model.ShowAvailable) { <td></td> }
+                                            @if (Model.ShowAvailable) { <td></td> }
                                         </tr>
                                     }
                                 }
@@ -643,6 +651,9 @@
                                 var l1QS = l1Rows.Sum(r => r.QuantitySold);
                                 var l1VS = l1Rows.Sum(r => useGross ? r.GrossSoldValue : r.NetSoldValue);
                                 var l1Profit = l1Rows.Sum(r => r.Profit);
+                                var l1QtyP = l1QP != 0 ? Math.Round((double)l1QS / (double)l1QP * 100, 1) : 100;
+                                var l1ValP = l1VP != 0 ? Math.Round((double)l1VS / (double)l1VP * 100, 1) : 100;
+                                var l1Stock = l1Rows.Sum(r => r.TotalStockQty);
                                 <tr class="group-subtotal-row">
                                     @for (int i = 0; i < (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0); i++) { <td></td> }
                                     @if (showItem) { <td class="fw-semibold text-uppercase text-muted">@l1Group.Key total</td><td></td> }
@@ -651,12 +662,12 @@
                                     <td class="text-end fw-semibold">@l1QS.ToString("N0")</td>
                                     <td class="text-end fw-semibold">@l1VS.ToString("N2")</td>
                                     @if (Model.ShowProfit) { <td class="text-end fw-semibold">@l1Profit.ToString("N2")</td> }
-                                    <td class="text-end fw-semibold">-</td>
-                                    <td class="text-end fw-semibold">-</td>
-                                    @if (Model.ShowStock) { <td></td> }
+                                    <td class="text-end fw-semibold">@l1QtyP.ToString("N1")%</td>
+                                    <td class="text-end fw-semibold">@l1ValP.ToString("N1")%</td>
+                                    @if (Model.ShowStock) { <td class="text-end">@l1Stock.ToString("N0")</td> }
                                     @if (Model.ShowOnOrder) { <td></td> }
                                     @if (Model.ShowReservation) { <td></td> }
-                                                    @if (Model.ShowAvailable) { <td></td> }
+                                    @if (Model.ShowAvailable) { <td></td> }
                                 </tr>
                             }
                         }
@@ -682,18 +693,28 @@
                         }
                     </tbody>
                     <tfoot>
+                        @{
+                            var gtQtyPerc = Model.TotalPurchasedQty != 0 ? Math.Round((double)Model.TotalSoldQty / (double)Model.TotalPurchasedQty * 100, 1) : 100;
+                            var gtValPerc = Model.TotalPurchasedValue != 0 ? Math.Round((double)(useGross ? Model.TotalSoldGross : Model.TotalSoldNet) / (double)(useGross ? Model.TotalPurchasedGross : Model.TotalPurchasedNet) * 100, 1) : 100;
+                            var gtStock = Model.Results.Sum(r => r.TotalStockQty);
+                        }
                         <tr class="grand-total-row">
                             @{ int emptyCols = (hasL1?1:0)+(hasL2?1:0)+(hasL3?1:0); }
-                            @for(int i=0;i<emptyCols;i++){<td></td>}
-                            @if (showItem) { <td><i class="bi bi-calculator me-1"></i>GRAND TOTAL</td><td></td> }
+                            @if (showItem) {
+                                @for(int i=0;i<emptyCols;i++){<td></td>}
+                                <td><i class="bi bi-calculator me-1"></i>GRAND TOTAL</td><td></td>
+                            } else if (emptyCols > 0) {
+                                <td><i class="bi bi-calculator me-1"></i>GRAND TOTAL</td>
+                                @for(int i=1;i<emptyCols;i++){<td></td>}
+                            }
                             <td class="text-end">@Model.TotalPurchasedQty.ToString("N0")</td>
                             <td class="text-end">@Model.TotalPurchasedValue.ToString("N2")</td>
                             <td class="text-end">@Model.TotalSoldQty.ToString("N0")</td>
                             <td class="text-end">@Model.TotalSoldValue.ToString("N2")</td>
                             @if (Model.ShowProfit) { <td class="text-end fw-semibold">@Model.TotalProfit.ToString("N2")</td> }
-                            <td class="text-end">-</td>
-                            <td class="text-end">-</td>
-                            @if (Model.ShowStock) { <td class="text-end">-</td> }
+                            <td class="text-end">@gtQtyPerc.ToString("N1")%</td>
+                            <td class="text-end">@gtValPerc.ToString("N1")%</td>
+                            @if (Model.ShowStock) { <td class="text-end">@gtStock.ToString("N0")</td> }
                             @if (Model.ShowOnOrder) { <td class="text-end fw-semibold">@Model.TotalOnOrder.ToString("N0")</td> }
                             @if (Model.ShowReservation) { <td class="text-end fw-semibold">@Model.TotalReserved.ToString("N0")</td> }
                             @if (Model.ShowAvailable) { <td class="text-end fw-semibold">@Model.TotalAvailable.ToString("N0")</td> }
@@ -787,6 +808,8 @@ else
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Period type</label>
                         <select class="form-select" id="schedDateRangeType" onchange="onSchedDateRangeTypeChange()">
+                            <option value="Today">Today</option>
+                            <option value="Yesterday">Yesterday</option>
                             <option value="LastNDays" data-value="7">Last 7 days</option>
                             <option value="LastNDays" data-value="30">Last 30 days</option>
                             <option value="ThisMonth">This month (to today)</option>
@@ -1226,7 +1249,7 @@ function updateColVisibleCount(){var total=document.querySelectorAll('.col-toggl
 
 function applyColumnVisibility(){var hidden=[];document.querySelectorAll('.col-toggle').forEach(function(cb){if(!cb.checked)hidden.push(cb.value);});var hi=document.getElementById('hiddenColumnsInput');if(hi)hi.value=hidden.join(',');var styleEl=document.getElementById('colVisibilityStyle');if(!styleEl){styleEl=document.createElement('style');styleEl.id='colVisibilityStyle';document.head.appendChild(styleEl);}var table=document.getElementById('resultsTable');if(!table)return;var rules=[];document.querySelectorAll('.col-toggle').forEach(function(cb){if(!cb.checked){var headers=table.querySelectorAll('thead tr:first-child th');for(var i=0;i<headers.length;i++){if(headers[i].getAttribute('data-col')===cb.value){rules.push('#resultsTable th:nth-child('+(i+1)+'),#resultsTable td:nth-child('+(i+1)+'){display:none;}');break;}}}});styleEl.textContent=rules.join('\n');updateColVisibleCount();}
 
-function autoSelectScheduleDateRange(){var preset=document.querySelector('input[name="DatePreset"]:checked');if(!preset)return;var map={'ytd':'YearToDate','lastYear':'LastYear','thisMonth':'ThisMonth','lastMonth':'LastMonth','last7':'LastNDays_7','last30':'LastNDays_30'};var mapped=map[preset.value];if(!mapped)return;var sel=document.getElementById('schedDateRangeType');for(var i=0;i<sel.options.length;i++){var opt=sel.options[i];if(mapped.startsWith('LastNDays_')){var days=mapped.split('_')[1];if(opt.value==='LastNDays'&&opt.getAttribute('data-value')===days){sel.selectedIndex=i;return;}}else if(opt.value===mapped){sel.selectedIndex=i;return;}}}
+function autoSelectScheduleDateRange(){var preset=document.querySelector('input[name="DatePreset"]:checked');if(!preset)return;var map={'today':'Today','yesterday':'Yesterday','ytd':'YearToDate','lastYear':'LastYear','thisMonth':'ThisMonth','lastMonth':'LastMonth','last7':'LastNDays_7','last30':'LastNDays_30'};var mapped=map[preset.value];if(!mapped)return;var sel=document.getElementById('schedDateRangeType');for(var i=0;i<sel.options.length;i++){var opt=sel.options[i];if(mapped.startsWith('LastNDays_')){var days=mapped.split('_')[1];if(opt.value==='LastNDays'&&opt.getAttribute('data-value')===days){sel.selectedIndex=i;return;}}else if(opt.value===mapped){sel.selectedIndex=i;return;}}}
 function onSchedDateRangeTypeChange(){var sel=document.getElementById('schedDateRangeType');var opt=sel.options[sel.selectedIndex];var isCustom=(opt.value==='Custom');document.getElementById('schedCustomDateFromWrap').style.display=isCustom?'':'none';document.getElementById('schedCustomDateToWrap').style.display=isCustom?'':'none';}
 function onSchedAiToggle(){document.getElementById('schedAiDetails').style.display=document.getElementById('schedIncludeAi').checked?'':'none';}
 function onRecurrenceChange(){var t=document.getElementById('schedRecurrence').value;document.getElementById('schedWeeklyDaysContainer').style.display=t==='Weekly'?'':'none';document.getElementById('schedMonthDayContainer').style.display=t==='Monthly'?'':'none';}
@@ -1274,6 +1297,8 @@ function applyPresetDates(preset){var today=new Date();var from,to;switch(preset
 function resetPage(){document.getElementById('pageNumberHidden').value=1;}
 function showLoading(){var btn=document.getElementById('generateBtn');btn.querySelector('.btn-text').classList.add('d-none');btn.querySelector('.spinner-border').classList.remove('d-none');btn.disabled=true;}
 document.addEventListener('DOMContentLoaded',function(){initColumnVisibilityFromServer();updateColVisibleCount();var colSearch=document.getElementById('colSearchInput');if(colSearch){colSearch.addEventListener('input',filterColumnList);colSearch.addEventListener('keyup',filterColumnList);}var savedPreset='@(Model.DatePreset??"")';if(savedPreset){var pr=document.querySelector('input[name="DatePreset"][value="'+savedPreset+'"]');if(pr)pr.checked=true;}document.querySelectorAll('input[name="DatePreset"]').forEach(function(r){r.addEventListener('change',function(){applyPresetDates(this.value);});});var form=document.getElementById('reportForm');form.addEventListener('submit',function(){populateItemsSelectionHidden();showLoading();});document.getElementById('generateBtn').addEventListener('click',function(){resetPage();});var schedModal=document.getElementById('scheduleModal');if(schedModal){schedModal.addEventListener('show.bs.modal',function(){resetScheduleForm();loadExistingSchedules();autoSelectScheduleDateRange();onSchedDateRangeTypeChange();});}
+var urlSchedId=new URLSearchParams(window.location.search).get('scheduleId');if(urlSchedId){history.replaceState(null,'',window.location.pathname);fetch('@Url.Action("GetScheduleById","Reports")?scheduleId='+urlSchedId).then(function(r){return r.json();}).then(function(data){if(!data||!data.success||!data.schedule)return;var s=data.schedule;var p={};try{p=typeof s.parametersJson==='string'?JSON.parse(s.parametersJson):(s.parametersJson||{});}catch(e){}var rdr=p.reportDateRange||{};var resolved=_resolvePsDates(rdr);var dfEl=document.getElementById('DateFrom');var dtEl=document.getElementById('DateTo');if(dfEl)dfEl.value=resolved.from;if(dtEl)dtEl.value=resolved.to;function _sv(id,v){var el=document.getElementById(id);if(el&&v!=null)el.value=v;}function _sc(id,v){var el=document.getElementById(id);if(el&&v!=null)el.checked=!!v;}_sv('ReportMode',p.reportMode);_sv('PrimaryGroup',p.primaryGroup);_sv('SecondaryGroup',p.secondaryGroup);_sv('ThirdGroup',p.thirdGroup);_sc('includeVatCheck',p.includeVat);_sc('showProfitCheck',p.showProfit);_sc('showStockCheck',p.showStock);_sc('showOnOrderCheck',p.showOnOrder);_sc('showReservationCheck',p.showReservation);_sc('showAvailableCheck',p.showAvailable);_sc('includeAdditionalChargesCheck',p.includeAdditionalCharges);setTimeout(function(){var btn=document.getElementById('generateBtn');if(btn)btn.click();},300);}).catch(function(){});}
+function _resolvePsDates(rdr){var today=new Date();today.setHours(0,0,0,0);function addD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r;}function fmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}var f,t;switch(rdr.type){case'Today':f=t=today;break;case'Yesterday':f=t=addD(today,-1);break;case'LastNDays':f=addD(today,-(Math.max(rdr.value||7,1)-1));t=today;break;case'ThisMonth':f=new Date(today.getFullYear(),today.getMonth(),1);t=today;break;case'LastMonth':f=new Date(today.getFullYear(),today.getMonth()-1,1);t=new Date(today.getFullYear(),today.getMonth(),0);break;case'YearToDate':f=new Date(today.getFullYear(),0,1);t=today;break;case'LastYear':f=new Date(today.getFullYear()-1,0,1);t=new Date(today.getFullYear()-1,11,31);break;case'Custom':return{from:rdr.dateFrom||fmt(addD(today,-29)),to:rdr.dateTo||fmt(today)};default:f=addD(today,-29);t=today;}return{from:fmt(f),to:fmt(t)};}
 });
 
 var _expandedRows = {};

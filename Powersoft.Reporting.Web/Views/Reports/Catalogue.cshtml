@@ -1375,6 +1375,7 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
         var preset = document.querySelector('input[name="DatePreset"]:checked');
         if (!preset) return;
         var map = {
+            'today': 'Today', 'yesterday': 'Yesterday',
             'ytd': 'YearToDate', 'lastYear': 'LastYear', 'thisMonth': 'ThisMonth',
             'lastMonth': 'LastMonth', 'last7': 'LastNDays_7', 'last30': 'LastNDays_30'
         };

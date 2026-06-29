@@ -42,6 +42,12 @@
         'Pareto':'Pareto 80/20','Charts':'Charts','ProspectClients':'Prospect Clients',
         'OffersReport':'Offers','TrialBalance':'Trial Balance','ProfitLoss':'Profit & Loss'
     };
+    var reportUrls = {
+        'AverageBasket':'/Reports/AverageBasket','PurchasesSales':'/Reports/PurchasesSales',
+        'BelowMinStock':'/Reports/BelowMinStock','Catalogue':'/Reports/Catalogue','CancelLog':'/Reports/CancelLog',
+        'Pareto':'/Reports/Pareto','Charts':'/Reports/Charts','ProspectClients':'/Reports/ProspectClients',
+        'OffersReport':'/Reports/OffersReport','TrialBalance':'/Reports/TrialBalance','ProfitLoss':'/Reports/ProfitLoss'
+    };
 
     function starHtml(rating, scheduleId) {
         var html = '<span class="star-rating" data-id="' + scheduleId + '">';
@@ -67,9 +73,11 @@
                     var statusBadge = s.isActive
                         ? '<span class="badge bg-success">Active</span>'
                         : '<span class="badge bg-secondary">Inactive</span>';
-                    html += '<tr>'
+                    var url = reportUrls[s.reportType] || '#';
+                    if (url !== '#') url += '?scheduleId=' + s.id;
+                    html += '<tr data-href="' + url + '" style="cursor:pointer;" title="Open ' + (reportLabels[s.reportType] || s.reportType) + ' report">'
                         + '<td>' + starHtml(s.starRating, s.id) + '</td>'
-                        + '<td class="fw-semibold">' + escHtml(s.name) + '</td>'
+                        + '<td class="fw-semibold">' + escHtml(s.name) + ' <i class="bi bi-box-arrow-up-right text-muted" style="font-size:11px;"></i></td>'
                         + '<td><span class="badge bg-primary bg-opacity-10 text-primary">' + (reportLabels[s.reportType] || s.reportType) + '</span></td>'
                         + '<td>' + s.recurrenceType + '</td>'
                         + '<td>' + s.exportFormat + '</td>'
@@ -81,6 +89,7 @@
                 });
                 tbody.innerHTML = html;
                 attachStarEvents();
+                attachRowNavigation();
             });
     }
 
@@ -104,6 +113,15 @@
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: 'scheduleId=' + id + '&rating=' + (newVal || '')
                 });
+            });
+        });
+    }
+
+    function attachRowNavigation() {
+        document.querySelectorAll('tr[data-href]').forEach(function(tr) {
+            tr.addEventListener('click', function(e) {
+                if (e.target.closest('.star-rating')) return;
+                window.location.href = this.getAttribute('data-href');
             });
         });
     }

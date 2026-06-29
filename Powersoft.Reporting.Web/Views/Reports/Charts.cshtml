@@ -266,8 +266,8 @@
                         <i class="bi bi-filetype-pdf me-1"></i>PDF
                     </button>
                 </div>
-                <button class="btn btn-sm btn-outline-primary" onclick="printChartPreview()" title="Print preview">
-                    <i class="bi bi-printer me-1"></i>Print
+                <button class="btn btn-sm btn-outline-primary" id="previewToggleBtn" onclick="toggleChartPreview()" title="Print preview">
+                    <i class="bi bi-eye me-1"></i>Preview
                 </button>
                 <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
                     <i class="bi bi-envelope me-1"></i>Send to Email
@@ -305,6 +305,20 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<div id="chartPreviewPanel" style="display:none;" class="mt-3">
+    <div class="card border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+            <span><i class="bi bi-file-earmark-text me-2"></i>Document Preview</span>
+            <button class="btn btn-sm btn-outline-light" onclick="toggleChartPreview()" title="Close preview">
+                <i class="bi bi-x-lg me-1"></i>Back to Chart
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <iframe id="chartPreviewFrame" style="width:100%; border:none; min-height:700px; background:#525659;"></iframe>
         </div>
     </div>
 </div>
@@ -433,24 +447,52 @@ function exportChart(format) {
     window.location.href = '/Reports/' + action + '?' + params.toString();
 }
 
-function printChartPreview() {
-    var dateFrom = document.getElementById('dateFrom').value;
-    var dateTo = document.getElementById('dateTo').value;
-    if (!dateFrom || !dateTo) { alert('Please select dates first.'); return; }
-    var params = new URLSearchParams({
-        dateFrom: dateFrom,
-        dateTo: dateTo,
-        dimension: document.getElementById('dimension').value,
-        metric: document.getElementById('metric').value,
-        topN: document.getElementById('topN').value,
-        showOthers: document.getElementById('showOthers').checked,
-        compareLastYear: document.getElementById('compareLastYear').checked,
-        includeVat: document.getElementById('includeVat').checked,
-        storeCodes: getSelectedStoreCodes()
-    });
-    var isJson = getItemsSelectionJson();
-    if (isJson) params.append('itemsSelection', isJson);
-    window.open('/Reports/PrintChartPreview?' + params.toString(), '_blank');
+var _chartPreviewOpen = false;
+function toggleChartPreview() {
+    var panel = document.getElementById('chartPreviewPanel');
+    var chartArea = document.getElementById('chartArea');
+    var btn = document.getElementById('previewToggleBtn');
+    _chartPreviewOpen = !_chartPreviewOpen;
+
+    if (_chartPreviewOpen) {
+        var dateFrom = document.getElementById('dateFrom').value;
+        var dateTo = document.getElementById('dateTo').value;
+        if (!dateFrom || !dateTo) { alert('Please select dates first.'); _chartPreviewOpen = false; return; }
+
+        chartArea.style.display = 'none';
+        panel.style.display = 'block';
+        btn.innerHTML = '<i class="bi bi-bar-chart me-1"></i>Chart';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-outline-warning');
+
+        var params = new URLSearchParams({
+            dateFrom: dateFrom, dateTo: dateTo,
+            dimension: document.getElementById('dimension').value,
+            metric: document.getElementById('metric').value,
+            topN: document.getElementById('topN').value,
+            showOthers: document.getElementById('showOthers').checked,
+            compareLastYear: document.getElementById('compareLastYear').checked,
+            includeVat: document.getElementById('includeVat').checked,
+            storeCodes: getSelectedStoreCodes()
+        });
+        var isJson = getItemsSelectionJson();
+        if (isJson) params.append('itemsSelection', isJson);
+
+        var frame = document.getElementById('chartPreviewFrame');
+        frame.src = '/Reports/PrintChartPreview?' + params.toString();
+        frame.onload = function() {
+            try {
+                var h = frame.contentDocument.body.scrollHeight + 80;
+                frame.style.height = Math.max(h, 700) + 'px';
+            } catch (e) { frame.style.height = '900px'; }
+        };
+    } else {
+        panel.style.display = 'none';
+        chartArea.style.display = '';
+        btn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+        btn.classList.remove('btn-outline-warning');
+        btn.classList.add('btn-outline-primary');
+    }
 }
 
 function loadChart() {
@@ -462,6 +504,10 @@ function loadChart() {
     document.getElementById('chartError').classList.add('d-none');
     document.getElementById('chartArea').classList.add('d-none');
     document.getElementById('emptyState').classList.add('d-none');
+    document.getElementById('chartPreviewPanel').style.display = 'none';
+    _chartPreviewOpen = false;
+    var _pvBtn = document.getElementById('previewToggleBtn');
+    if (_pvBtn) { _pvBtn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview'; _pvBtn.classList.remove('btn-outline-warning'); _pvBtn.classList.add('btn-outline-primary'); }
 
     var fd = new FormData();
     fd.append('dateFrom', dateFrom);
@@ -723,7 +769,26 @@ function renderChart(data, chartType) {
         }
         tbody.innerHTML += row;
     });
-    tbody.innerHTML += '<tr class="fw-bold table-light"><td></td><td>Total</td><td class="text-end">' + fmt(total) + '</td><td class="text-end">100%</td></tr>';
+    var totalRow;
+    if (isVsMode) {
+        var grandV2 = data.reduce(function(a, d) { return a + (d.value2 || 0); }, 0);
+        var grandDiff = data.reduce(function(a, d) { return a + (d.diffValue || 0); }, 0);
+        totalRow = '<tr class="fw-bold table-light"><td></td><td>Total</td>'
+            + '<td class="text-end">' + fmt(total) + '<br><small class="text-muted">' + fmt(grandV2) + '</small></td>'
+            + '<td class="text-end">' + fmt(grandDiff) + '</td></tr>';
+    } else if (hasCompare) {
+        var grandCompare = data.reduce(function(a, d) { return a + (d.compareValue || 0); }, 0);
+        var gDiff = total - grandCompare;
+        var gYoyPct = grandCompare !== 0 ? ((total - grandCompare) / grandCompare * 100).toFixed(1) : 'N/A';
+        var gCls = gYoyPct !== 'N/A' && parseFloat(gYoyPct) >= 0 ? 'text-success' : 'text-danger';
+        totalRow = '<tr class="fw-bold table-light"><td></td><td>Total</td>'
+            + '<td class="text-end">' + fmt(total) + '<br><small class="text-muted">LY: ' + fmt(grandCompare) + '</small></td>'
+            + '<td class="text-end">' + fmt(gDiff) + '<br><small class="' + gCls + '">' + (gYoyPct !== 'N/A' ? gYoyPct + '%' : gYoyPct) + '</small></td></tr>';
+    } else {
+        totalRow = '<tr class="fw-bold table-light"><td></td><td>Total</td>'
+            + '<td class="text-end">' + fmt(total) + '</td><td class="text-end">100%</td></tr>';
+    }
+    tbody.innerHTML += totalRow;
 }
 
 // ==================== Schedule ====================
@@ -772,7 +837,7 @@ function onScheduleParametersLoaded(p) {
 function autoSelectScheduleDateRange() {
     var preset = document.querySelector('input[name="DatePreset"]:checked');
     if (!preset) return;
-    var map = {'ytd':'YearToDate','lastYear':'LastYear','thisMonth':'ThisMonth','lastMonth':'LastMonth','last7':'LastNDays_7','last30':'LastNDays_30'};
+    var map = {'today':'Today','yesterday':'Yesterday','ytd':'YearToDate','lastYear':'LastYear','thisMonth':'ThisMonth','lastMonth':'LastMonth','last7':'LastNDays_7','last30':'LastNDays_30'};
     var mapped = map[preset.value];
     if (!mapped) return;
     var sel = document.getElementById('schedDateRangeType');

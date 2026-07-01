@@ -112,6 +112,12 @@ public static class ModuleConstants
     public const string IniHeaderDbSettings = "DBSETTINGS";
     public const string IniDescriptionDbSettings = "Report Engine Database Settings";
 
+    // Applied template packs (DB-level, userCode = "ALL"). Kept in a SEPARATE header from DBSETTINGS
+    // so saving DB settings (which rewrites all DBSETTINGS details) cannot wipe the applied-pack log.
+    // ParmCode = pack code (e.g. "FASHION"), ParmValue = ISO timestamp when it was applied.
+    public const string IniHeaderAppliedPacks = "APPLIEDPACKS";
+    public const string IniDescriptionAppliedPacks = "Applied Report Template Packs";
+
     // Settings parameter codes (ParmCode in tbl_IniDetail)
     public const string SettingMaxSchedules = "MaxSchedulesPerReport";
     public const string SettingDefaultExportFormat = "DefaultExportFormat";

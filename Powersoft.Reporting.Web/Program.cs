@@ -51,6 +51,10 @@ if (!string.IsNullOrEmpty(centralConnString))
 builder.Services.AddSingleton<ITenantRepositoryFactory, TenantRepositoryFactory>();
 builder.Services.AddSingleton<IFilterPresetRepository, FilterPresetRepository>();
 builder.Services.AddScoped<ScheduleExecutionService>();
+
+// Industry template packs (POC: code-seeded catalog + apply service)
+builder.Services.AddSingleton<ITemplatePackCatalog, Powersoft.Reporting.Core.Templates.SeededTemplatePackCatalog>();
+builder.Services.AddScoped<TemplatePackService>();
 builder.Services.AddHostedService<ScheduleBackgroundService>();
 builder.Services.AddHostedService<RetentionCleanupService>();
 

@@ -100,8 +100,11 @@
     
     <div class="col-lg-9">
         <div class="card">
-            <div class="card-header">
-                <i class="bi bi-speedometer2 me-2"></i>Reports Dashboard
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-speedometer2 me-2"></i>Reports Dashboard</span>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#templatePackModal">
+                    <i class="bi bi-collection me-1"></i>Apply Template Pack
+                </button>
             </div>
             <div class="card-body">
                 <h6 class="text-muted text-uppercase small fw-bold mb-3">
@@ -410,3 +413,241 @@
         </div>
     </div>
 </div>
+
+<!-- Apply Template Pack modal -->
+<div class="modal fade" id="templatePackModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-collection me-2"></i>Apply Template Pack</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @Html.AntiForgeryToken()
+                <p class="text-muted small">
+                    Pick an industry pack for <strong>@connectedDb</strong>, then choose which reports to schedule
+                    (all are selected by default — untick any you don't want). Already-applied reports are locked;
+                    you can come back later to add more. You can edit each schedule afterwards.
+                </p>
+                <div id="tpAlert"></div>
+                <div id="tpPackList" class="mb-3">
+                    <div class="text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Loading packs&hellip;</div>
+                </div>
+                <div class="mb-2">
+                    <label for="tpRecipients" class="form-label small fw-bold">Recipient email(s)</label>
+                    <input type="text" class="form-control form-control-sm" id="tpRecipients"
+                           placeholder="name@company.com, another@company.com">
+                    <div class="form-text">Comma-separated. Scheduled reports are emailed here.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="tpApplyBtn" disabled>
+                    <i class="bi bi-check2-circle me-1"></i>Apply Pack
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var modalEl = document.getElementById('templatePackModal');
+    if (!modalEl) return;
+
+    var listUrl = '@Url.Action("List", "TemplatePacks")';
+    var applyUrl = '@Url.Action("Apply", "TemplatePacks")';
+    var packListEl = document.getElementById('tpPackList');
+    var recipientsEl = document.getElementById('tpRecipients');
+    var applyBtn = document.getElementById('tpApplyBtn');
+    var alertEl = document.getElementById('tpAlert');
+    var selectedPack = null;
+
+    function esc(s) {
+        return (s == null ? '' : String(s)).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function showAlert(kind, msg) {
+        alertEl.innerHTML = '<div class="alert alert-' + kind + ' py-2 small mb-3">' + esc(msg) + '</div>';
+    }
+
+    // Checked, enabled (i.e. not-yet-applied) item checkboxes for the currently selected pack.
+    function selectableChecked() {
+        if (!selectedPack) return [];
+        return Array.prototype.slice.call(
+            packListEl.querySelectorAll('.tp-item[data-pack="' + cssEsc(selectedPack) + '"]:checked:not(:disabled)'));
+    }
+
+    function cssEsc(s) { return String(s).replace(/[^a-zA-Z0-9_-]/g, '\\$&'); }
+
+    function updateApplyState() {
+        applyBtn.disabled = !selectedPack || selectableChecked().length === 0;
+    }
+
+    // Item checkboxes for a given pack that are NOT already applied (i.e. the admin can toggle them).
+    function freshItems(packCode) {
+        return Array.prototype.slice.call(
+            packListEl.querySelectorAll('.tp-item[data-pack="' + cssEsc(packCode) + '"][data-applied="0"]'));
+    }
+
+    function setPackSelected(card, on) {
+        var itemsEl = card.querySelector('.tp-items');
+        if (on) {
+            card.classList.add('border-primary', 'border-2', 'bg-light');
+            if (itemsEl) itemsEl.style.display = '';
+        } else {
+            card.classList.remove('border-primary', 'border-2', 'bg-light');
+            if (itemsEl) itemsEl.style.display = 'none';
+        }
+    }
+
+    function selectPack(code) {
+        packListEl.querySelectorAll('.tp-pack').forEach(function (card) {
+            var mine = card.getAttribute('data-pack') === code;
+            setPackSelected(card, mine);
+            card.querySelectorAll('.tp-item').forEach(function (cb) {
+                var applied = cb.getAttribute('data-applied') === '1';
+                cb.disabled = !mine || applied;      // applied items stay locked
+                if (mine && !applied) cb.checked = true; // default: all fresh items selected
+            });
+        });
+        selectedPack = code;
+        updateApplyState();
+    }
+
+    function deselectAllPacks() {
+        selectedPack = null;
+        packListEl.querySelectorAll('.tp-pack').forEach(function (card) {
+            setPackSelected(card, false);
+            card.querySelectorAll('.tp-item').forEach(function (cb) {
+                if (cb.getAttribute('data-applied') !== '1') cb.disabled = true;
+            });
+        });
+        updateApplyState();
+    }
+
+    function renderPacks(packs) {
+        if (!packs || !packs.length) {
+            packListEl.innerHTML = '<div class="text-muted small">No template packs available.</div>';
+            return;
+        }
+        var html = '';
+        packs.forEach(function (p) {
+            var appliedBadge = p.applied
+                ? '<span class="badge bg-success ms-2">Applied</span>' : '';
+            var items = (p.reports || []).map(function (r) {
+                var itemApplied = !!r.applied;
+                var itemBadge = itemApplied ? ' <span class="badge bg-success">Applied</span>' : '';
+                var cbId = 'tpItem_' + esc(p.packCode) + '_' + esc(r.itemKey);
+                return '' +
+                    '<div class="form-check">' +
+                        '<input class="form-check-input tp-item" type="checkbox" ' +
+                            'data-pack="' + esc(p.packCode) + '" data-applied="' + (itemApplied ? '1' : '0') + '" ' +
+                            'value="' + esc(r.itemKey) + '" id="' + cbId + '" checked disabled>' +
+                        '<label class="form-check-label small" for="' + cbId + '">' +
+                            esc(r.templateName) + ' <span class="text-muted">(' + esc(r.recurrenceType) + ')</span>' + itemBadge +
+                        '</label>' +
+                    '</div>';
+            }).join('');
+            html +=
+                '<div class="tp-pack border rounded p-2 mb-2" data-pack="' + esc(p.packCode) + '" role="button" style="cursor:pointer">' +
+                    '<div class="fw-bold">' + esc(p.packName) + appliedBadge + '</div>' +
+                    '<div class="text-muted small">' + esc(p.description || '') + '</div>' +
+                    '<div class="tp-items mt-2" style="display:none">' +
+                        '<div class="mb-1 d-flex align-items-center gap-2">' +
+                            '<button type="button" class="btn btn-sm btn-link p-0 tp-select-all">Select all</button>' +
+                            '<span class="text-muted">&middot;</span>' +
+                            '<button type="button" class="btn btn-sm btn-link p-0 tp-clear-all">Clear</button>' +
+                        '</div>' +
+                        items +
+                    '</div>' +
+                '</div>';
+        });
+        packListEl.innerHTML = html;
+
+        // Click anywhere on a pack card (except inside its items area) toggles selection.
+        packListEl.querySelectorAll('.tp-pack').forEach(function (card) {
+            card.addEventListener('click', function (e) {
+                if (e.target.closest('.tp-items')) return; // item checkboxes / select-all handled below
+                var code = card.getAttribute('data-pack');
+                if (selectedPack === code) deselectAllPacks();
+                else selectPack(code);
+            });
+        });
+
+        packListEl.querySelectorAll('.tp-item').forEach(function (cb) {
+            cb.addEventListener('change', updateApplyState);
+        });
+
+        packListEl.querySelectorAll('.tp-select-all').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (!selectedPack) return;
+                freshItems(selectedPack).forEach(function (cb) { cb.checked = true; });
+                updateApplyState();
+            });
+        });
+        packListEl.querySelectorAll('.tp-clear-all').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (!selectedPack) return;
+                freshItems(selectedPack).forEach(function (cb) { cb.checked = false; });
+                updateApplyState();
+            });
+        });
+    }
+
+    function loadPacks() {
+        selectedPack = null;
+        updateApplyState();
+        alertEl.innerHTML = '';
+        packListEl.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Loading packs&hellip;</div>';
+        fetch(listUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.success) { showAlert('warning', d.message || 'Could not load packs.'); packListEl.innerHTML = ''; return; }
+                renderPacks(d.packs);
+            })
+            .catch(function () { showAlert('danger', 'Failed to load template packs.'); packListEl.innerHTML = ''; });
+    }
+
+    function applyPack() {
+        if (!selectedPack) return;
+        var chosen = selectableChecked();
+        if (!chosen.length) { showAlert('warning', 'Select at least one report to apply.'); return; }
+        var token = document.querySelector('#templatePackModal input[name="__RequestVerificationToken"]');
+        var body = new URLSearchParams();
+        body.append('packCode', selectedPack);
+        body.append('recipients', recipientsEl.value || '');
+        chosen.forEach(function (cb) { body.append('selectedItems', cb.value); });
+        if (token) body.append('__RequestVerificationToken', token.value);
+
+        applyBtn.disabled = true;
+        applyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Applying&hellip;';
+        fetch(applyUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body: body.toString()
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.success) {
+                    showAlert(d.alreadyApplied ? 'info' : 'success', d.message || 'Done.');
+                    loadPacks();
+                } else {
+                    showAlert('warning', d.message || 'Could not apply pack.');
+                }
+            })
+            .catch(function () { showAlert('danger', 'Failed to apply template pack.'); })
+            .finally(function () {
+                applyBtn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Apply Pack';
+                updateApplyState();
+            });
+    }
+
+    modalEl.addEventListener('show.bs.modal', loadPacks);
+    applyBtn.addEventListener('click', applyPack);
+})();
+</script>
+}

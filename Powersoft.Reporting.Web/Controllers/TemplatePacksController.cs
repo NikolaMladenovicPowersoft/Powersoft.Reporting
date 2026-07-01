@@ -40,7 +40,7 @@ public class TemplatePacksController : Controller
 
         var appliedKeys = await _service.GetAppliedKeysAsync(conn);
 
-        var packs = _service.GetPacks()
+        var packs = (await _service.GetPacksAsync())
             .OrderBy(p => p.SortOrder)
             .Select(p =>
             {

@@ -52,8 +52,10 @@ builder.Services.AddSingleton<ITenantRepositoryFactory, TenantRepositoryFactory>
 builder.Services.AddSingleton<IFilterPresetRepository, FilterPresetRepository>();
 builder.Services.AddScoped<ScheduleExecutionService>();
 
-// Industry template packs (POC: code-seeded catalog + apply service)
-builder.Services.AddSingleton<ITemplatePackCatalog, Powersoft.Reporting.Core.Templates.SeededTemplatePackCatalog>();
+// Industry template packs: DB-backed catalog (authored centrally, no redeploy). The code-seeded
+// catalog is kept as the seed source used to populate a fresh install (see startup block below).
+builder.Services.AddSingleton<Powersoft.Reporting.Core.Templates.SeededTemplatePackCatalog>();
+builder.Services.AddSingleton<ITemplatePackCatalog, DbTemplatePackCatalog>();
 builder.Services.AddScoped<TemplatePackService>();
 builder.Services.AddHostedService<ScheduleBackgroundService>();
 builder.Services.AddHostedService<RetentionCleanupService>();
@@ -133,6 +135,21 @@ Powersoft.Reporting.Data.Tenant.SchemaMigrationService.LogWarning = (msg, ex) =>
         {
             startupLogger.LogWarning(ex,
                 "Could not ensure central AI usage log table — run _SQL/CreateAiUsageLog.sql manually on psCentral.");
+        }
+
+        // Ensure + seed the central template-pack catalog. Seeding only happens when empty, so an
+        // admin's authored packs are never overwritten. Best-effort (no DDL rights => no-op).
+        try
+        {
+            await central.EnsureTemplatePackSchemaAsync();
+            var seedCatalog = app.Services.GetRequiredService<Powersoft.Reporting.Core.Templates.SeededTemplatePackCatalog>();
+            await central.SeedTemplatePacksIfEmptyAsync(seedCatalog.Packs, "SYSTEM");
+            startupLogger.LogInformation("Central template pack catalog is ready.");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex,
+                "Could not ensure central template pack tables — run _SQL/CreateTemplatePacks.sql manually on psCentral.");
         }
     }
 }

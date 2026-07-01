@@ -21,24 +21,24 @@ public class TemplatePackTests
     [Fact]
     public void Catalog_HasPacks_WithUniqueCodesAndItems()
     {
-        var packs = _catalog.GetPacks();
+        var packs = _catalog.Packs;
         packs.Should().NotBeEmpty();
         packs.Select(p => p.PackCode).Should().OnlyHaveUniqueItems();
         packs.Should().OnlyContain(p => p.Items.Count > 0);
     }
 
     [Fact]
-    public void GetPack_IsCaseInsensitive()
+    public async Task GetPack_IsCaseInsensitive()
     {
-        _catalog.GetPack("fashion").Should().NotBeNull();
-        _catalog.GetPack("FASHION").Should().NotBeNull();
-        _catalog.GetPack("does-not-exist").Should().BeNull();
+        (await _catalog.GetPackAsync("fashion")).Should().NotBeNull();
+        (await _catalog.GetPackAsync("FASHION")).Should().NotBeNull();
+        (await _catalog.GetPackAsync("does-not-exist")).Should().BeNull();
     }
 
     [Fact]
     public void EveryPack_HasUniqueItemKeys()
     {
-        foreach (var pack in _catalog.GetPacks())
+        foreach (var pack in _catalog.Packs)
             pack.Items.Select(i => i.ItemKey).Should()
                 .OnlyHaveUniqueItems($"item keys must be unique within pack '{pack.PackCode}'");
     }
@@ -46,7 +46,7 @@ public class TemplatePackTests
     [Fact]
     public void ItemKey_IsDerivedFromTemplateName_AsStableSlug()
     {
-        var item = _catalog.GetPack("FASHION")!.Items
+        var item = _catalog.Packs.Single(p => p.PackCode == "FASHION").Items
             .Single(i => i.ReportType == ReportTypeConstants.PurchasesSales);
         item.ItemKey.Should().Be("purchases-vs-sales-by-category-monthly");
     }
@@ -70,7 +70,7 @@ public class TemplatePackTests
     [Fact]
     public void EverySeededItem_UsesKnownReportType()
     {
-        foreach (var item in _catalog.GetPacks().SelectMany(p => p.Items))
+        foreach (var item in _catalog.Packs.SelectMany(p => p.Items))
             ReportTypeConstants.IsSchedulable(item.ReportType).Should()
                 .BeTrue($"'{item.ReportType}' must be a schedulable report type");
     }
@@ -78,7 +78,7 @@ public class TemplatePackTests
     [Fact]
     public void EverySeededItem_HasNoTenantSpecificSelections()
     {
-        foreach (var item in _catalog.GetPacks().SelectMany(p => p.Items))
+        foreach (var item in _catalog.Packs.SelectMany(p => p.Items))
         {
             TemplateParametersSanitizer.HasNonPortableSelections(item.ParametersJson)
                 .Should().BeFalse($"template '{item.TemplateName}' must not pin tenant-specific IDs");
@@ -88,7 +88,7 @@ public class TemplatePackTests
     [Fact]
     public void PurchasesSalesTemplate_ParsesToMonthlyByCategory_LastMonth()
     {
-        var item = _catalog.GetPack("FASHION")!.Items
+        var item = _catalog.Packs.Single(p => p.PackCode == "FASHION").Items
             .Single(i => i.ReportType == ReportTypeConstants.PurchasesSales);
 
         var p = ScheduleParametersParser.Parse(item.ParametersJson);
@@ -102,7 +102,7 @@ public class TemplatePackTests
     [Fact]
     public void AverageBasketTemplate_ParsesToMonthlyByCategory_LastMonth()
     {
-        var item = _catalog.GetPack("FASHION")!.Items
+        var item = _catalog.Packs.Single(p => p.PackCode == "FASHION").Items
             .Single(i => i.ReportType == ReportTypeConstants.AverageBasket);
 
         var p = ScheduleParametersParser.Parse(item.ParametersJson);

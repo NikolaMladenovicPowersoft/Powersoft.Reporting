@@ -1,5 +1,6 @@
 @{
     ViewData["Title"] = "All Schedules";
+    var isWebmaster = ViewBag.IsWebmaster == true;
 }
 
 <div class="d-flex align-items-center justify-content-between mb-3">
@@ -9,6 +10,11 @@
     </div>
     <a asp-action="ScheduleLogs" class="btn btn-outline-secondary btn-sm"><i class="bi bi-clock-history me-1"></i>Run Logs</a>
 </div>
+
+@if (isWebmaster)
+{
+    @Html.AntiForgeryToken()
+}
 
 <div class="card shadow-sm">
     <div class="table-responsive">
@@ -24,18 +30,97 @@
                     <th>Last Run</th>
                     <th>Created</th>
                     <th>Status</th>
+                    @if (isWebmaster)
+                    {
+                        <th style="width:140px;">Actions</th>
+                    }
                 </tr>
             </thead>
             <tbody id="schedulesBody">
-                <tr><td colspan="9" class="text-center py-4 text-muted"><i class="bi bi-hourglass-split me-1"></i>Loading...</td></tr>
+                <tr><td colspan="10" class="text-center py-4 text-muted"><i class="bi bi-hourglass-split me-1"></i>Loading...</td></tr>
             </tbody>
         </table>
     </div>
 </div>
 
+@if (isWebmaster)
+{
+    <!-- Save as Template modal -->
+    <div class="modal fade" id="satModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-bookmark-plus me-2"></i>Save schedule as template</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="satAlert"></div>
+                    <p class="small text-muted">
+                        Turns this schedule into a reusable, portable template report. Company-specific
+                        selections (stores, items, recipients) are removed automatically.
+                    </p>
+                    <input type="hidden" id="satScheduleId">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Source schedule</label>
+                        <input type="text" class="form-control form-control-sm" id="satSource" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Template report name</label>
+                        <input type="text" class="form-control form-control-sm" id="satItemName"
+                               placeholder="e.g. Purchases vs Sales by Category (Monthly)">
+                        <div class="form-text">Shown as the schedule name when a company applies the pack.</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold d-block">Add to</label>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="satMode" id="satModeExisting" value="existing" checked>
+                            <label class="form-check-label small" for="satModeExisting">Existing pack</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="satMode" id="satModeNew" value="new">
+                            <label class="form-check-label small" for="satModeNew">New pack</label>
+                        </div>
+                    </div>
+                    <div id="satExistingBox" class="mb-2">
+                        <select class="form-select form-select-sm" id="satPackSelect"></select>
+                    </div>
+                    <div id="satNewBox" class="mb-2 d-none border rounded p-2 bg-light">
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <label class="form-label small mb-1">Pack code</label>
+                                <input type="text" class="form-control form-control-sm" id="satPackCode" placeholder="FASHION" maxlength="50">
+                            </div>
+                            <div class="col-8">
+                                <label class="form-label small mb-1">Pack name</label>
+                                <input type="text" class="form-control form-control-sm" id="satPackName" placeholder="Fashion Retail">
+                            </div>
+                            <div class="col-5">
+                                <label class="form-label small mb-1">Industry <span class="text-muted">(optional)</span></label>
+                                <input type="text" class="form-control form-control-sm" id="satIndustry" placeholder="Fashion">
+                            </div>
+                            <div class="col-7">
+                                <label class="form-label small mb-1">Description <span class="text-muted">(optional)</span></label>
+                                <input type="text" class="form-control form-control-sm" id="satDesc">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="satSaveBtn"><i class="bi bi-check2-circle me-1"></i>Save Template</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @section Scripts {
 <script>
 (function() {
+    var isWebmaster = @(isWebmaster ? "true" : "false");
+    var colCount = isWebmaster ? 10 : 9;
+    var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+    var token = tokenEl ? tokenEl.value : '';
     var reportLabels = {
         'AverageBasket':'Average Basket','PurchasesSales':'Purchases vs Sales',
         'BelowMinStock':'Below Min Stock','Catalogue':'Catalogue','CancelLog':'Cancel Log',
@@ -65,7 +150,7 @@
             .then(function(data) {
                 var tbody = document.getElementById('schedulesBody');
                 if (!data.length) {
-                    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">No schedules found for this database.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="' + colCount + '" class="text-center py-4 text-muted">No schedules found for this database.</td></tr>';
                     return;
                 }
                 var html = '';
@@ -85,11 +170,17 @@
                         + '<td>' + (s.lastRun || '<span class="text-muted">—</span>') + '</td>'
                         + '<td class="small text-muted">' + s.createdDate + '<br/>' + escHtml(s.createdBy) + '</td>'
                         + '<td>' + statusBadge + '</td>'
+                        + (isWebmaster
+                            ? '<td><button type="button" class="btn btn-outline-primary btn-sm sat-btn" '
+                              + 'data-id="' + s.id + '" data-name="' + escAttr(s.name) + '" '
+                              + 'title="Save this schedule as a reusable template"><i class="bi bi-bookmark-plus me-1"></i>Template</button></td>'
+                            : '')
                         + '</tr>';
                 });
                 tbody.innerHTML = html;
                 attachStarEvents();
                 attachRowNavigation();
+                if (isWebmaster) attachTemplateEvents();
             });
     }
 
@@ -121,12 +212,119 @@
         document.querySelectorAll('tr[data-href]').forEach(function(tr) {
             tr.addEventListener('click', function(e) {
                 if (e.target.closest('.star-rating')) return;
+                if (e.target.closest('.sat-btn')) return;
                 window.location.href = this.getAttribute('data-href');
             });
         });
     }
 
     function escHtml(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+    function escAttr(s) { return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // ── Save as Template ──
+    var satModal = null, satPacks = [];
+    function satAlert(kind, msg) {
+        document.getElementById('satAlert').innerHTML =
+            '<div class="alert alert-' + kind + ' py-2 small">' + escHtml(msg) + '</div>';
+    }
+    function loadPackOptions() {
+        return fetch('/TemplateAdmin/PackList', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                satPacks = (d && d.success && d.packs) ? d.packs : [];
+                var sel = document.getElementById('satPackSelect');
+                if (!satPacks.length) {
+                    sel.innerHTML = '<option value="">(no packs yet — create a new one)</option>';
+                } else {
+                    sel.innerHTML = satPacks.map(function(p){
+                        return '<option value="' + escAttr(p.packCode) + '">' + escHtml(p.packName)
+                             + ' (' + p.itemCount + ')</option>';
+                    }).join('');
+                }
+            });
+    }
+    function setSatMode(mode) {
+        var isNew = mode === 'new';
+        document.getElementById('satExistingBox').classList.toggle('d-none', isNew);
+        document.getElementById('satNewBox').classList.toggle('d-none', !isNew);
+    }
+    function attachTemplateEvents() {
+        document.querySelectorAll('.sat-btn').forEach(function(btn){
+            btn.addEventListener('click', function(e){
+                e.stopPropagation();
+                document.getElementById('satAlert').innerHTML = '';
+                document.getElementById('satScheduleId').value = this.dataset.id;
+                document.getElementById('satSource').value = this.dataset.name;
+                document.getElementById('satItemName').value = this.dataset.name;
+                document.getElementById('satModeExisting').checked = true;
+                setSatMode('existing');
+                loadPackOptions().then(function(){
+                    // If there are no packs, default to "new".
+                    if (!satPacks.length) { document.getElementById('satModeNew').checked = true; setSatMode('new'); }
+                    satModal.show();
+                });
+            });
+        });
+    }
+
+    document.querySelectorAll('input[name="satMode"]').forEach(function(r){
+        r.addEventListener('change', function(){ setSatMode(this.value); });
+    });
+
+    var satSaveBtn = document.getElementById('satSaveBtn');
+    if (satSaveBtn) {
+        satModal = new bootstrap.Modal(document.getElementById('satModal'));
+        satSaveBtn.addEventListener('click', function(){
+            document.getElementById('satAlert').innerHTML = '';
+            var mode = document.querySelector('input[name="satMode"]:checked').value;
+            var itemName = document.getElementById('satItemName').value.trim();
+            if (!itemName) { satAlert('warning', 'Enter a template report name.'); return; }
+            var body = new URLSearchParams();
+            body.append('scheduleId', document.getElementById('satScheduleId').value);
+            body.append('mode', mode);
+            body.append('itemName', itemName);
+            body.append('__RequestVerificationToken', token);
+            if (mode === 'new') {
+                body.append('packCode', document.getElementById('satPackCode').value.trim());
+                body.append('packName', document.getElementById('satPackName').value.trim());
+                body.append('industryTag', document.getElementById('satIndustry').value.trim());
+                body.append('description', document.getElementById('satDesc').value.trim());
+            } else {
+                var code = document.getElementById('satPackSelect').value;
+                if (!code) { satAlert('warning', 'Select a target pack, or create a new one.'); return; }
+                body.append('packCode', code);
+            }
+            satSaveBtn.disabled = true;
+            satSaveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+            fetch('/TemplateAdmin/SaveScheduleAsTemplate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                body: body.toString()
+            }).then(function(r){ return r.json(); }).then(function(d){
+                satSaveBtn.disabled = false;
+                satSaveBtn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Save Template';
+                if (d.success) {
+                    satModal.hide();
+                    showToast(d.message || 'Saved as template.');
+                } else {
+                    satAlert('warning', d.message || 'Could not save.');
+                }
+            }).catch(function(){
+                satSaveBtn.disabled = false;
+                satSaveBtn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Save Template';
+                satAlert('danger', 'Request failed.');
+            });
+        });
+    }
+
+    function showToast(msg) {
+        var t = document.createElement('div');
+        t.className = 'alert alert-success shadow';
+        t.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:1080;max-width:340px;';
+        t.innerHTML = '<i class="bi bi-check-circle me-1"></i>' + escHtml(msg);
+        document.body.appendChild(t);
+        setTimeout(function(){ t.remove(); }, 4000);
+    }
 
     loadSchedules();
 })();

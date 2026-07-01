@@ -1,0 +1,730 @@
+@model List<Powersoft.Reporting.Core.Models.ReportTemplatePack>
+@{
+    ViewData["Title"] = "Template Packs";
+    var reportTypes = ViewBag.ReportTypes as List<string> ?? new List<string>();
+}
+
+<style>
+    .tpa-item { border-left: 3px solid var(--bs-primary); }
+    .tpa-item .card-body { padding: .85rem 1rem; }
+    .tpa-hint { color: var(--bs-secondary); cursor: help; }
+    .tpa-section-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--bs-secondary); font-weight: 600; }
+    #tpaPackList .card { transition: box-shadow .15s ease; }
+    #tpaPackList .card:hover { box-shadow: 0 .3rem .9rem rgba(0,0,0,.08); }
+    .tpa-pack-badge { font-weight: 500; }
+</style>
+
+<div class="d-flex align-items-center justify-content-between mb-2">
+    <h4 class="mb-0"><i class="bi bi-collection me-2"></i>Report Template Packs</h4>
+    <button type="button" class="btn btn-primary btn-sm" id="tpaNewBtn">
+        <i class="bi bi-plus-lg me-1"></i>New Pack
+    </button>
+</div>
+
+<p class="text-muted small mb-3">
+    Curate the industry packs offered to companies. A pack is a named set of ready-made scheduled reports.
+    Everything here is portable — company-specific selections are automatically removed on save, so a pack
+    works in any company.
+</p>
+
+@if (TempData["TemplateAdminError"] != null)
+{
+    <div class="alert alert-warning py-2 small">@TempData["TemplateAdminError"]</div>
+}
+
+@Html.AntiForgeryToken()
+<div id="tpaAlert"></div>
+
+@if (!Model.Any())
+{
+    <div class="text-center text-muted border rounded py-5">
+        <i class="bi bi-collection fs-1 d-block mb-2 opacity-50"></i>
+        No packs yet. Click <strong>New Pack</strong> to create your first one.
+    </div>
+}
+else
+{
+    <div class="row" id="tpaPackList">
+        @foreach (var p in Model)
+        {
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h6 class="card-title mb-1">@p.PackName</h6>
+                            <span class="badge bg-secondary tpa-pack-badge">@p.PackCode</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(p.IndustryTag))
+                        {
+                            <div class="small text-primary mb-1"><i class="bi bi-tag me-1"></i>@p.IndustryTag</div>
+                        }
+                        <div class="small text-muted">@p.Description</div>
+                        <ul class="small mt-2 mb-0 ps-3">
+                            @foreach (var it in p.Items)
+                            {
+                                <li>@it.TemplateName <span class="text-muted">(@it.RecurrenceType@(it.IncludeAiAnalysis ? " · AI" : ""))</span></li>
+                            }
+                        </ul>
+                    </div>
+                    <div class="card-footer bg-transparent d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-primary tpa-provision" data-code="@p.PackCode" data-name="@p.PackName">
+                            <i class="bi bi-buildings me-1"></i>Apply to companies
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary tpa-edit" data-code="@p.PackCode">
+                            <i class="bi bi-pencil me-1"></i>Edit
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger tpa-delete" data-code="@p.PackCode" data-name="@p.PackName">
+                            <i class="bi bi-trash me-1"></i>Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<!-- Editor modal -->
+<div class="modal fade" id="tpaEditor" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tpaEditorTitle">Edit Pack</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- validation / server messages appear HERE, inside the modal -->
+                <div id="tpaEditorAlert"></div>
+
+                <div class="tpa-section-label mb-2">Pack details</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold" for="tpaCode">
+                            Pack code
+                            <i class="bi bi-info-circle tpa-hint" data-bs-toggle="tooltip"
+                               title="Unique short id used internally (e.g. FASHION). Cannot be changed after creation. Letters, numbers, underscore."></i>
+                        </label>
+                        <input type="text" class="form-control form-control-sm" id="tpaCode" placeholder="FASHION" maxlength="50">
+                        <div class="invalid-feedback">Code must be 2-50 chars: A-Z, 0-9, underscore.</div>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold" for="tpaName">
+                            Pack name
+                            <i class="bi bi-info-circle tpa-hint" data-bs-toggle="tooltip"
+                               title="Friendly name shown to users when they pick a pack (e.g. Fashion Retail)."></i>
+                        </label>
+                        <input type="text" class="form-control form-control-sm" id="tpaName" placeholder="Fashion Retail">
+                        <div class="invalid-feedback">Pack name is required.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold" for="tpaTag">
+                            Industry tag <span class="text-muted fw-normal">(optional)</span>
+                            <i class="bi bi-info-circle tpa-hint" data-bs-toggle="tooltip"
+                               title="Optional label for grouping/filtering packs by industry (e.g. Fashion, Supermarket)."></i>
+                        </label>
+                        <input type="text" class="form-control form-control-sm" id="tpaTag" placeholder="Fashion">
+                    </div>
+                    <div class="col-md-9">
+                        <label class="form-label small fw-bold" for="tpaDesc">
+                            Description <span class="text-muted fw-normal">(optional)</span>
+                            <i class="bi bi-info-circle tpa-hint" data-bs-toggle="tooltip"
+                               title="One line describing what this pack sets up. Shown under the pack name."></i>
+                        </label>
+                        <input type="text" class="form-control form-control-sm" id="tpaDesc" placeholder="Monthly sales, basket and P&L reports for fashion stores.">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold" for="tpaSort">
+                            Display order
+                            <i class="bi bi-info-circle tpa-hint" data-bs-toggle="tooltip"
+                               title="Lower numbers appear first in the pack list. Default 0."></i>
+                        </label>
+                        <input type="number" class="form-control form-control-sm" id="tpaSort" value="0">
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="tpa-section-label mb-0">Reports in this pack</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="tpaAddItem">
+                        <i class="bi bi-plus-lg me-1"></i>Add report
+                    </button>
+                </div>
+                <div id="tpaItems"></div>
+                <div id="tpaEmptyItems" class="text-muted small fst-italic d-none">
+                    No reports yet — click “Add report”.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="tpaSaveBtn">
+                    <i class="bi bi-check2-circle me-1"></i>Save Pack
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Multi-company provision modal -->
+<div class="modal fade" id="tpaProvision" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-buildings me-2"></i>Apply <span id="tpvPackName"></span> to companies</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="tpvAlert"></div>
+                <p class="small text-muted">
+                    Provisions the selected reports into every chosen company at once. Reports already
+                    applied to a company are skipped (never duplicated), so you can safely re-run this.
+                </p>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Recipient email(s)</label>
+                    <input type="text" class="form-control form-control-sm" id="tpvRecipients"
+                           placeholder="owner@company.com, manager@company.com">
+                    <div class="form-text">Applied to every selected company. Separate multiple emails with commas.</div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small fw-bold mb-0">Reports</label>
+                            <div>
+                                <a href="#" class="small tpv-items-all">All</a> ·
+                                <a href="#" class="small tpv-items-none">None</a>
+                            </div>
+                        </div>
+                        <div id="tpvItems" class="border rounded p-2" style="max-height:260px;overflow:auto;">
+                            <div class="text-muted small">Loading…</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small fw-bold mb-0">Companies</label>
+                            <div>
+                                <a href="#" class="small tpv-co-all">All</a> ·
+                                <a href="#" class="small tpv-co-none">None</a>
+                            </div>
+                        </div>
+                        <input type="text" class="form-control form-control-sm mb-1" id="tpvCoFilter" placeholder="Filter companies…">
+                        <div id="tpvCompanies" class="border rounded p-2" style="max-height:220px;overflow:auto;">
+                            <div class="text-muted small">Loading…</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tpvResults" class="mt-3 d-none">
+                    <label class="form-label small fw-bold">Results</label>
+                    <div id="tpvResultsBody" class="small"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="tpvApplyBtn">
+                    <i class="bi bi-send-check me-1"></i>Apply
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    // ── config from server ──
+    var REPORT_TYPES = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(reportTypes));
+    var getUrl    = '@Url.Action("Get", "TemplateAdmin")';
+    var saveUrl   = '@Url.Action("Save", "TemplateAdmin")';
+    var deleteUrl = '@Url.Action("Delete", "TemplateAdmin")';
+    var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+    var FRIENDLY_TYPE = {
+        PurchasesSales: 'Purchases vs Sales', AverageBasket: 'Average Basket', ProfitLoss: 'Profit & Loss',
+        BelowMinStock: 'Below Minimum Stock', Catalogue: 'Power Reports Catalogue', CancelLog: 'Cancel Log',
+        Pareto: 'Pareto 80/20', Charts: 'Charts & Dashboards', ProspectClients: 'Prospect Clients',
+        OffersReport: 'Offers Report', TrialBalance: 'Trial Balance'
+    };
+    // Relative ranges only (portable across companies and time). Custom fixed dates are intentionally excluded.
+    var DATE_RANGES = [
+        ['LastMonth', 'Last month'], ['ThisMonth', 'This month'], ['YearToDate', 'Year to date'],
+        ['LastYear', 'Last year'], ['ThisWeek', 'This week'], ['LastWeek', 'Last week'],
+        ['Yesterday', 'Yesterday'], ['Today', 'Today'], ['LastNDays', 'Last N days']
+    ];
+    var PS_GROUPS = ['None','Category','Department','Brand','Season','Supplier','Store','Model','Colour','Size','GroupSize','Fabric','Franchise','User','PaymentType'];
+    var AB_GROUPS = ['None','Store','Category','Department','Brand','Season','Customer','User','Supplier','Model','Colour','Size','CustomerCategory1','CustomerCategory2','Item','GroupSize','Fabric'];
+    // Which friendly controls each report type exposes. Types not listed only get a date range.
+    var TYPE_PARAMS = {
+        PurchasesSales: {
+            selects: [
+                { key: 'reportMode',    label: 'Report mode', tip: 'Detailed lines, Summary totals, or Monthly columns.', options: ['Detailed','Summary','Monthly'], def: 'Monthly' },
+                { key: 'primaryGroup',  label: 'Group by',    tip: 'Primary dimension the rows are grouped by.', options: PS_GROUPS, def: 'Category', grp: 1 },
+                { key: 'secondaryGroup',label: 'Then by',     tip: 'Second grouping level (optional). Used only if the primary group is set.', options: PS_GROUPS, def: 'None', grp: 2 },
+                { key: 'thirdGroup',    label: 'Then by',     tip: 'Third grouping level (optional). Used only if the second group is set.', options: PS_GROUPS, def: 'None', grp: 3 }
+            ],
+            toggles: [
+                { key: 'showProfit', label: 'Show profit', tip: 'Include profit / margin columns.', def: true },
+                { key: 'includeVat', label: 'Include VAT', tip: 'Include VAT in the money amounts.', def: false }
+            ]
+        },
+        AverageBasket: {
+            selects: [
+                { key: 'breakdown',        label: 'Breakdown', tip: 'Time granularity of the columns.', options: ['Daily','Weekly','Monthly'], def: 'Monthly' },
+                { key: 'groupBy',          label: 'Group by',  tip: 'Primary dimension the rows are grouped by.', options: AB_GROUPS, def: 'Category', grp: 1 },
+                { key: 'secondaryGroupBy', label: 'Then by',   tip: 'Second grouping level (optional). Used only if the primary group is set.', options: AB_GROUPS, def: 'None', grp: 2 }
+            ],
+            toggles: [
+                { key: 'includeVat', label: 'Include VAT', tip: 'Include VAT in the money amounts.', def: false }
+            ]
+        }
+    };
+    var WEEKDAYS = [['1','Monday'],['2','Tuesday'],['3','Wednesday'],['4','Thursday'],['5','Friday'],['6','Saturday'],['0','Sunday']];
+
+    var editorEl = document.getElementById('tpaEditor');
+    var editor = new bootstrap.Modal(editorEl);
+    var itemsWrap = document.getElementById('tpaItems');
+    var emptyHint = document.getElementById('tpaEmptyItems');
+    var pageAlert = document.getElementById('tpaAlert');
+    var editorAlert = document.getElementById('tpaEditorAlert');
+
+    function esc(s) {
+        return (s == null ? '' : String(s)).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function alertHtml(kind, msg) {
+        return '<div class="alert alert-' + kind + ' py-2 small">' + esc(msg) + '</div>';
+    }
+    function showPageAlert(kind, msg) { pageAlert.innerHTML = alertHtml(kind, msg); window.scrollTo(0, 0); }
+    function showEditorAlert(kind, msg) { editorAlert.innerHTML = alertHtml(kind, msg); editorEl.querySelector('.modal-body').scrollTop = 0; }
+    function clearEditorAlert() { editorAlert.innerHTML = ''; }
+
+    function minToTime(min) {
+        var h = Math.floor((min || 0) / 60), m = (min || 0) % 60;
+        return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+    }
+    function timeToMin(t) {
+        var parts = (t || '08:00').split(':');
+        return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+    }
+    function opt(value, label, sel) {
+        return '<option value="' + esc(value) + '"' + (String(value) === String(sel) ? ' selected' : '') + '>' + esc(label) + '</option>';
+    }
+    function hint(t) {
+        return ' <i class="bi bi-info-circle tpa-hint" data-bs-toggle="tooltip" title="' + esc(t) + '"></i>';
+    }
+    function initTooltips(scope) {
+        (scope || document).querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+            var ex = bootstrap.Tooltip.getInstance(el); if (ex) ex.dispose();
+            new bootstrap.Tooltip(el);
+        });
+    }
+
+    // ── render the type-specific friendly controls for one item card ──
+    function renderTypeParams(card, existing) {
+        var type = card.querySelector('.tpa-type').value;
+        var schema = TYPE_PARAMS[type];
+        var box = card.querySelector('.tpa-typeparams');
+        if (!schema) {
+            box.innerHTML = '<div class="col-12"><span class="text-muted small fst-italic">' +
+                'This report uses its standard layout — only the date range applies.</span></div>';
+            return;
+        }
+        var html = '';
+        schema.selects.forEach(function (s) {
+            var cur = existing && existing[s.key] != null ? existing[s.key] : s.def;
+            var grpAttr = s.grp ? ' data-grp="' + s.grp + '"' : '';
+            html += '<div class="col-md-4"><label class="form-label small mb-1">' + esc(s.label) + hint(s.tip) + '</label>' +
+                '<select class="form-select form-select-sm tpa-p" data-pk="' + esc(s.key) + '" data-pt="select"' + grpAttr + '>' +
+                s.options.map(function (o) { return opt(o, o, cur); }).join('') + '</select></div>';
+        });
+        schema.toggles.forEach(function (t) {
+            var cur = existing && existing[t.key] != null ? !!existing[t.key] : t.def;
+            html += '<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-1">' +
+                '<input class="form-check-input tpa-p" type="checkbox" data-pk="' + esc(t.key) + '" data-pt="bool"' + (cur ? ' checked' : '') + '>' +
+                '<label class="form-check-label small">' + esc(t.label) + hint(t.tip) + '</label></div></div>';
+        });
+        box.innerHTML = html;
+        initTooltips(box);
+        wireGroupCascade(box);
+    }
+
+    // Strict hierarchy for multi-level grouping: a level is only usable when the level above it is set.
+    // Setting a parent to "None" resets and disables all deeper levels (mirrors the on-screen reports).
+    function wireGroupCascade(box) {
+        var groups = Array.prototype.slice.call(box.querySelectorAll('select[data-grp]'))
+            .sort(function (a, b) { return (+a.dataset.grp) - (+b.dataset.grp); });
+        if (groups.length < 2) return;
+        function apply() {
+            for (var i = 1; i < groups.length; i++) {
+                if (groups[i - 1].value === 'None') { groups[i].value = 'None'; groups[i].disabled = true; }
+                else { groups[i].disabled = false; }
+            }
+        }
+        groups.forEach(function (g) { g.addEventListener('change', apply); });
+        apply();
+    }
+
+    function updateDayControl(card, existingDay) {
+        var rec = card.querySelector('.tpa-rec').value;
+        var wrap = card.querySelector('.tpa-daywrap');
+        if (rec === 'Daily') { wrap.innerHTML = '<label class="form-label small mb-1 text-muted">Day</label>' +
+            '<input class="form-control form-control-sm" value="—" disabled>'; return; }
+        if (rec === 'Weekly') {
+            wrap.innerHTML = '<label class="form-label small mb-1">Day of week' + hint('Which weekday the report runs.') + '</label>' +
+                '<select class="form-select form-select-sm tpa-day">' +
+                WEEKDAYS.map(function (d) { return opt(d[0], d[1], existingDay != null ? existingDay : 1); }).join('') + '</select>';
+        } else {
+            wrap.innerHTML = '<label class="form-label small mb-1">Day of month' + hint('Day 1-31 the report runs each month.') + '</label>' +
+                '<input type="number" class="form-control form-control-sm tpa-day" min="1" max="31" value="' + (existingDay != null ? existingDay : 1) + '">';
+        }
+        initTooltips(wrap);
+    }
+
+    function updateNDays(card, existingVal) {
+        var range = card.querySelector('.tpa-range').value;
+        var wrap = card.querySelector('.tpa-ndayswrap');
+        if (range === 'LastNDays') {
+            wrap.classList.remove('d-none');
+            var inp = card.querySelector('.tpa-ndays');
+            if (existingVal != null) inp.value = existingVal;
+        } else {
+            wrap.classList.add('d-none');
+        }
+    }
+
+    function buildParams(card) {
+        var type = card.querySelector('.tpa-type').value;
+        var p = {};
+        var schema = TYPE_PARAMS[type];
+        if (schema) {
+            card.querySelectorAll('.tpa-p').forEach(function (el) {
+                p[el.dataset.pk] = el.dataset.pt === 'bool' ? el.checked : el.value;
+            });
+        }
+        var range = card.querySelector('.tpa-range').value;
+        var val = 0;
+        if (range === 'LastNDays') val = parseInt(card.querySelector('.tpa-ndays').value, 10) || 30;
+        p.reportDateRange = { type: range, value: val };
+        return p;
+    }
+
+    function itemTemplate() {
+        return '' +
+        '<div class="tpa-item card mb-2"><div class="card-body">' +
+            '<div class="row g-2">' +
+                '<div class="col-md-4"><label class="form-label small mb-1">Report type' + hint('Which report this schedule generates.') + '</label>' +
+                    '<select class="form-select form-select-sm tpa-type">' +
+                        REPORT_TYPES.map(function (t) { return opt(t, FRIENDLY_TYPE[t] || t, ''); }).join('') + '</select></div>' +
+                '<div class="col-md-6"><label class="form-label small mb-1">Report name' + hint('Shown as the schedule name and email subject.') + '</label>' +
+                    '<input class="form-control form-control-sm tpa-tname" placeholder="e.g. Purchases vs Sales by Category">' +
+                    '<div class="invalid-feedback">Please give this report a name.</div></div>' +
+                '<div class="col-md-2 d-flex align-items-end justify-content-end">' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger tpa-remove" data-bs-toggle="tooltip" title="Remove this report"><i class="bi bi-trash"></i></button></div>' +
+            '</div>' +
+            '<div class="row g-2 mt-1 align-items-start">' +
+                '<div class="col-md-3"><label class="form-label small mb-1">Frequency' + hint('How often the report is sent.') + '</label>' +
+                    '<select class="form-select form-select-sm tpa-rec">' + opt('Daily','Daily','') + opt('Weekly','Weekly','') + opt('Monthly','Monthly','Monthly') + '</select></div>' +
+                '<div class="col-md-3 tpa-daywrap"></div>' +
+                '<div class="col-md-2"><label class="form-label small mb-1">Time' + hint('Local time of day the report runs.') + '</label>' +
+                    '<input type="time" class="form-control form-control-sm tpa-time" value="08:00"></div>' +
+                '<div class="col-md-4"><label class="form-label small mb-1">Date range' + hint('Which period the report covers — relative, so it stays correct every run.') + '</label>' +
+                    '<select class="form-select form-select-sm tpa-range">' + DATE_RANGES.map(function (r) { return opt(r[0], r[1], 'LastMonth'); }).join('') + '</select>' +
+                    '<div class="tpa-ndayswrap d-none mt-1"><input type="number" class="form-control form-control-sm tpa-ndays" min="1" max="365" value="30" placeholder="Number of days"></div></div>' +
+            '</div>' +
+            '<div class="tpa-section-label mt-2 mb-1">Report options</div>' +
+            '<div class="row g-2 tpa-typeparams"></div>' +
+            '<div class="row g-2 mt-1">' +
+                '<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-1">' +
+                    '<input class="form-check-input tpa-ai" type="checkbox"><label class="form-check-label small">AI analysis' +
+                    hint('Add an AI-written summary to the report. Uses AI tokens on every run per company — leave off unless needed.') + '</label></div></div>' +
+                '<div class="col-md-4 d-flex align-items-end"><div class="form-check mb-1">' +
+                    '<input class="form-check-input tpa-skip" type="checkbox" checked><label class="form-check-label small">Skip if empty' +
+                    hint('Don\'t send an email if the report has no data for the period.') + '</label></div></div>' +
+            '</div>' +
+        '</div></div>';
+    }
+
+    function wireCard(card, item) {
+        item = item || {};
+        card.querySelector('.tpa-tname').value = item.templateName || '';
+        card.querySelector('.tpa-time').value = minToTime(item.scheduleTimeMin != null ? item.scheduleTimeMin : 480);
+        if (item.reportType) card.querySelector('.tpa-type').value = item.reportType;
+        if (item.recurrenceType) card.querySelector('.tpa-rec').value = item.recurrenceType;
+        card.querySelector('.tpa-ai').checked = !!item.includeAiAnalysis;
+        card.querySelector('.tpa-skip').checked = item.skipIfEmpty === false ? false : true;
+
+        // date range + type params parsed from stored JSON
+        var parsed = {};
+        try { parsed = JSON.parse(item.parametersJson || '{}') || {}; } catch (e) {}
+        var range = (parsed.reportDateRange && parsed.reportDateRange.type) || 'LastMonth';
+        card.querySelector('.tpa-range').value = range;
+
+        updateDayControl(card, item.recurrenceDay);
+        updateNDays(card, parsed.reportDateRange ? parsed.reportDateRange.value : null);
+        renderTypeParams(card, parsed);
+
+        var nameEl = card.querySelector('.tpa-tname');
+        card.querySelector('.tpa-type').addEventListener('change', function () {
+            renderTypeParams(card, null);
+            // Keep the name in sync with the type as long as the user hasn't typed their own.
+            if (!nameEl.value.trim() || nameEl.dataset.auto === '1') {
+                nameEl.value = (FRIENDLY_TYPE[this.value] || this.value);
+                nameEl.dataset.auto = '1';
+            }
+        });
+        card.querySelector('.tpa-rec').addEventListener('change', function () { updateDayControl(card, null); });
+        card.querySelector('.tpa-range').addEventListener('change', function () { updateNDays(card, null); });
+        card.querySelector('.tpa-remove').addEventListener('click', function () { card.remove(); refreshEmptyHint(); });
+        nameEl.addEventListener('input', function () { this.classList.remove('is-invalid'); this.dataset.auto = ''; });
+
+        initTooltips(card);
+    }
+
+    function addItemRow(item) {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = itemTemplate();
+        var card = tmp.firstElementChild;
+        itemsWrap.appendChild(card);
+        wireCard(card, item);
+        refreshEmptyHint();
+    }
+
+    function refreshEmptyHint() {
+        emptyHint.classList.toggle('d-none', itemsWrap.querySelectorAll('.tpa-item').length > 0);
+    }
+
+    function openEditor(pack) {
+        clearEditorAlert();
+        itemsWrap.innerHTML = '';
+        document.getElementById('tpaEditorTitle').textContent = pack ? ('Edit Pack · ' + (pack.packName || '')) : 'New Pack';
+        document.getElementById('tpaCode').value = pack ? pack.packCode : '';
+        document.getElementById('tpaCode').disabled = !!pack;
+        document.getElementById('tpaCode').classList.remove('is-invalid');
+        document.getElementById('tpaName').value = pack ? pack.packName : '';
+        document.getElementById('tpaName').classList.remove('is-invalid');
+        document.getElementById('tpaTag').value  = pack ? (pack.industryTag || '') : '';
+        document.getElementById('tpaDesc').value = pack ? (pack.description || '') : '';
+        document.getElementById('tpaSort').value = pack ? pack.sortOrder : 0;
+        (pack && pack.items ? pack.items : []).forEach(addItemRow);
+        if (!pack) addItemRow({});
+        refreshEmptyHint();
+        initTooltips(editorEl);
+        editor.show();
+    }
+
+    function collectPayload() {
+        var items = [];
+        itemsWrap.querySelectorAll('.tpa-item').forEach(function (card) {
+            var dayEl = card.querySelector('.tpa-day');
+            items.push({
+                reportType: card.querySelector('.tpa-type').value,
+                templateName: card.querySelector('.tpa-tname').value.trim(),
+                recurrenceType: card.querySelector('.tpa-rec').value,
+                recurrenceDay: dayEl ? (parseInt(dayEl.value, 10)) : null,
+                scheduleTimeMin: timeToMin(card.querySelector('.tpa-time').value),
+                includeAiAnalysis: card.querySelector('.tpa-ai').checked,
+                skipIfEmpty: card.querySelector('.tpa-skip').checked,
+                parametersJson: JSON.stringify(buildParams(card)),
+                exportFormat: 'Excel',
+                aiLocale: 'en'
+            });
+        });
+        return {
+            packCode: document.getElementById('tpaCode').value.trim().toUpperCase(),
+            packName: document.getElementById('tpaName').value.trim(),
+            industryTag: document.getElementById('tpaTag').value.trim(),
+            description: document.getElementById('tpaDesc').value.trim(),
+            sortOrder: parseInt(document.getElementById('tpaSort').value, 10) || 0,
+            items: items
+        };
+    }
+
+    function validate(payload) {
+        var codeEl = document.getElementById('tpaCode'), nameEl = document.getElementById('tpaName');
+        if (!/^[A-Z0-9_]{2,50}$/.test(payload.packCode)) { codeEl.classList.add('is-invalid'); codeEl.focus(); return 'Pack code must be 2-50 chars: A-Z, 0-9, underscore.'; }
+        if (!payload.packName) { nameEl.classList.add('is-invalid'); nameEl.focus(); return 'Pack name is required.'; }
+        if (!payload.items.length) return 'Add at least one report to the pack.';
+        var bad = -1;
+        itemsWrap.querySelectorAll('.tpa-item').forEach(function (card, i) {
+            var n = card.querySelector('.tpa-tname');
+            if (!n.value.trim()) { n.classList.add('is-invalid'); if (bad < 0) { bad = i; n.focus(); } }
+        });
+        if (bad >= 0) return 'Report #' + (bad + 1) + ' needs a name.';
+        return null;
+    }
+
+    function post(url, params) {
+        var body = new URLSearchParams();
+        Object.keys(params).forEach(function (k) { body.append(k, params[k]); });
+        body.append('__RequestVerificationToken', token);
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body: body.toString()
+        }).then(function (r) { return r.json(); });
+    }
+
+    document.getElementById('tpaNewBtn').addEventListener('click', function () { openEditor(null); });
+    document.getElementById('tpaAddItem').addEventListener('click', function () { addItemRow({}); });
+
+    document.querySelectorAll('.tpa-edit').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            fetch(getUrl + '?code=' + encodeURIComponent(btn.getAttribute('data-code')),
+                  { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d.success) { showPageAlert('warning', d.message || 'Could not load pack.'); return; }
+                    openEditor(d.pack);
+                })
+                .catch(function () { showPageAlert('danger', 'Failed to load pack.'); });
+        });
+    });
+
+    document.querySelectorAll('.tpa-delete').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (!confirm('Delete pack "' + btn.getAttribute('data-name') + '"? This cannot be undone.')) return;
+            post(deleteUrl, { packCode: btn.getAttribute('data-code') }).then(function (d) {
+                if (d.success) location.reload();
+                else showPageAlert('warning', d.message || 'Could not delete.');
+            }).catch(function () { showPageAlert('danger', 'Failed to delete pack.'); });
+        });
+    });
+
+    document.getElementById('tpaSaveBtn').addEventListener('click', function () {
+        clearEditorAlert();
+        var payload = collectPayload();
+        var err = validate(payload);
+        if (err) { showEditorAlert('warning', err); return; }
+        var btn = document.getElementById('tpaSaveBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+        post(saveUrl, { payload: JSON.stringify(payload) })
+            .then(function (d) {
+                if (d.success) location.reload();
+                else { showEditorAlert('warning', d.message || 'Could not save.'); btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Save Pack'; }
+            })
+            .catch(function () { showEditorAlert('danger', 'Failed to save pack.'); btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>Save Pack'; });
+    });
+
+    // init tooltips already present on the page (pack detail labels are inside the modal, re-init on show)
+    editorEl.addEventListener('shown.bs.modal', function () { initTooltips(editorEl); });
+
+    // ── Multi-company provision ──
+    var provEl = document.getElementById('tpaProvision');
+    var prov = new bootstrap.Modal(provEl);
+    var provPackCode = null;
+    var itemsUrl   = '@Url.Action("PackItems", "TemplateAdmin")';
+    var targetsUrl = '@Url.Action("ApplyTargets", "TemplateAdmin")';
+    var applyUrl   = '@Url.Action("ApplyToCompanies", "TemplateAdmin")';
+    var provCompanies = [];
+
+    function provAlert(kind, msg) { document.getElementById('tpvAlert').innerHTML = alertHtml(kind, msg); }
+
+    function loadProvItems(code) {
+        var box = document.getElementById('tpvItems');
+        box.innerHTML = '<div class="text-muted small">Loading…</div>';
+        return fetch(itemsUrl + '?packCode=' + encodeURIComponent(code), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.success) { box.innerHTML = '<div class="text-danger small">' + esc(d.message || 'Failed') + '</div>'; return; }
+                if (!d.items.length) { box.innerHTML = '<div class="text-muted small">This pack has no reports.</div>'; return; }
+                box.innerHTML = d.items.map(function (i) {
+                    var ai = i.includeAiAnalysis ? ' <span class="badge bg-info text-dark">AI</span>' : '';
+                    return '<div class="form-check">' +
+                        '<input class="form-check-input tpv-item" type="checkbox" value="' + esc(i.itemKey) + '" id="tpvi_' + esc(i.itemKey) + '" checked>' +
+                        '<label class="form-check-label small" for="tpvi_' + esc(i.itemKey) + '">' + esc(i.templateName) +
+                        ' <span class="text-muted">(' + esc(i.recurrenceType) + ')</span>' + ai + '</label></div>';
+                }).join('');
+            });
+    }
+
+    function renderCompanies(filter) {
+        var box = document.getElementById('tpvCompanies');
+        var f = (filter || '').toLowerCase();
+        var list = provCompanies.filter(function (c) {
+            return !f || (c.company + ' ' + c.dbName).toLowerCase().indexOf(f) >= 0;
+        });
+        if (!list.length) { box.innerHTML = '<div class="text-muted small">No companies.</div>'; return; }
+        var lastCompany = null, html = '';
+        list.forEach(function (c) {
+            if (c.company !== lastCompany) { html += '<div class="fw-bold small text-muted mt-2">' + esc(c.company) + '</div>'; lastCompany = c.company; }
+            html += '<div class="form-check">' +
+                '<input class="form-check-input tpv-co" type="checkbox" value="' + esc(c.dbCode) + '" id="tpvc_' + esc(c.dbCode) + '">' +
+                '<label class="form-check-label small" for="tpvc_' + esc(c.dbCode) + '">' + esc(c.dbName) + '</label></div>';
+        });
+        box.innerHTML = html;
+    }
+
+    function loadProvCompanies() {
+        var box = document.getElementById('tpvCompanies');
+        box.innerHTML = '<div class="text-muted small">Loading…</div>';
+        return fetch(targetsUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                provCompanies = (d && d.success && d.databases) ? d.databases : [];
+                renderCompanies('');
+            });
+    }
+
+    document.querySelectorAll('.tpa-provision').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            provPackCode = btn.getAttribute('data-code');
+            document.getElementById('tpvPackName').textContent = btn.getAttribute('data-name') || provPackCode;
+            document.getElementById('tpvAlert').innerHTML = '';
+            document.getElementById('tpvRecipients').value = '';
+            document.getElementById('tpvCoFilter').value = '';
+            document.getElementById('tpvResults').classList.add('d-none');
+            document.getElementById('tpvResultsBody').innerHTML = '';
+            Promise.all([loadProvItems(provPackCode), loadProvCompanies()]).then(function () { prov.show(); });
+        });
+    });
+
+    function setChecks(sel, val) { document.querySelectorAll(sel).forEach(function (c) { c.checked = val; }); }
+    provEl.querySelector('.tpv-items-all').addEventListener('click', function (e) { e.preventDefault(); setChecks('.tpv-item', true); });
+    provEl.querySelector('.tpv-items-none').addEventListener('click', function (e) { e.preventDefault(); setChecks('.tpv-item', false); });
+    provEl.querySelector('.tpv-co-all').addEventListener('click', function (e) { e.preventDefault(); setChecks('.tpv-co', true); });
+    provEl.querySelector('.tpv-co-none').addEventListener('click', function (e) { e.preventDefault(); setChecks('.tpv-co', false); });
+    document.getElementById('tpvCoFilter').addEventListener('input', function () { renderCompanies(this.value); });
+
+    document.getElementById('tpvApplyBtn').addEventListener('click', function () {
+        document.getElementById('tpvAlert').innerHTML = '';
+        var recipients = document.getElementById('tpvRecipients').value.trim();
+        var items = Array.prototype.slice.call(document.querySelectorAll('.tpv-item:checked')).map(function (c) { return c.value; });
+        var cos = Array.prototype.slice.call(document.querySelectorAll('.tpv-co:checked')).map(function (c) { return c.value; });
+        if (!recipients) { provAlert('warning', 'Enter at least one recipient email.'); return; }
+        if (!items.length) { provAlert('warning', 'Select at least one report.'); return; }
+        if (!cos.length) { provAlert('warning', 'Select at least one company.'); return; }
+
+        var body = new URLSearchParams();
+        body.append('packCode', provPackCode);
+        body.append('recipients', recipients);
+        items.forEach(function (i) { body.append('selectedItems', i); });
+        cos.forEach(function (c) { body.append('dbCodes', c); });
+        body.append('__RequestVerificationToken', token);
+
+        var btn = document.getElementById('tpvApplyBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Applying…';
+        fetch(applyUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+            body: body.toString()
+        }).then(function (r) { return r.json(); }).then(function (d) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send-check me-1"></i>Apply';
+            if (!d.success && !d.results) { provAlert('warning', d.message || 'Could not apply.'); return; }
+            provAlert(d.success ? 'success' : 'warning', d.message || 'Done.');
+            var rows = (d.results || []).map(function (r) {
+                var icon = r.success ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>';
+                return '<div>' + icon + ' <strong>' + esc(r.company || r.dbCode) + '</strong>: ' + esc(r.message || '') + '</div>';
+            }).join('');
+            document.getElementById('tpvResultsBody').innerHTML = rows;
+            document.getElementById('tpvResults').classList.remove('d-none');
+        }).catch(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send-check me-1"></i>Apply';
+            provAlert('danger', 'Request failed.');
+        });
+    });
+})();
+</script>
+}

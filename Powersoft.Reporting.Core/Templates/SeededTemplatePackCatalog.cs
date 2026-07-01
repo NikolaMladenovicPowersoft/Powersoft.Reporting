@@ -117,8 +117,13 @@ public class SeededTemplatePackCatalog : ITemplatePackCatalog
         };
     }
 
-    public IReadOnlyList<ReportTemplatePack> GetPacks() => _packs;
+    /// <summary>Raw seed packs — used to populate the central catalog on a fresh install.</summary>
+    public IReadOnlyList<ReportTemplatePack> Packs => _packs;
 
-    public ReportTemplatePack? GetPack(string packCode) =>
-        _packs.FirstOrDefault(p => string.Equals(p.PackCode, packCode, StringComparison.OrdinalIgnoreCase));
+    public Task<IReadOnlyList<ReportTemplatePack>> GetPacksAsync() =>
+        Task.FromResult<IReadOnlyList<ReportTemplatePack>>(_packs);
+
+    public Task<ReportTemplatePack?> GetPackAsync(string packCode) =>
+        Task.FromResult(_packs.FirstOrDefault(p =>
+            string.Equals(p.PackCode, packCode, StringComparison.OrdinalIgnoreCase)));
 }

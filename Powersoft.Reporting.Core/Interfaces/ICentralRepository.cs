@@ -70,4 +70,33 @@ public interface ICentralRepository
     /// Used for populating email recipient pickers.
     /// </summary>
     Task<List<(string UserCode, string DisplayName, string Email)>> GetUsersForDatabaseAsync(string dbCode);
+
+    // ==================== Industry template packs (authored centrally, applied per tenant) ====================
+
+    /// <summary>
+    /// Idempotently creates the central template-pack tables (dbo.tbl_RE_TemplatePack + Item) if missing.
+    /// Best-effort: called once at startup. Failures (e.g. no DDL rights) must not crash the app.
+    /// </summary>
+    Task EnsureTemplatePackSchemaAsync();
+
+    /// <summary>All active template packs with their items, ordered for display.</summary>
+    Task<List<ReportTemplatePack>> GetTemplatePacksAsync();
+
+    /// <summary>One template pack (with items) by code, or null. Includes inactive packs (for editing).</summary>
+    Task<ReportTemplatePack?> GetTemplatePackAsync(string packCode);
+
+    /// <summary>
+    /// Creates or updates a pack header AND replaces its full item list in one transaction.
+    /// Matching is by <see cref="ReportTemplatePack.PackCode"/> (case-insensitive).
+    /// </summary>
+    Task UpsertTemplatePackAsync(ReportTemplatePack pack, string userCode);
+
+    /// <summary>Deletes a pack and its items (cascade) by code. No-op if not found.</summary>
+    Task DeleteTemplatePackAsync(string packCode);
+
+    /// <summary>
+    /// Seeds the given example packs ONLY if the catalog is currently empty, so a fresh install has
+    /// something to show without overwriting anything an admin later authored.
+    /// </summary>
+    Task SeedTemplatePacksIfEmptyAsync(IEnumerable<ReportTemplatePack> seedPacks, string userCode);
 }

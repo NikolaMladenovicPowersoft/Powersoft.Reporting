@@ -25,7 +25,7 @@ public class TemplatePackService
         _logger = logger;
     }
 
-    public IReadOnlyList<ReportTemplatePack> GetPacks() => _catalog.GetPacks();
+    public Task<IReadOnlyList<ReportTemplatePack>> GetPacksAsync() => _catalog.GetPacksAsync();
 
     /// <summary>
     /// Raw applied-marker keys from the APPLIEDPACKS INI header. Keys are either a bare pack code
@@ -66,7 +66,7 @@ public class TemplatePackService
         string connectionString, string packCode, string recipients, string userCode,
         IReadOnlyCollection<string>? selectedItemKeys = null)
     {
-        var pack = _catalog.GetPack(packCode);
+        var pack = await _catalog.GetPackAsync(packCode);
         if (pack == null)
             return new TemplatePackApplyResult { Success = false, Message = "Template pack not found." };
 

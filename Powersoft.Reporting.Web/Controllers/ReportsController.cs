@@ -1341,6 +1341,7 @@ public class ReportsController : Controller
             return RedirectToAction("Index", "Home");
         }
         ViewBag.ConnectedDatabase = HttpContext.Session.GetString(SessionKeys.ConnectedDatabase);
+        ViewBag.IsWebmaster = GetRanking() == ModuleConstants.RankingWebmaster;
         return View();
     }
 

@@ -520,4 +520,261 @@ public class CentralRepository : ICentralRepository
         }
         return results;
     }
+
+    // ==================== Industry template packs ====================
+
+    public async Task EnsureTemplatePackSchemaAsync()
+    {
+        const string sql = @"
+            IF OBJECT_ID('dbo.tbl_RE_TemplatePack', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.tbl_RE_TemplatePack (
+                    pk_PackID     INT IDENTITY(1,1) CONSTRAINT PK_RE_TemplatePack PRIMARY KEY,
+                    PackCode      NVARCHAR(50)  NOT NULL CONSTRAINT UQ_RE_TemplatePack_Code UNIQUE,
+                    PackName      NVARCHAR(200) NOT NULL,
+                    IndustryTag   NVARCHAR(100) NULL,
+                    Description   NVARCHAR(500) NULL,
+                    SortOrder     INT NOT NULL CONSTRAINT DF_RE_TP_Sort   DEFAULT(0),
+                    IsActive      BIT NOT NULL CONSTRAINT DF_RE_TP_Active DEFAULT(1),
+                    CreatedBy     NVARCHAR(100) NULL,
+                    CreatedDate   DATETIME NOT NULL CONSTRAINT DF_RE_TP_Created DEFAULT(GETDATE()),
+                    ModifiedBy    NVARCHAR(100) NULL,
+                    ModifiedDate  DATETIME NULL
+                );
+            END
+            IF OBJECT_ID('dbo.tbl_RE_TemplatePackItem', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.tbl_RE_TemplatePackItem (
+                    pk_ItemID         INT IDENTITY(1,1) CONSTRAINT PK_RE_TemplatePackItem PRIMARY KEY,
+                    fk_PackID         INT NOT NULL CONSTRAINT FK_RE_TPItem_Pack
+                                          REFERENCES dbo.tbl_RE_TemplatePack(pk_PackID) ON DELETE CASCADE,
+                    ReportType        NVARCHAR(50)  NOT NULL,
+                    TemplateName      NVARCHAR(200) NOT NULL,
+                    ParametersJson    NVARCHAR(MAX) NULL,
+                    RecurrenceType    NVARCHAR(20)  NOT NULL CONSTRAINT DF_RE_TPItem_Rec  DEFAULT('Monthly'),
+                    RecurrenceDay     INT NULL,
+                    ScheduleTimeMin   INT NOT NULL CONSTRAINT DF_RE_TPItem_Time DEFAULT(480),
+                    ExportFormat      NVARCHAR(20)  NOT NULL CONSTRAINT DF_RE_TPItem_Fmt  DEFAULT('Excel'),
+                    IncludeAiAnalysis BIT NOT NULL CONSTRAINT DF_RE_TPItem_Ai   DEFAULT(0),
+                    AiLocale          NVARCHAR(10)  NOT NULL CONSTRAINT DF_RE_TPItem_Loc  DEFAULT('en'),
+                    SkipIfEmpty       BIT NOT NULL CONSTRAINT DF_RE_TPItem_Skip DEFAULT(1),
+                    SortOrder         INT NOT NULL CONSTRAINT DF_RE_TPItem_Sort DEFAULT(0)
+                );
+                CREATE INDEX IX_RE_TPItem_Pack ON dbo.tbl_RE_TemplatePackItem (fk_PackID);
+            END";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task<List<ReportTemplatePack>> GetTemplatePacksAsync()
+    {
+        const string sql = @"
+            SELECT pk_PackID, PackCode, PackName, IndustryTag, Description, SortOrder
+            FROM dbo.tbl_RE_TemplatePack WHERE IsActive = 1 ORDER BY SortOrder, PackName;
+
+            SELECT fk_PackID, pk_ItemID, ReportType, TemplateName, ParametersJson,
+                   RecurrenceType, RecurrenceDay, ScheduleTimeMin, ExportFormat,
+                   IncludeAiAnalysis, AiLocale, SkipIfEmpty
+            FROM dbo.tbl_RE_TemplatePackItem
+            ORDER BY fk_PackID, SortOrder, pk_ItemID;";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        using var reader = await cmd.ExecuteReaderAsync();
+
+        var byId = new Dictionary<int, ReportTemplatePack>();
+        var ordered = new List<ReportTemplatePack>();
+        while (await reader.ReadAsync())
+        {
+            var pack = new ReportTemplatePack
+            {
+                PackCode = reader.GetString(1),
+                PackName = reader.GetString(2),
+                IndustryTag = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Description = reader.IsDBNull(4) ? null : reader.GetString(4),
+                SortOrder = reader.GetInt32(5)
+            };
+            byId[reader.GetInt32(0)] = pack;
+            ordered.Add(pack);
+        }
+
+        await reader.NextResultAsync();
+        while (await reader.ReadAsync())
+        {
+            if (byId.TryGetValue(reader.GetInt32(0), out var pack))
+                pack.Items.Add(MapTemplateItem(reader));
+        }
+
+        return ordered;
+    }
+
+    public async Task<ReportTemplatePack?> GetTemplatePackAsync(string packCode)
+    {
+        const string sql = @"
+            SELECT pk_PackID, PackCode, PackName, IndustryTag, Description, SortOrder
+            FROM dbo.tbl_RE_TemplatePack WHERE PackCode = @Code;
+
+            SELECT i.fk_PackID, i.pk_ItemID, i.ReportType, i.TemplateName, i.ParametersJson,
+                   i.RecurrenceType, i.RecurrenceDay, i.ScheduleTimeMin, i.ExportFormat,
+                   i.IncludeAiAnalysis, i.AiLocale, i.SkipIfEmpty
+            FROM dbo.tbl_RE_TemplatePackItem i
+            INNER JOIN dbo.tbl_RE_TemplatePack p ON i.fk_PackID = p.pk_PackID
+            WHERE p.PackCode = @Code
+            ORDER BY i.SortOrder, i.pk_ItemID;";
+
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@Code", packCode);
+        using var reader = await cmd.ExecuteReaderAsync();
+
+        if (!await reader.ReadAsync()) return null;
+        var pack = new ReportTemplatePack
+        {
+            PackCode = reader.GetString(1),
+            PackName = reader.GetString(2),
+            IndustryTag = reader.IsDBNull(3) ? null : reader.GetString(3),
+            Description = reader.IsDBNull(4) ? null : reader.GetString(4),
+            SortOrder = reader.GetInt32(5)
+        };
+
+        await reader.NextResultAsync();
+        while (await reader.ReadAsync())
+            pack.Items.Add(MapTemplateItem(reader));
+
+        return pack;
+    }
+
+    private static ReportTemplateItem MapTemplateItem(SqlDataReader r) => new()
+    {
+        // Column order matches both item SELECTs above.
+        ItemKey = r.GetInt32(1).ToString(),   // pk_ItemID — stable idempotency key
+        ReportType = r.GetString(2),
+        TemplateName = r.GetString(3),
+        ParametersJson = r.IsDBNull(4) ? null : r.GetString(4),
+        RecurrenceType = r.GetString(5),
+        RecurrenceDay = r.IsDBNull(6) ? null : r.GetInt32(6),
+        ScheduleTime = TimeSpan.FromMinutes(r.GetInt32(7)),
+        ExportFormat = r.GetString(8),
+        IncludeAiAnalysis = r.GetBoolean(9),
+        AiLocale = r.GetString(10),
+        SkipIfEmpty = r.GetBoolean(11)
+    };
+
+    public async Task UpsertTemplatePackAsync(ReportTemplatePack pack, string userCode)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var tx = (SqlTransaction)await conn.BeginTransactionAsync();
+        try
+        {
+            // 1) Upsert header, resolve pk_PackID.
+            int packId;
+            using (var find = new SqlCommand(
+                "SELECT pk_PackID FROM dbo.tbl_RE_TemplatePack WHERE PackCode = @Code", conn, tx))
+            {
+                find.Parameters.AddWithValue("@Code", pack.PackCode);
+                var existing = await find.ExecuteScalarAsync();
+
+                if (existing == null || existing == DBNull.Value)
+                {
+                    using var ins = new SqlCommand(@"
+                        INSERT INTO dbo.tbl_RE_TemplatePack
+                            (PackCode, PackName, IndustryTag, Description, SortOrder, IsActive, CreatedBy, CreatedDate)
+                        VALUES (@Code, @Name, @Tag, @Desc, @Sort, 1, @User, GETDATE());
+                        SELECT CAST(SCOPE_IDENTITY() AS INT);", conn, tx);
+                    AddPackHeaderParams(ins, pack, userCode);
+                    packId = (int)(await ins.ExecuteScalarAsync())!;
+                }
+                else
+                {
+                    packId = (int)existing;
+                    using var upd = new SqlCommand(@"
+                        UPDATE dbo.tbl_RE_TemplatePack
+                        SET PackName = @Name, IndustryTag = @Tag, Description = @Desc,
+                            SortOrder = @Sort, ModifiedBy = @User, ModifiedDate = GETDATE()
+                        WHERE pk_PackID = @Id;", conn, tx);
+                    AddPackHeaderParams(upd, pack, userCode);
+                    upd.Parameters.AddWithValue("@Id", packId);
+                    await upd.ExecuteNonQueryAsync();
+                }
+            }
+
+            // 2) Replace the full item list (simplest correct sync of an edited pack).
+            using (var del = new SqlCommand(
+                "DELETE FROM dbo.tbl_RE_TemplatePackItem WHERE fk_PackID = @Id", conn, tx))
+            {
+                del.Parameters.AddWithValue("@Id", packId);
+                await del.ExecuteNonQueryAsync();
+            }
+
+            var sort = 0;
+            foreach (var item in pack.Items)
+            {
+                using var ins = new SqlCommand(@"
+                    INSERT INTO dbo.tbl_RE_TemplatePackItem
+                        (fk_PackID, ReportType, TemplateName, ParametersJson, RecurrenceType, RecurrenceDay,
+                         ScheduleTimeMin, ExportFormat, IncludeAiAnalysis, AiLocale, SkipIfEmpty, SortOrder)
+                    VALUES (@PackId, @Type, @Name, @Params, @Rec, @Day, @Time, @Fmt, @Ai, @Loc, @Skip, @Sort);", conn, tx);
+                ins.Parameters.AddWithValue("@PackId", packId);
+                ins.Parameters.AddWithValue("@Type", item.ReportType);
+                ins.Parameters.AddWithValue("@Name", item.TemplateName);
+                ins.Parameters.AddWithValue("@Params", (object?)item.ParametersJson ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@Rec", string.IsNullOrWhiteSpace(item.RecurrenceType) ? "Monthly" : item.RecurrenceType);
+                ins.Parameters.AddWithValue("@Day", (object?)item.RecurrenceDay ?? DBNull.Value);
+                ins.Parameters.AddWithValue("@Time", (int)item.ScheduleTime.TotalMinutes);
+                ins.Parameters.AddWithValue("@Fmt", string.IsNullOrWhiteSpace(item.ExportFormat) ? "Excel" : item.ExportFormat);
+                ins.Parameters.AddWithValue("@Ai", item.IncludeAiAnalysis);
+                ins.Parameters.AddWithValue("@Loc", string.IsNullOrWhiteSpace(item.AiLocale) ? "en" : item.AiLocale);
+                ins.Parameters.AddWithValue("@Skip", item.SkipIfEmpty);
+                ins.Parameters.AddWithValue("@Sort", sort++);
+                await ins.ExecuteNonQueryAsync();
+            }
+
+            await tx.CommitAsync();
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
+
+    private static void AddPackHeaderParams(SqlCommand cmd, ReportTemplatePack pack, string userCode)
+    {
+        cmd.Parameters.AddWithValue("@Code", pack.PackCode);
+        cmd.Parameters.AddWithValue("@Name", pack.PackName);
+        cmd.Parameters.AddWithValue("@Tag", (object?)pack.IndustryTag ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Desc", (object?)pack.Description ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Sort", pack.SortOrder);
+        cmd.Parameters.AddWithValue("@User", (object?)userCode ?? DBNull.Value);
+    }
+
+    public async Task DeleteTemplatePackAsync(string packCode)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        using var cmd = new SqlCommand(
+            "DELETE FROM dbo.tbl_RE_TemplatePack WHERE PackCode = @Code", conn);
+        cmd.Parameters.AddWithValue("@Code", packCode);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task SeedTemplatePacksIfEmptyAsync(IEnumerable<ReportTemplatePack> seedPacks, string userCode)
+    {
+        using (var conn = new SqlConnection(_connectionString))
+        {
+            await conn.OpenAsync();
+            using var count = new SqlCommand("SELECT COUNT(*) FROM dbo.tbl_RE_TemplatePack", conn);
+            var n = (int)(await count.ExecuteScalarAsync())!;
+            if (n > 0) return;
+        }
+
+        foreach (var pack in seedPacks)
+            await UpsertTemplatePackAsync(pack, userCode);
+    }
 }

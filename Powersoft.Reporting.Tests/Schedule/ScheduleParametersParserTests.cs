@@ -228,4 +228,106 @@ public class ScheduleParametersParserTests
         Enum.TryParse<CatalogueGroupBy>(p.CatSecondaryGroup, true, out var sg).Should().BeTrue();
         sg.Should().Be(CatalogueGroupBy.Brand);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Template-authoring UI contract (Views/TemplateAdmin/Index.cshtml).
+    //
+    // The authoring UI builds ParametersJson from hard-coded option lists. If any option
+    // value is not a real enum member, ParseEnum/Enum.TryParse silently falls back to the
+    // default — a template that *looks* grouped by "Brand" would run ungrouped. These tests
+    // pin every option list to its enum so a typo in the cshtml fails here instead of on a
+    // customer's scheduled report. Keep these arrays byte-identical to the cshtml.
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    private static readonly string[] Ui_PsGroups =
+        { "None","Category","Department","Brand","Season","Supplier","Store","Model","Colour","Size","GroupSize","Fabric","Franchise","User","PaymentType" };
+    private static readonly string[] Ui_AbGroups =
+        { "None","Store","Category","Department","Brand","Season","Customer","User","Supplier","Model","Colour","Size","CustomerCategory1","CustomerCategory2","Item","GroupSize","Fabric" };
+    private static readonly string[] Ui_CatGroups =
+        { "None","Category","Department","Supplier","Brand","Season","Store","Model","Colour","Size","Customer","Agent","PaymentType","Franchise","User" };
+    private static readonly string[] Ui_ParetoDims =
+        { "Category","Department","Brand","Season","Supplier","Store","Model","Colour","Size","GroupSize","Fabric","Customer","CustomerCategory1","CustomerCategory2","User","Item" };
+    private static readonly string[] Ui_ChartDims =
+        { "Category","Store","Brand","Customer","Supplier","Department","Season","Agent","User","Model","Colour","Item" };
+
+    public static IEnumerable<object[]> AuthoringOptionLists()
+    {
+        foreach (var v in Ui_PsGroups)     yield return new object[] { typeof(PsGroupBy), v };
+        foreach (var v in Ui_AbGroups)     yield return new object[] { typeof(GroupByType), v };
+        foreach (var v in Ui_CatGroups)    yield return new object[] { typeof(CatalogueGroupBy), v };
+        foreach (var v in Ui_ParetoDims)   yield return new object[] { typeof(ParetoDimension), v };
+        foreach (var v in Ui_ChartDims)    yield return new object[] { typeof(ChartDimension), v };
+        foreach (var v in new[] { "Detailed","Summary","Monthly" })                                         yield return new object[] { typeof(PsReportMode), v };
+        foreach (var v in new[] { "Daily","Weekly","Monthly" })                                             yield return new object[] { typeof(BreakdownType), v };
+        foreach (var v in new[] { "Summary","Detailed" })                                                   yield return new object[] { typeof(CatalogueReportMode), v };
+        foreach (var v in new[] { "Sale","Purchase","Both" })                                               yield return new object[] { typeof(CatalogueReportOn), v };
+        foreach (var v in new[] { "Value","Quantity","Profit" })                                            yield return new object[] { typeof(ParetoMetric), v };
+        foreach (var v in new[] { "Sales","SalesVsReturns","Purchases","PurchasesVsReturns","SalesVsPurchases" }) yield return new object[] { typeof(ChartMode), v };
+        foreach (var v in new[] { "Value","Quantity","Count" })                                             yield return new object[] { typeof(ChartMetric), v };
+    }
+
+    [Theory]
+    [MemberData(nameof(AuthoringOptionLists))]
+    public void AuthoringUi_EveryOptionValue_IsAValidEnumMember(Type enumType, string optionValue)
+    {
+        Enum.TryParse(enumType, optionValue, ignoreCase: true, out var parsed).Should().BeTrue(
+            "authoring option '{0}' must be a real {1} member or the scheduler silently drops the filter",
+            optionValue, enumType.Name);
+        Enum.IsDefined(enumType, parsed!).Should().BeTrue();
+    }
+
+    // The whole point of the Pareto authoring default: it must NOT resolve to Item, whose
+    // unfiltered item-level scan can time out on large tenants (see reporting-engine rule #10).
+    [Fact]
+    public void AuthoringUi_ParetoDefaultJson_ResolvesToSafeCategory_NotItem()
+    {
+        // Exactly what buildParams() emits for a freshly-added Pareto item with defaults.
+        var json = "{\"dimension\":\"Category\",\"metric\":\"Value\",\"includeVat\":false," +
+                   "\"reportDateRange\":{\"type\":\"LastMonth\",\"value\":0}}";
+
+        var p = ScheduleParametersParser.Parse(json);
+
+        p.ParetoDimension.Should().Be("Category");
+        var dim = Enum.TryParse<ParetoDimension>(p.ParetoDimension, true, out var d) ? d : ParetoDimension.Item;
+        dim.Should().Be(ParetoDimension.Category);
+        dim.Should().NotBe(ParetoDimension.Item, "the authoring default must avoid the timeout-prone Item scan");
+    }
+
+    // Catalogue authoring default must resolve to a grouped Summary, not the heavy ungrouped
+    // Detailed item listing the scheduler falls back to when primaryGroup is absent.
+    [Fact]
+    public void AuthoringUi_CatalogueDefaultJson_ResolvesToGroupedSummary()
+    {
+        var json = "{\"reportMode\":\"Summary\",\"reportOn\":\"Sale\",\"primaryGroup\":\"Category\"," +
+                   "\"secondaryGroup\":\"None\",\"thirdGroup\":\"None\",\"showProfit\":false,\"showStock\":false," +
+                   "\"reportDateRange\":{\"type\":\"LastMonth\",\"value\":0}}";
+
+        var p = ScheduleParametersParser.Parse(json);
+
+        Enum.TryParse<CatalogueReportMode>(p.CatReportMode, true, out var rm).Should().BeTrue();
+        rm.Should().Be(CatalogueReportMode.Summary);
+        Enum.TryParse<CatalogueReportOn>(p.CatReportOn, true, out var ro).Should().BeTrue();
+        ro.Should().Be(CatalogueReportOn.Sale);
+        Enum.TryParse<CatalogueGroupBy>(p.CatPrimaryGroup, true, out var pg).Should().BeTrue();
+        pg.Should().Be(CatalogueGroupBy.Category);
+        pg.Should().NotBe(CatalogueGroupBy.None, "an ungrouped Detailed catalogue lists every item and can be slow");
+    }
+
+    [Fact]
+    public void AuthoringUi_ChartsDefaultJson_ResolvesModeDimensionMetric()
+    {
+        var json = "{\"mode\":\"Sales\",\"dimension\":\"Category\",\"metric\":\"Value\"," +
+                   "\"chartType\":\"pie\",\"includeVat\":false," +
+                   "\"reportDateRange\":{\"type\":\"LastMonth\",\"value\":0}}";
+
+        var p = ScheduleParametersParser.Parse(json);
+
+        Enum.TryParse<ChartMode>(p.ChartMode, true, out var m).Should().BeTrue();
+        m.Should().Be(ChartMode.Sales);
+        Enum.TryParse<ChartDimension>(p.ChartDimension, true, out var dim).Should().BeTrue();
+        dim.Should().Be(ChartDimension.Category);
+        Enum.TryParse<ChartMetric>(p.ChartMetric, true, out var met).Should().BeTrue();
+        met.Should().Be(ChartMetric.Value);
+        p.ChartType.Should().Be("pie");
+    }
 }

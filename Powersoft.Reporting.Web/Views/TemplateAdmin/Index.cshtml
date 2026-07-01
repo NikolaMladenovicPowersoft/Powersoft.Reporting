@@ -251,6 +251,10 @@ else
     ];
     var PS_GROUPS = ['None','Category','Department','Brand','Season','Supplier','Store','Model','Colour','Size','GroupSize','Fabric','Franchise','User','PaymentType'];
     var AB_GROUPS = ['None','Store','Category','Department','Brand','Season','Customer','User','Supplier','Model','Colour','Size','CustomerCategory1','CustomerCategory2','Item','GroupSize','Fabric'];
+    // Values are enum member NAMES (must match Core enums) — the scheduler parses them via Enum.TryParse.
+    var CAT_GROUPS = ['None','Category','Department','Supplier','Brand','Season','Store','Model','Colour','Size','Customer','Agent','PaymentType','Franchise','User'];
+    var PARETO_DIMS = ['Category','Department','Brand','Season','Supplier','Store','Model','Colour','Size','GroupSize','Fabric','Customer','CustomerCategory1','CustomerCategory2','User','Item'];
+    var CHART_DIMS  = ['Category','Store','Brand','Customer','Supplier','Department','Season','Agent','User','Model','Colour','Item'];
     // Which friendly controls each report type exposes. Types not listed only get a date range.
     var TYPE_PARAMS = {
         PurchasesSales: {
@@ -270,6 +274,39 @@ else
                 { key: 'breakdown',        label: 'Breakdown', tip: 'Time granularity of the columns.', options: ['Daily','Weekly','Monthly'], def: 'Monthly' },
                 { key: 'groupBy',          label: 'Group by',  tip: 'Primary dimension the rows are grouped by.', options: AB_GROUPS, def: 'Category', grp: 1 },
                 { key: 'secondaryGroupBy', label: 'Then by',   tip: 'Second grouping level (optional). Used only if the primary group is set.', options: AB_GROUPS, def: 'None', grp: 2 }
+            ],
+            toggles: [
+                { key: 'includeVat', label: 'Include VAT', tip: 'Include VAT in the money amounts.', def: false }
+            ]
+        },
+        Catalogue: {
+            selects: [
+                { key: 'reportMode',   label: 'Report mode', tip: 'Summary totals per group, or detailed item lines.', options: ['Summary','Detailed'], def: 'Summary' },
+                { key: 'reportOn',     label: 'Report on',   tip: 'Sales, purchases, or both.', options: ['Sale','Purchase','Both'], def: 'Sale' },
+                { key: 'primaryGroup', label: 'Group by',    tip: 'Primary grouping. Leaving this None on a large database lists every item and can be slow.', options: CAT_GROUPS, def: 'Category', grp: 1 },
+                { key: 'secondaryGroup', label: 'Then by',   tip: 'Second grouping level (optional).', options: CAT_GROUPS, def: 'None', grp: 2 },
+                { key: 'thirdGroup',   label: 'Then by',     tip: 'Third grouping level (optional).', options: CAT_GROUPS, def: 'None', grp: 3 }
+            ],
+            toggles: [
+                { key: 'showProfit', label: 'Show profit', tip: 'Include profit / margin columns.', def: false },
+                { key: 'showStock',  label: 'Show stock',  tip: 'Include current stock columns.', def: false }
+            ]
+        },
+        Pareto: {
+            selects: [
+                { key: 'dimension', label: 'Analyse by', tip: 'Dimension the 80/20 analysis groups by. Item can be very slow on large databases — prefer Category or Brand.', options: PARETO_DIMS, def: 'Category' },
+                { key: 'metric',    label: 'Rank by',    tip: 'Which measure ranks the A/B/C classes.', options: ['Value','Quantity','Profit'], def: 'Value' }
+            ],
+            toggles: [
+                { key: 'includeVat', label: 'Include VAT', tip: 'Include VAT in the money amounts.', def: false }
+            ]
+        },
+        Charts: {
+            selects: [
+                { key: 'mode',      label: 'Show',           tip: 'What the chart measures.', options: ['Sales','SalesVsReturns','Purchases','PurchasesVsReturns','SalesVsPurchases'], def: 'Sales' },
+                { key: 'dimension', label: 'Break down by',  tip: 'Dimension the chart groups by.', options: CHART_DIMS, def: 'Category' },
+                { key: 'metric',    label: 'Measure',        tip: 'Value, quantity, or transaction count.', options: ['Value','Quantity','Count'], def: 'Value' },
+                { key: 'chartType', label: 'Chart type',     tip: 'Visual style of the chart.', options: ['pie','bar','line'], def: 'pie' }
             ],
             toggles: [
                 { key: 'includeVat', label: 'Include VAT', tip: 'Include VAT in the money amounts.', def: false }

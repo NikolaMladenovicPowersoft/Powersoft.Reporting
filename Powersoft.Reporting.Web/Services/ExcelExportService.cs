@@ -1582,6 +1582,143 @@ public class ExcelExportService
         return stream.ToArray();
     }
 
+    public byte[] GenerateCashFlowExcel(CashFlowStatement statement, CashFlowFilter filter)
+    {
+        statement ??= new();
+        bool monthly = filter.Monthly;
+        bool compare = filter.CompareToLastYear;
+        bool budget = filter.IncludeBudget;
+        var months = statement.Months;
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Cash Flow");
+
+        ws.Cell(1, 1).Value = monthly ? "Cash Flow (Direct) - Monthly" : "Cash Flow (Direct)";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:dd/MM/yyyy} - {filter.DateTo:dd/MM/yyyy}";
+        if (compare)
+            ws.Cell(selRow++, 1).Value = $"Comparison Period: {filter.PriorDateFrom:dd/MM/yyyy} - {filter.PriorDateTo:dd/MM/yyyy}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        static string MonthLabel(string key) =>
+            DateTime.TryParse(key + "-01", out var d) ? d.ToString("MMM-yy") : key;
+
+        int headerRow = selRow + 1;
+        int col = 1;
+        ws.Cell(headerRow, col++).Value = "Line";
+        if (monthly)
+        {
+            foreach (var m in months) ws.Cell(headerRow, col++).Value = MonthLabel(m);
+            ws.Cell(headerRow, col++).Value = "Total";
+        }
+        else
+        {
+            ws.Cell(headerRow, col++).Value = "Amount";
+            if (compare)
+            {
+                ws.Cell(headerRow, col++).Value = "Prior Year";
+                ws.Cell(headerRow, col++).Value = "Variance";
+            }
+            if (budget)
+            {
+                ws.Cell(headerRow, col++).Value = "Budget";
+                ws.Cell(headerRow, col++).Value = "Budget Variance";
+            }
+        }
+        int totalCols = col - 1;
+        var headerRange = ws.Range(headerRow, 1, headerRow, totalCols);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+        void PutNum(int r, int c, decimal v)
+        {
+            ws.Cell(r, c).Value = v;
+            // PBI statement format: negatives in parentheses, zero as dash.
+            ws.Cell(r, c).Style.NumberFormat.Format = "#,##0.00;(#,##0.00);\"-\"";
+        }
+
+        int PutValues(int r, decimal amount, decimal prior, decimal bud,
+            IReadOnlyDictionary<string, decimal>? monthAmounts)
+        {
+            int c = 2;
+            if (monthly)
+            {
+                foreach (var m in months) PutNum(r, c++, monthAmounts?.GetValueOrDefault(m) ?? 0m);
+                PutNum(r, c++, amount);
+            }
+            else
+            {
+                PutNum(r, c++, amount);
+                if (compare) { PutNum(r, c++, prior); PutNum(r, c++, amount - prior); }
+                if (budget) { PutNum(r, c++, bud); PutNum(r, c++, amount - bud); }
+            }
+            return c - 1;
+        }
+
+        foreach (var grp in statement.Groups)
+        {
+            // Group header row (bold, with group totals — PBI matrix style).
+            ws.Cell(dataRow, 1).Value = grp.Name;
+            PutValues(dataRow, grp.Amount, grp.PriorAmount, grp.BudgetAmount, grp.MonthAmounts);
+            var gr = ws.Range(dataRow, 1, dataRow, totalCols);
+            gr.Style.Font.Bold = true;
+            gr.Style.Fill.BackgroundColor = XLColor.FromHtml("#f1f5f9");
+            dataRow++;
+
+            foreach (var cat in grp.Categories)
+            {
+                ws.Cell(dataRow, 1).Value = "    " + cat.Name;
+                PutValues(dataRow, cat.Amount, cat.PriorAmount, cat.BudgetAmount, cat.MonthAmounts);
+                dataRow++;
+
+                foreach (var acc in cat.Accounts)
+                {
+                    ws.Cell(dataRow, 1).Value = "        " + (string.IsNullOrEmpty(acc.AccountCode)
+                        ? acc.AccountName : acc.AccountCode + " - " + acc.AccountName);
+                    ws.Cell(dataRow, 1).Style.Font.FontColor = XLColor.FromHtml("#475569");
+                    PutValues(dataRow, acc.Amount, acc.PriorAmount, acc.BudgetAmount, acc.MonthAmounts);
+                    dataRow++;
+                }
+            }
+        }
+
+        dataRow++;
+        ws.Cell(dataRow, 1).Value = "NET CASH MOVEMENT";
+        if (monthly)
+        {
+            int c = 2;
+            foreach (var m in months) PutNum(dataRow, c++, statement.MonthNetCashMovement.GetValueOrDefault(m));
+            PutNum(dataRow, c, statement.NetCashMovement);
+        }
+        else
+        {
+            PutNum(dataRow, 2, statement.NetCashMovement);
+            if (compare)
+            {
+                PutNum(dataRow, 3, statement.PriorNetCashMovement);
+                PutNum(dataRow, 4, statement.NetCashMovement - statement.PriorNetCashMovement);
+            }
+        }
+        var totRange = ws.Range(dataRow, 1, dataRow, totalCols);
+        totRange.Style.Font.Bold = true;
+        totRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
+
+        ws.Columns().AdjustToContents(1, 80);
+        ws.SheetView.FreezeRows(headerRow);
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
     public byte[] GenerateBelowMinStockExcel(List<BelowMinStockRow> rows, BelowMinStockFilter filter, bool viewCost = true)
     {
         rows ??= new();
@@ -1634,6 +1771,66 @@ public class ExcelExportService
             {
                 ws.Range(dataRow, 1, dataRow, headers.Count).Style.Font.FontColor = XLColor.Red;
             }
+            dataRow++;
+        }
+
+        ws.Columns().AdjustToContents(1, 80);
+        ws.SheetView.FreezeRows(headerRow);
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    public byte[] GenerateCustomerNotPurchasedExcel(List<CustomerNotPurchasedRow> rows, CustomerNotPurchasedFilter filter)
+    {
+        rows ??= new();
+        bool byCustomer = filter.GroupBy == GroupByType.Customer;
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Items Not Purchased");
+
+        ws.Cell(1, 1).Value = "Items Not Purchased Report";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+        ws.Cell(2, 1).Value = $"Window: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}  |  Not purchased for {filter.DaysThreshold} day(s)  |  As at {filter.ReferenceDate:yyyy-MM-dd}";
+        ws.Cell(3, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}  |  Items: {rows.Count}";
+
+        int headerRow = 5;
+        int col = 1;
+        var headers = new List<string>();
+        if (byCustomer) headers.Add("Customer");
+        headers.AddRange(new[] { "Item Code", "Item Name", "Category", "Last Purchased", "Days Since", "Last Qty", "Total Qty" });
+
+        foreach (var h in headers)
+        {
+            ws.Cell(headerRow, col).Value = h;
+            ws.Cell(headerRow, col).Style.Font.Bold = true;
+            ws.Cell(headerRow, col).Style.Fill.BackgroundColor = XLColor.FromHtml("#1a365d");
+            ws.Cell(headerRow, col).Style.Font.FontColor = XLColor.White;
+            col++;
+        }
+
+        int dataRow = headerRow + 1;
+        foreach (var r in rows)
+        {
+            col = 1;
+            if (byCustomer) ws.Cell(dataRow, col++).Value = r.CustomerName ?? r.CustomerCode ?? "";
+            ws.Cell(dataRow, col++).Value = r.ItemCode;
+            ws.Cell(dataRow, col++).Value = r.ItemName;
+            ws.Cell(dataRow, col++).Value = (r.CategoryCode ?? "") + (string.IsNullOrEmpty(r.CategoryDescr) ? "" : " - " + r.CategoryDescr);
+            if (r.LastPurchaseDate.HasValue)
+            {
+                ws.Cell(dataRow, col).Value = r.LastPurchaseDate.Value;
+                ws.Cell(dataRow, col).Style.NumberFormat.Format = "yyyy-mm-dd";
+            }
+            else ws.Cell(dataRow, col).Value = "Never";
+            col++;
+            if (r.DaysSinceLastPurchase.HasValue) ws.Cell(dataRow, col).Value = r.DaysSinceLastPurchase.Value;
+            else ws.Cell(dataRow, col).Value = "Never";
+            col++;
+            ws.Cell(dataRow, col).Value = r.LastPurchaseQty; ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(dataRow, col).Value = r.TotalQtyInWindow; ws.Cell(dataRow, col++).Style.NumberFormat.Format = "#,##0.00";
             dataRow++;
         }
 

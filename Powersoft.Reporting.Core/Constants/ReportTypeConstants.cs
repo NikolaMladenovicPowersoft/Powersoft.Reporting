@@ -19,6 +19,14 @@ public static class ReportTypeConstants
     public const string TrialBalance = "TrialBalance";
     public const string ProfitLoss = "ProfitLoss";
 
+    // Report B (George, 2026): "Items Not Purchased (by Customer) in X Days".
+    // Scheduler wiring (ScheduleExecutionService case + Cnp* params) is in place, so it is Schedulable.
+    public const string CustomerNotPurchased = "CustomerNotPurchased";
+
+    // Cash Flow (Direct) — George/Marinos 2026. Mirrors the Power BI cash-flow engine
+    // (GetAllTransactionsForBowerBI IsCashFlow=1 + GetFullTreeCoaBI hierarchy) but self-contained.
+    public const string CashFlow = "CashFlow";
+
     /// <summary>
     /// The set of report types that can be scheduled.
     /// Used for validation when creating/updating schedules.
@@ -35,7 +43,9 @@ public static class ReportTypeConstants
         ProspectClients,
         OffersReport,
         TrialBalance,
-        ProfitLoss
+        ProfitLoss,
+        CustomerNotPurchased,
+        CashFlow
     };
 
     public static bool IsSchedulable(string reportType) =>

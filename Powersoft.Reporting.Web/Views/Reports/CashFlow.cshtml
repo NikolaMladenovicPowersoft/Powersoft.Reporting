@@ -1,0 +1,539 @@
+@using Powersoft.Reporting.Core.Models
+@{
+    ViewData["Title"] = "Cash Flow";
+    var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
+    var canSchedule = true;
+    var hasSavedLayout = (bool)(ViewBag.HasSavedLayout ?? false);
+    var savedLayout = ViewBag.SavedLayout as Dictionary<string, string>;
+}
+
+<style>
+    .stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;}
+    .stat-value{font-size:clamp(1rem,1.6vw,1.5rem);font-weight:700;color:#1e293b;line-height:1.15;overflow-wrap:anywhere;}
+    .stat-label{font-size:.8rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:4px;}
+    .group-header-row td{background:#f1f5f9!important;font-weight:700;border-top:2px solid #cbd5e1;}
+    .cat-row td:first-child{padding-left:1.75rem;}
+    .acc-row td:first-child{padding-left:3.25rem;color:#475569;font-size:.85rem;}
+    .grand-total-row td{background:#dbeafe!important;font-weight:700;border-top:3px double #2563eb;border-bottom:3px double #2563eb;}
+    .var-pos{color:#059669;} .var-neg{color:#dc2626;}
+    .cell-pos{background:#e6f2e2!important;} .cell-neg{background:#fbe3e4!important;}
+</style>
+
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-start">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
+                    <li class="breadcrumb-item">Financial</li>
+                    <li class="breadcrumb-item active">Cash Flow</li>
+                </ol>
+            </nav>
+            <h2 class="mb-0"><i class="bi bi-cash-stack me-2 text-primary"></i>Cash Flow</h2>
+            <p class="text-muted mb-0">Direct cash flow statement (Operating / Investing / Financing), with optional monthly breakdown, prior-year and budget comparison</p>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-funnel me-2"></i>Report Parameters</div>
+    <div class="card-body">
+        <div class="row g-3 mb-3 align-items-end">
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold">From Date <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="dateFrom">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label fw-semibold">To Date <span class="text-danger">*</span></label>
+                <input type="date" class="form-control" id="dateTo">
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="compareLastYear">
+                    <label class="form-check-label text-nowrap" for="compareLastYear" title="Adds Prior Year and Variance columns (same period shifted one year back)">Compare to last year</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="includeBudget">
+                    <label class="form-check-label text-nowrap" for="includeBudget" title="Adds Budget and Budget Variance columns from the accounting budget">Include budget</label>
+                </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="showAccounts">
+                    <label class="form-check-label text-nowrap" for="showAccounts" title="Show the individual accounts under each statement line">Show accounts</label>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="monthlyBreakdown" onchange="onMonthlyToggle()">
+                    <label class="form-check-label text-nowrap" for="monthlyBreakdown" title="One column per calendar month (up to 12). Prior-year and budget columns are not available in monthly view.">Monthly breakdown</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="report-form-actions d-flex flex-wrap gap-2 pt-2 border-top">
+            <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
+                <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
+                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            </button>
+            @if (canSchedule)
+            {
+                <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                    <i class="bi bi-clock-history me-2"></i>Schedule
+                </button>
+            }
+            <div class="btn-group ms-auto">
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"
+                            title="Saved report layouts" id="layoutsDropdownBtn">
+                        <i class="bi bi-bookmark me-1"></i><span id="layoutsCurrentName">Layouts</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" id="layoutsDropdownMenu" style="min-width: 320px;">
+                        <li><h6 class="dropdown-header">Loading...</h6></li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Overwrite your default layout with current parameters">
+                    <i class="bi bi-save me-1"></i>Save
+                </button>
+                <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveLayoutAsModal"
+                        title="Save current parameters as a new named layout">
+                    <i class="bi bi-bookmark-plus me-1"></i>Save as...
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="resetSavedLayout()" title="Discard your saved default layout and restore defaults">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Default
+                </button>
+            </div>
+            <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()" title="Reset comparison and budget options">
+                <i class="bi bi-funnel me-1"></i>Clear Filters
+            </button>
+        </div>
+        @if (hasSavedLayout)
+        {
+            <div class="mt-2"><small class="text-info"><i class="bi bi-check-circle me-1"></i>Saved layout loaded</small></div>
+        }
+    </div>
+</div>
+
+<div id="reportAlert" style="display:none;"></div>
+
+<div id="reportLoading" style="display:none;" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2 text-muted">Loading report data...</p>
+</div>
+
+<div id="kpiCards" class="row mb-4 g-3" style="display:none;"></div>
+
+<div id="reportResults" style="display:none;">
+    <div class="card" id="results">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-table me-2"></i>Results: <span id="rowCountInfo">0</span></span>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()" id="previewToggleBtn" title="Toggle document preview">
+                    <i class="bi bi-eye me-1"></i>Preview
+                </button>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-success" onclick="exportServerCsv()" title="Export CSV"><i class="bi bi-filetype-csv me-1"></i>CSV</button>
+                    <button class="btn btn-outline-success" onclick="exportServerExcel()" title="Export Excel"><i class="bi bi-filetype-xlsx me-1"></i>Excel</button>
+                    <button class="btn btn-outline-danger" onclick="exportServerPdf()" title="Export PDF"><i class="bi bi-filetype-pdf me-1"></i>PDF</button>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email"><i class="bi bi-envelope me-1"></i>Send to Email</button>
+                <button class="btn btn-sm btn-outline-info" onclick="if(!hasData()){alert('Generate a report first.');return;}openAiAnalysis()" title="AI-powered report analysis" id="btnAnalyze"><i class="bi bi-stars me-1"></i>AI Analyze</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0" id="reportTable">
+                    <thead class="table-light" id="reportHead"></thead>
+                    <tbody id="reportBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="previewPanel" style="display:none;" class="mt-3">
+    <div class="card border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+            <span><i class="bi bi-file-earmark-text me-2"></i>Document Preview</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-light" onclick="printPreview()" title="Print"><i class="bi bi-printer me-1"></i>Print</button>
+                <button class="btn btn-sm btn-outline-light" onclick="togglePreview()" title="Close preview"><i class="bi bi-x-lg me-1"></i>Back to Grid</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <iframe id="previewFrame" style="width:100%; border:none; min-height:700px; background:#525659;"></iframe>
+        </div>
+    </div>
+</div>
+
+@await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel
+{
+    SaveAction = "SaveCashFlowSchedule",
+    ListAction = "GetCashFlowSchedules",
+    ReportBadge = "Cash Flow",
+    NamePlaceholder = "e.g. Monthly Cash Flow",
+    SubjectPlaceholder = "Cash Flow Report - {date}"
+})
+
+@await Html.PartialAsync("_SendEmail", new Powersoft.Reporting.Web.ViewModels.SendEmailPartialModel {
+    SendAction = "SendCashFlowReportEmail",
+    ReportType = "CashFlow",
+    SubjectDefault = "Cash Flow Report"
+})
+
+@await Html.PartialAsync("_AiAnalyze", new Powersoft.Reporting.Web.ViewModels.AiAnalyzePartialModel {
+    AnalyzeActionUrl = Url.Action("AnalyzeCashFlowReport", "Reports"),
+    ReportType = "CashFlow"
+})
+
+@await Html.PartialAsync("_SaveLayout", new Powersoft.Reporting.Web.ViewModels.SaveLayoutPartialModel
+{
+    ReportType     = Powersoft.Reporting.Core.Constants.ReportTypeConstants.CashFlow,
+    HasSavedLayout = (bool)(ViewBag.HasSavedLayout ?? false),
+    ReportViewUrl  = Url.Action("CashFlow", "Reports") ?? ""
+})
+
+<script>
+var _lastStatement = null;
+var _lastCompare = false;
+var _lastBudget = false;
+var _lastMonthly = false;
+
+// ===== Init ==========
+(function init() {
+    var t = new Date();
+    var y = t.getFullYear();
+    document.getElementById('dateFrom').value = y + '-01-01';
+    document.getElementById('dateTo').value = y+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
+})();
+
+function escapeHtml(s) { if (s==null) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmtDec(v) { if (v==null || v==0) return ''; return Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Statement number format (mirrors PBI): zero as "-", negatives in parentheses.
+function fmtCf(v) {
+    v = Number(v||0);
+    if (v === 0) return '-';
+    var s = Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    return v < 0 ? '('+s+')' : s;
+}
+
+function showAlert(id, type, msg) {
+    var el = document.getElementById(id);
+    el.innerHTML = '<div class="alert alert-'+type+' alert-dismissible fade show"><i class="bi bi-info-circle me-2"></i>'+escapeHtml(msg)+'<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+    el.style.display = '';
+}
+
+function onMonthlyToggle() {
+    var monthly = document.getElementById('monthlyBreakdown').checked;
+    // Monthly view has no prior-year/budget columns (mirrors the PBI Monthly page).
+    ['compareLastYear','includeBudget'].forEach(function(id) {
+        var cb = document.getElementById(id);
+        cb.disabled = monthly;
+        if (monthly) cb.checked = false;
+    });
+}
+
+function clearFilters() {
+    document.getElementById('compareLastYear').checked = false;
+    document.getElementById('includeBudget').checked = false;
+    document.getElementById('showAccounts').checked = false;
+    document.getElementById('monthlyBreakdown').checked = false;
+    onMonthlyToggle();
+}
+
+function getFilterParams() {
+    return {
+        dateFrom: document.getElementById('dateFrom').value,
+        dateTo: document.getElementById('dateTo').value,
+        compareToLastYear: document.getElementById('compareLastYear').checked,
+        includeBudget: document.getElementById('includeBudget').checked,
+        showAccounts: document.getElementById('showAccounts').checked,
+        monthly: document.getElementById('monthlyBreakdown').checked
+    };
+}
+
+function buildExportUrl(action) {
+    var p = getFilterParams();
+    return '/Reports/' + action
+        + '?dateFrom=' + p.dateFrom + '&dateTo=' + p.dateTo
+        + '&compareToLastYear=' + p.compareToLastYear
+        + '&includeBudget=' + p.includeBudget
+        + '&showAccounts=' + p.showAccounts
+        + '&monthly=' + p.monthly;
+}
+
+function hasData() { return !!(_lastStatement && _lastStatement.accountRowCount); }
+function exportServerCsv() { if (!hasData()) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportCashFlowCsv'); }
+function exportServerExcel() { if (!hasData()) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportCashFlowExcel'); }
+function exportServerPdf() { if (!hasData()) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportCashFlowPdf'); }
+
+var previewOpen = false;
+function togglePreview() {
+    if (!hasData()) { alert('Generate a report first.'); return; }
+    var panel = document.getElementById('previewPanel');
+    var gridCard = document.getElementById('results');
+    var kpis = document.getElementById('kpiCards');
+    var btn = document.getElementById('previewToggleBtn');
+    previewOpen = !previewOpen;
+    if (previewOpen) {
+        gridCard.style.display = 'none';
+        kpis.style.display = 'none';
+        panel.style.display = 'block';
+        btn.innerHTML = '<i class="bi bi-table me-1"></i>Grid';
+        btn.classList.remove('btn-outline-primary'); btn.classList.add('btn-outline-warning');
+        var frame = document.getElementById('previewFrame');
+        frame.src = buildExportUrl('CashFlowPrintPreview') + '&embedded=true';
+        frame.onload = function() {
+            try { var h = frame.contentDocument.body.scrollHeight + 40; frame.style.height = Math.max(h, 700) + 'px'; }
+            catch (e) { frame.style.height = '900px'; }
+        };
+    } else {
+        panel.style.display = 'none';
+        gridCard.style.display = '';
+        kpis.style.display = '';
+        btn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+        btn.classList.remove('btn-outline-warning'); btn.classList.add('btn-outline-primary');
+    }
+}
+function printPreview() {
+    var frame = document.getElementById('previewFrame');
+    if (frame && frame.contentWindow) frame.contentWindow.print();
+}
+
+function generateReport() {
+    var from = document.getElementById('dateFrom').value;
+    var to = document.getElementById('dateTo').value;
+    if (!from || !to) { showAlert('reportAlert','danger','Please select From and To dates.'); return; }
+    if (from > to) { showAlert('reportAlert','danger','From date must be on or before To date.'); return; }
+
+    document.getElementById('reportAlert').style.display = 'none';
+    document.getElementById('reportResults').style.display = 'none';
+    document.getElementById('kpiCards').style.display = 'none';
+    document.getElementById('reportLoading').style.display = '';
+
+    var btn = document.getElementById('generateBtn');
+    btn.querySelector('.btn-text').classList.add('d-none');
+    btn.querySelector('.spinner-border').classList.remove('d-none');
+    btn.disabled = true;
+
+    var fd = new FormData();
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+
+    fetch('@Url.Action("GetCashFlowData","Reports")', { method:'POST', body:fd, credentials:'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            if (!d.success) { showAlert('reportAlert','danger',d.message); return; }
+            _lastStatement = d.statement || null;
+            _lastCompare = !!d.compareToLastYear;
+            _lastBudget = !!d.includeBudget;
+            _lastMonthly = !!d.monthly;
+            renderKpis(_lastStatement, _lastCompare);
+            renderTable(_lastStatement, _lastCompare, _lastBudget, _lastMonthly);
+            document.getElementById('rowCountInfo').textContent = (d.totalRows || 0) + ' account line(s)';
+            document.getElementById('reportResults').style.display = '';
+            if (!hasData()) showAlert('reportAlert','info','No cash-flow transactions found for the selected period.');
+            else if (_lastBudget && !anyBudget(_lastStatement))
+                showAlert('reportAlert','info','No budget is defined for the selected period \u2014 the Budget column is empty and Budget Variance equals the Amount.');
+        })
+        .catch(function(e) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            showAlert('reportAlert','danger','Request failed: '+e.message);
+        });
+}
+
+function anyBudget(st) {
+    return (st.groups||[]).some(function(g){ return Math.abs(+g.budgetAmount||0) > 0; });
+}
+
+function renderKpis(st, compare) {
+    var cards = document.getElementById('kpiCards');
+    if (!st) { cards.style.display = 'none'; return; }
+    function card(label, val, cls) {
+        return '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value '+(cls||'')+'">'+(fmtDec(val)||'0.00')+'</div><div class="stat-label">'+label+'</div></div></div>';
+    }
+    cards.innerHTML =
+        card('Cash In', st.totalIn, 'text-success') +
+        card('Cash Out', st.totalOut, 'text-danger') +
+        card('Net Cash Movement', st.netCashMovement, st.netCashMovement>=0?'text-success':'text-danger') +
+        (compare ? card('Net Movement (LY)', st.priorNetCashMovement, 'text-muted')
+                 : '<div class="col-6 col-md-3"><div class="stat-card text-center"><div class="stat-value">'+(st.accountRowCount||0)+'</div><div class="stat-label">Account Lines</div></div></div>');
+    cards.style.display = '';
+}
+
+function monthLabel(key) {
+    var d = new Date(key + '-01T00:00:00');
+    return isNaN(d) ? key : d.toLocaleDateString('en-GB',{month:'short'}) + '-' + String(d.getFullYear()).slice(-2);
+}
+
+function colCount(compare, budget, monthly, months) {
+    return monthly ? 2 + months.length : 2 + (compare ? 2 : 0) + (budget ? 2 : 0);
+}
+
+function headRow(compare, budget, monthly, months) {
+    var h = '<tr><th>Line</th>';
+    if (monthly) {
+        months.forEach(function(m){ h += '<th class="text-end">'+escapeHtml(monthLabel(m))+'</th>'; });
+        h += '<th class="text-end">Total</th>';
+    } else {
+        h += '<th class="text-end">Amount</th>';
+        if (compare) h += '<th class="text-end">Prior Year</th><th class="text-end">Variance</th>';
+        if (budget) h += '<th class="text-end">Budget</th><th class="text-end">Budget Var.</th>';
+    }
+    return h + '</tr>';
+}
+
+// Value cells for one statement line. Monthly cells get PBI-style green/red shading by sign.
+function valueCells(amount, prior, bud, monthAmounts, compare, budget, monthly, months) {
+    var s = '';
+    if (monthly) {
+        months.forEach(function(m) {
+            var v = (monthAmounts && monthAmounts[m]) || 0;
+            var cls = v > 0 ? ' cell-pos' : (v < 0 ? ' cell-neg' : '');
+            s += '<td class="text-end'+cls+'">'+fmtCf(v)+'</td>';
+        });
+        s += '<td class="text-end fw-semibold">'+fmtCf(amount)+'</td>';
+        return s;
+    }
+    s += '<td class="text-end">'+fmtCf(amount)+'</td>';
+    if (compare) {
+        var v = (+amount||0) - (+prior||0);
+        s += '<td class="text-end">'+fmtCf(prior)+'</td>'
+           + '<td class="text-end '+(v >= 0 ? 'var-pos' : 'var-neg')+'">'+fmtCf(v)+'</td>';
+    }
+    if (budget) {
+        var bv = (+amount||0) - (+bud||0);
+        s += '<td class="text-end">'+fmtCf(bud)+'</td>'
+           + '<td class="text-end '+(bv >= 0 ? 'var-pos' : 'var-neg')+'">'+fmtCf(bv)+'</td>';
+    }
+    return s;
+}
+
+function renderTable(st, compare, budget, monthly) {
+    var thead = document.getElementById('reportHead');
+    var tbody = document.getElementById('reportBody');
+    var months = (st && st.months) || [];
+    thead.innerHTML = headRow(compare, budget, monthly, months);
+
+    var html = '';
+    (st.groups || []).forEach(function(g) {
+        html += '<tr class="group-header-row"><td><strong>'+escapeHtml(g.name)+'</strong></td>'
+              + valueCells(g.amount, g.priorAmount, g.budgetAmount, g.monthAmounts, compare, budget, monthly, months) + '</tr>';
+        (g.categories || []).forEach(function(c) {
+            html += '<tr class="cat-row"><td>'+escapeHtml(c.name)+'</td>'
+                  + valueCells(c.amount, c.priorAmount, c.budgetAmount, c.monthAmounts, compare, budget, monthly, months) + '</tr>';
+            (c.accounts || []).forEach(function(a) {
+                var label = a.accountCode ? (a.accountCode + ' - ' + a.accountName) : a.accountName;
+                html += '<tr class="acc-row"><td>'+escapeHtml(label)+'</td>'
+                      + valueCells(a.amount, a.priorAmount, a.budgetAmount, a.monthAmounts, compare, budget, monthly, months) + '</tr>';
+            });
+        });
+    });
+
+    html += '<tr class="grand-total-row"><td class="text-uppercase">Net Cash Movement</td>';
+    if (monthly) {
+        months.forEach(function(m) {
+            html += '<td class="text-end">'+fmtCf((st.monthNetCashMovement && st.monthNetCashMovement[m]) || 0)+'</td>';
+        });
+        html += '<td class="text-end">'+fmtCf(st.netCashMovement)+'</td>';
+    } else {
+        html += '<td class="text-end">'+fmtCf(st.netCashMovement)+'</td>';
+        if (compare) {
+            var v = (+st.netCashMovement||0) - (+st.priorNetCashMovement||0);
+            html += '<td class="text-end">'+fmtCf(st.priorNetCashMovement)+'</td><td class="text-end">'+fmtCf(v)+'</td>';
+        }
+        if (budget) html += '<td></td><td></td>';
+    }
+    html += '</tr>';
+    tbody.innerHTML = html;
+}
+
+// ========== SCHEDULE ==========
+function autoSelectScheduleDateRange() {
+    var from = document.getElementById('dateFrom').value;
+    var to = document.getElementById('dateTo').value;
+    if (!from || !to) return;
+    var sel = document.getElementById('schedDateRangeType');
+    if (!sel) return;
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === 'Custom') { sel.selectedIndex = i; break; }
+    }
+    var schedFrom = document.getElementById('schedDateFrom');
+    var schedTo = document.getElementById('schedDateTo');
+    if (schedFrom) schedFrom.value = from;
+    if (schedTo) schedTo.value = to;
+    if (typeof onSchedDateRangeTypeChange === 'function') onSchedDateRangeTypeChange();
+}
+
+function collectScheduleParameters() {
+    var p = getFilterParams();
+    return {
+        reportType: 'CashFlow',
+        cfShowAccounts: p.showAccounts,
+        cfCompareToLastYear: p.compareToLastYear,
+        cfIncludeBudget: p.includeBudget,
+        cfMonthly: p.monthly
+    };
+}
+
+function onScheduleParametersLoaded(p) {
+    if (!p) return;
+    function toBool(v) { return v === true || v === 'true'; }
+    if (typeof p.cfShowAccounts !== 'undefined') document.getElementById('showAccounts').checked = toBool(p.cfShowAccounts);
+    if (typeof p.cfCompareToLastYear !== 'undefined') document.getElementById('compareLastYear').checked = toBool(p.cfCompareToLastYear);
+    if (typeof p.cfIncludeBudget !== 'undefined') document.getElementById('includeBudget').checked = toBool(p.cfIncludeBudget);
+    if (typeof p.cfMonthly !== 'undefined') document.getElementById('monthlyBreakdown').checked = toBool(p.cfMonthly);
+    onMonthlyToggle();
+}
+
+// ========== SEND EMAIL ==========
+window.collectEmailParameters = function() {
+    if (!hasData()) { alert('Generate a report first.'); return null; }
+    return getFilterParams();
+};
+window.getEmailDefaultSubject = function() {
+    return 'Cash Flow Report \u2014 ' + document.getElementById('dateFrom').value + ' to ' + document.getElementById('dateTo').value;
+};
+
+// ========== AI ANALYSIS ==========
+function collectAiFormData() {
+    if (!hasData()) { alert('Generate a report first.'); return null; }
+    var fd = new FormData();
+    var p = getFilterParams();
+    Object.keys(p).forEach(function(k) { fd.append(k, p[k]); });
+    return fd;
+}
+
+// ========== Save / Reset Layout ==========
+function collectCurrentLayout() {
+    var p = {};
+    p['CompareLastYear'] = document.getElementById('compareLastYear').checked ? 'Y' : 'N';
+    p['IncludeBudget'] = document.getElementById('includeBudget').checked ? 'Y' : 'N';
+    p['ShowAccounts'] = document.getElementById('showAccounts').checked ? 'Y' : 'N';
+    p['Monthly'] = document.getElementById('monthlyBreakdown').checked ? 'Y' : 'N';
+    return p;
+}
+
+function applyLayoutParameters(parms) {
+    if (parms.CompareLastYear != null) document.getElementById('compareLastYear').checked = (parms.CompareLastYear === 'Y');
+    if (parms.IncludeBudget != null) document.getElementById('includeBudget').checked = (parms.IncludeBudget === 'Y');
+    if (parms.ShowAccounts != null) document.getElementById('showAccounts').checked = (parms.ShowAccounts === 'Y');
+    if (parms.Monthly != null) document.getElementById('monthlyBreakdown').checked = (parms.Monthly === 'Y');
+    onMonthlyToggle();
+}
+
+@if (hasSavedLayout && savedLayout != null)
+{
+    <text>
+    (function() {
+        var parms = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(savedLayout));
+        applyLayoutParameters(parms);
+    })();
+    </text>
+}
+</script>

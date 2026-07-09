@@ -1135,6 +1135,97 @@ public class CsvExportService
         return Encoding.UTF8.GetBytes(sb.ToString());
     }
 
+    public byte[] GenerateCashFlowCsv(CashFlowStatement statement, CashFlowFilter filter)
+    {
+        statement ??= new();
+        bool monthly = filter.Monthly;
+        bool compare = filter.CompareToLastYear;
+        bool budget = filter.IncludeBudget;
+        var months = statement.Months;
+
+        var sb = new StringBuilder();
+        sb.AppendLine(monthly ? "# Cash Flow (Direct) - Monthly" : "# Cash Flow (Direct)");
+        sb.AppendLine($"# Period: {filter.DateFrom:dd/MM/yyyy} - {filter.DateTo:dd/MM/yyyy}");
+        if (compare)
+            sb.AppendLine($"# Comparison Period: {filter.PriorDateFrom:dd/MM/yyyy} - {filter.PriorDateTo:dd/MM/yyyy}");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
+        static string Num(decimal v) => v.ToString("F2", CultureInfo.InvariantCulture);
+        static string MonthLabel(string key) =>
+            DateTime.TryParse(key + "-01", out var d) ? d.ToString("MMM-yy", CultureInfo.InvariantCulture) : key;
+
+        var header = new List<string> { "Group", "Category", "Account Code", "Account" };
+        if (monthly)
+        {
+            header.AddRange(months.Select(MonthLabel));
+            header.Add("Total");
+        }
+        else
+        {
+            header.Add("Amount");
+            if (compare) { header.Add("Prior Year"); header.Add("Variance"); }
+            if (budget) { header.Add("Budget"); header.Add("Budget Variance"); }
+        }
+        sb.AppendLine(string.Join(",", header.Select(Escape)));
+
+        void AppendValueCells(List<string> cells, decimal amount, decimal prior, decimal bud,
+            IReadOnlyDictionary<string, decimal>? monthAmounts)
+        {
+            if (monthly)
+            {
+                foreach (var m in months)
+                    cells.Add(Num(monthAmounts?.GetValueOrDefault(m) ?? 0m));
+                cells.Add(Num(amount));
+            }
+            else
+            {
+                cells.Add(Num(amount));
+                if (compare) { cells.Add(Num(prior)); cells.Add(Num(amount - prior)); }
+                if (budget) { cells.Add(Num(bud)); cells.Add(Num(amount - bud)); }
+            }
+        }
+
+        foreach (var grp in statement.Groups)
+        {
+            foreach (var cat in grp.Categories)
+            {
+                var cells = new List<string> { grp.Name, cat.Name, "", "" };
+                AppendValueCells(cells, cat.Amount, cat.PriorAmount, cat.BudgetAmount, cat.MonthAmounts);
+                sb.AppendLine(string.Join(",", cells.Select(Escape)));
+
+                foreach (var acc in cat.Accounts)
+                {
+                    var accCells = new List<string> { grp.Name, cat.Name, acc.AccountCode, acc.AccountName };
+                    AppendValueCells(accCells, acc.Amount, acc.PriorAmount, acc.BudgetAmount, acc.MonthAmounts);
+                    sb.AppendLine(string.Join(",", accCells.Select(Escape)));
+                }
+            }
+
+            var sub = new List<string> { grp.Name + " subtotal", "", "", "" };
+            AppendValueCells(sub, grp.Amount, grp.PriorAmount, grp.BudgetAmount, grp.MonthAmounts);
+            sb.AppendLine(string.Join(",", sub.Select(Escape)));
+        }
+
+        sb.AppendLine();
+        var net = new List<string> { "NET CASH MOVEMENT", "", "", "" };
+        if (monthly)
+        {
+            foreach (var m in months)
+                net.Add(Num(statement.MonthNetCashMovement.GetValueOrDefault(m)));
+            net.Add(Num(statement.NetCashMovement));
+        }
+        else
+        {
+            net.Add(Num(statement.NetCashMovement));
+            if (compare) { net.Add(Num(statement.PriorNetCashMovement)); net.Add(Num(statement.NetCashMovement - statement.PriorNetCashMovement)); }
+            if (budget) { net.Add(""); net.Add(""); }
+        }
+        sb.AppendLine(string.Join(",", net.Select(Escape)));
+
+        return Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
     public byte[] GenerateBelowMinStockCsv(List<BelowMinStockRow> rows, BelowMinStockFilter filter, bool viewCost = true)
     {
         rows ??= new();
@@ -1169,6 +1260,44 @@ public class CsvExportService
         }
 
         return Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
+    public byte[] GenerateCustomerNotPurchasedCsv(List<CustomerNotPurchasedRow> rows, CustomerNotPurchasedFilter filter)
+    {
+        rows ??= new();
+        bool byCustomer = filter.GroupBy == Core.Enums.GroupByType.Customer;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# Items Not Purchased Report");
+        sb.AppendLine($"# Observation window: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}");
+        sb.AppendLine($"# Not purchased for (days): {filter.DaysThreshold}");
+        sb.AppendLine($"# As at (reference date): {filter.ReferenceDate:yyyy-MM-dd}");
+        sb.AppendLine($"# Group By: {(byCustomer ? "Customer & Item" : "Item")}");
+        if (filter.IncludeNeverPurchased && !byCustomer) sb.AppendLine("# Include never purchased: Yes");
+        sb.AppendLine($"# Total Items: {rows.Count}");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
+        var header = new List<string>();
+        if (byCustomer) header.Add("Customer");
+        header.AddRange(new[] { "Item Code", "Item Name", "Category", "Last Purchased", "Days Since", "Last Qty", "Total Qty" });
+        sb.AppendLine(string.Join(",", header.Select(Escape)));
+
+        foreach (var r in rows)
+        {
+            var cells = new List<string>();
+            if (byCustomer) cells.Add(r.CustomerName ?? r.CustomerCode ?? "");
+            cells.Add(r.ItemCode);
+            cells.Add(r.ItemName);
+            cells.Add((r.CategoryCode ?? "") + (string.IsNullOrEmpty(r.CategoryDescr) ? "" : " - " + r.CategoryDescr));
+            cells.Add(r.LastPurchaseDate?.ToString("yyyy-MM-dd") ?? "");
+            cells.Add(r.DaysSinceLastPurchase?.ToString(CultureInfo.InvariantCulture) ?? "Never");
+            cells.Add(r.LastPurchaseQty.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(r.TotalQtyInWindow.ToString("F2", CultureInfo.InvariantCulture));
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
     }
 
     private static string Escape(string value)

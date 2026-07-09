@@ -191,6 +191,78 @@ END
 -- 10. tbl_ReportSchedule — add StarRating column if missing (1-5, NULL = not rated)
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_ReportSchedule') AND name = 'StarRating')
     ALTER TABLE {SchemaName}.tbl_ReportSchedule ADD StarRating TINYINT NULL;
+
+-- 11. tbl_CashFlowMapping — Cash Flow statement section mapping (Group/Category -> COA code ranges).
+--     Extracted 1:1 from the Power BI Accounting model (HE11901-ARVO-Accounting.pbix,
+--     ChartCF_Direct table; source sheet XL_CoA_CashFlow in Accounting_Metadata.xlsx).
+--     Matching is an INCLUSIVE STRING comparison: CodeFrom <= AccountCode <= CodeTo (same
+--     semantics as the Power BI M range match). When an account matches several ranges the
+--     MOST SPECIFIC one wins (greatest CodeFrom, then Group/Category sort order) — verified
+--     to reproduce the PBIX bridge table exactly (all 4,945 account-line pairs).
+--     Seeded only when empty so per-tenant customisations are preserved.
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'{SchemaName}.tbl_CashFlowMapping') AND type = 'U')
+    CREATE TABLE {SchemaName}.tbl_CashFlowMapping (
+        pk_MappingID      INT IDENTITY(1,1) PRIMARY KEY,
+        GroupName         NVARCHAR(60) NOT NULL,
+        GroupSortOrder    INT          NOT NULL,
+        CategoryName      NVARCHAR(60) NOT NULL,
+        CategorySortOrder INT          NOT NULL,
+        CodeFrom          NVARCHAR(20) NOT NULL,
+        CodeTo            NVARCHAR(20) NOT NULL
+    );
+
+IF NOT EXISTS (SELECT 1 FROM {SchemaName}.tbl_CashFlowMapping)
+INSERT INTO {SchemaName}.tbl_CashFlowMapping
+    (GroupName, GroupSortOrder, CategoryName, CategorySortOrder, CodeFrom, CodeTo)
+VALUES
+    (N'Operating Activities - Cash In', 1000, N'Customers', 1100, N'122', N'12299999'),
+    (N'Operating Activities - Cash In', 1000, N'Customers', 1100, N'411', N'411999'),
+    (N'Operating Activities - Cash In', 1000, N'Commisions', 1200, N'422', N'4229999'),
+    (N'Operating Activities - Cash In', 1000, N'Subsidies', 1300, N'425', N'425999'),
+    (N'Operating Activities - Cash In', 1000, N'Bank Interest and Taxes', 1400, N'421', N'421999'),
+    (N'Operating Activities - Cash In', 1000, N'Bank Interest and Taxes', 1400, N'426', N'426999'),
+    (N'Operating Activities - Cash In', 1000, N'Bank Interest and Taxes', 1400, N'2162', N'2162999'),
+    (N'Operating Activities - Cash In', 1000, N'Other Income', 1500, N'423', N'424999'),
+    (N'Operating Activities - Cash In', 1000, N'Other Income', 1500, N'427', N'429999'),
+    (N'Operating Activities - Cash Out', 2000, N'Employees', 2000, N'123029', N'123029'),
+    (N'Operating Activities - Cash Out', 2000, N'Employees', 2000, N'212003', N'212003'),
+    (N'Operating Activities - Cash Out', 2000, N'Employees', 2000, N'212022', N'212022'),
+    (N'Operating Activities - Cash Out', 2000, N'Employees', 2000, N'212026', N'212026'),
+    (N'Operating Activities - Cash Out', 2000, N'Employees', 2000, N'441002', N'441002'),
+    (N'Operating Activities - Cash Out', 2000, N'Employees', 2000, N'444', N'444999'),
+    (N'Operating Activities - Cash Out', 2000, N'Shareholders', 2100, N'3', N'399999'),
+    (N'Operating Activities - Cash Out', 2000, N'Suppliers', 2200, N'211', N'2119999999'),
+    (N'Operating Activities - Cash Out', 2000, N'Suppliers', 2200, N'43', N'439999'),
+    (N'Operating Activities - Cash Out', 2000, N'Admin. and Selling Expenses', 2400, N'441001', N'441001'),
+    (N'Operating Activities - Cash Out', 2000, N'Admin. and Selling Expenses', 2400, N'441003', N'441999'),
+    (N'Operating Activities - Cash Out', 2000, N'Interest and Taxes Paid', 2500, N'442', N'4439999'),
+    (N'Operating Activities - Cash Out', 2000, N'Interest and Taxes Paid', 2500, N'215', N'215999'),
+    (N'Operating Activities - Cash Out', 2000, N'Interest and Taxes Paid', 2500, N'2161', N'2161999'),
+    (N'Operating Activities - Cash Out', 2000, N'Other', 2600, N'445', N'449999'),
+    (N'Investing Activities', 3000, N'Assets', 3000, N'11', N'119999'),
+    (N'Financing Activities', 4000, N'Debt', 4000, N'221', N'221999'),
+    (N'Financing Activities', 4000, N'Debt', 4000, N'222', N'229999'),
+    (N'Financing Activities', 4000, N'Equity', 4100, N'213', N'213999'),
+    (N'Financing Activities', 4000, N'Equity', 4100, N'214', N'214999'),
+    (N'Other', 5000, N'Vat Clear A/C', 5100, N'216301', N'216301'),
+    (N'Other', 5000, N'Social Insurance', 5200, N'212002', N'212002'),
+    (N'Other', 5000, N'Social Insurance', 5200, N'447', N'447999'),
+    (N'Other', 5000, N'Other', 5400, N'121', N'1219999'),
+    (N'Other', 5000, N'Other', 5400, N'123', N'123028'),
+    (N'Other', 5000, N'Other', 5400, N'123030', N'123999'),
+    (N'Other', 5000, N'Other', 5400, N'212001', N'212001'),
+    (N'Other', 5000, N'Other', 5400, N'212002', N'212002'),
+    (N'Other', 5000, N'Other', 5400, N'212004', N'212021'),
+    (N'Other', 5000, N'Other', 5400, N'212023', N'212999'),
+    (N'Other', 5000, N'Other', 5400, N'217', N'219999'),
+    (N'Other', 5000, N'Other', 5400, N'2164', N'2169999'),
+    (N'Other', 5000, N'Other', 5400, N'125', N'125999'),
+    (N'Bank', 6000, N'Cash A/C', 6000, N'124001', N'124001'),
+    (N'Bank', 6000, N'Cash A/C', 6000, N'124005', N'124005'),
+    (N'Bank', 6000, N'Cash A/C', 6000, N'124007', N'124007'),
+    (N'Bank', 6000, N'Bank Institutes', 6100, N'124002', N'124004'),
+    (N'Bank', 6000, N'Bank Institutes', 6100, N'124006', N'124006'),
+    (N'Bank', 6000, N'Bank Institutes', 6100, N'124008', N'124999');
 ";
 
     public static async Task EnsureSchemaAsync(string connectionString)

@@ -326,6 +326,70 @@ WHERE NOT EXISTS (
 PRINT 'Linked new actions 6045-6046 (Profit & Loss) to RENGINEAI module (skipped existing).';
 GO
 
+-- =====================================================
+-- Step 3e: Actions 6047/6048 (added 2026-06)
+--   6047: View Items Not Purchased
+--   6048: Schedule Items Not Purchased
+-- =====================================================
+
+-- 6047 View Items Not Purchased
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6047)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6047, 1085, 'ViewCustomerNotPurchased', 'View Items Not Purchased Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6047 AND fk_ActionCategoryID <> 1085;
+
+-- 6048 Schedule Items Not Purchased
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6048)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6048, 1085, 'ScheduleCustomerNotPurchased', 'Schedule Items Not Purchased Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6048 AND fk_ActionCategoryID <> 1085;
+GO
+
+INSERT INTO tbl_RelModuleAction (fk_ModuleCode, fk_ActionID)
+SELECT 'RENGINEAI', v.ActionID
+FROM (VALUES (6047),(6048)) AS v(ActionID)
+WHERE NOT EXISTS (
+    SELECT 1 FROM tbl_RelModuleAction rma
+    WHERE rma.fk_ModuleCode = 'RENGINEAI' AND rma.fk_ActionID = v.ActionID
+);
+
+PRINT 'Linked new actions 6047-6048 (Items Not Purchased) to RENGINEAI module (skipped existing).';
+GO
+
+-- =====================================================
+-- Step 3f: Actions 6049/6050 (added 2026-07)
+--   6049: View Cash Flow
+--   6050: Schedule Cash Flow
+-- =====================================================
+
+-- 6049 View Cash Flow
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6049)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6049, 1085, 'ViewCashFlow', 'View Cash Flow Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6049 AND fk_ActionCategoryID <> 1085;
+
+-- 6050 Schedule Cash Flow
+IF NOT EXISTS (SELECT 1 FROM tbl_Action WHERE pk_ActionID = 6050)
+    INSERT INTO tbl_Action (pk_ActionID, fk_ActionCategoryID, ActionName, ActionDesc, PowersoftSupport, AllowCEO)
+    VALUES (6050, 1085, 'ScheduleCashFlow', 'Schedule Cash Flow Report', 1, 0);
+ELSE
+    UPDATE tbl_Action SET fk_ActionCategoryID = 1085 WHERE pk_ActionID = 6050 AND fk_ActionCategoryID <> 1085;
+GO
+
+INSERT INTO tbl_RelModuleAction (fk_ModuleCode, fk_ActionID)
+SELECT 'RENGINEAI', v.ActionID
+FROM (VALUES (6049),(6050)) AS v(ActionID)
+WHERE NOT EXISTS (
+    SELECT 1 FROM tbl_RelModuleAction rma
+    WHERE rma.fk_ModuleCode = 'RENGINEAI' AND rma.fk_ActionID = v.ActionID
+);
+
+PRINT 'Linked new actions 6049-6050 (Cash Flow) to RENGINEAI module (skipped existing).';
+GO
+
 -- NOTE: Actions 6015 (ViewCost) and 1200 (ViewSupplierList) are legacy PSBase actions.
 -- They already exist in pscentral — DO NOT re-seed.
 -- They are checked by IsActionAuthorizedAsync in the Reporting Engine at login.

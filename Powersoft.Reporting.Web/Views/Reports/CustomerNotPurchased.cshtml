@@ -1,0 +1,557 @@
+@using Powersoft.Reporting.Core.Models
+@{
+    ViewData["Title"] = "Items Not Purchased";
+    var storesJson = ViewBag.StoresJson as string ?? "[]";
+    var today = DateTime.Today;
+    var defFrom = today.AddYears(-2);
+    var canSchedule = (bool)(ViewBag.CanSchedule ?? false);
+}
+
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-start">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
+                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
+                    <li class="breadcrumb-item active">Items Not Purchased</li>
+                </ol>
+            </nav>
+            <h2 class="mb-0">
+                <i class="bi bi-cart-x me-2 text-primary"></i>Items Not Purchased
+            </h2>
+            <p class="text-muted mb-0">Items a customer (or all customers) has not bought within the selected number of days, and when they were last bought</p>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-funnel me-2"></i>Report Parameters
+    </div>
+    <div class="card-body">
+        <div class="row mb-3">
+            <div class="col-12">
+                <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                <div class="date-presets btn-group flex-wrap" role="group">
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off" onchange="applyPresetDates('today')">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetYesterday" value="yesterday" autocomplete="off" onchange="applyPresetDates('yesterday')">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetYesterday">Yesterday</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLast7" value="last7" autocomplete="off" onchange="applyPresetDates('last7')">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLast7">Last 7 Days</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off" onchange="applyPresetDates('last30')">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off" onchange="applyPresetDates('thisMonth')">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off" onchange="applyPresetDates('lastMonth')">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off" onchange="applyPresetDates('ytd')">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                    <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off" onchange="applyPresetDates('lastYear')">
+                    <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                </div>
+            </div>
+        </div>
+        <hr class="my-3">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Observation window from</label>
+                <input type="date" class="form-control" id="dateFrom" value="@defFrom.ToString("yyyy-MM-dd")" onchange="clearPreset()" />
+                <div class="form-text">History range used to establish the last purchase.</div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">to</label>
+                <input type="date" class="form-control" id="dateTo" value="@today.ToString("yyyy-MM-dd")" onchange="clearPreset()" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Not purchased for (days)</label>
+                <input type="number" class="form-control" id="days" value="30" min="1" max="3650" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">As at (reference date)</label>
+                <input type="date" class="form-control" id="referenceDate" value="@today.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Group by</label>
+                <select class="form-select" id="groupBy">
+                    <option value="Item" selected>Item</option>
+                    <option value="Customer">Customer &amp; Item</option>
+                </select>
+            </div>
+        </div>
+        <div class="row g-3 mt-1">
+            <div class="col-md-12">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="includeNeverPurchased" />
+                    <label class="form-check-label small" for="includeNeverPurchased">
+                        Also include items never purchased in scope (no last-purchase date). Item grouping only.
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="report-form-actions d-flex flex-wrap gap-2 pt-3 mt-2 border-top">
+            <button type="button" class="btn btn-primary btn-lg btn-generate" id="generateBtn" onclick="generateReport()">
+                <span class="btn-text"><i class="bi bi-play-fill me-2"></i>Generate Report</span>
+                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            </button>
+            @if (canSchedule)
+            {
+                <button type="button" class="btn btn-warning btn-lg" data-bs-toggle="modal" data-bs-target="#scheduleModal" title="Schedule recurring report delivery">
+                    <i class="bi bi-clock-history me-2"></i>Schedule
+                </button>
+            }
+            <div class="btn-group ms-auto">
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"
+                            title="Saved report layouts" id="layoutsDropdownBtn">
+                        <i class="bi bi-bookmark me-1"></i><span id="layoutsCurrentName">Layouts</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" id="layoutsDropdownMenu" style="min-width: 320px;">
+                        <li><h6 class="dropdown-header">Loading...</h6></li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-outline-info" onclick="saveCurrentLayout()" title="Overwrite your default layout with current parameters">
+                    <i class="bi bi-save me-1"></i>Save
+                </button>
+                <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#saveLayoutAsModal"
+                        title="Save current parameters as a new named layout (optionally shared with all users)">
+                    <i class="bi bi-bookmark-plus me-1"></i>Save as...
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="resetLayoutBtn" onclick="resetSavedLayout()" title="Discard your saved default layout and restore factory defaults" style="display:none;">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Default
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@await Html.PartialAsync("_CustomerSelection")
+
+@await Html.PartialAsync("_ItemsSelection", new ItemsSelectionConfig
+{
+    ShowCategories = true,
+    ShowDepartments = true,
+    ShowBrands = true,
+    ShowSeasons = true,
+    ShowSuppliers = true,
+    ShowStores = true,
+    ShowItems = true,
+    ShowCustomers = false,
+    ShowStockFilter = false,
+    ShowECommerce = false,
+    ShowModifiedDate = false,
+    StoresJson = storesJson,
+    ReportType = "CustomerNotPurchased"
+})
+
+<div id="reportAlert" style="display:none;"></div>
+
+<div id="reportLoading" style="display:none;" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2 text-muted">Loading report data...</p>
+</div>
+
+<div id="reportResults" style="display:none;">
+    <div class="card" id="results">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-table me-2"></i>Results: <span id="rowCountInfo"></span></span>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <button class="btn btn-sm btn-outline-primary" onclick="togglePreview()" id="previewToggleBtn" title="Toggle print preview">
+                    <i class="bi bi-eye me-1"></i>Preview
+                </button>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-success" onclick="exportServerExcel()" title="Export Excel">
+                        <i class="bi bi-filetype-xlsx me-1"></i>Excel
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="exportServerCsv()" title="Export CSV">
+                        <i class="bi bi-filetype-csv me-1"></i>CSV
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="exportServerPdf()" title="Export PDF">
+                        <i class="bi bi-filetype-pdf me-1"></i>PDF
+                    </button>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="openSendEmailModal()" title="Send report via email">
+                    <i class="bi bi-envelope me-1"></i>Send to Email
+                </button>
+                <button class="btn btn-sm btn-outline-info" onclick="if(!_lastData.length){alert('Generate a report first.');return;}openAiAnalysis()" title="AI-powered report analysis" id="btnAnalyze">
+                    <i class="bi bi-stars me-1"></i>AI Analyze
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0" id="reportTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th id="thCustomer" style="cursor:pointer;display:none" onclick="sortBy('CustomerName')">Customer <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th style="cursor:pointer" onclick="sortBy('ItemCode')">Item Code <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th style="cursor:pointer" onclick="sortBy('ItemName')">Item Name <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th>Category</th>
+                            <th style="cursor:pointer" onclick="sortBy('LastPurchaseDate')">Last Purchased <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" style="cursor:pointer" onclick="sortBy('DaysSinceLastPurchase')">Days Since <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" style="cursor:pointer" onclick="sortBy('LastPurchaseQty')">Last Qty <i class="bi bi-arrow-down-up text-muted"></i></th>
+                            <th class="text-end" style="cursor:pointer" onclick="sortBy('TotalQtyInWindow')">Total Qty <i class="bi bi-arrow-down-up text-muted"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Inline Print Preview Panel (hidden by default) -->
+<div id="previewPanel" style="display:none;" class="mt-3">
+    <div class="card border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+            <span><i class="bi bi-file-earmark-text me-2"></i>Print Preview</span>
+            <button class="btn btn-sm btn-outline-light" onclick="togglePreview()" title="Close preview">
+                <i class="bi bi-x-lg me-1"></i>Back to Grid
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <iframe id="previewFrame" style="width:100%; border:none; min-height:700px; background:#525659;"></iframe>
+        </div>
+    </div>
+</div>
+
+@await Html.PartialAsync("_Schedule", new Powersoft.Reporting.Web.ViewModels.SchedulePartialModel
+{
+    SaveAction = "SaveCnpSchedule",
+    ListAction = "GetCnpSchedules",
+    ReportBadge = "Items Not Purchased",
+    NamePlaceholder = "e.g. Weekly Stale Items",
+    SubjectPlaceholder = "Items Not Purchased Report - {date}"
+})
+
+@await Html.PartialAsync("_SendEmail", new Powersoft.Reporting.Web.ViewModels.SendEmailPartialModel {
+    SendAction = "SendCustomerNotPurchasedReportEmail",
+    ReportType = "CustomerNotPurchased",
+    SubjectDefault = "Items Not Purchased Report"
+})
+
+@await Html.PartialAsync("_AiAnalyze", new Powersoft.Reporting.Web.ViewModels.AiAnalyzePartialModel {
+    AnalyzeActionUrl = Url.Action("AnalyzeCustomerNotPurchasedReport", "Reports"),
+    ReportType = "CustomerNotPurchased"
+})
+
+@await Html.PartialAsync("_SaveLayout", new Powersoft.Reporting.Web.ViewModels.SaveLayoutPartialModel
+{
+    ReportType     = Powersoft.Reporting.Core.Constants.ReportTypeConstants.CustomerNotPurchased,
+    HasSavedLayout = false,
+    ReportViewUrl  = Url.Action("CustomerNotPurchased", "Reports") ?? ""
+})
+
+<script>
+var _sortCol = 'DaysSinceLastPurchase';
+var _sortDir = 'DESC';
+var _lastData = [];
+var _lastGroupByCustomer = false;
+
+// Quick Date Selection — identical shared format/behaviour to other reports (Average Basket /
+// Purchases vs Sales). Selecting a preset only fills the observation window (dateFrom/dateTo); the
+// user then clicks Generate. It never auto-runs the report. clearPreset() deselects the chip when
+// a date is edited manually. Bootstrap btn-check :checked highlights the active preset.
+function _cnpFmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _cnpAddDays(d, n){ var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function clearPreset(){ document.querySelectorAll('input[name="DatePreset"]').forEach(function(r){ r.checked = false; }); }
+function applyPresetDates(preset){
+    var today = new Date(); today.setHours(0,0,0,0);
+    var from, to;
+    switch (preset) {
+        case 'today': from = to = today; break;
+        case 'yesterday': from = to = _cnpAddDays(today, -1); break;
+        case 'last7': from = _cnpAddDays(today, -6); to = today; break;
+        case 'last30': from = _cnpAddDays(today, -29); to = today; break;
+        case 'thisMonth': from = new Date(today.getFullYear(), today.getMonth(), 1); to = today; break;
+        case 'lastMonth': var lm = new Date(today.getFullYear(), today.getMonth() - 1, 1); from = lm; to = new Date(lm.getFullYear(), lm.getMonth() + 1, 0); break;
+        case 'ytd': from = new Date(today.getFullYear(), 0, 1); to = today; break;
+        case 'lastYear': from = new Date(today.getFullYear() - 1, 0, 1); to = new Date(today.getFullYear() - 1, 11, 31); break;
+        default: return;
+    }
+    document.getElementById('dateFrom').value = _cnpFmtDate(from);
+    document.getElementById('dateTo').value = _cnpFmtDate(to);
+}
+
+function collectParams() {
+    var cust = (typeof getCustomerSelectionFilter === 'function') ? getCustomerSelectionFilter() : { codes: [], excludeMode: false };
+    return {
+        dateFrom: document.getElementById('dateFrom').value,
+        dateTo: document.getElementById('dateTo').value,
+        referenceDate: document.getElementById('referenceDate').value,
+        days: document.getElementById('days').value || '30',
+        groupBy: document.getElementById('groupBy').value,
+        includeNeverPurchased: document.getElementById('includeNeverPurchased').checked,
+        customerCodes: (cust.codes || []).join(','),
+        customerExcludeMode: cust.excludeMode ? 'true' : 'false',
+        storeCodes: (typeof getItemsSelectionStoreCodes === 'function') ? getItemsSelectionStoreCodes() : '',
+        itemsSelection: (typeof getItemsSelectionFilter === 'function') ? JSON.stringify(getItemsSelectionFilter()) : '',
+        sortColumn: _sortCol,
+        sortDirection: _sortDir
+    };
+}
+
+function generateReport() {
+    var alertEl = document.getElementById('reportAlert');
+    alertEl.style.display = 'none';
+    document.getElementById('reportResults').style.display = 'none';
+    document.getElementById('reportLoading').style.display = '';
+
+    var btn = document.getElementById('generateBtn');
+    btn.querySelector('.btn-text').classList.add('d-none');
+    btn.querySelector('.spinner-border').classList.remove('d-none');
+    btn.disabled = true;
+
+    var p = collectParams();
+    var fd = new FormData();
+    Object.keys(p).forEach(function (k) { fd.append(k, p[k]); });
+
+    fetch('@Url.Action("GetCustomerNotPurchasedData", "Reports")', { method: 'POST', body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+
+            if (!d.success) {
+                alertEl.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>' + esc(d.message) + '</div>';
+                alertEl.style.display = '';
+                return;
+            }
+            _lastData = d.data || [];
+            _lastGroupByCustomer = (p.groupBy === 'Customer');
+            document.getElementById('thCustomer').style.display = _lastGroupByCustomer ? '' : 'none';
+            renderTable(_lastData);
+            document.getElementById('rowCountInfo').textContent =
+                (d.totalRows || _lastData.length) + ' item(s) not purchased in the last ' + p.days + ' day(s)';
+            document.getElementById('reportResults').style.display = '';
+            if (_lastData.length === 0) {
+                alertEl.innerHTML = '<div class="alert alert-info"><i class="bi bi-check-circle me-2"></i>No items match — everything in scope was purchased within the selected window.</div>';
+                alertEl.style.display = '';
+            }
+        })
+        .catch(function (err) {
+            document.getElementById('reportLoading').style.display = 'none';
+            btn.querySelector('.btn-text').classList.remove('d-none');
+            btn.querySelector('.spinner-border').classList.add('d-none');
+            btn.disabled = false;
+            alertEl.innerHTML = '<div class="alert alert-danger"><i class="bi bi-wifi-off me-2"></i>Network error: ' + esc(err.message) + '</div>';
+            alertEl.style.display = '';
+        });
+}
+
+function renderTable(data) {
+    var body = document.getElementById('reportBody');
+    var cols = _lastGroupByCustomer ? 8 : 7;
+    if (!data.length) {
+        body.innerHTML = '<tr><td colspan="' + cols + '" class="text-center text-muted py-4">No items</td></tr>';
+        return;
+    }
+    var html = '';
+    data.forEach(function (r) {
+        var days = (r.daysSinceLastPurchase == null) ? 'Never' : r.daysSinceLastPurchase.toLocaleString();
+        var daysCls = (r.daysSinceLastPurchase == null) ? 'text-danger fw-bold' : 'text-warning';
+        var cat = (r.categoryCode || r.categoryDescr)
+            ? esc((r.categoryCode || '') + (r.categoryDescr ? ' - ' + r.categoryDescr : '')) : '-';
+        html += '<tr>' +
+            (_lastGroupByCustomer ? ('<td>' + esc(r.customerName || r.customerCode || '-') + '</td>') : '') +
+            '<td class="text-nowrap"><code>' + esc(r.itemCode) + '</code></td>' +
+            '<td>' + esc(r.itemName) + '</td>' +
+            '<td>' + cat + '</td>' +
+            '<td class="text-nowrap">' + fmtDate(r.lastPurchaseDate) + '</td>' +
+            '<td class="text-end ' + daysCls + '">' + days + '</td>' +
+            '<td class="text-end">' + fmt(r.lastPurchaseQty) + '</td>' +
+            '<td class="text-end">' + fmt(r.totalQtyInWindow) + '</td>' +
+            '</tr>';
+    });
+    body.innerHTML = html;
+}
+
+function sortBy(col) {
+    if (_sortCol === col) _sortDir = _sortDir === 'ASC' ? 'DESC' : 'ASC';
+    else { _sortCol = col; _sortDir = 'ASC'; }
+    generateReport();
+}
+
+// ===== Server exports (Excel/CSV/PDF) — share the exact on-screen filter selection =====
+function cnpQuery() {
+    var p = collectParams();
+    var qs = new URLSearchParams();
+    qs.append('dateFrom', p.dateFrom);
+    qs.append('dateTo', p.dateTo);
+    qs.append('referenceDate', p.referenceDate);
+    qs.append('days', p.days);
+    qs.append('groupBy', p.groupBy);
+    qs.append('includeNeverPurchased', p.includeNeverPurchased);
+    qs.append('customerCodes', p.customerCodes);
+    qs.append('customerExcludeMode', p.customerExcludeMode);
+    qs.append('storeCodes', p.storeCodes);
+    qs.append('itemsSelectionJson', p.itemsSelection);
+    qs.append('sortColumn', p.sortColumn);
+    qs.append('sortDirection', p.sortDirection);
+    return qs;
+}
+function buildExportUrl(action) { return '/Reports/' + action + '?' + cnpQuery().toString(); }
+function exportServerExcel() { if (!_lastData.length) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportCustomerNotPurchasedExcel'); }
+function exportServerCsv() { if (!_lastData.length) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportCustomerNotPurchasedCsv'); }
+function exportServerPdf() { if (!_lastData.length) { alert('Generate a report first.'); return; } window.location.href = buildExportUrl('ExportCustomerNotPurchasedPdf'); }
+
+// ===== Print preview (iframe) =====
+var previewOpen = false;
+function togglePreview() {
+    if (!_lastData.length) { alert('Generate a report first.'); return; }
+    var panel = document.getElementById('previewPanel');
+    var gridCard = document.getElementById('results');
+    var btn = document.getElementById('previewToggleBtn');
+    previewOpen = !previewOpen;
+    if (previewOpen) {
+        gridCard.style.display = 'none';
+        panel.style.display = 'block';
+        btn.innerHTML = '<i class="bi bi-table me-1"></i>Grid';
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-outline-warning');
+        var frame = document.getElementById('previewFrame');
+        frame.src = buildExportUrl('CustomerNotPurchasedPrintPreview');
+        frame.onload = function() {
+            try { frame.style.height = Math.max(frame.contentDocument.body.scrollHeight + 80, 700) + 'px'; }
+            catch (e) { frame.style.height = '900px'; }
+        };
+    } else {
+        panel.style.display = 'none';
+        gridCard.style.display = '';
+        btn.innerHTML = '<i class="bi bi-eye me-1"></i>Preview';
+        btn.classList.remove('btn-outline-warning');
+        btn.classList.add('btn-outline-primary');
+    }
+}
+
+// ===== SCHEDULE (shared _Schedule.cshtml partial) =====
+function autoSelectScheduleDateRange() {
+    var df = document.getElementById('dateFrom').value;
+    var dt = document.getElementById('dateTo').value;
+    if (!df || !dt) return;
+    var sel = document.getElementById('schedDateRangeType');
+    if (!sel) return;
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === 'Custom') { sel.selectedIndex = i; break; }
+    }
+    var schedFrom = document.getElementById('schedDateFrom');
+    var schedTo = document.getElementById('schedDateTo');
+    if (schedFrom) schedFrom.value = df;
+    if (schedTo) schedTo.value = dt;
+    if (typeof onSchedDateRangeTypeChange === 'function') onSchedDateRangeTypeChange();
+}
+
+function collectScheduleParameters() {
+    var cust = (typeof getCustomerSelectionFilter === 'function') ? getCustomerSelectionFilter() : { codes: [], excludeMode: false };
+    var p = {
+        reportType: 'CustomerNotPurchased',
+        dateFrom: document.getElementById('dateFrom').value,
+        dateTo: document.getElementById('dateTo').value,
+        cnpDays: document.getElementById('days').value || '30',
+        cnpGroupBy: document.getElementById('groupBy').value,
+        cnpIncludeNeverPurchased: document.getElementById('includeNeverPurchased').checked,
+        cnpCustomerCodesJson: JSON.stringify(cust.codes || []),
+        cnpCustomerExcludeMode: !!cust.excludeMode,
+        storeCodes: (typeof getItemsSelectionStoreCodes === 'function') ? getItemsSelectionStoreCodes() : '',
+        sortColumn: _sortCol,
+        sortDirection: _sortDir
+    };
+    if (typeof getItemsSelectionFilter === 'function') p.itemsSelectionJson = JSON.stringify(getItemsSelectionFilter());
+    return p;
+}
+
+function onScheduleParametersLoaded(p) {
+    if (!p) return;
+    if (p.cnpDays) document.getElementById('days').value = p.cnpDays;
+    if (p.cnpGroupBy) document.getElementById('groupBy').value = p.cnpGroupBy;
+    if (typeof p.cnpIncludeNeverPurchased !== 'undefined')
+        document.getElementById('includeNeverPurchased').checked =
+            (p.cnpIncludeNeverPurchased === true || p.cnpIncludeNeverPurchased === 'true' || p.cnpIncludeNeverPurchased === 1);
+}
+
+// ===== SEND EMAIL host hooks (shared _SendEmail.cshtml partial) =====
+window.collectEmailParameters = function() {
+    if (!_lastData.length) { alert('Generate a report first.'); return null; }
+    var p = collectParams();
+    return {
+        dateFrom: p.dateFrom, dateTo: p.dateTo, referenceDate: p.referenceDate,
+        days: p.days, groupBy: p.groupBy, includeNeverPurchased: p.includeNeverPurchased,
+        customerCodes: p.customerCodes, customerExcludeMode: p.customerExcludeMode,
+        storeCodes: p.storeCodes, itemsSelectionJson: p.itemsSelection,
+        sortColumn: p.sortColumn, sortDirection: p.sortDirection
+    };
+};
+window.getEmailDefaultSubject = function() {
+    return 'Items Not Purchased Report \u2014 ' + document.getElementById('dateFrom').value + ' to ' + document.getElementById('dateTo').value;
+};
+
+// ===== AI ANALYSIS host hook (shared _AiAnalyze.cshtml partial) =====
+function collectAiFormData() {
+    if (!_lastData.length) { alert('Generate a report first.'); return null; }
+    var p = collectParams();
+    var fd = new FormData();
+    fd.append('dateFrom', p.dateFrom);
+    fd.append('dateTo', p.dateTo);
+    fd.append('referenceDate', p.referenceDate);
+    fd.append('days', p.days);
+    fd.append('groupBy', p.groupBy);
+    fd.append('includeNeverPurchased', p.includeNeverPurchased);
+    fd.append('customerCodes', p.customerCodes);
+    fd.append('customerExcludeMode', p.customerExcludeMode);
+    fd.append('storeCodes', p.storeCodes);
+    fd.append('itemsSelectionJson', p.itemsSelection);
+    fd.append('sortColumn', p.sortColumn);
+    fd.append('sortDirection', p.sortDirection);
+    return fd;
+}
+
+// ===== Save / Reset Layout (shared _SaveLayout.cshtml partial) =====
+function collectCurrentLayout() {
+    function v(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    var p = {};
+    p['Days'] = v('days');
+    p['GroupBy'] = v('groupBy');
+    p['IncludeNeverPurchased'] = document.getElementById('includeNeverPurchased').checked ? '1' : '0';
+    if (typeof getItemsSelectionFilter === 'function') {
+        var sel = getItemsSelectionFilter();
+        if (sel) p['ItemsSelectionJson'] = JSON.stringify(sel);
+    }
+    if (typeof getCustomerSelectionFilter === 'function') {
+        var cust = getCustomerSelectionFilter();
+        if (cust) p['CustomerCodesJson'] = JSON.stringify(cust.codes || []);
+    }
+    return p;
+}
+
+function applyLayoutParameters(parms) {
+    function setVal(id, v) { var el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; }
+    setVal('days', parms.Days);
+    setVal('groupBy', parms.GroupBy);
+    if (parms.IncludeNeverPurchased != null)
+        document.getElementById('includeNeverPurchased').checked =
+            (parms.IncludeNeverPurchased === '1' || parms.IncludeNeverPurchased === 1 || parms.IncludeNeverPurchased === true);
+    if (parms.ItemsSelectionJson != null && typeof reloadItemsSelectionFromJson === 'function') {
+        try { reloadItemsSelectionFromJson(JSON.parse(parms.ItemsSelectionJson)); } catch (e) {}
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('@Url.Action("GetReportLayout", "Reports")?reportType=CustomerNotPurchased')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success || !data.hasSaved) return;
+            applyLayoutParameters(data.parameters || {});
+            var btn = document.getElementById('resetLayoutBtn');
+            if (btn) btn.style.display = '';
+        })
+        .catch(function() {});
+});
+
+function fmt(v) { return v != null ? v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '-'; }
+function fmtDate(v) { if (!v) return '-'; var d = new Date(v); return isNaN(d) ? '-' : d.toISOString().slice(0, 10); }
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+</script>

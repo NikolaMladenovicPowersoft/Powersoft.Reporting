@@ -57,7 +57,7 @@
     var _selected = [];   // [{code, name}]
     var _exclude = false;
     var _searchTimer = null;
-    var _dimUrl = '@Url.Action("GetDimension", "Reports")';
+    var _dimUrl = '@Url.Action("GetDimensions", "Reports")';
 
     function render() {
         var chips = document.getElementById('csChips');
@@ -124,7 +124,7 @@
     };
 
     function csSearch(q) {
-        fetch(_dimUrl + '?type=customer&q=' + encodeURIComponent(q) + '&max=20', { credentials: 'same-origin' })
+        fetch(_dimUrl + '?type=customer&search=' + encodeURIComponent(q), { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (data) { showDropdown(data); })
             .catch(function () { hideDropdown(); });

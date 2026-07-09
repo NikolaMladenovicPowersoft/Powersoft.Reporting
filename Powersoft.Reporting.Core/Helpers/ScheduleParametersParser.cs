@@ -160,6 +160,16 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("suppressedHeaders", out var plsup) || root.TryGetProperty("PlSuppressedHeaders", out plsup))
                 p.PlSuppressedHeaders = AsString(plsup);
 
+            // Cash Flow specific (keys from collectScheduleParameters() in CashFlow.cshtml).
+            if (root.TryGetProperty("cfShowAccounts", out var cfsa) || root.TryGetProperty("CfShowAccounts", out cfsa))
+                p.CfShowAccounts = ParseBool(cfsa, false);
+            if (root.TryGetProperty("cfCompareToLastYear", out var cfcmp) || root.TryGetProperty("CfCompareToLastYear", out cfcmp))
+                p.CfCompareToLastYear = ParseBool(cfcmp, false);
+            if (root.TryGetProperty("cfIncludeBudget", out var cfbud) || root.TryGetProperty("CfIncludeBudget", out cfbud))
+                p.CfIncludeBudget = ParseBool(cfbud, false);
+            if (root.TryGetProperty("cfMonthly", out var cfmo) || root.TryGetProperty("CfMonthly", out cfmo))
+                p.CfMonthly = ParseBool(cfmo, false);
+
             // Catalogue specific (keys from collectCatalogueParams() in Catalogue.cshtml).
             // reportMode/primaryGroup/etc. share key names with PS but carry CatalogueGroupBy
             // values; captured into distinct Cat* fields so the Catalogue handler reads the
@@ -221,6 +231,19 @@ public static class ScheduleParametersParser
             if (root.TryGetProperty("statusCodesJson", out var orScj) || root.TryGetProperty("OrStatusCodesJson", out orScj)) p.OrStatusCodesJson = AsString(orScj);
             if (root.TryGetProperty("storeCodesJson",  out var orStcj)|| root.TryGetProperty("OrStoreCodesJson",  out orStcj))p.OrStoreCodesJson  = AsString(orStcj);
             if (root.TryGetProperty("agentCodesJson",  out var orAcj) || root.TryGetProperty("OrAgentCodesJson",  out orAcj)) p.OrAgentCodesJson  = AsString(orAcj);
+
+            // Items Not Purchased specific (keys from collectScheduleParameters() in CustomerNotPurchased.cshtml).
+            // Distinct cnp* keys avoid clashing with AverageBasket "groupBy" and generic "days".
+            if (root.TryGetProperty("cnpDays", out var cnpD) || root.TryGetProperty("CnpDaysThreshold", out cnpD))
+                p.CnpDaysThreshold = ParseInt(cnpD, 30);
+            if (root.TryGetProperty("cnpGroupBy", out var cnpGb) || root.TryGetProperty("CnpGroupBy", out cnpGb))
+                p.CnpGroupBy = AsString(cnpGb);
+            if (root.TryGetProperty("cnpIncludeNeverPurchased", out var cnpInp) || root.TryGetProperty("CnpIncludeNeverPurchased", out cnpInp))
+                p.CnpIncludeNeverPurchased = ParseBool(cnpInp, false);
+            if (root.TryGetProperty("cnpCustomerCodesJson", out var cnpCcj) || root.TryGetProperty("CnpCustomerCodesJson", out cnpCcj))
+                p.CnpCustomerCodesJson = AsString(cnpCcj);
+            if (root.TryGetProperty("cnpCustomerExcludeMode", out var cnpCem) || root.TryGetProperty("CnpCustomerExcludeMode", out cnpCem))
+                p.CnpCustomerExcludeMode = ParseBool(cnpCem, false);
 
             // ItemsSelection dimension filter (categories/brands/suppliers/stores/items/etc.).
             // The view serialises it as a JSON *string* under "itemsSelectionJson"; older/code

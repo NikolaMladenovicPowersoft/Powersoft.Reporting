@@ -254,6 +254,7 @@ public class ReportsController : Controller
             ViewBag.CanViewOffers     = true;
             ViewBag.CanViewTrialBalance = true;
             ViewBag.CanViewProfitLoss = true;
+            ViewBag.CanViewCashFlow   = true;
         }
         else
         {
@@ -270,7 +271,8 @@ public class ReportsController : Controller
             var t9  = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewOffersReport);
             var t10 = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewTrialBalance);
             var t11 = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewProfitLoss);
-            await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11);
+            var t12 = _centralRepository.IsActionAuthorizedAsync(roleId, ModuleConstants.ActionViewCashFlow);
+            await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12);
 
             ViewBag.CanViewAB         = t1.Result;
             ViewBag.CanViewPS         = t2.Result && CanViewCost();
@@ -283,6 +285,7 @@ public class ReportsController : Controller
             ViewBag.CanViewOffers     = t9.Result;
             ViewBag.CanViewTrialBalance = t10.Result;
             ViewBag.CanViewProfitLoss = t11.Result;
+            ViewBag.CanViewCashFlow   = t12.Result;
         }
 
         ViewBag.ViewCost     = CanViewCost();
@@ -904,6 +907,8 @@ public class ReportsController : Controller
             ReportTypeConstants.BelowMinStock  => (ModuleConstants.IniHeaderBelowMinStock,    ModuleConstants.IniDescriptionBelowMinStock),
             ReportTypeConstants.TrialBalance   => (ModuleConstants.IniHeaderTrialBalance,     ModuleConstants.IniDescriptionTrialBalance),
             ReportTypeConstants.ProfitLoss     => (ModuleConstants.IniHeaderProfitLoss,       ModuleConstants.IniDescriptionProfitLoss),
+            ReportTypeConstants.CustomerNotPurchased => (ModuleConstants.IniHeaderCustomerNotPurchased, ModuleConstants.IniDescriptionCustomerNotPurchased),
+            ReportTypeConstants.CashFlow       => (ModuleConstants.IniHeaderCashFlow,         ModuleConstants.IniDescriptionCashFlow),
             _                                  => null
         };
 
@@ -5097,6 +5102,435 @@ public class ReportsController : Controller
         catch { return Json(Array.Empty<object>()); }
     }
 
+    // ==================== Items Not Purchased (by Customer) ====================
+
+    public async Task<IActionResult> CustomerNotPurchased()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewCustomerNotPurchased))
+        {
+            _logger.LogWarning("User {User} denied access to CustomerNotPurchased (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewCustomerNotPurchased);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
+        var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+        var stores = await storeRepo.GetActiveStoresAsync();
+        ViewBag.StoresJson = System.Text.Json.JsonSerializer.Serialize(
+            stores.Select(s => new { code = s.StoreCode, name = s.StoreName }));
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+        ViewBag.CanSchedule  = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCustomerNotPurchased);
+        ViewBag.ViewCost     = CanViewCost();
+        ViewBag.ViewSupplier = CanViewSupplier();
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetCustomerNotPurchasedData(
+        DateTime dateFrom, DateTime dateTo, DateTime? referenceDate = null,
+        int days = 30, string groupBy = "Item", bool includeNeverPurchased = false,
+        string? customerCodes = null, bool customerExcludeMode = false,
+        string? storeCodes = null, string? itemsSelection = null,
+        string sortColumn = "DaysSinceLastPurchase", string sortDirection = "DESC",
+        int pageNumber = 1, int pageSize = 100)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        try
+        {
+            // Only Item and Customer grouping are supported (see filter validation).
+            if (!Enum.TryParse<GroupByType>(groupBy, true, out var gb) || gb != GroupByType.Customer)
+                gb = GroupByType.Item;
+
+            var filter = new CustomerNotPurchasedFilter
+            {
+                DateFrom = dateFrom,
+                DateTo = dateTo,
+                ReferenceDate = referenceDate ?? DateTime.Today,
+                DaysThreshold = days,
+                GroupBy = gb,
+                IncludeNeverPurchased = includeNeverPurchased,
+                CustomerCodes = string.IsNullOrWhiteSpace(customerCodes) ? new List<string>()
+                    : customerCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                CustomerExcludeMode = customerExcludeMode,
+                StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? new List<string>()
+                    : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+                ItemsSelection = ParseItemsSelection(itemsSelection),
+                SortColumn = sortColumn,
+                SortDirection = sortDirection,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+
+            if (!filter.IsValid(out var errors))
+                return Json(new { success = false, message = string.Join(" ", errors) });
+
+            var repo = _repositoryFactory.CreateCustomerNotPurchasedRepository(tenantConnString);
+            var result = await repo.GetDataAsync(filter);
+
+            return Json(new
+            {
+                success = true,
+                data = result.Items,
+                totalRows = result.TotalCount,
+                pageNumber = result.PageNumber,
+                pageSize = result.PageSize,
+                totalPages = result.TotalPages
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Items Not Purchased data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    // Builds a CNP filter from the same parameter surface used across export/email/AI/print/schedule.
+    // allRows=true lifts the page cap so exports/analysis see the whole result set (bounded to 100k rows).
+    private static CustomerNotPurchasedFilter BuildCnpFilterCore(
+        DateTime dateFrom, DateTime dateTo, DateTime? referenceDate,
+        int days, string groupBy, bool includeNeverPurchased,
+        string? customerCodes, bool customerExcludeMode,
+        List<string> storeList, ItemsSelectionFilter? itemsSelection,
+        string sortColumn, string sortDirection, bool allRows)
+    {
+        if (!Enum.TryParse<GroupByType>(groupBy, true, out var gb) || gb != GroupByType.Customer)
+            gb = GroupByType.Item;
+
+        return new CustomerNotPurchasedFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            ReferenceDate = referenceDate ?? DateTime.Today,
+            DaysThreshold = days,
+            GroupBy = gb,
+            IncludeNeverPurchased = includeNeverPurchased,
+            CustomerCodes = string.IsNullOrWhiteSpace(customerCodes) ? new List<string>()
+                : customerCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            CustomerExcludeMode = customerExcludeMode,
+            StoreCodes = storeList,
+            ItemsSelection = itemsSelection,
+            SortColumn = sortColumn,
+            SortDirection = sortDirection,
+            PageNumber = 1,
+            PageSize = allRows ? 100000 : 100,
+            MaxRecords = allRows ? 100000 : 10000
+        };
+    }
+
+    private async Task<(List<CustomerNotPurchasedRow> rows, CustomerNotPurchasedFilter filter)?> RunCnpExportQuery(
+        DateTime dateFrom, DateTime dateTo, DateTime? referenceDate,
+        int days, string groupBy, bool includeNeverPurchased,
+        string? customerCodes, bool customerExcludeMode,
+        string? storeCodes, string? itemsSelection,
+        string sortColumn, string sortDirection)
+    {
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return null;
+
+        var storeList = string.IsNullOrWhiteSpace(storeCodes) ? new List<string>()
+            : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        var filter = BuildCnpFilterCore(dateFrom, dateTo, referenceDate, days, groupBy, includeNeverPurchased,
+            customerCodes, customerExcludeMode, storeList, ParseItemsSelection(itemsSelection),
+            sortColumn, sortDirection, allRows: true);
+
+        if (!filter.IsValid(out _)) return null;
+
+        var repo = _repositoryFactory.CreateCustomerNotPurchasedRepository(conn);
+        var result = await repo.GetDataAsync(filter);
+        return (result.Items, filter);
+    }
+
+    public async Task<IActionResult> ExportCustomerNotPurchasedCsv(
+        DateTime dateFrom, DateTime dateTo, DateTime? referenceDate = null,
+        int days = 30, string groupBy = "Item", bool includeNeverPurchased = false,
+        string? customerCodes = null, bool customerExcludeMode = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "DaysSinceLastPurchase", string sortDirection = "DESC")
+    {
+        var q = await RunCnpExportQuery(dateFrom, dateTo, referenceDate, days, groupBy, includeNeverPurchased,
+            customerCodes, customerExcludeMode, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null) return RedirectToAction("CustomerNotPurchased");
+
+        var bytes = new CsvExportService().GenerateCustomerNotPurchasedCsv(q.Value.rows, q.Value.filter);
+        return File(bytes, "text/csv", $"ItemsNotPurchased_{DateTime.Now:yyyyMMdd}.csv");
+    }
+
+    public async Task<IActionResult> ExportCustomerNotPurchasedExcel(
+        DateTime dateFrom, DateTime dateTo, DateTime? referenceDate = null,
+        int days = 30, string groupBy = "Item", bool includeNeverPurchased = false,
+        string? customerCodes = null, bool customerExcludeMode = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "DaysSinceLastPurchase", string sortDirection = "DESC")
+    {
+        var q = await RunCnpExportQuery(dateFrom, dateTo, referenceDate, days, groupBy, includeNeverPurchased,
+            customerCodes, customerExcludeMode, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null) return RedirectToAction("CustomerNotPurchased");
+
+        var bytes = new ExcelExportService().GenerateCustomerNotPurchasedExcel(q.Value.rows, q.Value.filter);
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"ItemsNotPurchased_{DateTime.Now:yyyyMMdd}.xlsx");
+    }
+
+    public async Task<IActionResult> ExportCustomerNotPurchasedPdf(
+        DateTime dateFrom, DateTime dateTo, DateTime? referenceDate = null,
+        int days = 30, string groupBy = "Item", bool includeNeverPurchased = false,
+        string? customerCodes = null, bool customerExcludeMode = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "DaysSinceLastPurchase", string sortDirection = "DESC")
+    {
+        var q = await RunCnpExportQuery(dateFrom, dateTo, referenceDate, days, groupBy, includeNeverPurchased,
+            customerCodes, customerExcludeMode, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null) return RedirectToAction("CustomerNotPurchased");
+
+        var bytes = new PdfExportService().GenerateCustomerNotPurchasedPdf(q.Value.rows, q.Value.filter);
+        return File(bytes, "application/pdf", $"ItemsNotPurchased_{DateTime.Now:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> CustomerNotPurchasedPrintPreview(
+        DateTime dateFrom, DateTime dateTo, DateTime? referenceDate = null,
+        int days = 30, string groupBy = "Item", bool includeNeverPurchased = false,
+        string? customerCodes = null, bool customerExcludeMode = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "DaysSinceLastPurchase", string sortDirection = "DESC")
+    {
+        var q = await RunCnpExportQuery(dateFrom, dateTo, referenceDate, days, groupBy, includeNeverPurchased,
+            customerCodes, customerExcludeMode, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null) return RedirectToAction("CustomerNotPurchased");
+
+        var model = new ViewModels.CustomerNotPurchasedViewModel
+        {
+            Rows = q.Value.rows,
+            Filter = q.Value.filter,
+            ConnectedDatabase = GetConnectedDatabaseName()
+        };
+        return View(model);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendCustomerNotPurchasedReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo, DateTime? referenceDate = null,
+        int days = 30, string groupBy = "Item", bool includeNeverPurchased = false,
+        string? customerCodes = null, bool customerExcludeMode = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "DaysSinceLastPurchase", string sortDirection = "DESC")
+    {
+        var q = await RunCnpExportQuery(dateFrom, dateTo, referenceDate, days, groupBy, includeNeverPurchased,
+            customerCodes, customerExcludeMode, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+        var stamp = DateTime.Now.ToString("yyyyMMdd");
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateCustomerNotPurchasedPdf(q.Value.rows, q.Value.filter);
+                fileName = $"ItemsNotPurchased_{stamp}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateCustomerNotPurchasedCsv(q.Value.rows, q.Value.filter);
+                fileName = $"ItemsNotPurchased_{stamp}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateCustomerNotPurchasedExcel(q.Value.rows, q.Value.filter);
+                fileName = $"ItemsNotPurchased_{stamp}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        var rowCount = q.Value.rows.Count;
+
+        var selectionLines = new List<string>
+        {
+            $"Not purchased for: {days} day(s)",
+            $"As at: {q.Value.filter.ReferenceDate:yyyy-MM-dd}",
+            $"Group By: {(q.Value.filter.GroupBy == GroupByType.Customer ? "Customer & Item" : "Item")}"
+        };
+        if (includeNeverPurchased) selectionLines.Add("Include never purchased: Yes");
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Items Not Purchased", dbName, period, rowCount, exportFormat, userName, "Items", selectionsHtml);
+        var defaultTextBody = $"Items Not Purchased Report\nDatabase: {dbName}\nPeriod: {period}\nItems: {rowCount}\nFormat: {exportFormat}\n\n{string.Join("\n", selectionLines)}";
+
+        var tokens = BuildEmailTokens("Items Not Purchased", dbName, period, rowCount, exportFormat, userName);
+
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "CustomerNotPurchased", templateId,
+            fileBytes, fileName, contentType,
+            $"Items Not Purchased Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeCustomerNotPurchasedReport(
+        DateTime dateFrom, DateTime dateTo, DateTime? referenceDate = null,
+        int days = 30, string groupBy = "Item", bool includeNeverPurchased = false,
+        string? customerCodes = null, bool customerExcludeMode = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "DaysSinceLastPurchase", string sortDirection = "DESC",
+        string? locale = "el", int? promptTemplateId = null)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var q = await RunCnpExportQuery(dateFrom, dateTo, referenceDate, days, groupBy, includeNeverPurchased,
+            customerCodes, customerExcludeMode, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        if (q.Value.rows.Count == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvBytes = new CsvExportService().GenerateCustomerNotPurchasedCsv(q.Value.rows, q.Value.filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
+            _logger.LogInformation(
+                "AI analysis [CustomerNotPurchased]: {Rows} rows, {CsvLen} chars, locale={Locale}, user={User}",
+                q.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
+
+            var guard = await AnalyzeWithBudgetAsync(csvData, "CustomerNotPurchased", locale, customPrompt, GetTenantConnectionString());
+            var guardFail = AiGuardFailure(guard);
+            if (guardFail != null) return guardFail;
+
+            return Json(new { success = true, analysis = guard.Analysis, csvPreview = TruncateCsvForChat(csvData) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Items Not Purchased report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveCnpSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCustomerNotPurchased))
+            return Json(new { success = false, message = "Not authorized to schedule this report." });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.CustomerNotPurchased,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "Unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty
+            };
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.CustomerNotPurchased);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving CustomerNotPurchased schedule");
+            return Json(new { success = false, message = "Failed to save schedule." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetCnpSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.CustomerNotPurchased);
+            return Json(new { success = true, schedules });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading CustomerNotPurchased schedules");
+            return Json(new { success = false, message = "Failed to load schedules." });
+        }
+    }
+
     // ==================== Cancellation Logging ====================
 
     public async Task<IActionResult> CancelLog()
@@ -6505,6 +6939,417 @@ public class ReportsController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error analyzing Profit & Loss report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    // ==================== Cash Flow (Direct) ====================
+    // Engine mirrors Power BI (GetAllTransactionsForBowerBI slice) but self-contained; statement
+    // grouping = dboReportsAI.tbl_CashFlowMapping (Operating/Investing/Financing/Other/Bank code
+    // ranges, extracted 1:1 from the PBI Accounting model). See CashFlowRepository remarks.
+
+    public async Task<IActionResult> CashFlow()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewCashFlow))
+        {
+            _logger.LogWarning("User {User} denied access to CashFlow (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewCashFlow);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+
+        bool hasSavedLayout = false;
+        Dictionary<string, string>? savedLayout = null;
+        try
+        {
+            var iniRepo = _repositoryFactory.CreateIniRepository(tenantConnString);
+            savedLayout = await iniRepo.GetLayoutAsync(
+                ModuleConstants.ModuleCode,
+                ModuleConstants.IniHeaderCashFlow,
+                GetUserCode());
+            hasSavedLayout = savedLayout.Count > 0;
+        }
+        catch { /* first time — no layout */ }
+
+        ViewBag.HasSavedLayout = hasSavedLayout;
+        ViewBag.SavedLayout    = savedLayout;
+        ViewBag.CanSchedule    = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCashFlow);
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetCashFlowData(
+        DateTime dateFrom, DateTime dateTo,
+        bool compareToLastYear = false, bool includeBudget = false,
+        bool showAccounts = false, bool monthly = false)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        try
+        {
+            var filter = BuildCashFlowFilter(dateFrom, dateTo, compareToLastYear, includeBudget, showAccounts, monthly);
+
+            if (filter.DateFrom > filter.DateTo)
+                return Json(new { success = false, message = "From date must be on or before To date." });
+            if (!filter.IsValid())
+                return Json(new { success = false, message = "Monthly breakdown supports up to 12 months — please narrow the period." });
+
+            var repo = _repositoryFactory.CreateCashFlowRepository(tenantConnString);
+            var result = await repo.GenerateAsync(filter);
+            var statement = CashFlowStatementBuilder.Build(result, filter);
+
+            return Json(new
+            {
+                success = true,
+                statement,
+                totalRows = statement.AccountRowCount,
+                compareToLastYear = filter.CompareToLastYear,
+                includeBudget = filter.IncludeBudget,
+                showAccounts = filter.ShowAccounts,
+                monthly = filter.Monthly
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Cash Flow data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveCashFlowSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected." });
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleCashFlow))
+            return Json(new { success = false, message = "Not authorized to schedule this report." });
+
+        if (string.IsNullOrWhiteSpace(scheduleName) || string.IsNullOrWhiteSpace(recipients))
+            return Json(new { success = false, message = "Schedule name and recipients are required" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (string.Equals(recurrenceType, "Once", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                {
+                    nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+                    if (nextRun == null)
+                        return Json(new { success = false, message = "For 'Run once', please set a valid start date and time in the future." });
+                }
+                else
+                {
+                    nextRun = CalculateNextRun("Once", recurrenceDay, parsedTime);
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(recurrenceJson))
+            {
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            }
+
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.CashFlow,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty,
+                IsActive = true
+            };
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.CashFlow);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving Cash Flow schedule");
+            return Json(new { success = false, message = "Failed to save schedule. The schedule tables may not exist yet." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetCashFlowSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(Array.Empty<object>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.CashFlow);
+            return Json(schedules.Select(s => new
+            {
+                s.ScheduleId, s.ScheduleName, s.RecurrenceType, s.ExportFormat,
+                scheduleTime = s.ScheduleTime.ToString(@"hh\:mm"),
+                nextRun = s.NextRunDate?.ToString("yyyy-MM-dd HH:mm"),
+                s.SkipIfEmpty
+            }));
+        }
+        catch { return Json(Array.Empty<object>()); }
+    }
+
+    /// <summary>Monthly mode has no prior-year/budget columns (mirrors the PBI Monthly page) — forced off here so every endpoint behaves identically.</summary>
+    private static CashFlowFilter BuildCashFlowFilter(
+        DateTime dateFrom, DateTime dateTo, bool compareToLastYear, bool includeBudget,
+        bool showAccounts, bool monthly) => new()
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            CompareToLastYear = compareToLastYear && !monthly,
+            IncludeBudget = includeBudget && !monthly,
+            ShowAccounts = showAccounts,
+            Monthly = monthly
+        };
+
+    private CashFlowViewModel BuildCashFlowViewModel(CashFlowFilter filter, CashFlowStatement statement) => new()
+    {
+        DateFrom = filter.DateFrom,
+        DateTo = filter.DateTo,
+        CompareToLastYear = filter.CompareToLastYear,
+        IncludeBudget = filter.IncludeBudget,
+        ShowAccounts = filter.ShowAccounts,
+        Monthly = filter.Monthly,
+        ConnectedDatabase = GetConnectedDatabaseName(),
+        Statement = statement
+    };
+
+    private async Task<(CashFlowStatement statement, CashFlowFilter filter)?> RunCashFlowQuery(
+        DateTime dateFrom, DateTime dateTo, bool compareToLastYear, bool includeBudget,
+        bool showAccounts, bool monthly)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString)) return null;
+
+        var filter = BuildCashFlowFilter(dateFrom, dateTo, compareToLastYear, includeBudget, showAccounts, monthly);
+        if (!filter.IsValid()) return null;
+
+        try
+        {
+            var repo = _repositoryFactory.CreateCashFlowRepository(tenantConnString);
+            var result = await repo.GenerateAsync(filter);
+            return (CashFlowStatementBuilder.Build(result, filter), filter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error running Cash Flow query");
+            return null;
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportCashFlowCsv(
+        DateTime dateFrom, DateTime dateTo, bool compareToLastYear = false, bool includeBudget = false,
+        bool showAccounts = false, bool monthly = false)
+    {
+        var result = await RunCashFlowQuery(dateFrom, dateTo, compareToLastYear, includeBudget, showAccounts, monthly);
+        if (result == null) return RedirectToAction("CashFlow");
+
+        var bytes = new CsvExportService().GenerateCashFlowCsv(result.Value.statement, result.Value.filter);
+        return File(bytes, "text/csv", $"CashFlow_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportCashFlowExcel(
+        DateTime dateFrom, DateTime dateTo, bool compareToLastYear = false, bool includeBudget = false,
+        bool showAccounts = false, bool monthly = false)
+    {
+        var result = await RunCashFlowQuery(dateFrom, dateTo, compareToLastYear, includeBudget, showAccounts, monthly);
+        if (result == null) return RedirectToAction("CashFlow");
+
+        var bytes = new ExcelExportService().GenerateCashFlowExcel(result.Value.statement, result.Value.filter);
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"CashFlow_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> ExportCashFlowPdf(
+        DateTime dateFrom, DateTime dateTo, bool compareToLastYear = false, bool includeBudget = false,
+        bool showAccounts = false, bool monthly = false)
+    {
+        var result = await RunCashFlowQuery(dateFrom, dateTo, compareToLastYear, includeBudget, showAccounts, monthly);
+        if (result == null) return RedirectToAction("CashFlow");
+
+        var bytes = new PdfExportService().GenerateCashFlowPdf(result.Value.statement, result.Value.filter);
+        return File(bytes, "application/pdf", $"CashFlow_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> CashFlowPrintPreview(
+        DateTime dateFrom, DateTime dateTo, bool compareToLastYear = false, bool includeBudget = false,
+        bool showAccounts = false, bool monthly = false)
+    {
+        var result = await RunCashFlowQuery(dateFrom, dateTo, compareToLastYear, includeBudget, showAccounts, monthly);
+        if (result == null) return RedirectToAction("CashFlow");
+
+        var model = BuildCashFlowViewModel(result.Value.filter, result.Value.statement);
+        return View(model);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendCashFlowReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo, bool compareToLastYear = false, bool includeBudget = false,
+        bool showAccounts = false, bool monthly = false)
+    {
+        var result = await RunCashFlowQuery(dateFrom, dateTo, compareToLastYear, includeBudget, showAccounts, monthly);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateCashFlowPdf(result.Value.statement, result.Value.filter);
+                fileName = $"CashFlow_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateCashFlowCsv(result.Value.statement, result.Value.filter);
+                fileName = $"CashFlow_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateCashFlowExcel(result.Value.statement, result.Value.filter);
+                fileName = $"CashFlow_{dateFrom:yyyyMMdd}_{dateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:dd/MM/yyyy} \u2014 {dateTo:dd/MM/yyyy}";
+        var rowCount = result.Value.statement.AccountRowCount;
+
+        var selectionLines = new List<string>
+        {
+            $"Period: {period}",
+            $"Monthly Breakdown: {(result.Value.filter.Monthly ? "Yes" : "No")}",
+            $"Show Accounts: {(showAccounts ? "Yes" : "No")}",
+            $"Compare To Last Year: {(result.Value.filter.CompareToLastYear ? "Yes" : "No")}",
+            $"Include Budget: {(result.Value.filter.IncludeBudget ? "Yes" : "No")}"
+        };
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Cash Flow", dbName, period, rowCount, exportFormat, userName, "Lines", selectionsHtml);
+        var selectionsText = string.Join("\n", selectionLines);
+        var defaultTextBody = $"Cash Flow Report\nDatabase: {dbName}\nPeriod: {period}\nLines: {rowCount}\nFormat: {exportFormat}\n\nSelections:\n{selectionsText}";
+
+        var tokens = BuildEmailTokens("Cash Flow", dbName, period, rowCount, exportFormat, userName);
+
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "CashFlow", templateId,
+            fileBytes, fileName, contentType,
+            $"Cash Flow Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeCashFlowReport(
+        DateTime dateFrom, DateTime dateTo, bool compareToLastYear = false, bool includeBudget = false,
+        bool showAccounts = false, bool monthly = false,
+        string? locale = "el", int? promptTemplateId = null)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var result = await RunCashFlowQuery(dateFrom, dateTo, compareToLastYear, includeBudget, showAccounts, monthly);
+        if (result == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        if (result.Value.statement.AccountRowCount == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvBytes = new CsvExportService().GenerateCashFlowCsv(result.Value.statement, result.Value.filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
+            _logger.LogInformation(
+                "AI analysis [CashFlow]: {Rows} rows, {CsvLen} chars, locale={Locale}, user={User}",
+                result.Value.statement.AccountRowCount, csvData.Length, locale, User.Identity?.Name);
+
+            var guardCf = await AnalyzeWithBudgetAsync(csvData, "CashFlow", locale, customPrompt, GetTenantConnectionString());
+            var guardFailCf = AiGuardFailure(guardCf);
+            if (guardFailCf != null) return guardFailCf;
+            var analysis = guardCf.Analysis;
+
+            return Json(new { success = true, analysis, csvPreview = TruncateCsvForChat(csvData) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Cash Flow report with AI");
             return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
         }
     }

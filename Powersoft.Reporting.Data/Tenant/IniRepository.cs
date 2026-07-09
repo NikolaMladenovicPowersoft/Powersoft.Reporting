@@ -175,16 +175,17 @@ public class IniRepository : IIniRepository
     private const int MaxHeaderCodeLength = 20;
 
     /// <summary>
-    /// Header code shape for named layouts: "{prefix}:{slug}".
+    /// Header code shape for named layouts: "{prefix}:{slug}{suffix}".
     /// Plain "{prefix}" (no colon) is reserved for the legacy single default layout.
-    /// Truncates to fit within the IniHeaderCode column (nvarchar(20)).
+    /// Truncates the slug (never the suffix) to fit within the IniHeaderCode column (nvarchar(20)),
+    /// so collision suffixes ("-2", "-3", ...) survive truncation and stay distinct.
     /// </summary>
-    private static string BuildNamedHeaderCode(string prefix, string slug)
+    private static string BuildNamedHeaderCode(string prefix, string slug, string suffix = "")
     {
-        var maxSlug = MaxHeaderCodeLength - prefix.Length - 1;
+        var maxSlug = MaxHeaderCodeLength - prefix.Length - 1 - suffix.Length;
         if (maxSlug < 1) maxSlug = 1;
         if (slug.Length > maxSlug) slug = slug.Substring(0, maxSlug).TrimEnd('-');
-        return $"{prefix}:{slug}";
+        return $"{prefix}:{slug}{suffix}";
     }
 
     /// <summary>
@@ -285,7 +286,6 @@ public class IniRepository : IIniRepository
             throw new ArgumentException("Layout name is required.", nameof(layoutName));
 
         var slug = SlugifyLayoutName(layoutName);
-        var headerCode = BuildNamedHeaderCode(headerCodePrefix, slug);
         var displayName = layoutName.Trim();
         if (displayName.Length > 100) displayName = displayName.Substring(0, 100);
 
@@ -298,7 +298,7 @@ public class IniRepository : IIniRepository
             // Look for an existing header with same code (regardless of user) so we can detect ownership
             // conflicts on public layouts before we touch anything.
             const string lookupSql = @"
-                SELECT TOP 1 pk_IniHeaderID, fk_UserCode, CreatedBy
+                SELECT TOP 1 pk_IniHeaderID, fk_UserCode, CreatedBy, IniHeaderDescr
                 FROM tbl_IniHeader
                 WHERE fk_IniModuleCode = @ModuleCode
                   AND IniHeaderCode = @HeaderCode
@@ -308,21 +308,35 @@ public class IniRepository : IIniRepository
                     OR (@IsPublic = 0 AND fk_UserCode = @UserCode)
                   )";
 
-            long headerId = 0;
-            string? existingCreatedBy = null;
-            using (var cmd = new SqlCommand(lookupSql, conn, transaction))
+            async Task<(long id, string? createdBy, string? descr)> LookupAsync(string code)
             {
+                using var cmd = new SqlCommand(lookupSql, conn, transaction);
                 cmd.Parameters.AddWithValue("@ModuleCode", moduleCode);
-                cmd.Parameters.AddWithValue("@HeaderCode", headerCode);
+                cmd.Parameters.AddWithValue("@HeaderCode", code);
                 cmd.Parameters.AddWithValue("@UserCode", userCode);
                 cmd.Parameters.AddWithValue("@IsPublic", isPublic ? 1 : 0);
-
                 using var rdr = await cmd.ExecuteReaderAsync();
                 if (await rdr.ReadAsync())
-                {
-                    headerId = rdr.GetInt64(0);
-                    existingCreatedBy = rdr.IsDBNull(2) ? null : rdr.GetString(2);
-                }
+                    return (rdr.GetInt64(0),
+                            rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                            rdr.IsDBNull(3) ? null : rdr.GetString(3));
+                return (0, null, null);
+            }
+
+            // Different layout names can slugify to the same header code (non-ASCII names all
+            // collapse to "layout"; long names truncate). Overwrite only when the DISPLAY NAME
+            // matches (that's a genuine re-save of the same layout); otherwise probe "-2", "-3"...
+            // so a new name never silently replaces an existing different layout.
+            var headerCode = BuildNamedHeaderCode(headerCodePrefix, slug);
+            var (headerId, existingCreatedBy, existingDescr) = await LookupAsync(headerCode);
+            for (var n = 2; headerId > 0
+                 && !string.Equals(existingDescr, displayName, StringComparison.OrdinalIgnoreCase); n++)
+            {
+                if (n > 99)
+                    throw new InvalidOperationException(
+                        $"Too many layouts share the name pattern '{slug}'. Please pick a more distinctive name.");
+                headerCode = BuildNamedHeaderCode(headerCodePrefix, slug, $"-{n}");
+                (headerId, existingCreatedBy, existingDescr) = await LookupAsync(headerCode);
             }
 
             if (headerId > 0 && isPublic

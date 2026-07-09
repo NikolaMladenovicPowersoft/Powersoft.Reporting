@@ -108,12 +108,26 @@ public class ScheduleParameters
     public string? TbSelectedHeaders { get; set; }
     public string? TbSuppressedHeaders { get; set; }
 
+    // Items Not Purchased specific (distinct Cnp* keys). ReferenceDate is resolved to "today"
+    // at execution time (a scheduled staleness report is always relative to the run date).
+    public int CnpDaysThreshold { get; set; } = 30;
+    public string? CnpGroupBy { get; set; }            // "Item" or "Customer"
+    public bool CnpIncludeNeverPurchased { get; set; }
+    public string? CnpCustomerCodesJson { get; set; }
+    public bool CnpCustomerExcludeMode { get; set; }
+
     // Profit & Loss specific (distinct Pl* keys)
     public bool PlHeaderLevel { get; set; }
     public bool PlCompareToLastYear { get; set; }
     public decimal PlOpeningStockValue { get; set; }
     public decimal PlClosingStockValue { get; set; }
     public string? PlSuppressedHeaders { get; set; }
+
+    // Cash Flow specific (distinct Cf* keys)
+    public bool CfShowAccounts { get; set; }
+    public bool CfCompareToLastYear { get; set; }
+    public bool CfIncludeBudget { get; set; }
+    public bool CfMonthly { get; set; }
 
     // Shared
     public bool IncludeVat { get; set; }

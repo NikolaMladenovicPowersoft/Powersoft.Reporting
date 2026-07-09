@@ -9,10 +9,12 @@
     bool canViewCatalogue = ViewBag.CanViewCatalogue ?? true;
     bool canViewBMS       = ViewBag.CanViewBMS       ?? true;
     bool canViewCancelLog = ViewBag.CanViewCancelLog ?? true;
+    bool canViewCNP       = ViewBag.CanViewCNP       ?? true;
     bool canViewPC        = ViewBag.CanViewPC        ?? true;
     bool canViewOffers    = ViewBag.CanViewOffers    ?? true;
     bool canViewTrialBalance = ViewBag.CanViewTrialBalance ?? true;
     bool canViewProfitLoss = ViewBag.CanViewProfitLoss ?? true;
+    bool canViewCashFlow  = ViewBag.CanViewCashFlow  ?? true;
 }
 
 <div class="row">
@@ -58,6 +60,11 @@
                     <i class="bi bi-x-circle me-2"></i>Cancellation Logging
                 </a>
                 }
+                @if (canViewCNP) {
+                <a class="nav-link" asp-action="CustomerNotPurchased">
+                    <i class="bi bi-cart-x me-2"></i>Items Not Purchased
+                </a>
+                }
             </nav>
             
             <hr class="my-3">
@@ -92,6 +99,11 @@
                 @if (canViewProfitLoss) {
                 <a class="nav-link" asp-action="ProfitLoss">
                     <i class="bi bi-graph-up-arrow me-2"></i>Profit &amp; Loss
+                </a>
+                }
+                @if (canViewCashFlow) {
+                <a class="nav-link" asp-action="CashFlow">
+                    <i class="bi bi-cash-stack me-2"></i>Cash Flow
                 </a>
                 }
             </nav>
@@ -284,6 +296,31 @@
                         </div>
                     </div>
                     }
+
+                    @if (canViewCNP) {
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100 border-primary">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="bg-primary bg-opacity-10 rounded-circle p-3 me-3">
+                                        <i class="bi bi-cart-x text-primary" style="font-size: 1.5rem;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Items Not Purchased</h5>
+                                        <p class="text-muted small mb-0">Customer purchase-gap analysis</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Pick a customer (or all) and a day threshold to list items not bought recently,
+                                    including when each was last purchased. Filter by category, brand, supplier and store.
+                                </p>
+                                <a asp-action="CustomerNotPurchased" class="btn btn-primary mt-auto">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    }
                 </div>
 
                 <h6 class="text-muted text-uppercase small fw-bold mb-3 mt-4">
@@ -387,6 +424,30 @@
                                     and Expenses, with Gross &amp; Net Profit and an optional prior-year comparison column.
                                 </p>
                                 <a asp-action="ProfitLoss" class="btn mt-auto text-white" style="background:#16a34a;">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    }
+                    @if (canViewCashFlow) {
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100" style="border-color:#0891b2;">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="rounded-circle p-3 me-3" style="background:rgba(8,145,178,0.10);">
+                                        <i class="bi bi-cash-stack" style="font-size: 1.5rem; color:#0891b2;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Cash Flow</h5>
+                                        <p class="text-muted small mb-0">Direct cash flow statement</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Cash movements from bank-touching transactions grouped by chart-of-accounts section,
+                                    with net cash movement and optional prior-year and budget comparison columns.
+                                </p>
+                                <a asp-action="CashFlow" class="btn mt-auto text-white" style="background:#0891b2;">
                                     <i class="bi bi-arrow-right me-1"></i>Open Report
                                 </a>
                             </div>

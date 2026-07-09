@@ -19,4 +19,6 @@ public interface ITenantRepositoryFactory
     ITrialBalanceRepository CreateTrialBalanceRepository(string connectionString);
     IProfitLossRepository CreateProfitLossRepository(string connectionString);
     IEmailRecipientRepository CreateEmailRecipientRepository(string connectionString);
+    ICustomerNotPurchasedRepository CreateCustomerNotPurchasedRepository(string connectionString);
+    ICashFlowRepository CreateCashFlowRepository(string connectionString);
 }

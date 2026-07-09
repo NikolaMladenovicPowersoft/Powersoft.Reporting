@@ -1,0 +1,119 @@
+@model Powersoft.Reporting.Web.ViewModels.CustomerNotPurchasedViewModel
+@{
+    Layout = null;
+    var db = Model.ConnectedDatabase ?? "Unknown";
+    var now = DateTime.Now;
+    var f = Model.Filter;
+    var byCustomer = Model.GroupByCustomer;
+    var colCount = (byCustomer ? 1 : 0) + 7;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Items Not Purchased - Print Preview</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #525659; color: #1e293b; }
+
+        .toolbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: #2c3e50; color: #fff; padding: 8px 16px;
+            display: flex; align-items: center; gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 13px;
+        }
+        .toolbar .title { font-weight: 600; margin-right: auto; }
+        .toolbar button {
+            background: none; border: 1px solid rgba(255,255,255,0.25); color: #fff;
+            padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px;
+        }
+        .toolbar button:hover { background: rgba(255,255,255,0.15); }
+
+        .page {
+            background: #fff; max-width: 1100px; margin: 60px auto 40px;
+            padding: 32px 36px; box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+        }
+        .doc-head { border-bottom: 3px solid #1a365d; padding-bottom: 12px; margin-bottom: 18px; }
+        .doc-head h1 { font-size: 22px; color: #1a365d; }
+        .doc-meta { font-size: 12px; color: #64748b; margin-top: 6px; line-height: 1.6; }
+        .doc-meta strong { color: #334155; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        thead th { background: #1a365d; color: #fff; text-align: left; padding: 7px 8px; font-weight: 600; }
+        tbody td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
+        tbody tr:nth-child(even) td { background: #f8fafc; }
+        .num { text-align: right; }
+        .never { color: #dc2626; font-weight: 700; }
+        .stale { color: #d97706; font-weight: 600; }
+        .empty { text-align: center; color: #64748b; padding: 30px; }
+
+        @@media print {
+            body { background: #fff; }
+            .toolbar { display: none; }
+            .page { margin: 0; max-width: none; box-shadow: none; padding: 0; }
+            thead { display: table-header-group; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <span class="title"><i></i>Items Not Purchased &mdash; Print Preview</span>
+        <button onclick="window.print()">🖨 Print</button>
+    </div>
+
+    <div class="page">
+        <div class="doc-head">
+            <h1>Items Not Purchased</h1>
+            <div class="doc-meta">
+                <strong>Database:</strong> @db &nbsp;|&nbsp;
+                <strong>Generated:</strong> @now.ToString("yyyy-MM-dd HH:mm")<br />
+                <strong>Observation window:</strong> @f.DateFrom.ToString("yyyy-MM-dd") to @f.DateTo.ToString("yyyy-MM-dd") &nbsp;|&nbsp;
+                <strong>Not purchased for:</strong> @f.DaysThreshold day(s) &nbsp;|&nbsp;
+                <strong>As at:</strong> @f.ReferenceDate.ToString("yyyy-MM-dd") &nbsp;|&nbsp;
+                <strong>Group by:</strong> @(byCustomer ? "Customer & Item" : "Item")
+                @if (f.IncludeNeverPurchased && !byCustomer) { <text> &nbsp;|&nbsp; <strong>Includes never purchased</strong></text> }
+                <br /><strong>Items:</strong> @Model.Rows.Count
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    @if (byCustomer) { <th>Customer</th> }
+                    <th>Item Code</th>
+                    <th>Item Name</th>
+                    <th>Category</th>
+                    <th>Last Purchased</th>
+                    <th class="num">Days Since</th>
+                    <th class="num">Last Qty</th>
+                    <th class="num">Total Qty</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Rows.Count == 0)
+                {
+                    <tr><td class="empty" colspan="@colCount">No items match — everything in scope was purchased within the selected window.</td></tr>
+                }
+                else
+                {
+                    @foreach (var r in Model.Rows)
+                    {
+                        var cat = (r.CategoryCode ?? "") + (string.IsNullOrEmpty(r.CategoryDescr) ? "" : " - " + r.CategoryDescr);
+                        <tr>
+                            @if (byCustomer) { <td>@(r.CustomerName ?? r.CustomerCode ?? "-")</td> }
+                            <td>@r.ItemCode</td>
+                            <td>@r.ItemName</td>
+                            <td>@(string.IsNullOrEmpty(cat) ? "-" : cat)</td>
+                            <td>@(r.LastPurchaseDate?.ToString("yyyy-MM-dd") ?? "Never")</td>
+                            <td class="num @(r.DaysSinceLastPurchase == null ? "never" : "stale")">@(r.DaysSinceLastPurchase?.ToString() ?? "Never")</td>
+                            <td class="num">@r.LastPurchaseQty.ToString("N2")</td>
+                            <td class="num">@r.TotalQtyInWindow.ToString("N2")</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

@@ -338,6 +338,9 @@ public class ScheduleExecutionService
         if (string.Equals(reportType, ReportTypeConstants.ProfitLoss, StringComparison.OrdinalIgnoreCase))
             return await GenerateProfitLossReportAsync(schedule, connString);
 
+        if (string.Equals(reportType, ReportTypeConstants.CashFlow, StringComparison.OrdinalIgnoreCase))
+            return await GenerateCashFlowReportAsync(schedule, connString);
+
         if (string.Equals(reportType, ReportTypeConstants.Catalogue, StringComparison.OrdinalIgnoreCase))
             return await GenerateCatalogueReportAsync(schedule, connString);
 
@@ -347,7 +350,89 @@ public class ScheduleExecutionService
         if (string.Equals(reportType, ReportTypeConstants.OffersReport, StringComparison.OrdinalIgnoreCase))
             return await GenerateOffersReportAsync(schedule, connString);
 
+        if (string.Equals(reportType, ReportTypeConstants.CustomerNotPurchased, StringComparison.OrdinalIgnoreCase))
+            return await GenerateCustomerNotPurchasedReportAsync(schedule, connString);
+
         return await GenerateAverageBasketReportAsync(schedule, connString);
+    }
+
+    private static CustomerNotPurchasedFilter BuildScheduledCnpFilter(ScheduleParameters parameters, DateTime dateFrom, DateTime dateTo)
+    {
+        var gb = string.Equals(parameters.CnpGroupBy, "Customer", StringComparison.OrdinalIgnoreCase)
+            ? GroupByType.Customer : GroupByType.Item;
+
+        List<string> customerCodes = new();
+        if (!string.IsNullOrWhiteSpace(parameters.CnpCustomerCodesJson))
+        {
+            try { customerCodes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(parameters.CnpCustomerCodesJson) ?? new(); }
+            catch { /* ignore malformed */ }
+        }
+
+        var filter = new CustomerNotPurchasedFilter
+        {
+            DateFrom = dateFrom.Date,
+            DateTo = dateTo.Date,
+            ReferenceDate = DateTime.Today, // staleness is relative to the run date
+            DaysThreshold = parameters.CnpDaysThreshold > 0 ? parameters.CnpDaysThreshold : 30,
+            GroupBy = gb,
+            IncludeNeverPurchased = parameters.CnpIncludeNeverPurchased,
+            CustomerCodes = customerCodes,
+            CustomerExcludeMode = parameters.CnpCustomerExcludeMode,
+            StoreCodes = parameters.StoreCodes ?? new(),
+            ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
+            SortColumn = string.IsNullOrWhiteSpace(parameters.SortColumn) ? "DaysSinceLastPurchase" : parameters.SortColumn,
+            SortDirection = string.IsNullOrWhiteSpace(parameters.SortDirection) ? "DESC" : parameters.SortDirection,
+            PageNumber = 1,
+            PageSize = 100000,
+            MaxRecords = 100000
+        };
+        if (filter.ItemsSelection?.Stores is { HasFilter: true, Mode: FilterMode.Include })
+            filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+        return filter;
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateCustomerNotPurchasedReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+        var filter = BuildScheduledCnpFilter(parameters, dateFrom, dateTo);
+
+        _logger.LogInformation(
+            "CustomerNotPurchased schedule {Id}: window {From:yyyy-MM-dd}..{To:yyyy-MM-dd}, days={Days}, groupBy={Gb}, includeNever={Never}",
+            schedule.ScheduleId, filter.DateFrom, filter.DateTo, filter.DaysThreshold, filter.GroupBy, filter.IncludeNeverPurchased);
+
+        var repo = _repositoryFactory.CreateCustomerNotPurchasedRepository(connString);
+        var result = await repo.GetDataAsync(filter);
+        int rowCount = result.Items.Count;
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        var stamp = $"{filter.DateFrom:yyyyMMdd}_{filter.DateTo:yyyyMMdd}";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateCustomerNotPurchasedPdf(result.Items, filter);
+                fileName = $"ItemsNotPurchased_{stamp}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateCustomerNotPurchasedCsv(result.Items, filter);
+                fileName = $"ItemsNotPurchased_{stamp}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateCustomerNotPurchasedExcel(result.Items, filter);
+                fileName = $"ItemsNotPurchased_{stamp}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"{filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        return (rowCount, fileBytes, fileName, contentType, period);
     }
 
     private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
@@ -523,6 +608,59 @@ public class ScheduleExecutionService
             default:
                 fileBytes = new ExcelExportService().GenerateProfitLossExcel(rows, filter);
                 fileName = $"ProfitLoss_{filter.DateFrom:yyyyMMdd}_{filter.DateTo:yyyyMMdd}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"{filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        return (rowCount, fileBytes, fileName, contentType, period);
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateCashFlowReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+
+        var filter = new CashFlowFilter
+        {
+            DateFrom = dateFrom.Date,
+            DateTo = dateTo.Date,
+            ShowAccounts = parameters.CfShowAccounts,
+            Monthly = parameters.CfMonthly,
+            CompareToLastYear = parameters.CfCompareToLastYear && !parameters.CfMonthly,
+            IncludeBudget = parameters.CfIncludeBudget && !parameters.CfMonthly
+        };
+
+        _logger.LogInformation(
+            "CashFlow schedule {Id}: {From:yyyy-MM-dd}..{To:yyyy-MM-dd}, showAccounts={SA}, monthly={Mo}, compare={Cmp}, budget={Bud}",
+            schedule.ScheduleId, filter.DateFrom, filter.DateTo, filter.ShowAccounts, filter.Monthly, filter.CompareToLastYear, filter.IncludeBudget);
+
+        var repo = _repositoryFactory.CreateCashFlowRepository(connString);
+        var result = await repo.GenerateAsync(filter);
+        var statement = CashFlowStatementBuilder.Build(result, filter);
+        int rowCount = statement.AccountRowCount;
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateCashFlowPdf(statement, filter);
+                fileName = $"CashFlow_{filter.DateFrom:yyyyMMdd}_{filter.DateTo:yyyyMMdd}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateCashFlowCsv(statement, filter);
+                fileName = $"CashFlow_{filter.DateFrom:yyyyMMdd}_{filter.DateTo:yyyyMMdd}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateCashFlowExcel(statement, filter);
+                fileName = $"CashFlow_{filter.DateFrom:yyyyMMdd}_{filter.DateTo:yyyyMMdd}.xlsx";
                 contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 break;
         }
@@ -1097,6 +1235,20 @@ public class ScheduleExecutionService
                 var (rows, _) = await repo.GenerateAsync(filter);
                 csvBytes = new CsvExportService().GenerateProfitLossCsv(rows, filter);
             }
+            else if (string.Equals(reportType, ReportTypeConstants.CashFlow, StringComparison.OrdinalIgnoreCase))
+            {
+                var filter = new CashFlowFilter
+                {
+                    DateFrom = dateFrom.Date, DateTo = dateTo.Date,
+                    ShowAccounts = parameters.CfShowAccounts,
+                    Monthly = parameters.CfMonthly,
+                    CompareToLastYear = parameters.CfCompareToLastYear && !parameters.CfMonthly,
+                    IncludeBudget = parameters.CfIncludeBudget && !parameters.CfMonthly
+                };
+                var repo = _repositoryFactory.CreateCashFlowRepository(connString);
+                var result = await repo.GenerateAsync(filter);
+                csvBytes = new CsvExportService().GenerateCashFlowCsv(CashFlowStatementBuilder.Build(result, filter), filter);
+            }
             else if (string.Equals(reportType, ReportTypeConstants.TrialBalance, StringComparison.OrdinalIgnoreCase))
             {
                 var asAt = dateTo.Date;
@@ -1136,6 +1288,13 @@ public class ScheduleExecutionService
                 var repo = _repositoryFactory.CreateCatalogueRepository(connString);
                 var result = await repo.GetCatalogueDataAsync(filter);
                 csvBytes = new CsvExportService().GenerateCatalogueCsv(result.Items, result.CatalogueTotals, filter, false);
+            }
+            else if (string.Equals(reportType, ReportTypeConstants.CustomerNotPurchased, StringComparison.OrdinalIgnoreCase))
+            {
+                var filter = BuildScheduledCnpFilter(parameters, dateFrom, dateTo);
+                var repo = _repositoryFactory.CreateCustomerNotPurchasedRepository(connString);
+                var result = await repo.GetDataAsync(filter);
+                csvBytes = new CsvExportService().GenerateCustomerNotPurchasedCsv(result.Items, filter);
             }
             else
             {
@@ -1319,6 +1478,7 @@ Time: {(analysis.DurationMs / 1000.0):F1}s</p>");
             ReportTypeConstants.PurchasesSales => "Purchases vs Sales",
             ReportTypeConstants.TrialBalance => "Trial Balance",
             ReportTypeConstants.ProfitLoss => "Profit & Loss",
+            ReportTypeConstants.CashFlow => "Cash Flow",
             _ => "Average Basket"
         };
         var mergeValues = new Dictionary<string, string>

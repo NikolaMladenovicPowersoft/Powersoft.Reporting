@@ -58,7 +58,7 @@ public class IniRepositorySlugTests
         var m = typeof(IniRepository).GetMethod("BuildNamedHeaderCode",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
             ?? throw new InvalidOperationException("BuildNamedHeaderCode not found");
-        var headerCode = (string)m.Invoke(null, new object[] { "AVGBASKET", slug })!;
+        var headerCode = (string)m.Invoke(null, new object[] { "AVGBASKET", slug, "" })!;
         headerCode.Length.Should().BeLessThanOrEqualTo(20,
             because: "IniHeaderCode column is nvarchar(20)");
         headerCode.Should().StartWith("AVGBASKET:");
@@ -89,7 +89,7 @@ public class IniRepositorySlugTests
         var m = typeof(IniRepository).GetMethod("BuildNamedHeaderCode",
             BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("BuildNamedHeaderCode not found");
-        var headerCode = (string)m.Invoke(null, new object[] { ModuleConstants.IniHeaderTrialBalance, slug })!;
+        var headerCode = (string)m.Invoke(null, new object[] { ModuleConstants.IniHeaderTrialBalance, slug, "" })!;
         headerCode.Length.Should().BeLessThanOrEqualTo(20);
         headerCode.Should().StartWith("TRIALBAL:");
     }
@@ -111,9 +111,32 @@ public class IniRepositorySlugTests
         var m = typeof(IniRepository).GetMethod("BuildNamedHeaderCode",
             BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("BuildNamedHeaderCode not found");
-        var headerCode = (string)m.Invoke(null, new object[] { ModuleConstants.IniHeaderProfitLoss, slug })!;
+        var headerCode = (string)m.Invoke(null, new object[] { ModuleConstants.IniHeaderProfitLoss, slug, "" })!;
         headerCode.Length.Should().BeLessThanOrEqualTo(20);
         headerCode.Should().StartWith("PROFITLOSS:");
+        headerCode.Should().NotEndWith("-");
+    }
+
+    [Fact]
+    public void CashFlow_SlugConstant_IsPresent()
+    {
+        ModuleConstants.IniHeaderCashFlow.Should().Be("CASHFLOW");
+        ModuleConstants.IniHeaderCashFlow.Length.Should().BeLessThanOrEqualTo(20,
+            because: "IniHeaderCode column is nvarchar(20) and the slug suffix needs room");
+        ModuleConstants.IniDescriptionCashFlow.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void CashFlow_NamedHeaderCode_FitsWithin20Chars()
+    {
+        var longName = new string('a', 200);
+        var slug = Slug(longName);
+        var m = typeof(IniRepository).GetMethod("BuildNamedHeaderCode",
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("BuildNamedHeaderCode not found");
+        var headerCode = (string)m.Invoke(null, new object[] { ModuleConstants.IniHeaderCashFlow, slug, "" })!;
+        headerCode.Length.Should().BeLessThanOrEqualTo(20);
+        headerCode.Should().StartWith("CASHFLOW:");
         headerCode.Should().NotEndWith("-");
     }
 
@@ -123,5 +146,27 @@ public class IniRepositorySlugTests
         var first = Slug("Quarterly Stock Report — 2026");
         var second = Slug(first);
         second.Should().Be(first, because: "running slugify on a slug must be a no-op");
+    }
+
+    [Fact]
+    public void BuildNamedHeaderCode_CollisionSuffix_SurvivesTruncation()
+    {
+        // Two different long/non-ASCII names can produce the same base slug; the "-N" suffix
+        // must never be truncated away or the collision probe would loop on the same code.
+        var m = typeof(IniRepository).GetMethod("BuildNamedHeaderCode",
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("BuildNamedHeaderCode not found");
+
+        var longSlug = Slug(new string('a', 200));
+        var baseCode = (string)m.Invoke(null, new object[] { "CASHFLOW", longSlug, "" })!;
+        var suffixed = (string)m.Invoke(null, new object[] { "CASHFLOW", longSlug, "-2" })!;
+
+        suffixed.Length.Should().BeLessThanOrEqualTo(20, because: "IniHeaderCode is nvarchar(20)");
+        suffixed.Should().EndWith("-2");
+        suffixed.Should().NotBe(baseCode);
+
+        var suffixed99 = (string)m.Invoke(null, new object[] { "CASHFLOW", longSlug, "-99" })!;
+        suffixed99.Length.Should().BeLessThanOrEqualTo(20);
+        suffixed99.Should().EndWith("-99");
     }
 }

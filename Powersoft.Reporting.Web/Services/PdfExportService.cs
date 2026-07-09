@@ -1263,6 +1263,155 @@ public class PdfExportService
         return ms.ToArray();
     }
 
+    public byte[] GenerateCashFlowPdf(CashFlowStatement statement, CashFlowFilter filter)
+    {
+        statement ??= new();
+        bool monthly = filter.Monthly;
+        bool compare = filter.CompareToLastYear;
+        bool budget = filter.IncludeBudget;
+        var months = statement.Months;
+        int valueCols = monthly ? months.Count + 1 : 1 + (compare ? 2 : 0) + (budget ? 2 : 0);
+        int colCount = 1 + valueCols;
+
+        using var ms = new MemoryStream();
+        bool landscape = monthly ? months.Count > 6 : compare && budget;
+        var document = new Document(landscape ? PageSize.A4.Rotate() : PageSize.A4, 24, 24, 30, 24);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph(monthly ? "Cash Flow (Direct) - Monthly" : "Cash Flow (Direct)", TitleFont));
+        document.Add(new Paragraph($"Period: {filter.DateFrom:dd/MM/yyyy} - {filter.DateTo:dd/MM/yyyy}", SubtitleFont));
+        if (compare)
+            document.Add(new Paragraph($"Comparison Period: {filter.PriorDateFrom:dd/MM/yyyy} - {filter.PriorDateTo:dd/MM/yyyy}", SubtitleFont));
+        document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var widths = new List<float> { monthly ? 28f : 40f };
+        for (int i = 0; i < valueCols; i++) widths.Add(monthly ? 72f / valueCols : 15f);
+        var table = new PdfPTable(colCount) { WidthPercentage = 100, SpacingBefore = 5f };
+        table.SetWidths(widths.ToArray());
+
+        static string MonthLabel(string key) =>
+            DateTime.TryParse(key + "-01", out var d) ? d.ToString("MMM-yy") : key;
+
+        AddHeaderCell(table, "Line");
+        if (monthly)
+        {
+            foreach (var m in months) AddHeaderCell(table, MonthLabel(m));
+            AddHeaderCell(table, "Total");
+        }
+        else
+        {
+            AddHeaderCell(table, "Amount");
+            if (compare) { AddHeaderCell(table, "Prior Year"); AddHeaderCell(table, "Variance"); }
+            if (budget) { AddHeaderCell(table, "Budget"); AddHeaderCell(table, "Budget Var."); }
+        }
+
+        // PBI statement format: negatives in parentheses, zero as dash.
+        static string Num(decimal v) => v == 0 ? "-" : v < 0 ? $"({Math.Abs(v):N2})" : v.ToString("N2");
+
+        void AddValueDataCells(decimal amount, decimal prior, decimal bud,
+            IReadOnlyDictionary<string, decimal>? monthAmounts, BaseColor bg)
+        {
+            if (monthly)
+            {
+                foreach (var m in months)
+                    AddDataCell(table, Num(monthAmounts?.GetValueOrDefault(m) ?? 0m), bg, Element.ALIGN_RIGHT);
+                AddDataCell(table, Num(amount), bg, Element.ALIGN_RIGHT);
+            }
+            else
+            {
+                AddDataCell(table, Num(amount), bg, Element.ALIGN_RIGHT);
+                if (compare)
+                {
+                    AddDataCell(table, Num(prior), bg, Element.ALIGN_RIGHT);
+                    AddDataCell(table, Num(amount - prior), bg, Element.ALIGN_RIGHT);
+                }
+                if (budget)
+                {
+                    AddDataCell(table, Num(bud), bg, Element.ALIGN_RIGHT);
+                    AddDataCell(table, Num(amount - bud), bg, Element.ALIGN_RIGHT);
+                }
+            }
+        }
+
+        void AddValueTotalCells(decimal amount, decimal prior, decimal bud,
+            IReadOnlyDictionary<string, decimal>? monthAmounts)
+        {
+            if (monthly)
+            {
+                foreach (var m in months)
+                    AddTotalCell(table, Num(monthAmounts?.GetValueOrDefault(m) ?? 0m), Element.ALIGN_RIGHT);
+                AddTotalCell(table, Num(amount), Element.ALIGN_RIGHT);
+            }
+            else
+            {
+                AddTotalCell(table, Num(amount), Element.ALIGN_RIGHT);
+                if (compare)
+                {
+                    AddTotalCell(table, Num(prior), Element.ALIGN_RIGHT);
+                    AddTotalCell(table, Num(amount - prior), Element.ALIGN_RIGHT);
+                }
+                if (budget)
+                {
+                    AddTotalCell(table, Num(bud), Element.ALIGN_RIGHT);
+                    AddTotalCell(table, Num(amount - bud), Element.ALIGN_RIGHT);
+                }
+            }
+        }
+
+        bool alternate = false;
+        foreach (var grp in statement.Groups)
+        {
+            // Group row (bold, with group totals — PBI matrix style).
+            AddTotalCell(table, grp.Name);
+            AddValueTotalCells(grp.Amount, grp.PriorAmount, grp.BudgetAmount, grp.MonthAmounts);
+
+            foreach (var cat in grp.Categories)
+            {
+                var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+                AddDataCell(table, "    " + cat.Name, bg);
+                AddValueDataCells(cat.Amount, cat.PriorAmount, cat.BudgetAmount, cat.MonthAmounts, bg);
+                alternate = !alternate;
+
+                foreach (var acc in cat.Accounts)
+                {
+                    var abg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+                    AddDataCell(table, "        " + (string.IsNullOrEmpty(acc.AccountCode)
+                        ? acc.AccountName : acc.AccountCode + " - " + acc.AccountName), abg);
+                    AddValueDataCells(acc.Amount, acc.PriorAmount, acc.BudgetAmount, acc.MonthAmounts, abg);
+                    alternate = !alternate;
+                }
+            }
+        }
+
+        AddTotalCell(table, "NET CASH MOVEMENT");
+        if (monthly)
+        {
+            foreach (var m in months)
+                AddTotalCell(table, Num(statement.MonthNetCashMovement.GetValueOrDefault(m)), Element.ALIGN_RIGHT);
+            AddTotalCell(table, Num(statement.NetCashMovement), Element.ALIGN_RIGHT);
+        }
+        else
+        {
+            AddTotalCell(table, Num(statement.NetCashMovement), Element.ALIGN_RIGHT);
+            if (compare)
+            {
+                AddTotalCell(table, Num(statement.PriorNetCashMovement), Element.ALIGN_RIGHT);
+                AddTotalCell(table, Num(statement.NetCashMovement - statement.PriorNetCashMovement), Element.ALIGN_RIGHT);
+            }
+            if (budget)
+            {
+                AddTotalCell(table, "", Element.ALIGN_RIGHT);
+                AddTotalCell(table, "", Element.ALIGN_RIGHT);
+            }
+        }
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
+
     public byte[] GenerateBelowMinStockPdf(List<BelowMinStockRow> rows, BelowMinStockFilter filter, bool viewCost = true)
     {
         rows ??= new();
@@ -1332,6 +1481,69 @@ public class PdfExportService
             AddNum(r.Difference);
             if (viewCost) { AddNum(r.Cost ?? 0, "N2"); AddNum(r.StockValue ?? 0, "N2"); }
             AddText(r.Shelf ?? "");
+        }
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
+
+    public byte[] GenerateCustomerNotPurchasedPdf(List<CustomerNotPurchasedRow> rows, CustomerNotPurchasedFilter filter)
+    {
+        rows ??= new();
+        bool byCustomer = filter.GroupBy == Core.Enums.GroupByType.Customer;
+        int colCount = (byCustomer ? 1 : 0) + 7;
+
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Items Not Purchased Report", TitleFont));
+        document.Add(new Paragraph(
+            $"Window: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}  |  Not purchased for {filter.DaysThreshold} day(s)  |  As at {filter.ReferenceDate:yyyy-MM-dd}  |  Items: {rows.Count}",
+            SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var table = new PdfPTable(colCount) { WidthPercentage = 100, SpacingBefore = 5f };
+        var widths = new List<float>();
+        if (byCustomer) widths.Add(12f);
+        widths.AddRange(new[] { 9f, 18f, 12f, 9f, 6f, 6f, 6f });
+        table.SetWidths(widths.ToArray());
+
+        var headers = new List<string>();
+        if (byCustomer) headers.Add("Customer");
+        headers.AddRange(new[] { "Item Code", "Item Name", "Category", "Last Purchased", "Days Since", "Last Qty", "Total Qty" });
+
+        foreach (var h in headers)
+        {
+            table.AddCell(new PdfPCell(new Phrase(h, HeaderFont))
+            {
+                BackgroundColor = HeaderBg,
+                HorizontalAlignment = Element.ALIGN_CENTER,
+                Padding = 4f
+            });
+        }
+
+        foreach (var r in rows)
+        {
+            void AddText(string v, int align = Element.ALIGN_LEFT)
+            {
+                table.AddCell(new PdfPCell(new Phrase(v, CellFont))
+                {
+                    HorizontalAlignment = align,
+                    Padding = 3f
+                });
+            }
+
+            if (byCustomer) AddText(r.CustomerName ?? r.CustomerCode ?? "");
+            AddText(r.ItemCode);
+            AddText(r.ItemName);
+            AddText((r.CategoryCode ?? "") + (string.IsNullOrEmpty(r.CategoryDescr) ? "" : " - " + r.CategoryDescr));
+            AddText(r.LastPurchaseDate?.ToString("yyyy-MM-dd") ?? "Never", Element.ALIGN_CENTER);
+            AddText(r.DaysSinceLastPurchase?.ToString() ?? "Never", Element.ALIGN_RIGHT);
+            AddText(r.LastPurchaseQty.ToString("N2"), Element.ALIGN_RIGHT);
+            AddText(r.TotalQtyInWindow.ToString("N2"), Element.ALIGN_RIGHT);
         }
 
         document.Add(table);

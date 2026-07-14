@@ -353,7 +353,82 @@ public class ScheduleExecutionService
         if (string.Equals(reportType, ReportTypeConstants.CustomerNotPurchased, StringComparison.OrdinalIgnoreCase))
             return await GenerateCustomerNotPurchasedReportAsync(schedule, connString);
 
+        if (string.Equals(reportType, ReportTypeConstants.SalesThrough, StringComparison.OrdinalIgnoreCase))
+            return await GenerateSalesThroughReportAsync(schedule, connString);
+
         return await GenerateAverageBasketReportAsync(schedule, connString);
+    }
+
+    private static SalesThroughFilter BuildScheduledStFilter(ScheduleParameters parameters, DateTime dateFrom, DateTime dateTo)
+    {
+        PsGroupBy Parse(string? v) =>
+            Enum.TryParse<PsGroupBy>(v, true, out var g) ? g : PsGroupBy.None;
+
+        var filter = new SalesThroughFilter
+        {
+            DateFrom = dateFrom.Date,
+            DateTo = dateTo.Date,
+            Summary = parameters.StSummary,
+            PrimaryGroup = Parse(parameters.StPrimaryGroup),
+            SecondaryGroup = Parse(parameters.StSecondaryGroup),
+            ThirdGroup = Parse(parameters.StThirdGroup),
+            IncludeAdditionalCharges = parameters.StIncludeAdditionalCharges,
+            SortBySizeSequence = parameters.StSortBySizeSequence,
+            StoreCodes = parameters.StoreCodes ?? new(),
+            ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
+            SortColumn = string.IsNullOrWhiteSpace(parameters.SortColumn) ? "ItemCode" : parameters.SortColumn,
+            SortDirection = string.IsNullOrWhiteSpace(parameters.SortDirection) ? "ASC" : parameters.SortDirection,
+            PageNumber = 1,
+            PageSize = 100000
+        };
+        if (filter.ItemsSelection?.Stores is { HasFilter: true, Mode: FilterMode.Include })
+            filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+        return filter;
+    }
+
+    private async Task<(int rowCount, byte[] fileBytes, string fileName, string contentType, string period)>
+        GenerateSalesThroughReportAsync(ReportSchedule schedule, string connString)
+    {
+        var parameters = DeserializeParameters(schedule.ParametersJson);
+        var (dateFrom, dateTo) = DateRangeResolver.Resolve(parameters.DateRange);
+        var filter = BuildScheduledStFilter(parameters, dateFrom, dateTo);
+
+        _logger.LogInformation(
+            "SalesThrough schedule {Id}: window {From:yyyy-MM-dd}..{To:yyyy-MM-dd}, summary={Summary}, groups={G1}/{G2}/{G3}",
+            schedule.ScheduleId, filter.DateFrom, filter.DateTo, filter.Summary,
+            filter.PrimaryGroup, filter.SecondaryGroup, filter.ThirdGroup);
+
+        var repo = _repositoryFactory.CreateSalesThroughRepository(connString);
+        var result = await repo.GetSalesThroughDataAsync(filter);
+        int rowCount = result.Items.Count;
+
+        var format = schedule.ExportFormat?.ToLowerInvariant() ?? "excel";
+        var stamp = $"{filter.DateFrom:yyyyMMdd}_{filter.DateTo:yyyyMMdd}";
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateSalesThroughPdf(result.Items, result.SalesThroughTotals, filter);
+                fileName = $"SalesThrough_{stamp}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateSalesThroughCsv(result.Items, result.SalesThroughTotals, filter);
+                fileName = $"SalesThrough_{stamp}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateSalesThroughExcel(result.Items, result.SalesThroughTotals, filter);
+                fileName = $"SalesThrough_{stamp}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var period = $"{filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        return (rowCount, fileBytes, fileName, contentType, period);
     }
 
     private static CustomerNotPurchasedFilter BuildScheduledCnpFilter(ScheduleParameters parameters, DateTime dateFrom, DateTime dateTo)
@@ -723,6 +798,14 @@ public class ScheduleExecutionService
 
         ApplyCatalogueColumnFilters(filter, parameters.CatColumnFilters);
 
+        // Tenant attribute captions so exported column headers say e.g. "GENDER" not "Attr 1".
+        try
+        {
+            filter.AttributeCaptions = await _repositoryFactory
+                .CreateDimensionRepository(connString).GetAttributeCaptionsAsync();
+        }
+        catch { /* generic labels are an acceptable fallback */ }
+
         var repo = _repositoryFactory.CreateCatalogueRepository(connString);
         var result = await repo.GetCatalogueDataAsync(filter);
         var rows = result.Items;
@@ -982,6 +1065,7 @@ public class ScheduleExecutionService
             ShowReservation = parameters.ShowReservation,
             ShowAvailable = parameters.ShowAvailable,
             IncludeAdditionalCharges = parameters.IncludeAdditionalCharges,
+            SortBySizeSequence = parameters.SortBySizeSequence,
             StoreCodes = parameters.StoreCodes ?? new(),
             ItemIds = parameters.ItemIds ?? new(),
             ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
@@ -1209,6 +1293,7 @@ public class ScheduleExecutionService
                     ShowReservation = parameters.ShowReservation,
                     ShowAvailable = parameters.ShowAvailable,
                     IncludeAdditionalCharges = parameters.IncludeAdditionalCharges,
+                    SortBySizeSequence = parameters.SortBySizeSequence,
                     StoreCodes = parameters.StoreCodes ?? new(),
                     ItemIds = parameters.ItemIds ?? new(),
                     ItemsSelection = ItemsSelectionParser.Parse(parameters.ItemsSelectionJson),
@@ -1285,6 +1370,12 @@ public class ScheduleExecutionService
                 };
                 if (filter.ItemsSelection?.Stores is { HasFilter: true, Mode: FilterMode.Include })
                     filter.StoreCodes = filter.ItemsSelection.Stores.Ids;
+                try
+                {
+                    filter.AttributeCaptions = await _repositoryFactory
+                        .CreateDimensionRepository(connString).GetAttributeCaptionsAsync();
+                }
+                catch { /* generic labels are an acceptable fallback */ }
                 var repo = _repositoryFactory.CreateCatalogueRepository(connString);
                 var result = await repo.GetCatalogueDataAsync(filter);
                 csvBytes = new CsvExportService().GenerateCatalogueCsv(result.Items, result.CatalogueTotals, filter, false);
@@ -1295,6 +1386,13 @@ public class ScheduleExecutionService
                 var repo = _repositoryFactory.CreateCustomerNotPurchasedRepository(connString);
                 var result = await repo.GetDataAsync(filter);
                 csvBytes = new CsvExportService().GenerateCustomerNotPurchasedCsv(result.Items, filter);
+            }
+            else if (string.Equals(reportType, ReportTypeConstants.SalesThrough, StringComparison.OrdinalIgnoreCase))
+            {
+                var filter = BuildScheduledStFilter(parameters, dateFrom, dateTo);
+                var repo = _repositoryFactory.CreateSalesThroughRepository(connString);
+                var result = await repo.GetSalesThroughDataAsync(filter);
+                csvBytes = new CsvExportService().GenerateSalesThroughCsv(result.Items, result.SalesThroughTotals, filter);
             }
             else
             {

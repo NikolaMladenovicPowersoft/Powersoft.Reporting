@@ -341,6 +341,196 @@ public class ExcelExportService
         return stream.ToArray();
     }
 
+    public byte[] GenerateSalesThroughExcel(
+        List<SalesThroughRow> rows,
+        SalesThroughTotals? totals,
+        SalesThroughFilter filter)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Sales Through");
+
+        ws.Cell(1, 1).Value = "Sales Through Report";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 14;
+        int selRow = 2;
+        ws.Cell(selRow++, 1).Value = $"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}";
+        ws.Cell(selRow++, 1).Value = $"Mode: {(filter.IsSummary ? "Summary" : "Detailed")}";
+        if (filter.PrimaryGroup != PsGroupBy.None)
+            ws.Cell(selRow++, 1).Value = $"Primary Group: {filter.PrimaryGroup}";
+        if (filter.SecondaryGroup != PsGroupBy.None)
+            ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.SecondaryGroup}";
+        if (filter.ThirdGroup != PsGroupBy.None)
+            ws.Cell(selRow++, 1).Value = $"Third Group: {filter.ThirdGroup}";
+        if (!filter.IncludeAdditionalCharges)
+            ws.Cell(selRow++, 1).Value = "Intake cost: Wholesale only (excl. additional charges)";
+        if (filter.SortBySizeSequence)
+            ws.Cell(selRow++, 1).Value = "Sizes ordered by size sequence";
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            ws.Cell(selRow++, 1).Value = $"Stores: {string.Join(", ", filter.StoreCodes)}";
+        ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
+        for (int sr = 2; sr < selRow; sr++)
+            ws.Cell(sr, 1).Style.Font.FontColor = XLColor.FromHtml("#6b7280");
+
+        int headerRow = selRow + 1;
+        int col = 1;
+
+        bool hasL1 = filter.PrimaryGroup != PsGroupBy.None;
+        bool hasL2 = filter.SecondaryGroup != PsGroupBy.None;
+        bool hasL3 = filter.ThirdGroup != PsGroupBy.None;
+        bool hasItem = !filter.IsSummary || (!hasL1 && !hasL2 && !hasL3);
+
+        if (hasL1) ws.Cell(headerRow, col++).Value = filter.PrimaryGroup.ToString();
+        if (hasL2) ws.Cell(headerRow, col++).Value = filter.SecondaryGroup.ToString();
+        if (hasL3) ws.Cell(headerRow, col++).Value = filter.ThirdGroup.ToString();
+        if (hasItem) { ws.Cell(headerRow, col++).Value = "Item Code"; ws.Cell(headerRow, col++).Value = "Item Name"; }
+        ws.Cell(headerRow, col++).Value = "Intake Qty";
+        ws.Cell(headerRow, col++).Value = "Intake Value";
+        ws.Cell(headerRow, col++).Value = "Sales Qty";
+        ws.Cell(headerRow, col++).Value = "Sales Net";
+        ws.Cell(headerRow, col++).Value = "Sales Gross";
+        ws.Cell(headerRow, col++).Value = "Sell-Through Qty %";
+        ws.Cell(headerRow, col++).Value = "Sell-Through Value %";
+        ws.Cell(headerRow, col++).Value = "Current Stock";
+        ws.Cell(headerRow, col++).Value = "Sales Mix %";
+        ws.Cell(headerRow, col++).Value = "Intake Mix %";
+        ws.Cell(headerRow, col++).Value = "Stock Mix %";
+
+        var headerRange = ws.Range(headerRow, 1, headerRow, col - 1);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563eb");
+        headerRange.Style.Font.FontColor = XLColor.White;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        int dataRow = headerRow + 1;
+        string? prevL1 = null, prevL2 = null, prevL3 = null;
+        var l1Agg = new SalesThroughAgg(); var l2Agg = new SalesThroughAgg(); var l3Agg = new SalesThroughAgg();
+
+        for (int ri = 0; ri < rows.Count; ri++)
+        {
+            var row = rows[ri];
+            string curL1 = hasL1 ? (row.Level1Value ?? row.Level1 ?? "N/A") : "";
+            string curL2 = hasL2 ? (row.Level2Value ?? row.Level2 ?? "N/A") : "";
+            string curL3 = hasL3 ? (row.Level3Value ?? row.Level3 ?? "N/A") : "";
+
+            bool l1Changed = hasL1 && curL1 != prevL1 && ri > 0;
+            bool l2Changed = hasL2 && (curL2 != prevL2 || l1Changed) && ri > 0;
+            bool l3Changed = hasL3 && (curL3 != prevL3 || l2Changed) && ri > 0;
+
+            if (l3Changed)
+                dataRow = WriteStExcelSubtotalRow(ws, dataRow, $"Subtotal: {prevL3}", l3Agg, hasL1, hasL2, hasL3, hasItem);
+            if (l2Changed)
+                dataRow = WriteStExcelSubtotalRow(ws, dataRow, $"Subtotal: {prevL2}", l2Agg, hasL1, hasL2, hasL3, hasItem);
+            if (l1Changed)
+                dataRow = WriteStExcelSubtotalRow(ws, dataRow, $"Subtotal: {prevL1}", l1Agg, hasL1, hasL2, hasL3, hasItem);
+
+            if (l1Changed || ri == 0) { l1Agg = new SalesThroughAgg(); l2Agg = new SalesThroughAgg(); l3Agg = new SalesThroughAgg(); }
+            else if (l2Changed) { l2Agg = new SalesThroughAgg(); l3Agg = new SalesThroughAgg(); }
+            else if (l3Changed) { l3Agg = new SalesThroughAgg(); }
+            prevL1 = curL1; prevL2 = curL2; prevL3 = curL3;
+
+            l1Agg.Add(row); l2Agg.Add(row); l3Agg.Add(row);
+
+            col = 1;
+            if (hasL1) ws.Cell(dataRow, col++).Value = curL1;
+            if (hasL2) ws.Cell(dataRow, col++).Value = curL2;
+            if (hasL3) ws.Cell(dataRow, col++).Value = curL3;
+            if (hasItem) { ws.Cell(dataRow, col++).Value = row.ItemCode ?? ""; ws.Cell(dataRow, col++).Value = row.ItemName ?? ""; }
+            ws.Cell(dataRow, col++).Value = row.IntakeQty;
+            ws.Cell(dataRow, col++).Value = row.IntakeValue;
+            ws.Cell(dataRow, col++).Value = row.SalesQty;
+            ws.Cell(dataRow, col++).Value = row.SalesNet;
+            ws.Cell(dataRow, col++).Value = row.SalesGross;
+            ws.Cell(dataRow, col++).Value = row.SellThroughQtyPct;
+            ws.Cell(dataRow, col++).Value = row.SellThroughValuePct;
+            ws.Cell(dataRow, col++).Value = row.CurrentStock;
+            ws.Cell(dataRow, col++).Value = row.SalesMixPct;
+            ws.Cell(dataRow, col++).Value = row.IntakeMixPct;
+            ws.Cell(dataRow, col++).Value = row.StockMixPct;
+            dataRow++;
+        }
+
+        if (rows.Count > 0)
+        {
+            if (hasL3) dataRow = WriteStExcelSubtotalRow(ws, dataRow, $"Subtotal: {prevL3}", l3Agg, hasL1, hasL2, hasL3, hasItem);
+            if (hasL2) dataRow = WriteStExcelSubtotalRow(ws, dataRow, $"Subtotal: {prevL2}", l2Agg, hasL1, hasL2, hasL3, hasItem);
+            if (hasL1) dataRow = WriteStExcelSubtotalRow(ws, dataRow, $"Subtotal: {prevL1}", l1Agg, hasL1, hasL2, hasL3, hasItem);
+        }
+
+        if (totals != null)
+        {
+            col = 1;
+            int skipCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+            if (hasItem)
+            {
+                for (int i = 0; i < skipCols; i++) ws.Cell(dataRow, col++).Value = "";
+                ws.Cell(dataRow, col++).Value = "TOTAL";
+                ws.Cell(dataRow, col++).Value = "";
+            }
+            else
+            {
+                for (int i = 0; i < skipCols - 1; i++) ws.Cell(dataRow, col++).Value = "";
+                ws.Cell(dataRow, col++).Value = "TOTAL";
+            }
+            ws.Cell(dataRow, col++).Value = totals.TotalIntakeQty;
+            ws.Cell(dataRow, col++).Value = totals.TotalIntakeValue;
+            ws.Cell(dataRow, col++).Value = totals.TotalSalesQty;
+            ws.Cell(dataRow, col++).Value = totals.TotalSalesNet;
+            ws.Cell(dataRow, col++).Value = totals.TotalSalesGross;
+            ws.Cell(dataRow, col++).Value = totals.SellThroughQtyPct;
+            ws.Cell(dataRow, col++).Value = totals.SellThroughValuePct;
+            ws.Cell(dataRow, col++).Value = totals.TotalCurrentStock;
+            ws.Cell(dataRow, col++).Value = 100;
+            ws.Cell(dataRow, col++).Value = 100;
+            ws.Cell(dataRow, col++).Value = 100;
+
+            var totalRange = ws.Range(dataRow, 1, dataRow, col - 1);
+            totalRange.Style.Font.Bold = true;
+            totalRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#dbeafe");
+            totalRange.Style.Border.TopBorder = XLBorderStyleValues.Medium;
+        }
+
+        ws.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    private int WriteStExcelSubtotalRow(IXLWorksheet ws, int dataRow, string label, SalesThroughAgg agg,
+        bool hasL1, bool hasL2, bool hasL3, bool hasItem)
+    {
+        int col = 1;
+        int skipCols = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+        if (hasItem)
+        {
+            for (int i = 0; i < skipCols; i++) ws.Cell(dataRow, col++).Value = "";
+            ws.Cell(dataRow, col++).Value = label;
+            ws.Cell(dataRow, col++).Value = "";
+        }
+        else
+        {
+            // Summary mode: label occupies the last group column so metrics stay under their headers.
+            for (int i = 0; i < skipCols - 1; i++) ws.Cell(dataRow, col++).Value = "";
+            ws.Cell(dataRow, col++).Value = label;
+        }
+        ws.Cell(dataRow, col++).Value = agg.IntakeQty;
+        ws.Cell(dataRow, col++).Value = agg.IntakeValue;
+        ws.Cell(dataRow, col++).Value = agg.SalesQty;
+        ws.Cell(dataRow, col++).Value = agg.SalesNet;
+        ws.Cell(dataRow, col++).Value = agg.SalesGross;
+        ws.Cell(dataRow, col++).Value = agg.SellThroughQtyPct;
+        ws.Cell(dataRow, col++).Value = agg.SellThroughValuePct;
+        ws.Cell(dataRow, col++).Value = agg.CurrentStock;
+        ws.Cell(dataRow, col++).Value = "";
+        ws.Cell(dataRow, col++).Value = "";
+        ws.Cell(dataRow, col++).Value = "";
+
+        var rng = ws.Range(dataRow, 1, dataRow, col - 1);
+        rng.Style.Font.Bold = true;
+        rng.Style.Fill.BackgroundColor = XLColor.FromHtml("#eef2ff");
+        return dataRow + 1;
+    }
+
     public byte[] GenerateCatalogueExcel(
         List<CatalogueRow> rows,
         CatalogueTotals? totals,
@@ -360,11 +550,11 @@ public class ExcelExportService
         ws.Cell(selRow++, 1).Value = $"Report Mode: {filter.ReportMode}";
         ws.Cell(selRow++, 1).Value = $"Report On: {filter.ReportOn}";
         if (filter.PrimaryGroup != Core.Enums.CatalogueGroupBy.None)
-            ws.Cell(selRow++, 1).Value = $"Primary Group: {filter.PrimaryGroup}";
+            ws.Cell(selRow++, 1).Value = $"Primary Group: {filter.GroupLabel(filter.PrimaryGroup)}";
         if (filter.SecondaryGroup != Core.Enums.CatalogueGroupBy.None)
-            ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.SecondaryGroup}";
+            ws.Cell(selRow++, 1).Value = $"Secondary Group: {filter.GroupLabel(filter.SecondaryGroup)}";
         if (filter.ThirdGroup != Core.Enums.CatalogueGroupBy.None)
-            ws.Cell(selRow++, 1).Value = $"Third Group: {filter.ThirdGroup}";
+            ws.Cell(selRow++, 1).Value = $"Third Group: {filter.GroupLabel(filter.ThirdGroup)}";
         if (filter.StoreCodes != null && filter.StoreCodes.Any())
             ws.Cell(selRow++, 1).Value = $"Stores: {string.Join(", ", filter.StoreCodes)}";
         ws.Cell(selRow++, 1).Value = $"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}";
@@ -434,12 +624,12 @@ public class ExcelExportService
         if (dc("Price2Incl")) cols.Add(("Price2Incl", "Price 2 In", true, r => r.Price2Incl));
         if (dc("Price3Excl")) cols.Add(("Price3Excl", "Price 3 Ex", true, r => r.Price3Excl));
         if (dc("Price3Incl")) cols.Add(("Price3Incl", "Price 3 In", true, r => r.Price3Incl));
-        if (dc("ItemAttr1")) cols.Add(("ItemAttr1", "Attr 1", false, r => r.ItemAttr1Descr));
-        if (dc("ItemAttr2")) cols.Add(("ItemAttr2", "Attr 2", false, r => r.ItemAttr2Descr));
-        if (dc("ItemAttr3")) cols.Add(("ItemAttr3", "Attr 3", false, r => r.ItemAttr3Descr));
-        if (dc("ItemAttr4")) cols.Add(("ItemAttr4", "Attr 4", false, r => r.ItemAttr4Descr));
-        if (dc("ItemAttr5")) cols.Add(("ItemAttr5", "Attr 5", false, r => r.ItemAttr5Descr));
-        if (dc("ItemAttr6")) cols.Add(("ItemAttr6", "Attr 6", false, r => r.ItemAttr6Descr));
+        if (dc("ItemAttr1")) cols.Add(("ItemAttr1", filter.AttrCaption(1, "Attr 1"), false, r => r.ItemAttr1Descr));
+        if (dc("ItemAttr2")) cols.Add(("ItemAttr2", filter.AttrCaption(2, "Attr 2"), false, r => r.ItemAttr2Descr));
+        if (dc("ItemAttr3")) cols.Add(("ItemAttr3", filter.AttrCaption(3, "Attr 3"), false, r => r.ItemAttr3Descr));
+        if (dc("ItemAttr4")) cols.Add(("ItemAttr4", filter.AttrCaption(4, "Attr 4"), false, r => r.ItemAttr4Descr));
+        if (dc("ItemAttr5")) cols.Add(("ItemAttr5", filter.AttrCaption(5, "Attr 5"), false, r => r.ItemAttr5Descr));
+        if (dc("ItemAttr6")) cols.Add(("ItemAttr6", filter.AttrCaption(6, "Attr 6"), false, r => r.ItemAttr6Descr));
 
         for (int i = 0; i < cols.Count; i++)
             ws.Cell(headerRow, i + 1).Value = cols[i].Label;

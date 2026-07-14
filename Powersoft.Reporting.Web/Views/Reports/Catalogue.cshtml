@@ -422,12 +422,12 @@
                             @if (dc("Price10Incl")) { <th class="text-end" data-col="Price10Incl">Price 10 In</th> }
                             @if (dc("InvPriceExcl")) { <th class="text-end" data-col="InvPriceExcl">Inv. Price Ex</th> }
                             @if (dc("InvPriceIncl")) { <th class="text-end" data-col="InvPriceIncl">Inv. Price In</th> }
-                            @if (dc("ItemAttr1")) { <th data-col="ItemAttr1">Attr 1</th> }
-                            @if (dc("ItemAttr2")) { <th data-col="ItemAttr2">Attr 2</th> }
-                            @if (dc("ItemAttr3")) { <th data-col="ItemAttr3">Attr 3</th> }
-                            @if (dc("ItemAttr4")) { <th data-col="ItemAttr4">Attr 4</th> }
-                            @if (dc("ItemAttr5")) { <th data-col="ItemAttr5">Attr 5</th> }
-                            @if (dc("ItemAttr6")) { <th data-col="ItemAttr6">Attr 6</th> }
+                            @if (dc("ItemAttr1")) { <th data-col="ItemAttr1">@Model.AttrCaption(1, "Attr 1")</th> }
+                            @if (dc("ItemAttr2")) { <th data-col="ItemAttr2">@Model.AttrCaption(2, "Attr 2")</th> }
+                            @if (dc("ItemAttr3")) { <th data-col="ItemAttr3">@Model.AttrCaption(3, "Attr 3")</th> }
+                            @if (dc("ItemAttr4")) { <th data-col="ItemAttr4">@Model.AttrCaption(4, "Attr 4")</th> }
+                            @if (dc("ItemAttr5")) { <th data-col="ItemAttr5">@Model.AttrCaption(5, "Attr 5")</th> }
+                            @if (dc("ItemAttr6")) { <th data-col="ItemAttr6">@Model.AttrCaption(6, "Attr 6")</th> }
                         </tr>
                     </thead>
                     @{
@@ -593,7 +593,7 @@
                             {
                                 var l1Rows = l1Group.ToList();
                                 <tr class="group-header-row" style="background:#dbeafe;">
-                                    <td colspan="@totalColumns"><i class="bi bi-diagram-3 me-2"></i><strong>@Model.PrimaryGroup:</strong> @l1Group.Key</td>
+                                    <td colspan="@totalColumns"><i class="bi bi-diagram-3 me-2"></i><strong>@Model.GroupLabel(Model.PrimaryGroup):</strong> @l1Group.Key</td>
                                 </tr>
 
                                 @if (hasL2)
@@ -603,7 +603,7 @@
                                     {
                                         var l2Rows = l2Group.ToList();
                                         <tr class="group-header-row" style="background:#e8f0fe;">
-                                            <td colspan="@totalColumns" class="ps-4"><i class="bi bi-chevron-right me-1"></i><strong>@Model.SecondaryGroup:</strong> @l2Group.Key</td>
+                                            <td colspan="@totalColumns" class="ps-4"><i class="bi bi-chevron-right me-1"></i><strong>@Model.GroupLabel(Model.SecondaryGroup):</strong> @l2Group.Key</td>
                                         </tr>
 
                                         @if (hasL3)
@@ -613,7 +613,7 @@
                                             {
                                                 var l3Rows = l3Group.ToList();
                                                 <tr class="group-header-row" style="background:#f0f4f8;">
-                                                    <td colspan="@totalColumns" class="ps-5"><i class="bi bi-dash me-1"></i><strong>@Model.ThirdGroup:</strong> @l3Group.Key</td>
+                                                    <td colspan="@totalColumns" class="ps-5"><i class="bi bi-dash me-1"></i><strong>@Model.GroupLabel(Model.ThirdGroup):</strong> @l3Group.Key</td>
                                                 </tr>
                                                 @foreach (var r in l3Rows) { @renderDataRow(r) }
                                                 @renderSubtotal(Tuple.Create(l3Rows, l3Group.Key + " subtotal", "#f0f4f8", 3))
@@ -885,12 +885,12 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                                 ("Price10Incl","Price 10 In","price 10 incl","Price10Incl", false, dc("Price10Incl"), true),
                                 ("InvPriceExcl","Inv. Price Ex","invoice price excl line","InvPriceExcl", false, dc("InvPriceExcl"), true),
                                 ("InvPriceIncl","Inv. Price In","invoice price incl line","InvPriceIncl", false, dc("InvPriceIncl"), true),
-                                ("ItemAttr1","Attr 1","attribute 1","ItemAttr1", false, dc("ItemAttr1"), true),
-                                ("ItemAttr2","Attr 2","attribute 2","ItemAttr2", false, dc("ItemAttr2"), true),
-                                ("ItemAttr3","Attr 3","attribute 3","ItemAttr3", false, dc("ItemAttr3"), true),
-                                ("ItemAttr4","Attr 4","attribute 4","ItemAttr4", false, dc("ItemAttr4"), true),
-                                ("ItemAttr5","Attr 5","attribute 5","ItemAttr5", false, dc("ItemAttr5"), true),
-                                ("ItemAttr6","Attr 6","attribute 6","ItemAttr6", false, dc("ItemAttr6"), true)
+                                ("ItemAttr1",Model.AttrCaption(1, "Attr 1"),"attribute 1","ItemAttr1", false, dc("ItemAttr1"), true),
+                                ("ItemAttr2",Model.AttrCaption(2, "Attr 2"),"attribute 2","ItemAttr2", false, dc("ItemAttr2"), true),
+                                ("ItemAttr3",Model.AttrCaption(3, "Attr 3"),"attribute 3","ItemAttr3", false, dc("ItemAttr3"), true),
+                                ("ItemAttr4",Model.AttrCaption(4, "Attr 4"),"attribute 4","ItemAttr4", false, dc("ItemAttr4"), true),
+                                ("ItemAttr5",Model.AttrCaption(5, "Attr 5"),"attribute 5","ItemAttr5", false, dc("ItemAttr5"), true),
+                                ("ItemAttr6",Model.AttrCaption(6, "Attr 6"),"attribute 6","ItemAttr6", false, dc("ItemAttr6"), true)
                             };
                             var togglableCount = visCols.Count(c => c.CanToggle && !c.IsGrouping);
                         }
@@ -1192,6 +1192,22 @@ else if (ViewContext.HttpContext.Request.Method == "POST")
                         o.remove();
                     }
                 });
+            });
+        }
+
+        // Tenant attribute captions in the group dropdowns: rename "Attribute N"
+        // (CatalogueGroupBy.ItemAttrN = 17+N) to the tbl_Field name, e.g. "GENDER".
+        var _attrCaptions = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.AttributeCaptions));
+        if (_attrCaptions) {
+            ['PrimaryGroup', 'SecondaryGroup', 'ThirdGroup'].forEach(function (n) {
+                var sel = document.querySelector('[name="' + n + '"]');
+                if (!sel) return;
+                for (var i = 1; i <= 6; i++) {
+                    var cap = _attrCaptions[i] || _attrCaptions[String(i)];
+                    if (!cap) continue;
+                    var opt = sel.querySelector('option[value="' + (17 + i) + '"]');
+                    if (opt) opt.textContent = cap;
+                }
             });
         }
     });

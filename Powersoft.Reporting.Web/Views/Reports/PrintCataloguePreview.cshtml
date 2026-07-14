@@ -132,9 +132,9 @@
                     <strong>To:</strong> @Model.DateTo.ToString("dd/MM/yyyy")<br />
                     <strong>Mode:</strong> @Model.ReportMode &nbsp;|&nbsp;
                     <strong>Report On:</strong> @Model.ReportOn
-                    @if (hasL1) { <br /><span><strong>Group:</strong> @Model.PrimaryGroup</span> }
-                    @if (hasL2) { <span> &gt; @Model.SecondaryGroup</span> }
-                    @if (hasL3) { <span> &gt; @Model.ThirdGroup</span> }
+                    @if (hasL1) { <br /><span><strong>Group:</strong> @Model.GroupLabel(Model.PrimaryGroup)</span> }
+                    @if (hasL2) { <span> &gt; @Model.GroupLabel(Model.SecondaryGroup)</span> }
+                    @if (hasL3) { <span> &gt; @Model.GroupLabel(Model.ThirdGroup)</span> }
                 </div>
             </div>
 
@@ -147,9 +147,9 @@
                 <table class="report-table" id="reportTable">
                     <thead>
                         <tr>
-                            @if (hasL1) { <th class="text-left">@Model.PrimaryGroup</th> }
-                            @if (hasL2) { <th class="text-left">@Model.SecondaryGroup</th> }
-                            @if (hasL3) { <th class="text-left">@Model.ThirdGroup</th> }
+                            @if (hasL1) { <th class="text-left">@Model.GroupLabel(Model.PrimaryGroup)</th> }
+                            @if (hasL2) { <th class="text-left">@Model.GroupLabel(Model.SecondaryGroup)</th> }
+                            @if (hasL3) { <th class="text-left">@Model.GroupLabel(Model.ThirdGroup)</th> }
                             @if (showItem && dc("ItemCode")) { <th class="text-left">Code</th> }
                             @if (showItem && dc("ItemName")) { <th class="text-left">Description</th> }
                             @if (dc("Quantity"))       { <th class="col-trans">Qty</th> }
@@ -235,19 +235,19 @@
                         foreach (var l1 in Model.Results.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A"))
                         {
                             var l1Rows = l1.ToList();
-                            <tr class="group-header"><td colspan="@totalCols"><strong>@Model.PrimaryGroup:</strong> @l1.Key</td></tr>
+                            <tr class="group-header"><td colspan="@totalCols"><strong>@Model.GroupLabel(Model.PrimaryGroup):</strong> @l1.Key</td></tr>
                             if (hasL2)
                             {
                                 foreach (var l2 in l1Rows.GroupBy(r => r.Level2Value ?? "N/A"))
                                 {
                                     var l2Rows = l2.ToList();
-                                    <tr class="group-header"><td colspan="@totalCols" style="padding-left:18px;"><strong>@Model.SecondaryGroup:</strong> @l2.Key</td></tr>
+                                    <tr class="group-header"><td colspan="@totalCols" style="padding-left:18px;"><strong>@Model.GroupLabel(Model.SecondaryGroup):</strong> @l2.Key</td></tr>
                                     if (hasL3)
                                     {
                                         foreach (var l3 in l2Rows.GroupBy(r => r.Level3Value ?? "N/A"))
                                         {
                                             var l3Rows = l3.ToList();
-                                            <tr class="group-header"><td colspan="@totalCols" style="padding-left:32px;"><strong>@Model.ThirdGroup:</strong> @l3.Key</td></tr>
+                                            <tr class="group-header"><td colspan="@totalCols" style="padding-left:32px;"><strong>@Model.GroupLabel(Model.ThirdGroup):</strong> @l3.Key</td></tr>
                                             foreach (var row in l3Rows) { @rowTpl(row) }
                                             @subTpl(Tuple.Create(l3Rows, l3.Key + " subtotal"))
                                         }

@@ -80,6 +80,8 @@ public static class ScheduleParametersParser
                 p.ShowAvailable = sav.ValueKind == JsonValueKind.True;
             if (root.TryGetProperty("includeAdditionalCharges", out var iac))
                 p.IncludeAdditionalCharges = iac.ValueKind != JsonValueKind.False;
+            if (root.TryGetProperty("sortBySizeSequence", out var sbss) || root.TryGetProperty("SortBySizeSequence", out sbss))
+                p.SortBySizeSequence = ParseBool(sbss, false);
 
             // Pareto 80/20 specific (keys produced by collectParetoParams() in Pareto.cshtml)
             if (root.TryGetProperty("dimension", out var pd) || root.TryGetProperty("ParetoDimension", out pd))
@@ -244,6 +246,20 @@ public static class ScheduleParametersParser
                 p.CnpCustomerCodesJson = AsString(cnpCcj);
             if (root.TryGetProperty("cnpCustomerExcludeMode", out var cnpCem) || root.TryGetProperty("CnpCustomerExcludeMode", out cnpCem))
                 p.CnpCustomerExcludeMode = ParseBool(cnpCem, false);
+
+            // Sales Through specific (keys from collectScheduleParameters() in SalesThrough.cshtml).
+            if (root.TryGetProperty("stSummary", out var stS) || root.TryGetProperty("StSummary", out stS))
+                p.StSummary = ParseBool(stS, false);
+            if (root.TryGetProperty("stPrimaryGroup", out var stPg) || root.TryGetProperty("StPrimaryGroup", out stPg))
+                p.StPrimaryGroup = AsString(stPg);
+            if (root.TryGetProperty("stSecondaryGroup", out var stSg) || root.TryGetProperty("StSecondaryGroup", out stSg))
+                p.StSecondaryGroup = AsString(stSg);
+            if (root.TryGetProperty("stThirdGroup", out var stTg) || root.TryGetProperty("StThirdGroup", out stTg))
+                p.StThirdGroup = AsString(stTg);
+            if (root.TryGetProperty("stIncludeAdditionalCharges", out var stIac) || root.TryGetProperty("StIncludeAdditionalCharges", out stIac))
+                p.StIncludeAdditionalCharges = ParseBool(stIac, true);
+            if (root.TryGetProperty("stSortBySizeSequence", out var stSbs) || root.TryGetProperty("StSortBySizeSequence", out stSbs))
+                p.StSortBySizeSequence = ParseBool(stSbs, false);
 
             // ItemsSelection dimension filter (categories/brands/suppliers/stores/items/etc.).
             // The view serialises it as a JSON *string* under "itemsSelectionJson"; older/code

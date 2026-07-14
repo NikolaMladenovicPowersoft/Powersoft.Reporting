@@ -15,6 +15,7 @@
     bool canViewTrialBalance = ViewBag.CanViewTrialBalance ?? true;
     bool canViewProfitLoss = ViewBag.CanViewProfitLoss ?? true;
     bool canViewCashFlow  = ViewBag.CanViewCashFlow  ?? true;
+    bool canViewST        = ViewBag.CanViewST        ?? true;
 }
 
 <div class="row">
@@ -63,6 +64,11 @@
                 @if (canViewCNP) {
                 <a class="nav-link" asp-action="CustomerNotPurchased">
                     <i class="bi bi-cart-x me-2"></i>Items Not Purchased
+                </a>
+                }
+                @if (canViewST) {
+                <a class="nav-link" asp-action="SalesThrough">
+                    <i class="bi bi-graph-up-arrow me-2"></i>Sales Through
                 </a>
                 }
             </nav>
@@ -315,6 +321,31 @@
                                     including when each was last purchased. Filter by category, brand, supplier and store.
                                 </p>
                                 <a asp-action="CustomerNotPurchased" class="btn btn-primary mt-auto">
+                                    <i class="bi bi-arrow-right me-1"></i>Open Report
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    }
+
+                    @if (canViewST) {
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100" style="border-color:#16a34a;">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex align-items-center mb-3">
+                                    <div class="rounded-circle p-3 me-3" style="background:rgba(22,163,74,0.10);">
+                                        <i class="bi bi-graph-up-arrow" style="font-size: 1.5rem; color:#16a34a;"></i>
+                                    </div>
+                                    <div>
+                                        <h5 class="card-title mb-1">Sales Through</h5>
+                                        <p class="text-muted small mb-0">Sell-through &amp; mix analysis</p>
+                                    </div>
+                                </div>
+                                <p class="card-text text-muted small flex-grow-1">
+                                    Intake (net purchases) vs sales vs current stock with sell-through
+                                    percentages and sales/intake/stock mix, grouped up to three levels.
+                                </p>
+                                <a asp-action="SalesThrough" class="btn mt-auto text-white" style="background:#16a34a;">
                                     <i class="bi bi-arrow-right me-1"></i>Open Report
                                 </a>
                             </div>

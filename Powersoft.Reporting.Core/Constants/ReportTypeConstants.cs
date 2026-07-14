@@ -27,6 +27,11 @@ public static class ReportTypeConstants
     // (GetAllTransactionsForBowerBI IsCashFlow=1 + GetFullTreeCoaBI hierarchy) but self-contained.
     public const string CashFlow = "CashFlow";
 
+    // Sales Through (sell-through) — Splash/George 2026-07. Intake vs sales vs current stock
+    // with sell-through % and mix %, mirroring the ERES SS26 ST Excel workbook built on the
+    // legacy Power Purchases & Sales export.
+    public const string SalesThrough = "SalesThrough";
+
     /// <summary>
     /// The set of report types that can be scheduled.
     /// Used for validation when creating/updating schedules.
@@ -45,7 +50,8 @@ public static class ReportTypeConstants
         TrialBalance,
         ProfitLoss,
         CustomerNotPurchased,
-        CashFlow
+        CashFlow,
+        SalesThrough
     };
 
     public static bool IsSchedulable(string reportType) =>

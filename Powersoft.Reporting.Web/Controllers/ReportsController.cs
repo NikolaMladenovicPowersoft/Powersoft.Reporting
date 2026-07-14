@@ -520,7 +520,32 @@ public class ReportsController : Controller
             return Json(new { error = $"Failed to load {type}" });
         }
     }
-    
+
+    /// <summary>
+    /// Tenant-defined display names for item attributes 1..6 (tbl_Field, FieldType=3).
+    /// Returned as { "1": "GENDER", "3": "AGE GROUP", ... } — indexes without a custom
+    /// name are omitted and the UI keeps the generic "Attribute N" label.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetAttributeCaptions()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new Dictionary<int, string>());
+
+        try
+        {
+            var repo = _repositoryFactory.CreateDimensionRepository(tenantConnString);
+            var captions = await repo.GetAttributeCaptionsAsync();
+            return Json(captions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading attribute captions");
+            return Json(new Dictionary<int, string>());
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetEntityDetail(string code, string type)
     {
@@ -909,6 +934,7 @@ public class ReportsController : Controller
             ReportTypeConstants.ProfitLoss     => (ModuleConstants.IniHeaderProfitLoss,       ModuleConstants.IniDescriptionProfitLoss),
             ReportTypeConstants.CustomerNotPurchased => (ModuleConstants.IniHeaderCustomerNotPurchased, ModuleConstants.IniDescriptionCustomerNotPurchased),
             ReportTypeConstants.CashFlow       => (ModuleConstants.IniHeaderCashFlow,         ModuleConstants.IniDescriptionCashFlow),
+            ReportTypeConstants.SalesThrough   => (ModuleConstants.IniHeaderSalesThrough,     ModuleConstants.IniDescriptionSalesThrough),
             _                                  => null
         };
 
@@ -2067,11 +2093,12 @@ public class ReportsController : Controller
         string sortColumn = "ItemCode", string sortDirection = "ASC",
         string? ItemsSelectionJson = null,
         bool showOnOrder = false, bool showReservation = false,
-        bool showAvailable = false, bool includeAdditionalCharges = true)
+        bool showAvailable = false, bool includeAdditionalCharges = true,
+        bool sortBySizeSequence = false)
     {
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
             includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
-            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges, sortBySizeSequence);
         if (result == null) return RedirectToAction("PurchasesSales");
 
         var service = new ExcelExportService();
@@ -2090,11 +2117,12 @@ public class ReportsController : Controller
         string sortColumn = "ItemCode", string sortDirection = "ASC",
         string? ItemsSelectionJson = null,
         bool showOnOrder = false, bool showReservation = false,
-        bool showAvailable = false, bool includeAdditionalCharges = true)
+        bool showAvailable = false, bool includeAdditionalCharges = true,
+        bool sortBySizeSequence = false)
     {
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
             includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
-            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges, sortBySizeSequence);
         if (result == null) return RedirectToAction("PurchasesSales");
 
         var service = new PdfExportService();
@@ -2111,11 +2139,12 @@ public class ReportsController : Controller
         string sortColumn = "ItemCode", string sortDirection = "ASC",
         string? ItemsSelectionJson = null,
         bool showOnOrder = false, bool showReservation = false,
-        bool showAvailable = false, bool includeAdditionalCharges = true)
+        bool showAvailable = false, bool includeAdditionalCharges = true,
+        bool sortBySizeSequence = false)
     {
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
             includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
-            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges, sortBySizeSequence);
         if (result == null) return RedirectToAction("PurchasesSales");
 
         var service = new CsvExportService();
@@ -2134,11 +2163,12 @@ public class ReportsController : Controller
         string sortColumn = "ItemCode", string sortDirection = "ASC",
         string? ItemsSelectionJson = null,
         bool showOnOrder = false, bool showReservation = false,
-        bool showAvailable = false, bool includeAdditionalCharges = true)
+        bool showAvailable = false, bool includeAdditionalCharges = true,
+        bool sortBySizeSequence = false)
     {
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
             includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
-            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges, sortBySizeSequence);
         if (result == null)
             return Json(new { success = false, message = "Failed to generate report data." });
 
@@ -2184,6 +2214,7 @@ public class ReportsController : Controller
         if (showReservation) selectionLines.Add("Show Reserved: Yes");
         if (showAvailable) selectionLines.Add("Show Available: Yes");
         if (!includeAdditionalCharges) selectionLines.Add("Cost: Wholesale only (excl. additional charges)");
+        if (sortBySizeSequence) selectionLines.Add("Size Sort: By size sequence");
         if (!string.IsNullOrWhiteSpace(storeCodes)) selectionLines.Add($"Stores: {storeCodes}");
 
         var selectionsHtml = string.Join("", selectionLines.Select(s =>
@@ -2209,7 +2240,8 @@ public class ReportsController : Controller
         string sortColumn, string sortDirection,
         string? itemsSelectionJson = null,
         bool showOnOrder = false, bool showReservation = false,
-        bool showAvailable = false, bool includeAdditionalCharges = true)
+        bool showAvailable = false, bool includeAdditionalCharges = true,
+        bool sortBySizeSequence = false)
     {
         var tenantConnString = GetTenantConnectionString();
         if (string.IsNullOrEmpty(tenantConnString)) return null;
@@ -2229,6 +2261,7 @@ public class ReportsController : Controller
             ShowReservation = showReservation,
             ShowAvailable = showAvailable,
             IncludeAdditionalCharges = includeAdditionalCharges,
+            SortBySizeSequence = sortBySizeSequence,
             StoreCodes = string.IsNullOrEmpty(storeCodes) ? new() : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
             ItemIds = string.IsNullOrEmpty(itemIds) ? new() : itemIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Where(s => int.TryParse(s.Trim(), out _)).Select(s => int.Parse(s.Trim())).ToList(),
@@ -2321,6 +2354,8 @@ public class ReportsController : Controller
                 model.ShowAvailable = sav == "1";
             if (parms.TryGetValue("IncludeAdditionalCharges", out var iac))
                 model.IncludeAdditionalCharges = iac == "1";
+            if (parms.TryGetValue("SortBySizeSequence", out var sbss))
+                model.SortBySizeSequence = sbss == "1";
             if (parms.TryGetValue("ReportMode", out var rm) && Enum.TryParse<PsReportMode>(rm, out var rmt))
                 model.ReportMode = rmt;
             if (parms.TryGetValue("PrimaryGroup", out var pg) && Enum.TryParse<PsGroupBy>(pg, out var pgt))
@@ -2650,14 +2685,15 @@ public class ReportsController : Controller
         string? locale = "el", int? promptTemplateId = null,
         string? ItemsSelectionJson = null,
         bool showOnOrder = false, bool showReservation = false,
-        bool showAvailable = false, bool includeAdditionalCharges = true)
+        bool showAvailable = false, bool includeAdditionalCharges = true,
+        bool sortBySizeSequence = false)
     {
         if (!_analyzerFactory.IsConfigured)
             return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
 
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
             includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
-            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges, sortBySizeSequence);
         if (result == null)
             return Json(new { success = false, message = "Failed to generate report data for analysis." });
 
@@ -2968,11 +3004,12 @@ public class ReportsController : Controller
         string sortColumn = "ItemCode", string sortDirection = "ASC",
         string? ItemsSelectionJson = null,
         bool showOnOrder = false, bool showReservation = false,
-        bool showAvailable = false, bool includeAdditionalCharges = true)
+        bool showAvailable = false, bool includeAdditionalCharges = true,
+        bool sortBySizeSequence = false)
     {
         var result = await RunPsExportQuery(dateFrom, dateTo, reportMode, primaryGroup, secondaryGroup, thirdGroup,
             includeVat, showProfit, showStock, storeCodes, itemIds, sortColumn, sortDirection, ItemsSelectionJson,
-            showOnOrder, showReservation, showAvailable, includeAdditionalCharges);
+            showOnOrder, showReservation, showAvailable, includeAdditionalCharges, sortBySizeSequence);
         if (result == null) return RedirectToAction("PurchasesSales");
 
         var model = new PurchasesSalesViewModel
@@ -2990,6 +3027,7 @@ public class ReportsController : Controller
             ShowReservation = showReservation,
             ShowAvailable = showAvailable,
             IncludeAdditionalCharges = includeAdditionalCharges,
+            SortBySizeSequence = sortBySizeSequence,
             ConnectedDatabase = GetConnectedDatabaseName(),
             Results = result.Value.rows,
             TotalCount = result.Value.rows.Count,
@@ -4278,6 +4316,22 @@ public class ReportsController : Controller
             _logger.LogWarning(ex, "Failed to load stores for Catalogue report");
             model.AvailableStores = new();
         }
+        model.AttributeCaptions = await GetAttributeCaptionsSafeAsync(tenantConnString);
+    }
+
+    // Tenant attribute captions (tbl_Field) — never let a lookup failure break a report page.
+    private async Task<Dictionary<int, string>> GetAttributeCaptionsSafeAsync(string tenantConnString)
+    {
+        try
+        {
+            var repo = _repositoryFactory.CreateDimensionRepository(tenantConnString);
+            return await repo.GetAttributeCaptionsAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load attribute captions");
+            return new Dictionary<int, string>();
+        }
     }
 
     // ==================== Catalogue Export ====================
@@ -4299,6 +4353,7 @@ public class ReportsController : Controller
             var repo = _repositoryFactory.CreateCatalogueRepository(tenantConnString);
             filter.PageNumber = 1;
             filter.PageSize = int.MaxValue;
+            filter.AttributeCaptions = await GetAttributeCaptionsSafeAsync(tenantConnString);
             var result = await repo.GetCatalogueDataAsync(filter);
             CatalogueTotals? totals = filter.ReportOn != CatalogueReportOn.Both
                 ? await repo.GetCatalogueTotalsAsync(filter)
@@ -4529,7 +4584,8 @@ public class ReportsController : Controller
             TotalCount = result.Value.rows.Count,
             Totals = result.Value.totals,
             SortColumn = sortColumn,
-            SortDirection = sortDirection
+            SortDirection = sortDirection,
+            AttributeCaptions = result.Value.filter.AttributeCaptions
         };
         if (!string.IsNullOrWhiteSpace(displayColumns))
             model.DisplayColumnsString = displayColumns;
@@ -5527,6 +5583,418 @@ public class ReportsController : Controller
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading CustomerNotPurchased schedules");
+            return Json(new { success = false, message = "Failed to load schedules." });
+        }
+    }
+
+    // ==================== Sales Through (Splash) ====================
+
+    public async Task<IActionResult> SalesThrough()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return RedirectToAction("Index", "Home");
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionViewSalesThrough))
+        {
+            _logger.LogWarning("User {User} denied access to SalesThrough (action {Action})",
+                User.Identity?.Name, ModuleConstants.ActionViewSalesThrough);
+            return RedirectToAction("AccessDenied", "Account");
+        }
+
+        var storeRepo = _repositoryFactory.CreateStoreRepository(tenantConnString);
+        var stores = await storeRepo.GetActiveStoresAsync();
+        ViewBag.StoresJson = System.Text.Json.JsonSerializer.Serialize(
+            stores.Select(s => new { code = s.StoreCode, name = s.StoreName }));
+        ViewBag.ConnectedDatabase = GetConnectedDatabaseName();
+        ViewBag.CanSchedule = await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleSalesThrough);
+        return View();
+    }
+
+    // Builds an ST filter from the shared parameter surface (screen/export/email/AI/print/schedule).
+    // allRows=true lifts the page cap so exports/analysis see the whole result set.
+    private SalesThroughFilter BuildStFilterCore(
+        DateTime dateFrom, DateTime dateTo, bool summary,
+        string? primaryGroup, string? secondaryGroup, string? thirdGroup,
+        bool includeAdditionalCharges, bool sortBySizeSequence,
+        string? storeCodes, string? itemsSelectionJson,
+        string sortColumn, string sortDirection,
+        int pageNumber, int pageSize, bool allRows)
+    {
+        PsGroupBy Parse(string? v) =>
+            Enum.TryParse<PsGroupBy>(v, true, out var g) ? g : PsGroupBy.None;
+
+        return new SalesThroughFilter
+        {
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            Summary = summary,
+            PrimaryGroup = Parse(primaryGroup),
+            SecondaryGroup = Parse(secondaryGroup),
+            ThirdGroup = Parse(thirdGroup),
+            IncludeAdditionalCharges = includeAdditionalCharges,
+            SortBySizeSequence = sortBySizeSequence,
+            StoreCodes = string.IsNullOrWhiteSpace(storeCodes) ? new List<string>()
+                : storeCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList(),
+            ItemsSelection = ParseItemsSelection(itemsSelectionJson),
+            SortColumn = sortColumn,
+            SortDirection = sortDirection,
+            PageNumber = allRows ? 1 : pageNumber,
+            PageSize = allRows ? 100000 : pageSize
+        };
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GetSalesThroughData(
+        DateTime dateFrom, DateTime dateTo, bool summary = false,
+        string? primaryGroup = null, string? secondaryGroup = null, string? thirdGroup = null,
+        bool includeAdditionalCharges = true, bool sortBySizeSequence = false,
+        string? storeCodes = null, string? itemsSelection = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        int pageNumber = 1, int pageSize = 100)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database." });
+
+        try
+        {
+            var filter = BuildStFilterCore(dateFrom, dateTo, summary,
+                primaryGroup, secondaryGroup, thirdGroup,
+                includeAdditionalCharges, sortBySizeSequence,
+                storeCodes, itemsSelection, sortColumn, sortDirection,
+                pageNumber, pageSize, allRows: false);
+
+            if (!filter.IsValid(out var errors))
+                return Json(new { success = false, message = string.Join(" ", errors) });
+
+            var repo = _repositoryFactory.CreateSalesThroughRepository(tenantConnString);
+            var result = await repo.GetSalesThroughDataAsync(filter);
+
+            return Json(new
+            {
+                success = true,
+                data = result.Items,
+                totals = result.SalesThroughTotals,
+                totalRows = result.TotalCount,
+                pageNumber = result.PageNumber,
+                pageSize = result.PageSize,
+                totalPages = result.TotalPages
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading Sales Through data");
+            return Json(new { success = false, message = ex.Message });
+        }
+    }
+
+    private async Task<(List<SalesThroughRow> rows, SalesThroughTotals? totals, SalesThroughFilter filter)?> RunStExportQuery(
+        DateTime dateFrom, DateTime dateTo, bool summary,
+        string? primaryGroup, string? secondaryGroup, string? thirdGroup,
+        bool includeAdditionalCharges, bool sortBySizeSequence,
+        string? storeCodes, string? itemsSelectionJson,
+        string sortColumn, string sortDirection)
+    {
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return null;
+
+        var filter = BuildStFilterCore(dateFrom, dateTo, summary,
+            primaryGroup, secondaryGroup, thirdGroup,
+            includeAdditionalCharges, sortBySizeSequence,
+            storeCodes, itemsSelectionJson, sortColumn, sortDirection,
+            1, 100000, allRows: true);
+
+        if (!filter.IsValid(out _)) return null;
+
+        var repo = _repositoryFactory.CreateSalesThroughRepository(conn);
+        var result = await repo.GetSalesThroughDataAsync(filter);
+        return (result.Items, result.SalesThroughTotals, filter);
+    }
+
+    public async Task<IActionResult> ExportSalesThroughCsv(
+        DateTime dateFrom, DateTime dateTo, bool summary = false,
+        string? primaryGroup = null, string? secondaryGroup = null, string? thirdGroup = null,
+        bool includeAdditionalCharges = true, bool sortBySizeSequence = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var q = await RunStExportQuery(dateFrom, dateTo, summary, primaryGroup, secondaryGroup, thirdGroup,
+            includeAdditionalCharges, sortBySizeSequence, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null) return RedirectToAction("SalesThrough");
+
+        var bytes = new CsvExportService().GenerateSalesThroughCsv(q.Value.rows, q.Value.totals, q.Value.filter);
+        return File(bytes, "text/csv", $"SalesThrough_{DateTime.Now:yyyyMMdd}.csv");
+    }
+
+    public async Task<IActionResult> ExportSalesThroughExcel(
+        DateTime dateFrom, DateTime dateTo, bool summary = false,
+        string? primaryGroup = null, string? secondaryGroup = null, string? thirdGroup = null,
+        bool includeAdditionalCharges = true, bool sortBySizeSequence = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var q = await RunStExportQuery(dateFrom, dateTo, summary, primaryGroup, secondaryGroup, thirdGroup,
+            includeAdditionalCharges, sortBySizeSequence, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null) return RedirectToAction("SalesThrough");
+
+        var bytes = new ExcelExportService().GenerateSalesThroughExcel(q.Value.rows, q.Value.totals, q.Value.filter);
+        return File(bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"SalesThrough_{DateTime.Now:yyyyMMdd}.xlsx");
+    }
+
+    public async Task<IActionResult> ExportSalesThroughPdf(
+        DateTime dateFrom, DateTime dateTo, bool summary = false,
+        string? primaryGroup = null, string? secondaryGroup = null, string? thirdGroup = null,
+        bool includeAdditionalCharges = true, bool sortBySizeSequence = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var q = await RunStExportQuery(dateFrom, dateTo, summary, primaryGroup, secondaryGroup, thirdGroup,
+            includeAdditionalCharges, sortBySizeSequence, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null) return RedirectToAction("SalesThrough");
+
+        var bytes = new PdfExportService().GenerateSalesThroughPdf(q.Value.rows, q.Value.totals, q.Value.filter);
+        return File(bytes, "application/pdf", $"SalesThrough_{DateTime.Now:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> SalesThroughPrintPreview(
+        DateTime dateFrom, DateTime dateTo, bool summary = false,
+        string? primaryGroup = null, string? secondaryGroup = null, string? thirdGroup = null,
+        bool includeAdditionalCharges = true, bool sortBySizeSequence = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var q = await RunStExportQuery(dateFrom, dateTo, summary, primaryGroup, secondaryGroup, thirdGroup,
+            includeAdditionalCharges, sortBySizeSequence, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null) return RedirectToAction("SalesThrough");
+
+        var model = new ViewModels.SalesThroughViewModel
+        {
+            Rows = q.Value.rows,
+            Totals = q.Value.totals,
+            Filter = q.Value.filter,
+            ConnectedDatabase = GetConnectedDatabaseName()
+        };
+        return View(model);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SendSalesThroughReportEmail(
+        string recipients, string? cc, string? bcc, string? emailSubject,
+        string exportFormat, int? templateId,
+        DateTime dateFrom, DateTime dateTo, bool summary = false,
+        string? primaryGroup = null, string? secondaryGroup = null, string? thirdGroup = null,
+        bool includeAdditionalCharges = true, bool sortBySizeSequence = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC")
+    {
+        var q = await RunStExportQuery(dateFrom, dateTo, summary, primaryGroup, secondaryGroup, thirdGroup,
+            includeAdditionalCharges, sortBySizeSequence, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null)
+            return Json(new { success = false, message = "Failed to generate report data." });
+
+        var format = (exportFormat ?? "Excel").ToLowerInvariant();
+        byte[] fileBytes;
+        string fileName;
+        string contentType;
+        var stamp = DateTime.Now.ToString("yyyyMMdd");
+
+        switch (format)
+        {
+            case "pdf":
+                fileBytes = new PdfExportService().GenerateSalesThroughPdf(q.Value.rows, q.Value.totals, q.Value.filter);
+                fileName = $"SalesThrough_{stamp}.pdf";
+                contentType = "application/pdf";
+                break;
+            case "csv":
+                fileBytes = new CsvExportService().GenerateSalesThroughCsv(q.Value.rows, q.Value.totals, q.Value.filter);
+                fileName = $"SalesThrough_{stamp}.csv";
+                contentType = "text/csv";
+                break;
+            default:
+                fileBytes = new ExcelExportService().GenerateSalesThroughExcel(q.Value.rows, q.Value.totals, q.Value.filter);
+                fileName = $"SalesThrough_{stamp}.xlsx";
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                break;
+        }
+
+        var dbName = GetConnectedDatabaseName() ?? "Unknown";
+        var userName = User.Identity?.Name ?? "Unknown";
+        var period = $"{dateFrom:yyyy-MM-dd} to {dateTo:yyyy-MM-dd}";
+        var rowCount = q.Value.rows.Count;
+
+        var selectionLines = new List<string>
+        {
+            $"Mode: {(q.Value.filter.IsSummary ? "Summary" : "Detailed")}"
+        };
+        if (q.Value.filter.PrimaryGroup != PsGroupBy.None) selectionLines.Add($"Primary Group: {q.Value.filter.PrimaryGroup}");
+        if (q.Value.filter.SecondaryGroup != PsGroupBy.None) selectionLines.Add($"Secondary Group: {q.Value.filter.SecondaryGroup}");
+        if (q.Value.filter.ThirdGroup != PsGroupBy.None) selectionLines.Add($"Third Group: {q.Value.filter.ThirdGroup}");
+        if (!includeAdditionalCharges) selectionLines.Add("Intake cost: Wholesale only");
+        if (sortBySizeSequence) selectionLines.Add("Sizes ordered by size sequence");
+
+        var selectionsHtml = string.Join("", selectionLines.Select(s =>
+            $"<tr><td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:12px;'>{s.Split(':')[0]}</td>" +
+            $"<td style='padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;'>{(s.Contains(':') ? s[(s.IndexOf(':') + 1)..].Trim() : "")}</td></tr>"));
+
+        var defaultHtmlBody = BuildDefaultEmailHtmlBody("Sales Through", dbName, period, rowCount, exportFormat, userName, "Rows", selectionsHtml);
+        var defaultTextBody = $"Sales Through Report\nDatabase: {dbName}\nPeriod: {period}\nRows: {rowCount}\nFormat: {exportFormat}\n\n{string.Join("\n", selectionLines)}";
+
+        var tokens = BuildEmailTokens("Sales Through", dbName, period, rowCount, exportFormat, userName);
+
+        return await SendReportEmailCore(recipients, cc, bcc, emailSubject, "SalesThrough", templateId,
+            fileBytes, fileName, contentType,
+            $"Sales Through Report \u2014 {period}", defaultHtmlBody, defaultTextBody, tokens);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AnalyzeSalesThroughReport(
+        DateTime dateFrom, DateTime dateTo, bool summary = false,
+        string? primaryGroup = null, string? secondaryGroup = null, string? thirdGroup = null,
+        bool includeAdditionalCharges = true, bool sortBySizeSequence = false,
+        string? storeCodes = null, string? itemsSelectionJson = null,
+        string sortColumn = "ItemCode", string sortDirection = "ASC",
+        string? locale = "el", int? promptTemplateId = null)
+    {
+        if (!_analyzerFactory.IsConfigured)
+            return Json(new { success = false, message = "AI Analyzer is not configured. Please set the API key in Settings > AI Analyzer." });
+
+        var q = await RunStExportQuery(dateFrom, dateTo, summary, primaryGroup, secondaryGroup, thirdGroup,
+            includeAdditionalCharges, sortBySizeSequence, storeCodes, itemsSelectionJson, sortColumn, sortDirection);
+        if (q == null)
+            return Json(new { success = false, message = "Failed to generate report data for analysis." });
+
+        if (q.Value.rows.Count == 0)
+            return Json(new { success = false, message = "No data to analyze. Please generate the report first." });
+
+        try
+        {
+            var csvBytes = new CsvExportService().GenerateSalesThroughCsv(q.Value.rows, q.Value.totals, q.Value.filter);
+            var csvData = System.Text.Encoding.UTF8.GetString(csvBytes);
+
+            string? customPrompt = null;
+            if (promptTemplateId.HasValue && promptTemplateId.Value > 0)
+            {
+                var tenantConn = GetTenantConnectionString();
+                if (!string.IsNullOrEmpty(tenantConn))
+                {
+                    try
+                    {
+                        var schedRepo = _repositoryFactory.CreateScheduleRepository(tenantConn);
+                        var tpl = await schedRepo.GetAiPromptTemplateByIdAsync(promptTemplateId.Value);
+                        if (tpl != null) customPrompt = tpl.SystemPrompt;
+                    }
+                    catch { /* fall through to default prompt */ }
+                }
+            }
+
+            _logger.LogInformation(
+                "AI analysis [SalesThrough]: {Rows} rows, {CsvLen} chars, locale={Locale}, user={User}",
+                q.Value.rows.Count, csvData.Length, locale, User.Identity?.Name);
+
+            var guard = await AnalyzeWithBudgetAsync(csvData, "SalesThrough", locale, customPrompt, GetTenantConnectionString());
+            var guardFail = AiGuardFailure(guard);
+            if (guardFail != null) return guardFail;
+
+            return Json(new { success = true, analysis = guard.Analysis, csvPreview = TruncateCsvForChat(csvData) });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error analyzing Sales Through report with AI");
+            return Json(new { success = false, message = $"Analysis failed: {ex.Message}" });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> SaveStSchedule(
+        string scheduleName, string recurrenceType, int? recurrenceDay,
+        string scheduleTime, string exportFormat, string recipients,
+        string? emailSubject, string? parametersJson, string? recurrenceJson,
+        bool includeAiAnalysis = false, string? aiLocale = "el",
+        bool skipIfEmpty = false, int scheduleId = 0)
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        if (!await IsActionAuthorizedAsync(ModuleConstants.ActionScheduleSalesThrough))
+            return Json(new { success = false, message = "Not authorized to schedule this report." });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var parsedTime = TimeSpan.TryParse(scheduleTime, out var ts) ? ts : new TimeSpan(8, 0, 0);
+            DateTime? nextRun = null;
+
+            if (!string.IsNullOrWhiteSpace(recurrenceJson))
+                nextRun = RecurrenceNextRunCalculator.GetNextRun(recurrenceJson, DateTime.Now);
+            if (nextRun == null)
+                nextRun = CalculateNextRun(recurrenceType ?? "Daily", recurrenceDay, parsedTime);
+
+            var schedule = new ReportSchedule
+            {
+                ReportType = ReportTypeConstants.SalesThrough,
+                ScheduleName = scheduleName,
+                CreatedBy = User.Identity?.Name ?? "Unknown",
+                RecurrenceType = recurrenceType ?? "Daily",
+                RecurrenceDay = recurrenceDay,
+                ScheduleTime = parsedTime,
+                ExportFormat = exportFormat ?? "Excel",
+                Recipients = recipients,
+                EmailSubject = emailSubject,
+                ParametersJson = InjectPermissionsIntoParametersJson(parametersJson),
+                RecurrenceJson = string.IsNullOrWhiteSpace(recurrenceJson) ? null : recurrenceJson,
+                NextRunDate = nextRun,
+                IncludeAiAnalysis = includeAiAnalysis,
+                AiLocale = aiLocale ?? "el",
+                SkipIfEmpty = skipIfEmpty
+            };
+
+            if (scheduleId > 0)
+            {
+                var existing = await repo.GetScheduleByIdAsync(scheduleId);
+                var (ok, message) = ValidateScheduleForMutation(existing, ReportTypeConstants.SalesThrough);
+                if (!ok)
+                    return Json(new { success = false, message });
+
+                schedule.ScheduleId = scheduleId;
+                schedule.IsActive = true;
+                var updated = await repo.UpdateScheduleAsync(schedule);
+                if (!updated)
+                    return Json(new { success = false, message = "Failed to update schedule." });
+
+                return Json(new { success = true, scheduleId, updated = true, message = "Schedule updated successfully" });
+            }
+
+            var id = await repo.CreateScheduleAsync(schedule);
+            return Json(new { success = true, scheduleId = id, updated = false, message = "Schedule saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving SalesThrough schedule");
+            return Json(new { success = false, message = "Failed to save schedule." });
+        }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetStSchedules()
+    {
+        var tenantConnString = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(tenantConnString))
+            return Json(new { success = false, message = "Not connected to database" });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateScheduleRepository(tenantConnString);
+            var schedules = await repo.GetSchedulesForReportAsync(ReportTypeConstants.SalesThrough);
+            return Json(new { success = true, schedules });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading SalesThrough schedules");
             return Json(new { success = false, message = "Failed to load schedules." });
         }
     }

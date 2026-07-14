@@ -25,6 +25,7 @@ public class ScheduleParameters
     public bool ShowReservation { get; set; }
     public bool ShowAvailable { get; set; }
     public bool IncludeAdditionalCharges { get; set; } = true;
+    public bool SortBySizeSequence { get; set; }
     public string? ReportType { get; set; }
 
     // Pareto 80/20 specific
@@ -128,6 +129,14 @@ public class ScheduleParameters
     public bool CfCompareToLastYear { get; set; }
     public bool CfIncludeBudget { get; set; }
     public bool CfMonthly { get; set; }
+
+    // Sales Through specific (distinct St* keys to avoid clashing with PS primaryGroup etc.)
+    public bool StSummary { get; set; }
+    public string? StPrimaryGroup { get; set; }
+    public string? StSecondaryGroup { get; set; }
+    public string? StThirdGroup { get; set; }
+    public bool StIncludeAdditionalCharges { get; set; } = true;
+    public bool StSortBySizeSequence { get; set; }
 
     // Shared
     public bool IncludeVat { get; set; }

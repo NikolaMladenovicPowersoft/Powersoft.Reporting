@@ -66,6 +66,9 @@ public static class ModuleConstants
     // Cash Flow (Direct). ⚠ Seed in psCentral tbl_Action before go-live (Christina), same as above.
     public const int ActionViewCashFlow = 6049;
     public const int ActionScheduleCashFlow = 6050;
+    // Sales Through (Splash). ⚠ Seed in psCentral tbl_Action before go-live (Christina), same as above.
+    public const int ActionViewSalesThrough = 6051;
+    public const int ActionScheduleSalesThrough = 6052;
 
     // Legacy Powersoft365 cross-module actions (already exist in psCentral — do NOT seed)
     public const int ActionViewCost = 6015;
@@ -118,6 +121,8 @@ public static class ModuleConstants
     public const string IniDescriptionCustomerNotPurchased = "Items Not Purchased Report Layout";
     public const string IniHeaderCashFlow = "CASHFLOW";
     public const string IniDescriptionCashFlow = "Cash Flow Report Layout";
+    public const string IniHeaderSalesThrough = "SALESTHRU";
+    public const string IniDescriptionSalesThrough = "Sales Through Report Layout";
 
     // INI settings constants (DB-level settings, userCode = "ALL")
     public const string IniHeaderDbSettings = "DBSETTINGS";

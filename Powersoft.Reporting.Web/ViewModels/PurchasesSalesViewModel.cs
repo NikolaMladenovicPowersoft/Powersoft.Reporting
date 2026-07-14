@@ -45,6 +45,9 @@ public class PurchasesSalesViewModel
     [Display(Name = "Include Additional Charges")]
     public bool IncludeAdditionalCharges { get; set; } = true;
 
+    [Display(Name = "Sort Sizes by Sequence")]
+    public bool SortBySizeSequence { get; set; }
+
     public string? DatePreset { get; set; }
     public string SortColumn { get; set; } = "ItemCode";
     public string SortDirection { get; set; } = "ASC";
@@ -139,6 +142,7 @@ public class PurchasesSalesViewModel
             ShowReservation = ShowReservation,
             ShowAvailable = ShowAvailable,
             IncludeAdditionalCharges = IncludeAdditionalCharges,
+            SortBySizeSequence = SortBySizeSequence,
             StoreCodes = SelectedStoreCodes,
             ItemIds = SelectedItemIds,
             PageNumber = PageNumber,

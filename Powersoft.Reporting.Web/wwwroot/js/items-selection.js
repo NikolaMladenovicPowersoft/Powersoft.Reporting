@@ -257,12 +257,14 @@
         }
 
         window.openDimModal = function (dim, label) {
+            // Tenant-defined attribute captions override the hard-coded label from the partial.
+            if (dim.indexOf('attr') === 0 && _dimLabelMap[dim]) label = _dimLabelMap[dim];
             _modalDim = dim;
             _modalTempSelected = new Set(_selected[dim]);
             _showSelectedOnly = false;
             var selToggle = document.getElementById('dimModalSelectedToggle');
             if (selToggle) { selToggle.classList.remove('active', 'btn-secondary'); selToggle.classList.add('btn-outline-secondary'); }
-            document.getElementById('dimModalTitle').innerHTML = '<i class="bi bi-funnel me-1"></i>Select ' + label;
+            document.getElementById('dimModalTitle').innerHTML = '<i class="bi bi-funnel me-1"></i>Select ' + escapeHtml(label);
             document.getElementById('dimModalSearch').value = '';
             document.getElementById('dimModalList').innerHTML =
                 '<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary me-2"></span>Loading...</div>';
@@ -502,6 +504,8 @@
         };
 
         function getDimLabel(dim) {
+            // Tenant-defined caption (attributes) wins over the static markup label.
+            if (_dimLabelMap[dim] && dim.indexOf('attr') === 0) return _dimLabelMap[dim];
             var el = document.querySelector('[data-dim="' + dim + '"] .dim-text');
             if (!el) return dim;
             var trigger = document.getElementById('dimTrigger_' + dim);
@@ -597,6 +601,27 @@
             attr1: 'Attribute 1', attr2: 'Attribute 2', attr3: 'Attribute 3',
             attr4: 'Attribute 4', attr5: 'Attribute 5', attr6: 'Attribute 6'
         };
+
+        // George (2026-07): show the tenant-defined attribute name (tbl_Field.FieldDesc,
+        // e.g. "GENDER") instead of the generic "Attribute 1" — same as legacy
+        // ItemsSelections.ascx. Applies to the trigger buttons, the modal title and the
+        // selected-filter chips. Missing/blank captions keep the generic label.
+        fetch('/Reports/GetAttributeCaptions')
+            .then(function (r) { return r.json(); })
+            .then(function (captions) {
+                if (!captions) return;
+                for (var i = 1; i <= 6; i++) {
+                    var cap = captions[i] || captions[String(i)];
+                    if (!cap) continue;
+                    var dim = 'attr' + i;
+                    _dimLabelMap[dim] = cap;
+                    var trigger = document.getElementById('dimTrigger_' + dim);
+                    if (trigger) trigger.setAttribute('title', 'Select ' + cap);
+                    updateTrigger(dim);
+                }
+                renderSelectedSummary();
+            })
+            .catch(function () { /* keep generic labels */ });
 
         // Best-effort: pull dimension names for an active filter even if its modal was never opened
         // (e.g. restored saved filter / preset), so the summary shows real names not "N selected".

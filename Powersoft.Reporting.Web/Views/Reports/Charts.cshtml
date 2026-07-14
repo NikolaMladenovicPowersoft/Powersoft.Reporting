@@ -369,6 +369,23 @@ document.getElementById('showDataLabels').addEventListener('change', function() 
     document.getElementById('labelPositionGroup').style.display = this.checked ? '' : 'none';
 });
 
+// Tenant attribute captions: rename "Attribute N" in the Group By dropdown to the
+// tbl_Field-defined name (e.g. "GENDER"), same as the Items Selection filter labels.
+fetch('/Reports/GetAttributeCaptions')
+    .then(function (r) { return r.json(); })
+    .then(function (captions) {
+        if (!captions) return;
+        var sel = document.getElementById('dimension');
+        if (!sel) return;
+        for (var i = 1; i <= 6; i++) {
+            var cap = captions[i] || captions[String(i)];
+            if (!cap) continue;
+            var opt = sel.querySelector('option[value="Attr' + i + '"]');
+            if (opt) opt.textContent = cap;
+        }
+    })
+    .catch(function () { /* keep generic labels */ });
+
 var _chart = null;
 var COLORS = [
     '#2563eb','#059669','#d97706','#dc2626','#7c3aed',

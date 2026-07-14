@@ -156,4 +156,20 @@ public class TenantRepositoryFactory : ITenantRepositoryFactory
 
         return new CashFlowRepository(connectionString);
     }
+
+    public ICashFlowMappingRepository CreateCashFlowMappingRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+
+        return new CashFlowMappingRepository(connectionString);
+    }
+
+    public ISalesThroughRepository CreateSalesThroughRepository(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("Connection string cannot be null or empty.", nameof(connectionString));
+
+        return new SalesThroughRepository(connectionString);
+    }
 }

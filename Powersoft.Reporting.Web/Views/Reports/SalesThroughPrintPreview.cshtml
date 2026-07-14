@@ -1,0 +1,254 @@
+@model Powersoft.Reporting.Web.ViewModels.SalesThroughViewModel
+@{
+    Layout = null;
+    var db = Model.ConnectedDatabase ?? "Unknown";
+    var now = DateTime.Now;
+    var f = Model.Filter;
+    var hasL1 = Model.HasL1;
+    var hasL2 = Model.HasL2;
+    var hasL3 = Model.HasL3;
+    var hasItem = Model.HasItem;
+    var colCount = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0) + (hasItem ? 2 : 0) + 11;
+    var labelSpan = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0) + (hasItem ? 2 : 0);
+
+    // Same nested presentation as the Purchases vs Sales preview: group header + subtotal per
+    // primary group (rows arrive pre-sorted by group levels, so grouping preserves SQL order).
+    var grouped = hasL1
+        ? Model.Rows.GroupBy(r => r.Level1Value ?? r.Level1 ?? "N/A").ToList()
+        : null;
+}
+@functions {
+    // Group sell-through % is recomputed from the group sums (never averaged over rows).
+    static decimal Pct(decimal num, decimal den) => den != 0 ? Math.Round(num / den * 100, 1) : 100;
+
+    private void StRow(SalesThroughRow r)
+    {
+        var hasL1 = Model.HasL1; var hasL2 = Model.HasL2; var hasL3 = Model.HasL3; var hasItem = Model.HasItem;
+        <tr>
+            @if (hasL1) { <td>@(r.Level1Value ?? r.Level1 ?? "N/A")</td> }
+            @if (hasL2) { <td>@(r.Level2Value ?? r.Level2 ?? "N/A")</td> }
+            @if (hasL3) { <td>@(r.Level3Value ?? r.Level3 ?? "N/A")</td> }
+            @if (hasItem) { <td>@r.ItemCode</td> <td>@r.ItemName</td> }
+            <td class="num">@r.IntakeQty.ToString("N0")</td>
+            <td class="num">@r.IntakeValue.ToString("N2")</td>
+            <td class="num">@r.SalesQty.ToString("N0")</td>
+            <td class="num">@r.SalesNet.ToString("N2")</td>
+            <td class="num">@r.SalesGross.ToString("N2")</td>
+            <td class="num">@r.SellThroughQtyPct.ToString("N1")%</td>
+            <td class="num">@r.SellThroughValuePct.ToString("N1")%</td>
+            <td class="num">@r.CurrentStock.ToString("N0")</td>
+            <td class="num">@r.SalesMixPct.ToString("N1")%</td>
+            <td class="num">@r.IntakeMixPct.ToString("N1")%</td>
+            <td class="num">@r.StockMixPct.ToString("N1")%</td>
+        </tr>
+    }
+
+    private void StSubtotal(string label, List<SalesThroughRow> rows)
+    {
+        var hasL1 = Model.HasL1; var hasL2 = Model.HasL2; var hasL3 = Model.HasL3; var hasItem = Model.HasItem;
+        var iq = rows.Sum(x => x.IntakeQty);
+        var iv = rows.Sum(x => x.IntakeValue);
+        var sq = rows.Sum(x => x.SalesQty);
+        var sn = rows.Sum(x => x.SalesNet);
+        var sg = rows.Sum(x => x.SalesGross);
+        var cs = rows.Sum(x => x.CurrentStock);
+        var sm = rows.Sum(x => x.SalesMixPct);
+        var im = rows.Sum(x => x.IntakeMixPct);
+        var km = rows.Sum(x => x.StockMixPct);
+        <tr class="group-subtotal">
+            @* Label goes in the item-code column when item detail is shown; otherwise in the
+               first group column — keeps the cell count identical to the header row. *@
+            @if (hasItem)
+            {
+                @if (hasL1) { <td></td> }
+                @if (hasL2) { <td></td> }
+                @if (hasL3) { <td></td> }
+                <td style="text-align:left;">@label</td> <td></td>
+            }
+            else
+            {
+                <td style="text-align:left;">@label</td>
+                @if (hasL2) { <td></td> }
+                @if (hasL3) { <td></td> }
+            }
+            <td class="num">@iq.ToString("N0")</td>
+            <td class="num">@iv.ToString("N2")</td>
+            <td class="num">@sq.ToString("N0")</td>
+            <td class="num">@sn.ToString("N2")</td>
+            <td class="num">@sg.ToString("N2")</td>
+            <td class="num">@Pct(sq, iq).ToString("N1")%</td>
+            <td class="num">@Pct(sn, iv).ToString("N1")%</td>
+            <td class="num">@cs.ToString("N0")</td>
+            <td class="num">@sm.ToString("N1")%</td>
+            <td class="num">@im.ToString("N1")%</td>
+            <td class="num">@km.ToString("N1")%</td>
+        </tr>
+    }
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sales Through - Print Preview</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #525659; color: #1e293b; }
+
+        .toolbar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+            background: #2c3e50; color: #fff; padding: 8px 16px;
+            display: flex; align-items: center; gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 13px;
+        }
+        .toolbar .title { font-weight: 600; margin-right: auto; }
+        .toolbar button {
+            background: none; border: 1px solid rgba(255,255,255,0.25); color: #fff;
+            padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px;
+        }
+        .toolbar button:hover { background: rgba(255,255,255,0.15); }
+
+        .page {
+            background: #fff; max-width: 1300px; margin: 60px auto 40px;
+            padding: 32px 36px; box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+        }
+        .doc-head { border-bottom: 3px solid #1a365d; padding-bottom: 12px; margin-bottom: 18px; }
+        .doc-head h1 { font-size: 22px; color: #1a365d; }
+        .doc-meta { font-size: 12px; color: #64748b; margin-top: 6px; line-height: 1.6; }
+        .doc-meta strong { color: #334155; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        thead th { background: #1a365d; color: #fff; text-align: left; padding: 6px 6px; font-weight: 600; }
+        thead th.num { text-align: right; }
+        tbody td { padding: 5px 6px; border-bottom: 1px solid #e2e8f0; }
+        tbody tr:nth-child(even) td { background: #f8fafc; }
+        /* Nested group presentation — mirrors the Purchases vs Sales print preview */
+        tbody tr.group-header td { background: #f8fafc; padding: 6px 6px 3px; font-weight: 700; font-size: 11.5px; color: #1e293b; border-top: 1px solid #94a3b8; text-align: left; }
+        tbody tr.group-header.lvl2 td { padding-left: 18px; font-size: 11px; }
+        tbody tr.group-header.lvl3 td { padding-left: 32px; font-size: 10.5px; color: #475569; }
+        tbody tr.group-subtotal td { font-weight: 600; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #94a3b8; padding: 4px 6px; background: #f8fafc; font-style: italic; color: #475569; }
+        tfoot td { padding: 6px 6px; background: #dbeafe; font-weight: 700; border-top: 2px solid #1a365d; }
+        .num { text-align: right; }
+        .empty { text-align: center; color: #64748b; padding: 30px; }
+
+        @@media print {
+            body { background: #fff; }
+            .toolbar { display: none; }
+            .page { margin: 0; max-width: none; box-shadow: none; padding: 0; }
+            thead { display: table-header-group; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <span class="title">Sales Through &mdash; Print Preview</span>
+        <button onclick="window.print()">🖨 Print</button>
+    </div>
+
+    <div class="page">
+        <div class="doc-head">
+            <h1>Sales Through Report</h1>
+            <div class="doc-meta">
+                <strong>Database:</strong> @db &nbsp;|&nbsp;
+                <strong>Generated:</strong> @now.ToString("yyyy-MM-dd HH:mm")<br />
+                <strong>Period:</strong> @f.DateFrom.ToString("yyyy-MM-dd") to @f.DateTo.ToString("yyyy-MM-dd") &nbsp;|&nbsp;
+                <strong>Mode:</strong> @(f.IsSummary ? "Summary" : "Detailed")
+                @if (hasL1) { <text> &nbsp;|&nbsp; <strong>Primary:</strong> @f.PrimaryGroup</text> }
+                @if (hasL2) { <text> &nbsp;|&nbsp; <strong>Secondary:</strong> @f.SecondaryGroup</text> }
+                @if (hasL3) { <text> &nbsp;|&nbsp; <strong>Third:</strong> @f.ThirdGroup</text> }
+                @if (!f.IncludeAdditionalCharges) { <text> &nbsp;|&nbsp; <strong>Intake cost:</strong> Wholesale only</text> }
+                <br /><strong>Rows:</strong> @Model.Rows.Count
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    @if (hasL1) { <th>@f.PrimaryGroup</th> }
+                    @if (hasL2) { <th>@f.SecondaryGroup</th> }
+                    @if (hasL3) { <th>@f.ThirdGroup</th> }
+                    @if (hasItem) { <th>Item Code</th> <th>Item Name</th> }
+                    <th class="num">Intake Qty</th>
+                    <th class="num">Intake Value</th>
+                    <th class="num">Sales Qty</th>
+                    <th class="num">Sales Net</th>
+                    <th class="num">Sales Gross</th>
+                    <th class="num">ST Qty %</th>
+                    <th class="num">ST Value %</th>
+                    <th class="num">Stock</th>
+                    <th class="num">Sales Mix %</th>
+                    <th class="num">Intake Mix %</th>
+                    <th class="num">Stock Mix %</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Rows.Count == 0)
+                {
+                    <tr><td class="empty" colspan="@colCount">No data for the selected filters.</td></tr>
+                }
+                else if (grouped != null)
+                {
+                    @foreach (var l1 in grouped)
+                    {
+                        var l1Rows = l1.ToList();
+                        <tr class="group-header"><td colspan="@colCount">@f.PrimaryGroup: @l1.Key</td></tr>
+
+                        @if (hasL2)
+                        {
+                            @foreach (var l2 in l1Rows.GroupBy(r => r.Level2Value ?? r.Level2 ?? "N/A"))
+                            {
+                                var l2Rows = l2.ToList();
+                                <tr class="group-header lvl2"><td colspan="@colCount">@f.SecondaryGroup: @l2.Key</td></tr>
+
+                                @if (hasL3)
+                                {
+                                    @foreach (var l3 in l2Rows.GroupBy(r => r.Level3Value ?? r.Level3 ?? "N/A"))
+                                    {
+                                        var l3Rows = l3.ToList();
+                                        <tr class="group-header lvl3"><td colspan="@colCount">@f.ThirdGroup: @l3.Key</td></tr>
+                                        foreach (var r in l3Rows) { StRow(r); }
+                                        StSubtotal($"{l3.Key} subtotal", l3Rows);
+                                    }
+                                }
+                                else
+                                {
+                                    foreach (var r in l2Rows) { StRow(r); }
+                                }
+                                StSubtotal($"{l2.Key} subtotal", l2Rows);
+                            }
+                        }
+                        else
+                        {
+                            foreach (var r in l1Rows) { StRow(r); }
+                        }
+                        StSubtotal($"{l1.Key} total", l1Rows);
+                    }
+                }
+                else
+                {
+                    @foreach (var r in Model.Rows) { StRow(r); }
+                }
+            </tbody>
+            @if (Model.Totals != null && Model.Rows.Count > 0)
+            {
+                <tfoot>
+                    <tr>
+                        @if (labelSpan > 0) { <td colspan="@labelSpan">TOTAL</td> }
+                        <td class="num">@Model.Totals.TotalIntakeQty.ToString("N0")</td>
+                        <td class="num">@Model.Totals.TotalIntakeValue.ToString("N2")</td>
+                        <td class="num">@Model.Totals.TotalSalesQty.ToString("N0")</td>
+                        <td class="num">@Model.Totals.TotalSalesNet.ToString("N2")</td>
+                        <td class="num">@Model.Totals.TotalSalesGross.ToString("N2")</td>
+                        <td class="num">@Model.Totals.SellThroughQtyPct.ToString("N1")%</td>
+                        <td class="num">@Model.Totals.SellThroughValuePct.ToString("N1")%</td>
+                        <td class="num">@Model.Totals.TotalCurrentStock.ToString("N0")</td>
+                        <td class="num">100%</td>
+                        <td class="num">100%</td>
+                        <td class="num">100%</td>
+                    </tr>
+                </tfoot>
+            }
+        </table>
+    </div>
+</body>
+</html>

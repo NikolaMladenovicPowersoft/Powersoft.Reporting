@@ -69,6 +69,26 @@ public class CatalogueFilter : IValidatableObject
     public Dictionary<string, string> FilterOperators { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public bool HasColumnFilters => FilterValues.Any(kv => !string.IsNullOrEmpty(kv.Value));
 
+    // Tenant-defined attribute display names (tbl_Field, FieldType=3), e.g. 1 -> "GENDER".
+    // Populated by the caller (controller / scheduler) so exports label attribute columns
+    // with the real name instead of the generic "Attr N" (George, 2026-07).
+    public Dictionary<int, string> AttributeCaptions { get; set; } = new();
+
+    public string AttrCaption(int idx, string fallback) =>
+        AttributeCaptions.TryGetValue(idx, out var c) && !string.IsNullOrWhiteSpace(c) ? c : fallback;
+
+    /// <summary>Display label for a group level — resolves ItemAttrN to the tenant caption.</summary>
+    public string GroupLabel(CatalogueGroupBy g) => g switch
+    {
+        CatalogueGroupBy.ItemAttr1 => AttrCaption(1, "Attribute 1"),
+        CatalogueGroupBy.ItemAttr2 => AttrCaption(2, "Attribute 2"),
+        CatalogueGroupBy.ItemAttr3 => AttrCaption(3, "Attribute 3"),
+        CatalogueGroupBy.ItemAttr4 => AttrCaption(4, "Attribute 4"),
+        CatalogueGroupBy.ItemAttr5 => AttrCaption(5, "Attribute 5"),
+        CatalogueGroupBy.ItemAttr6 => AttrCaption(6, "Attribute 6"),
+        _ => g.ToString()
+    };
+
     public bool HasDisplayColumn(string col) =>
         DisplayColumns.Contains(col, StringComparer.OrdinalIgnoreCase);
 

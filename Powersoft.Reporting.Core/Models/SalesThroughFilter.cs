@@ -3,7 +3,13 @@ using Powersoft.Reporting.Core.Enums;
 
 namespace Powersoft.Reporting.Core.Models;
 
-public class PurchasesSalesFilter : IValidatableObject
+/// <summary>
+/// Filter for the Sales Through report (Splash/George 2026-07).
+/// Reuses the Purchases vs Sales grouping dimensions (<see cref="PsGroupBy"/>) because the
+/// source data is the same engine: purchases (intake) vs sales vs current stock, with
+/// sell-through and mix percentages added.
+/// </summary>
+public class SalesThroughFilter : IValidatableObject
 {
     [Required] [DataType(DataType.Date)]
     public DateTime DateFrom { get; set; } = new(DateTime.Today.Year, 1, 1);
@@ -11,44 +17,24 @@ public class PurchasesSalesFilter : IValidatableObject
     [Required] [DataType(DataType.Date)]
     public DateTime DateTo { get; set; } = DateTime.Today;
 
-    public PsReportMode ReportMode { get; set; } = PsReportMode.Detailed;
+    /// <summary>Detailed = item-level rows; Summary = one row per group combination.</summary>
+    public bool Summary { get; set; }
 
     public PsGroupBy PrimaryGroup { get; set; } = PsGroupBy.None;
     public PsGroupBy SecondaryGroup { get; set; } = PsGroupBy.None;
     public PsGroupBy ThirdGroup { get; set; } = PsGroupBy.None;
 
-    public bool IncludeVat { get; set; }
-    public bool ShowProfit { get; set; }
-    public bool ShowStock { get; set; }
-    public bool ShowOnOrder { get; set; }
-    public bool ShowReservation { get; set; }
-    public bool ShowAvailable { get; set; }
-
-    // When true (default), purchase cost includes allocated additional/landed charges
-    // (tbl_CostingDetails) like legacy Powersoft365. When false, cost = invoice net only
-    // (wholesale-only) per SPLASH TG LTD request.
+    /// <summary>
+    /// When false, intake cost = purchase invoice net only (wholesale) — the Splash convention.
+    /// When true, allocated additional/landed charges (tbl_CostingDetails) are included,
+    /// matching legacy Powersoft365 Purchases &amp; Sales.
+    /// </summary>
     public bool IncludeAdditionalCharges { get; set; } = true;
 
-    // SPLASH request: when a group level is Size, order the size groups by the configured
-    // tbl_SizeSequence.SizeSequence (36.5 before 37) instead of alphabetically by code/descr.
-    // Sizes without a sequence sort last. Ignored for non-Size group levels.
+    /// <summary>Order Size groups by tbl_SizeSequence instead of alphabetically (Splash).</summary>
     public bool SortBySizeSequence { get; set; }
 
     public List<string> StoreCodes { get; set; } = new();
-    public List<int> ItemIds { get; set; } = new();
-    public List<string> CategoryIds { get; set; } = new();
-    public List<string> DepartmentIds { get; set; } = new();
-    public List<string> SupplierIds { get; set; } = new();
-    public List<string> BrandIds { get; set; } = new();
-    public List<string> SeasonIds { get; set; } = new();
-    public List<string> UserCodes { get; set; } = new();
-    public List<string> PaymentTypeCodes { get; set; } = new();
-
-    public bool FilterByReleaseDate { get; set; }
-    public DateTime? ReleaseDateFrom { get; set; }
-    public DateTime? ReleaseDateTo { get; set; }
-    public int TimeZoneOffsetMinutes { get; set; }
-
     public ItemsSelectionFilter? ItemsSelection { get; set; }
 
     public string SortColumn { get; set; } = "ItemCode";
@@ -58,23 +44,8 @@ public class PurchasesSalesFilter : IValidatableObject
     public int PageSize { get; set; } = 100;
     public int Skip => (PageNumber - 1) * PageSize;
 
-    public bool IsSummary => ReportMode == PsReportMode.Summary
-                          || (PrimaryGroup != PsGroupBy.None && ReportMode != PsReportMode.Detailed);
-    public bool IsMonthly => ReportMode == PsReportMode.Monthly;
-
+    public bool IsSummary => Summary && PrimaryGroup != PsGroupBy.None;
     public bool HasStoreFilter => StoreCodes.Any();
-    public bool HasItemFilter => ItemIds.Any();
-    public bool HasCategoryFilter => CategoryIds.Any();
-    public bool HasDepartmentFilter => DepartmentIds.Any();
-    public bool HasSupplierFilter => SupplierIds.Any();
-    public bool HasBrandFilter => BrandIds.Any();
-    public bool HasSeasonFilter => SeasonIds.Any();
-    public bool HasUserFilter => UserCodes.Any();
-    public bool HasPaymentTypeFilter => PaymentTypeCodes.Any();
-
-    public Dictionary<string, string> FilterValues { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    public Dictionary<string, string> FilterOperators { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-    public bool HasColumnFilters => FilterValues.Any(kv => !string.IsNullOrEmpty(kv.Value));
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

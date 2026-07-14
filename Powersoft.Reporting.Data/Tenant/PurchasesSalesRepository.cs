@@ -589,8 +589,16 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
         sb.AppendLine($"GROUP BY {string.Join(", ", groupByCols)}");
 
         var sortParts = new List<string>();
-        if (filter.PrimaryGroup != PsGroupBy.None) { sortParts.Add("Level1Value"); sortParts.Add("Level1"); }
-        if (filter.SecondaryGroup != PsGroupBy.None) { sortParts.Add("Level2Value"); sortParts.Add("Level2"); }
+        if (filter.PrimaryGroup != PsGroupBy.None)
+        {
+            if (UseSizeSequenceSort(filter, filter.PrimaryGroup)) sortParts.Add("Level1SortKey");
+            sortParts.Add("Level1Value"); sortParts.Add("Level1");
+        }
+        if (filter.SecondaryGroup != PsGroupBy.None)
+        {
+            if (UseSizeSequenceSort(filter, filter.SecondaryGroup)) sortParts.Add("Level2SortKey");
+            sortParts.Add("Level2Value"); sortParts.Add("Level2");
+        }
         sortParts.Add("transYear");
         if (!isSummary) sortParts.Add("ItemCode");
         sb.AppendLine($"ORDER BY {string.Join(", ", sortParts)}");
@@ -608,9 +616,9 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
 
     private GroupingInfo BuildGrouping(PurchasesSalesFilter filter)
     {
-        var g1 = GetGroupSelect(filter.PrimaryGroup, "tp", "Level1");
-        var g2 = GetGroupSelect(filter.SecondaryGroup, "tp1", "Level2");
-        var g3 = GetGroupSelect(filter.ThirdGroup, "tp2", "Level3");
+        var g1 = GetGroupSelect(filter.PrimaryGroup, "tp", "Level1", filter.SortBySizeSequence);
+        var g2 = GetGroupSelect(filter.SecondaryGroup, "tp1", "Level2", filter.SortBySizeSequence);
+        var g3 = GetGroupSelect(filter.ThirdGroup, "tp2", "Level3", filter.SortBySizeSequence);
 
         bool hasAny = filter.PrimaryGroup != PsGroupBy.None
                    || filter.SecondaryGroup != PsGroupBy.None
@@ -635,9 +643,29 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
 
     private record GroupFragment(string Select, string Join, List<string> GroupByCols);
 
-    private GroupFragment? GetGroupSelect(PsGroupBy type, string alias, string levelName)
+    private GroupFragment? GetGroupSelect(PsGroupBy type, string alias, string levelName, bool sortBySizeSequence = false)
     {
         if (type == PsGroupBy.None) return null;
+
+        // Size sequence sort (SPLASH): expose an extra {levelName}SortKey column derived from
+        // tbl_SizeSequence so ORDER BY can follow the configured size order (36.5 < 37) instead
+        // of the string sort of code/description.
+        // The sort key MUST be functionally dependent on the displayed group key — the UI/exports
+        // group rows by {levelName}Value = ISNULL(SizeInvoiceDescr,'N/A') using adjacency, so if
+        // two tbl_Size rows share a description but carried different sequences the ORDER BY would
+        // tear one displayed group into several. Hence MIN(SizeSequence) per description.
+        // Sizes without a sequence sort last (99999).
+        if (type == PsGroupBy.Size && sortBySizeSequence)
+        {
+            var seqAlias = $"seq{alias}";
+            var seqKey = $"ISNULL({seqAlias}.SizeSequence,99999)";
+            return new GroupFragment(
+                $"ISNULL({alias}.SizeCode,'N/A') AS {levelName}, ISNULL({alias}.SizeInvoiceDescr,'N/A') AS {levelName}Value, {seqKey} AS {levelName}SortKey",
+                $"LEFT JOIN tbl_Size {alias} ON it.fk_SizeID = {alias}.pk_SizeID\n" +
+                $"LEFT JOIN (SELECT ISNULL(sz.SizeInvoiceDescr,'N/A') AS SizeDescr, MIN(ss.SizeSequence) AS SizeSequence FROM tbl_SizeSequence ss INNER JOIN tbl_Size sz ON ss.fk_SizeID = sz.pk_SizeID GROUP BY ISNULL(sz.SizeInvoiceDescr,'N/A')) {seqAlias} ON ISNULL({alias}.SizeInvoiceDescr,'N/A') = {seqAlias}.SizeDescr",
+                new List<string> { $"ISNULL({alias}.SizeCode,'N/A')", $"ISNULL({alias}.SizeInvoiceDescr,'N/A')", seqKey }
+            );
+        }
 
         var (code, value, join, groupByCols) = type switch
         {
@@ -954,16 +982,19 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
 
         if (filter.PrimaryGroup != PsGroupBy.None)
         {
+            if (UseSizeSequenceSort(filter, filter.PrimaryGroup)) parts.Add("d.Level1SortKey");
             parts.Add("d.Level1Value");
             parts.Add("d.Level1");
         }
         if (filter.SecondaryGroup != PsGroupBy.None)
         {
+            if (UseSizeSequenceSort(filter, filter.SecondaryGroup)) parts.Add("d.Level2SortKey");
             parts.Add("d.Level2Value");
             parts.Add("d.Level2");
         }
         if (filter.ThirdGroup != PsGroupBy.None)
         {
+            if (UseSizeSequenceSort(filter, filter.ThirdGroup)) parts.Add("d.Level3SortKey");
             parts.Add("d.Level3Value");
             parts.Add("d.Level3");
         }
@@ -972,6 +1003,9 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
 
         return string.Join(", ", parts);
     }
+
+    private static bool UseSizeSequenceSort(PurchasesSalesFilter filter, PsGroupBy level) =>
+        filter.SortBySizeSequence && level == PsGroupBy.Size;
 
     private (string whereClause, List<SqlParameter> filterParams) BuildColumnFilterClause(PurchasesSalesFilter filter)
     {
@@ -1115,6 +1149,11 @@ GROUP BY ItemCode, ItemNamePrimary, transYear{storeGb2}";
         cmd.Parameters.AddWithValue("@DateFrom", filter.DateFrom.Date);
         cmd.Parameters.AddWithValue("@DateTo", filter.DateTo.Date);
         foreach (var p in itemFilters.Parameters) cmd.Parameters.Add(Clone(p));
+        // Totals SQL embeds {saleOnlyCond} on the sale legs, so the sale-only parameters
+        // (@socus*/@soagn*/...) must be bound too — omitting them crashes the whole request
+        // whenever a customer/agent/payment-type filter is active.
+        if (itemFilters.SaleOnlyParameters is { Count: > 0 })
+            foreach (var p in itemFilters.SaleOnlyParameters) cmd.Parameters.Add(Clone(p));
 
         using var reader = await cmd.ExecuteReaderAsync();
         if (await reader.ReadAsync())

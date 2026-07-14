@@ -299,6 +299,152 @@ public class CsvExportService
         sb.AppendLine(string.Join(",", cells.Select(Escape)));
     }
 
+    public byte[] GenerateSalesThroughCsv(
+        List<SalesThroughRow> rows,
+        SalesThroughTotals? totals,
+        SalesThroughFilter filter)
+    {
+        rows ??= new();
+        bool hasL1 = filter.PrimaryGroup != Core.Enums.PsGroupBy.None;
+        bool hasL2 = filter.SecondaryGroup != Core.Enums.PsGroupBy.None;
+        bool hasL3 = filter.ThirdGroup != Core.Enums.PsGroupBy.None;
+        bool hasItem = !filter.IsSummary || (!hasL1 && !hasL2 && !hasL3);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# Sales Through Report");
+        sb.AppendLine($"# Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}");
+        sb.AppendLine($"# Mode: {(filter.IsSummary ? "Summary" : "Detailed")}");
+        if (hasL1) sb.AppendLine($"# Primary Group: {filter.PrimaryGroup}");
+        if (hasL2) sb.AppendLine($"# Secondary Group: {filter.SecondaryGroup}");
+        if (hasL3) sb.AppendLine($"# Third Group: {filter.ThirdGroup}");
+        if (!filter.IncludeAdditionalCharges) sb.AppendLine("# Intake cost: Wholesale only (excl. additional charges)");
+        if (filter.SortBySizeSequence) sb.AppendLine("# Sizes ordered by size sequence");
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            sb.AppendLine($"# Stores: {string.Join(", ", filter.StoreCodes)}");
+        sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        sb.AppendLine();
+
+        var headers = new List<string>();
+        if (hasL1) headers.Add(filter.PrimaryGroup.ToString());
+        if (hasL2) headers.Add(filter.SecondaryGroup.ToString());
+        if (hasL3) headers.Add(filter.ThirdGroup.ToString());
+        if (hasItem) { headers.Add("Item Code"); headers.Add("Item Name"); }
+        headers.AddRange(new[]
+        {
+            "Intake Qty", "Intake Value", "Sales Qty", "Sales Net", "Sales Gross",
+            "Sell-Through Qty %", "Sell-Through Value %", "Current Stock",
+            "Sales Mix %", "Intake Mix %", "Stock Mix %"
+        });
+        sb.AppendLine(string.Join(",", headers.Select(Escape)));
+
+        string? prevL1 = null, prevL2 = null, prevL3 = null;
+        var l1Agg = new SalesThroughAgg(); var l2Agg = new SalesThroughAgg(); var l3Agg = new SalesThroughAgg();
+
+        for (int ri = 0; ri < rows.Count; ri++)
+        {
+            var row = rows[ri];
+            string curL1 = hasL1 ? (row.Level1Value ?? row.Level1 ?? "N/A") : "";
+            string curL2 = hasL2 ? (row.Level2Value ?? row.Level2 ?? "N/A") : "";
+            string curL3 = hasL3 ? (row.Level3Value ?? row.Level3 ?? "N/A") : "";
+
+            bool l1Changed = hasL1 && curL1 != prevL1 && ri > 0;
+            bool l2Changed = hasL2 && (curL2 != prevL2 || l1Changed) && ri > 0;
+            bool l3Changed = hasL3 && (curL3 != prevL3 || l2Changed) && ri > 0;
+
+            if (l3Changed) WriteStCsvSubtotalRow(sb, $"Subtotal: {prevL3}", l3Agg, hasL1, hasL2, hasL3, hasItem);
+            if (l2Changed) WriteStCsvSubtotalRow(sb, $"Subtotal: {prevL2}", l2Agg, hasL1, hasL2, hasL3, hasItem);
+            if (l1Changed) WriteStCsvSubtotalRow(sb, $"Subtotal: {prevL1}", l1Agg, hasL1, hasL2, hasL3, hasItem);
+
+            if (l1Changed || ri == 0) { l1Agg = new SalesThroughAgg(); l2Agg = new SalesThroughAgg(); l3Agg = new SalesThroughAgg(); }
+            else if (l2Changed) { l2Agg = new SalesThroughAgg(); l3Agg = new SalesThroughAgg(); }
+            else if (l3Changed) { l3Agg = new SalesThroughAgg(); }
+            prevL1 = curL1; prevL2 = curL2; prevL3 = curL3;
+
+            l1Agg.Add(row); l2Agg.Add(row); l3Agg.Add(row);
+
+            var cells = new List<string>();
+            if (hasL1) cells.Add(curL1);
+            if (hasL2) cells.Add(curL2);
+            if (hasL3) cells.Add(curL3);
+            if (hasItem) { cells.Add(row.ItemCode ?? ""); cells.Add(row.ItemName ?? ""); }
+            cells.Add(row.IntakeQty.ToString(CultureInfo.InvariantCulture));
+            cells.Add(row.IntakeValue.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.SalesQty.ToString(CultureInfo.InvariantCulture));
+            cells.Add(row.SalesNet.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.SalesGross.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.SellThroughQtyPct.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.SellThroughValuePct.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.CurrentStock.ToString(CultureInfo.InvariantCulture));
+            cells.Add(row.SalesMixPct.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.IntakeMixPct.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(row.StockMixPct.ToString("F2", CultureInfo.InvariantCulture));
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        if (rows.Count > 0)
+        {
+            if (hasL3) WriteStCsvSubtotalRow(sb, $"Subtotal: {prevL3}", l3Agg, hasL1, hasL2, hasL3, hasItem);
+            if (hasL2) WriteStCsvSubtotalRow(sb, $"Subtotal: {prevL2}", l2Agg, hasL1, hasL2, hasL3, hasItem);
+            if (hasL1) WriteStCsvSubtotalRow(sb, $"Subtotal: {prevL1}", l1Agg, hasL1, hasL2, hasL3, hasItem);
+        }
+
+        if (totals != null)
+        {
+            var cells = new List<string>();
+            int skip = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+            if (hasItem)
+            {
+                for (int i = 0; i < skip; i++) cells.Add("");
+                cells.Add("TOTAL"); cells.Add("");
+            }
+            else
+            {
+                for (int i = 0; i < skip - 1; i++) cells.Add("");
+                cells.Add("TOTAL");
+            }
+            cells.Add(totals.TotalIntakeQty.ToString(CultureInfo.InvariantCulture));
+            cells.Add(totals.TotalIntakeValue.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(totals.TotalSalesQty.ToString(CultureInfo.InvariantCulture));
+            cells.Add(totals.TotalSalesNet.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(totals.TotalSalesGross.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(totals.SellThroughQtyPct.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(totals.SellThroughValuePct.ToString("F2", CultureInfo.InvariantCulture));
+            cells.Add(totals.TotalCurrentStock.ToString(CultureInfo.InvariantCulture));
+            cells.Add("100.00"); cells.Add("100.00"); cells.Add("100.00");
+            sb.AppendLine(string.Join(",", cells.Select(Escape)));
+        }
+
+        return new UTF8Encoding(true).GetBytes(sb.ToString());
+    }
+
+    private void WriteStCsvSubtotalRow(StringBuilder sb, string label, SalesThroughAgg agg,
+        bool hasL1, bool hasL2, bool hasL3, bool hasItem)
+    {
+        var cells = new List<string>();
+        int skip = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+        if (hasItem)
+        {
+            for (int i = 0; i < skip; i++) cells.Add("");
+            cells.Add(label); cells.Add("");
+        }
+        else
+        {
+            // Summary mode: label occupies the last group column so metrics stay under their headers.
+            for (int i = 0; i < skip - 1; i++) cells.Add("");
+            cells.Add(label);
+        }
+        cells.Add(agg.IntakeQty.ToString(CultureInfo.InvariantCulture));
+        cells.Add(agg.IntakeValue.ToString("F2", CultureInfo.InvariantCulture));
+        cells.Add(agg.SalesQty.ToString(CultureInfo.InvariantCulture));
+        cells.Add(agg.SalesNet.ToString("F2", CultureInfo.InvariantCulture));
+        cells.Add(agg.SalesGross.ToString("F2", CultureInfo.InvariantCulture));
+        cells.Add(agg.SellThroughQtyPct.ToString("F2", CultureInfo.InvariantCulture));
+        cells.Add(agg.SellThroughValuePct.ToString("F2", CultureInfo.InvariantCulture));
+        cells.Add(agg.CurrentStock.ToString(CultureInfo.InvariantCulture));
+        cells.Add(""); cells.Add(""); cells.Add("");
+        sb.AppendLine(string.Join(",", cells.Select(Escape)));
+    }
+
     public byte[] GenerateCatalogueCsv(
         List<CatalogueRow> rows,
         CatalogueTotals? totals,
@@ -318,9 +464,9 @@ public class CsvExportService
         sb.AppendLine($"# Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}");
         sb.AppendLine($"# Report Mode: {filter.ReportMode}");
         sb.AppendLine($"# Report On: {filter.ReportOn}");
-        if (hasL1) sb.AppendLine($"# Primary Group: {filter.PrimaryGroup}");
-        if (hasL2) sb.AppendLine($"# Secondary Group: {filter.SecondaryGroup}");
-        if (hasL3) sb.AppendLine($"# Third Group: {filter.ThirdGroup}");
+        if (hasL1) sb.AppendLine($"# Primary Group: {filter.GroupLabel(filter.PrimaryGroup)}");
+        if (hasL2) sb.AppendLine($"# Secondary Group: {filter.GroupLabel(filter.SecondaryGroup)}");
+        if (hasL3) sb.AppendLine($"# Third Group: {filter.GroupLabel(filter.ThirdGroup)}");
         if (filter.StoreCodes != null && filter.StoreCodes.Any())
             sb.AppendLine($"# Stores: {string.Join(", ", filter.StoreCodes)}");
         sb.AppendLine($"# Generated: {DateTime.Now:yyyy-MM-dd HH:mm}");
@@ -381,12 +527,12 @@ public class CsvExportService
         if (dc("Price2Incl")) cols.Add(("Price2Incl", "Price 2 In", true, r => r.Price2Incl.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("Price3Excl")) cols.Add(("Price3Excl", "Price 3 Ex", true, r => r.Price3Excl.ToString("F2", CultureInfo.InvariantCulture)));
         if (dc("Price3Incl")) cols.Add(("Price3Incl", "Price 3 In", true, r => r.Price3Incl.ToString("F2", CultureInfo.InvariantCulture)));
-        if (dc("ItemAttr1")) cols.Add(("ItemAttr1", "Attr 1", false, r => r.ItemAttr1Descr ?? ""));
-        if (dc("ItemAttr2")) cols.Add(("ItemAttr2", "Attr 2", false, r => r.ItemAttr2Descr ?? ""));
-        if (dc("ItemAttr3")) cols.Add(("ItemAttr3", "Attr 3", false, r => r.ItemAttr3Descr ?? ""));
-        if (dc("ItemAttr4")) cols.Add(("ItemAttr4", "Attr 4", false, r => r.ItemAttr4Descr ?? ""));
-        if (dc("ItemAttr5")) cols.Add(("ItemAttr5", "Attr 5", false, r => r.ItemAttr5Descr ?? ""));
-        if (dc("ItemAttr6")) cols.Add(("ItemAttr6", "Attr 6", false, r => r.ItemAttr6Descr ?? ""));
+        if (dc("ItemAttr1")) cols.Add(("ItemAttr1", filter.AttrCaption(1, "Attr 1"), false, r => r.ItemAttr1Descr ?? ""));
+        if (dc("ItemAttr2")) cols.Add(("ItemAttr2", filter.AttrCaption(2, "Attr 2"), false, r => r.ItemAttr2Descr ?? ""));
+        if (dc("ItemAttr3")) cols.Add(("ItemAttr3", filter.AttrCaption(3, "Attr 3"), false, r => r.ItemAttr3Descr ?? ""));
+        if (dc("ItemAttr4")) cols.Add(("ItemAttr4", filter.AttrCaption(4, "Attr 4"), false, r => r.ItemAttr4Descr ?? ""));
+        if (dc("ItemAttr5")) cols.Add(("ItemAttr5", filter.AttrCaption(5, "Attr 5"), false, r => r.ItemAttr5Descr ?? ""));
+        if (dc("ItemAttr6")) cols.Add(("ItemAttr6", filter.AttrCaption(6, "Attr 6"), false, r => r.ItemAttr6Descr ?? ""));
 
         sb.AppendLine(string.Join(",", cols.Select(c => Escape(c.Label))));
 

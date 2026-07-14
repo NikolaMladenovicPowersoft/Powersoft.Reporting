@@ -22,5 +22,12 @@ public interface IDimensionRepository
     Task<List<DimensionItem>> GetGroupSizesAsync();
     Task<List<DimensionItem>> GetFabricsAsync();
     Task<List<DimensionItem>> GetAttributeValuesAsync(int attrIndex);
+
+    /// <summary>
+    /// Tenant-defined display names for item attributes 1-6 (e.g. "GENDER" instead of "Attribute 1").
+    /// Key = attribute index 1..6; missing/blank entries mean "no custom name — use the generic label".
+    /// </summary>
+    Task<Dictionary<int, string>> GetAttributeCaptionsAsync();
+
     Task<FashionDimensionAvailability> GetFashionDimensionAvailabilityAsync();
 }

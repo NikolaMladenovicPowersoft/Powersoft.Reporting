@@ -21,4 +21,6 @@ public interface ITenantRepositoryFactory
     IEmailRecipientRepository CreateEmailRecipientRepository(string connectionString);
     ICustomerNotPurchasedRepository CreateCustomerNotPurchasedRepository(string connectionString);
     ICashFlowRepository CreateCashFlowRepository(string connectionString);
+    ICashFlowMappingRepository CreateCashFlowMappingRepository(string connectionString);
+    ISalesThroughRepository CreateSalesThroughRepository(string connectionString);
 }

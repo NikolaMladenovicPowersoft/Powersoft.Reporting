@@ -9,6 +9,7 @@ public class PagedResult<T>
     public ReportGrandTotals? GrandTotals { get; set; }
     public PurchasesSalesTotals? PsTotals { get; set; }
     public CatalogueTotals? CatalogueTotals { get; set; }
+    public SalesThroughTotals? SalesThroughTotals { get; set; }
     
     public int TotalPages => PageSize > 0 ? (int)Math.Ceiling(TotalCount / (double)PageSize) : 0;
     public bool HasPreviousPage => PageNumber > 1;

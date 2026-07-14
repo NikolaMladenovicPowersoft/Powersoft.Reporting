@@ -341,6 +341,36 @@ public class DimensionRepository : IDimensionRepository
         return await ExecuteListQueryAsync(sql);
     }
 
+    // Legacy parity: ItemsSelections.ascx.vb (CloudAccounting) reads tbl_Field for
+    // TableName='tbl_Item' AND FieldType=3 and uses FieldDesc as the caption for AttrVal1..6
+    // — that's how legacy shows "GENDER" / "MATERIAL" instead of "Attribute 1".
+    public async Task<Dictionary<int, string>> GetAttributeCaptionsAsync()
+    {
+        const string sql = @"
+            SELECT FieldName, ISNULL(FieldDesc,'') AS FieldDesc
+            FROM tbl_Field
+            WHERE TableName = 'tbl_Item' AND FieldType = 3
+              AND FieldName LIKE 'AttrVal[1-6]'";
+
+        var result = new Dictionary<int, string>();
+        using var conn = new SqlConnection(_connectionString);
+        using var cmd = new SqlCommand(sql, conn);
+        await conn.OpenAsync();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var fieldName = reader.GetString(0);
+            var desc = reader.GetString(1).Trim();
+            // FieldName is 'AttrVal1'..'AttrVal6' (enforced by the LIKE above)
+            if (int.TryParse(fieldName.Substring(7), out var idx) && idx >= 1 && idx <= 6
+                && desc.Length > 0)
+            {
+                result[idx] = desc;
+            }
+        }
+        return result;
+    }
+
     // A dimension is "available" only if items actually reference it (not merely that a
     // dimension master table has a seeded row), so non-fashion tenants stay uncluttered.
     // Model/Colour/Size live on tbl_Item; GroupSize/Fabric on tbl_Model; Attributes on

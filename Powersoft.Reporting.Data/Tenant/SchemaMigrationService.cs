@@ -215,6 +215,16 @@ IF NOT EXISTS (SELECT 1 FROM {SchemaName}.tbl_CashFlowMapping)
 INSERT INTO {SchemaName}.tbl_CashFlowMapping
     (GroupName, GroupSortOrder, CategoryName, CategorySortOrder, CodeFrom, CodeTo)
 VALUES
+{CashFlowMappingSeedValues};
+";
+
+    /// <summary>
+    /// Default Cash Flow section mapping seed (ARVA client, extracted 1:1 from
+    /// HE11901-ARVO-Accounting.pbix / ChartCF_Direct — all 48 rows including the deliberate
+    /// 212002 duplicate that most-specific-wins resolves). Shared by the initial schema seed
+    /// above and the admin UI's "Reset to defaults" action so both always produce the same rows.
+    /// </summary>
+    public const string CashFlowMappingSeedValues = @"
     (N'Operating Activities - Cash In', 1000, N'Customers', 1100, N'122', N'12299999'),
     (N'Operating Activities - Cash In', 1000, N'Customers', 1100, N'411', N'411999'),
     (N'Operating Activities - Cash In', 1000, N'Commisions', 1200, N'422', N'4229999'),
@@ -262,8 +272,7 @@ VALUES
     (N'Bank', 6000, N'Cash A/C', 6000, N'124007', N'124007'),
     (N'Bank', 6000, N'Bank Institutes', 6100, N'124002', N'124004'),
     (N'Bank', 6000, N'Bank Institutes', 6100, N'124006', N'124006'),
-    (N'Bank', 6000, N'Bank Institutes', 6100, N'124008', N'124999');
-";
+    (N'Bank', 6000, N'Bank Institutes', 6100, N'124008', N'124999')";
 
     public static async Task EnsureSchemaAsync(string connectionString)
     {

@@ -351,6 +351,176 @@ public class PdfExportService
         return ms.ToArray();
     }
 
+    public byte[] GenerateSalesThroughPdf(
+        List<SalesThroughRow> rows,
+        SalesThroughTotals? totals,
+        SalesThroughFilter filter)
+    {
+        bool hasL1 = filter.PrimaryGroup != Core.Enums.PsGroupBy.None;
+        bool hasL2 = filter.SecondaryGroup != Core.Enums.PsGroupBy.None;
+        bool hasL3 = filter.ThirdGroup != Core.Enums.PsGroupBy.None;
+        bool hasItem = !filter.IsSummary || (!hasL1 && !hasL2 && !hasL3);
+
+        int colCount = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0)
+                     + (hasItem ? 2 : 0) + 11;
+
+        using var ms = new MemoryStream();
+        var document = new Document(PageSize.A4.Rotate(), 20, 20, 30, 20);
+        PdfWriter.GetInstance(document, ms);
+        document.Open();
+
+        document.Add(new Paragraph("Sales Through Report", TitleFont));
+        document.Add(new Paragraph($"Period: {filter.DateFrom:yyyy-MM-dd} to {filter.DateTo:yyyy-MM-dd}", SubtitleFont));
+        document.Add(new Paragraph($"Mode: {(filter.IsSummary ? "Summary" : "Detailed")}" +
+            (hasL1 ? $" | Primary: {filter.PrimaryGroup}" : "") +
+            (hasL2 ? $" | Secondary: {filter.SecondaryGroup}" : "") +
+            (hasL3 ? $" | Third: {filter.ThirdGroup}" : "") +
+            (!filter.IncludeAdditionalCharges ? " | Intake: Wholesale only" : "") +
+            (filter.SortBySizeSequence ? " | Size sequence sort" : ""), SubtitleFont));
+        if (filter.StoreCodes != null && filter.StoreCodes.Any())
+            document.Add(new Paragraph($"Stores: {string.Join(", ", filter.StoreCodes)}", SubtitleFont));
+        document.Add(new Paragraph($"Generated: {DateTime.Now:yyyy-MM-dd HH:mm}", SubtitleFont));
+        document.Add(new Paragraph(" "));
+
+        var table = new PdfPTable(colCount) { WidthPercentage = 100, SpacingBefore = 5f };
+
+        if (hasL1) AddHeaderCell(table, filter.PrimaryGroup.ToString());
+        if (hasL2) AddHeaderCell(table, filter.SecondaryGroup.ToString());
+        if (hasL3) AddHeaderCell(table, filter.ThirdGroup.ToString());
+        if (hasItem) { AddHeaderCell(table, "Code"); AddHeaderCell(table, "Name"); }
+        AddHeaderCell(table, "Intake Qty");
+        AddHeaderCell(table, "Intake Val");
+        AddHeaderCell(table, "Sales Qty");
+        AddHeaderCell(table, "Sales Net");
+        AddHeaderCell(table, "Sales Gross");
+        AddHeaderCell(table, "ST Qty %");
+        AddHeaderCell(table, "ST Val %");
+        AddHeaderCell(table, "Stock");
+        AddHeaderCell(table, "Sales Mix %");
+        AddHeaderCell(table, "Intake Mix %");
+        AddHeaderCell(table, "Stock Mix %");
+
+        bool alternate = false;
+        string? prevL1 = null, prevL2 = null, prevL3 = null;
+        var l1Agg = new SalesThroughAgg(); var l2Agg = new SalesThroughAgg(); var l3Agg = new SalesThroughAgg();
+
+        for (int ri = 0; ri < rows.Count; ri++)
+        {
+            var row = rows[ri];
+            string curL1 = hasL1 ? (row.Level1Value ?? row.Level1 ?? "N/A") : "";
+            string curL2 = hasL2 ? (row.Level2Value ?? row.Level2 ?? "N/A") : "";
+            string curL3 = hasL3 ? (row.Level3Value ?? row.Level3 ?? "N/A") : "";
+
+            bool l1Changed = hasL1 && curL1 != prevL1 && ri > 0;
+            bool l2Changed = hasL2 && (curL2 != prevL2 || l1Changed) && ri > 0;
+            bool l3Changed = hasL3 && (curL3 != prevL3 || l2Changed) && ri > 0;
+
+            if (l3Changed) WriteStPdfSubtotalRow(table, $"Subtotal: {prevL3}", l3Agg, hasL1, hasL2, hasL3, hasItem);
+            if (l2Changed) WriteStPdfSubtotalRow(table, $"Subtotal: {prevL2}", l2Agg, hasL1, hasL2, hasL3, hasItem);
+            if (l1Changed) WriteStPdfSubtotalRow(table, $"Subtotal: {prevL1}", l1Agg, hasL1, hasL2, hasL3, hasItem);
+
+            if (l1Changed || ri == 0) { l1Agg = new SalesThroughAgg(); l2Agg = new SalesThroughAgg(); l3Agg = new SalesThroughAgg(); }
+            else if (l2Changed) { l2Agg = new SalesThroughAgg(); l3Agg = new SalesThroughAgg(); }
+            else if (l3Changed) { l3Agg = new SalesThroughAgg(); }
+            prevL1 = curL1; prevL2 = curL2; prevL3 = curL3;
+
+            l1Agg.Add(row); l2Agg.Add(row); l3Agg.Add(row);
+
+            var bg = alternate ? new BaseColor(248, 250, 252) : BaseColor.White;
+            if (hasL1) AddDataCell(table, curL1, bg);
+            if (hasL2) AddDataCell(table, curL2, bg);
+            if (hasL3) AddDataCell(table, curL3, bg);
+            if (hasItem) { AddDataCell(table, row.ItemCode ?? "", bg); AddDataCell(table, row.ItemName ?? "", bg); }
+            AddDataCell(table, row.IntakeQty.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.IntakeValue.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.SalesQty.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.SalesNet.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.SalesGross.ToString("N2"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, $"{row.SellThroughQtyPct:N1}%", bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, $"{row.SellThroughValuePct:N1}%", bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, row.CurrentStock.ToString("N0"), bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, $"{row.SalesMixPct:N1}%", bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, $"{row.IntakeMixPct:N1}%", bg, Element.ALIGN_RIGHT);
+            AddDataCell(table, $"{row.StockMixPct:N1}%", bg, Element.ALIGN_RIGHT);
+            alternate = !alternate;
+        }
+
+        if (rows.Count > 0)
+        {
+            if (hasL3) WriteStPdfSubtotalRow(table, $"Subtotal: {prevL3}", l3Agg, hasL1, hasL2, hasL3, hasItem);
+            if (hasL2) WriteStPdfSubtotalRow(table, $"Subtotal: {prevL2}", l2Agg, hasL1, hasL2, hasL3, hasItem);
+            if (hasL1) WriteStPdfSubtotalRow(table, $"Subtotal: {prevL1}", l1Agg, hasL1, hasL2, hasL3, hasItem);
+        }
+
+        if (totals != null)
+        {
+            int skip = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+            if (hasItem)
+            {
+                for (int i = 0; i < skip; i++) AddTotalCell(table, "");
+                AddTotalCell(table, "TOTAL"); AddTotalCell(table, "");
+            }
+            else
+            {
+                // Summary mode: label occupies the last group column to keep the column count exact.
+                for (int i = 0; i < skip - 1; i++) AddTotalCell(table, "");
+                AddTotalCell(table, "TOTAL");
+            }
+            AddTotalCell(table, totals.TotalIntakeQty.ToString("N0"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, totals.TotalIntakeValue.ToString("N2"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, totals.TotalSalesQty.ToString("N0"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, totals.TotalSalesNet.ToString("N2"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, totals.TotalSalesGross.ToString("N2"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, $"{totals.SellThroughQtyPct:N1}%", Element.ALIGN_RIGHT);
+            AddTotalCell(table, $"{totals.SellThroughValuePct:N1}%", Element.ALIGN_RIGHT);
+            AddTotalCell(table, totals.TotalCurrentStock.ToString("N0"), Element.ALIGN_RIGHT);
+            AddTotalCell(table, "100.0%", Element.ALIGN_RIGHT);
+            AddTotalCell(table, "100.0%", Element.ALIGN_RIGHT);
+            AddTotalCell(table, "100.0%", Element.ALIGN_RIGHT);
+        }
+
+        document.Add(table);
+        document.Close();
+        return ms.ToArray();
+    }
+
+    private void WriteStPdfSubtotalRow(PdfPTable table, string label, SalesThroughAgg agg,
+        bool hasL1, bool hasL2, bool hasL3, bool hasItem)
+    {
+        var subFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 7);
+        var subBg = new BaseColor(238, 242, 255);
+
+        void Cell(string text, int align = Element.ALIGN_LEFT) =>
+            table.AddCell(new PdfPCell(new Phrase(text, subFont))
+            {
+                BackgroundColor = subBg,
+                HorizontalAlignment = align,
+                Padding = 3f
+            });
+
+        int skip = (hasL1 ? 1 : 0) + (hasL2 ? 1 : 0) + (hasL3 ? 1 : 0);
+        if (hasItem)
+        {
+            for (int i = 0; i < skip; i++) Cell("");
+            Cell(label); Cell("");
+        }
+        else
+        {
+            // Summary mode: label occupies the last group column to keep the column count exact.
+            for (int i = 0; i < skip - 1; i++) Cell("");
+            Cell(label);
+        }
+        Cell(agg.IntakeQty.ToString("N0"), Element.ALIGN_RIGHT);
+        Cell(agg.IntakeValue.ToString("N2"), Element.ALIGN_RIGHT);
+        Cell(agg.SalesQty.ToString("N0"), Element.ALIGN_RIGHT);
+        Cell(agg.SalesNet.ToString("N2"), Element.ALIGN_RIGHT);
+        Cell(agg.SalesGross.ToString("N2"), Element.ALIGN_RIGHT);
+        Cell($"{agg.SellThroughQtyPct:N1}%", Element.ALIGN_RIGHT);
+        Cell($"{agg.SellThroughValuePct:N1}%", Element.ALIGN_RIGHT);
+        Cell(agg.CurrentStock.ToString("N0"), Element.ALIGN_RIGHT);
+        Cell(""); Cell(""); Cell("");
+    }
+
     public byte[] GenerateParetoPdf(ParetoResult result, ParetoFilter filter, bool viewCost = true)
     {
         using var ms = new MemoryStream();

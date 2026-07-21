@@ -1,4 +1,4 @@
-@using Powersoft.Reporting.Core.Models
+﻿@using Powersoft.Reporting.Core.Models
 @{
     ViewData["Title"] = "Offers Report";
     var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
@@ -24,20 +24,19 @@
     th.sortable.sort-asc .sort-icon,th.sortable.sort-desc .sort-icon{opacity:1;color:#7c3aed;}
 </style>
 
-<div class="row mb-4">
-    <div class="col-12 d-flex justify-content-between align-items-start">
+<div class="rpt-modern">
+
+<div class="rpt-hero rpt-rise">
+    <div class="rpt-hero-left">
+        <div class="rpt-hero-icon"><i class="bi bi-file-earmark-text"></i></div>
         <div>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
-                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">CRM</a></li>
-                    <li class="breadcrumb-item active">Offers Report</li>
-                </ol>
-            </nav>
-            <h2 class="mb-0">
-                <i class="bi bi-file-earmark-text me-2" style="color:#7c3aed;"></i>Offers Report
-            </h2>
-            <p class="text-muted mb-0">Sales offers by status, customer, store and agent analysis</p>
+            <div class="rpt-crumbs">
+                <a asp-controller="Reports" asp-action="Index">Reports</a>
+                <a asp-controller="Reports" asp-action="Index">CRM</a>
+                <span>Offers Report</span>
+            </div>
+            <h2>Offers Report</h2>
+            <p class="rpt-hero-sub">Sales offers by status, customer, store and agent analysis</p>
         </div>
     </div>
 </div>
@@ -47,24 +46,24 @@
     <div class="card-body">
         <div class="row mb-3">
             <div class="col-12">
-                <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                <div class="rpt-eyebrow"><i class="bi bi-lightning-charge"></i>Quick Date Selection</div>
                 <div class="date-presets btn-group flex-wrap" role="group">
                     <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                    <label class="btn rpt-chip" for="presetToday">Today</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetYesterday" value="yesterday" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetYesterday">Yesterday</label>
+                    <label class="btn rpt-chip" for="presetYesterday">Yesterday</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetLast7" value="last7" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetLast7">Last 7 Days</label>
+                    <label class="btn rpt-chip" for="presetLast7">Last 7 Days</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                    <label class="btn rpt-chip" for="presetLast30">Last 30 Days</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                    <label class="btn rpt-chip" for="presetThisMonth">This Month</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                    <label class="btn rpt-chip" for="presetLastMonth">Last Month</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                    <label class="btn rpt-chip" for="presetYTD">Year to Date</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                    <label class="btn rpt-chip" for="presetLastYear">Last Year</label>
                 </div>
             </div>
         </div>
@@ -1068,3 +1067,5 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 </script>
+
+</div> @* /.rpt-modern *@

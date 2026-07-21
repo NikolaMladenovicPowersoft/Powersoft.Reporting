@@ -128,6 +128,9 @@
                 lsSave('__default__', 'My Layout');
                 // Refresh dropdown so "My Layout" entry appears
                 window.loadLayoutsList();
+                // Reveal the Reset Default button on views that hide it until a layout exists
+                var rb = document.getElementById('resetLayoutBtn');
+                if (rb) rb.style.display = '';
             }
             showLayoutToast(d.success ? 'Layout saved successfully' : (d.message || 'Failed to save layout'),
                             d.success ? 'success' : 'danger');

@@ -18,6 +18,7 @@
     bool useGross = Model.IncludeVat;
 }
 
+@* report-modern.css + report-modern.js are loaded globally from _Layout *@
 <style>
     a.dd-link-purch { color: #2563eb; text-decoration: none; cursor: pointer; border-bottom: 1px dashed #2563eb; }
     a.dd-link-purch:hover { color: #1d4ed8; border-bottom-style: solid; }
@@ -27,28 +28,27 @@
     th.col-sales { background: #ecfdf5 !important; color: #065f46; }
 </style>
 
-<div class="row mb-4">
-    <div class="col-12 d-flex justify-content-between align-items-start">
+<div class="rpt-modern">
+
+<div class="rpt-hero rpt-rise">
+    <div class="rpt-hero-left">
+        <div class="rpt-hero-icon"><i class="bi bi-arrow-left-right"></i></div>
         <div>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
-                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
-                    <li class="breadcrumb-item active">Purchases vs Sales</li>
-                </ol>
-            </nav>
-            <h2 class="mb-0">
-                <i class="bi bi-arrow-left-right me-2 text-primary"></i>Purchases vs Sales
-            </h2>
-            <p class="text-muted mb-0">Compare purchasing and selling quantities and values per item</p>
+            <div class="rpt-crumbs">
+                <a asp-controller="Reports" asp-action="Index">Reports</a>
+                <a asp-controller="Reports" asp-action="Index">Stock Control</a>
+                <span>Purchases vs Sales</span>
+            </div>
+            <h2>Purchases vs Sales</h2>
+            <p class="rpt-hero-sub">Compare purchasing and selling quantities and values per item</p>
         </div>
-        <div class="mt-3">
-            @await Html.PartialAsync("_TutorialButton", ("Purchases vs Sales", ""))
-        </div>
+    </div>
+    <div>
+        @await Html.PartialAsync("_TutorialButton", ("Purchases vs Sales", ""))
     </div>
 </div>
 
-<div class="card mb-4">
+<div class="card mb-4 rpt-rise rpt-rise-1">
     <div class="card-header"><i class="bi bi-funnel me-2"></i>Report Parameters</div>
     <div class="card-body">
         <form asp-action="PurchasesSales" method="post" id="reportForm">
@@ -67,29 +67,29 @@
 
             <div class="row mb-3">
                 <div class="col-12">
-                    <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                    <div class="rpt-eyebrow"><i class="bi bi-lightning-charge"></i>Quick Date Selection</div>
                     <div class="date-presets btn-group flex-wrap" role="group">
                         <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                        <label class="btn rpt-chip" for="presetToday">Today</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetYesterday" value="yesterday" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetYesterday">Yesterday</label>
+                        <label class="btn rpt-chip" for="presetYesterday">Yesterday</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetLast7" value="last7" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetLast7">Last 7 Days</label>
+                        <label class="btn rpt-chip" for="presetLast7">Last 7 Days</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                        <label class="btn rpt-chip" for="presetLast30">Last 30 Days</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                        <label class="btn rpt-chip" for="presetThisMonth">This Month</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                        <label class="btn rpt-chip" for="presetLastMonth">Last Month</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                        <label class="btn rpt-chip" for="presetYTD">Year to Date</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                        <label class="btn rpt-chip" for="presetLastYear">Last Year</label>
                     </div>
                 </div>
             </div>
 
-            <hr class="my-3">
+            <div class="rpt-eyebrow mt-4"><i class="bi bi-calendar-range"></i>Period, Mode &amp; Grouping</div>
 
             <div class="row g-3 mb-3 align-items-end">
                 <div class="col-6 col-md-2">
@@ -122,57 +122,45 @@
             </div>
 
 
-            <div class="row g-3 mb-4 align-items-end">
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="IncludeVat" class="form-check-input" id="includeVatCheck" />
-                        <label asp-for="IncludeVat" class="form-check-label">Include VAT</label>
-                    </div>
+            <div class="rpt-eyebrow"><i class="bi bi-toggles"></i>Display Options</div>
+
+            <div class="rpt-switches mb-4">
+                <div class="form-check form-switch">
+                    <input type="checkbox" asp-for="IncludeVat" class="form-check-input" id="includeVatCheck" />
+                    <label asp-for="IncludeVat" class="form-check-label">Include VAT</label>
                 </div>
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="ShowProfit" class="form-check-input" id="showProfitCheck" />
-                        <label asp-for="ShowProfit" class="form-check-label">Show Profit</label>
-                    </div>
+                <div class="form-check form-switch">
+                    <input type="checkbox" asp-for="ShowProfit" class="form-check-input" id="showProfitCheck" />
+                    <label asp-for="ShowProfit" class="form-check-label">Show Profit</label>
                 </div>
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="ShowStock" class="form-check-input" id="showStockCheck" />
-                        <label asp-for="ShowStock" class="form-check-label">Show Stock</label>
-                    </div>
+                <div class="form-check form-switch">
+                    <input type="checkbox" asp-for="ShowStock" class="form-check-input" id="showStockCheck" />
+                    <label asp-for="ShowStock" class="form-check-label">Show Stock</label>
                 </div>
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="ShowOnOrder" class="form-check-input" id="showOnOrderCheck" />
-                        <label asp-for="ShowOnOrder" class="form-check-label">Show On Order</label>
-                    </div>
+                <div class="form-check form-switch">
+                    <input type="checkbox" asp-for="ShowOnOrder" class="form-check-input" id="showOnOrderCheck" />
+                    <label asp-for="ShowOnOrder" class="form-check-label">Show On Order</label>
                 </div>
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="ShowReservation" class="form-check-input" id="showReservationCheck" />
-                        <label asp-for="ShowReservation" class="form-check-label">Show Reserved</label>
-                    </div>
+                <div class="form-check form-switch">
+                    <input type="checkbox" asp-for="ShowReservation" class="form-check-input" id="showReservationCheck" />
+                    <label asp-for="ShowReservation" class="form-check-label">Show Reserved</label>
                 </div>
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="ShowAvailable" class="form-check-input" id="showAvailableCheck" />
-                        <label asp-for="ShowAvailable" class="form-check-label">Show Available</label>
-                    </div>
+                <div class="form-check form-switch">
+                    <input type="checkbox" asp-for="ShowAvailable" class="form-check-input" id="showAvailableCheck" />
+                    <label asp-for="ShowAvailable" class="form-check-label">Show Available</label>
                 </div>
-                <div class="col-auto">
-                    <div class="form-check">
-                        <input type="checkbox" asp-for="IncludeAdditionalCharges" class="form-check-input" id="includeAdditionalChargesCheck" />
-                        <label asp-for="IncludeAdditionalCharges" class="form-check-label" title="When off, purchase cost is invoice (wholesale) only, without allocated landed/additional charges">Include Additional Charges</label>
-                    </div>
+                <div class="form-check form-switch">
+                    <input type="checkbox" asp-for="IncludeAdditionalCharges" class="form-check-input" id="includeAdditionalChargesCheck" />
+                    <label asp-for="IncludeAdditionalCharges" class="form-check-label" title="When off, purchase cost is invoice (wholesale) only, without allocated landed/additional charges">Include Additional Charges</label>
                 </div>
-                <div class="col-auto" id="sortBySizeSequenceWrap" style="display:none;">
-                    <div class="form-check">
+                <div id="sortBySizeSequenceWrap" style="display:none;">
+                    <div class="form-check form-switch">
                         <input type="checkbox" asp-for="SortBySizeSequence" class="form-check-input" id="sortBySizeSequenceCheck" />
                         <label asp-for="SortBySizeSequence" class="form-check-label" title="Order Size groups by the configured size sequence (e.g. 36.5 before 37) instead of alphabetically">Sort Sizes by Sequence</label>
                     </div>
                 </div>
-                <div class="col-auto ms-md-auto">
-                    <label class="form-label fw-semibold small text-muted mb-1">Rows per page</label>
+                <div class="ms-md-auto d-flex align-items-center gap-2">
+                    <label class="form-label small text-muted mb-0">Rows per page</label>
                     <select asp-for="PageSize" class="form-select form-select-sm w-auto">
                         <option value="50">50</option>
                         <option value="100">100</option>
@@ -273,57 +261,78 @@
         @if (isMonthly)
         {
             <div class="col-6 col-md-4">
-                <div class="stat-card text-center">
-                    <div class="stat-value">@Model.MonthlyTotalPurchased.ToString("N2")</div>
-                    <div class="stat-label">Total Purchased</div>
+                <div class="rpt-kpi kpi-purch rpt-rise rpt-rise-1">
+                    <div class="rpt-kpi-icon"><i class="bi bi-cart-plus"></i></div>
+                    <div>
+                        <div class="stat-value" data-rm-countup>@Model.MonthlyTotalPurchased.ToString("N2")</div>
+                        <div class="stat-label">Total Purchased</div>
+                    </div>
                 </div>
             </div>
             <div class="col-6 col-md-4">
-                <div class="stat-card text-center">
-                    <div class="stat-value">@Model.MonthlyTotalSold.ToString("N2")</div>
-                    <div class="stat-label">Total Sold</div>
+                <div class="rpt-kpi kpi-sales rpt-rise rpt-rise-2">
+                    <div class="rpt-kpi-icon"><i class="bi bi-cart-check"></i></div>
+                    <div>
+                        <div class="stat-value" data-rm-countup>@Model.MonthlyTotalSold.ToString("N2")</div>
+                        <div class="stat-label">Total Sold</div>
+                    </div>
                 </div>
             </div>
             <div class="col-6 col-md-4">
-                <div class="stat-card text-center">
-                    <div class="stat-value">@Model.TotalCount.ToString("N0")</div>
-                    <div class="stat-label">Total Rows</div>
+                <div class="rpt-kpi kpi-neutral rpt-rise rpt-rise-3">
+                    <div class="rpt-kpi-icon"><i class="bi bi-list-ol"></i></div>
+                    <div>
+                        <div class="stat-value" data-rm-countup>@Model.TotalCount.ToString("N0")</div>
+                        <div class="stat-label">Total Rows</div>
+                    </div>
                 </div>
             </div>
         }
         else
         {
         <div class="col-6 col-md-3">
-            <div class="stat-card text-center">
-                <div class="stat-value">@Model.TotalPurchasedQty.ToString("N0")</div>
-                <div class="stat-label">Total Qty Purchased</div>
+            <div class="rpt-kpi kpi-purch rpt-rise rpt-rise-1">
+                <div class="rpt-kpi-icon"><i class="bi bi-cart-plus"></i></div>
+                <div>
+                    <div class="stat-value" data-rm-countup>@Model.TotalPurchasedQty.ToString("N0")</div>
+                    <div class="stat-label">Total Qty Purchased</div>
+                </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="stat-card text-center">
-                <div class="stat-value">@Model.TotalSoldQty.ToString("N0")</div>
-                <div class="stat-label">Total Qty Sold</div>
+            <div class="rpt-kpi kpi-sales rpt-rise rpt-rise-2">
+                <div class="rpt-kpi-icon"><i class="bi bi-cart-check"></i></div>
+                <div>
+                    <div class="stat-value" data-rm-countup>@Model.TotalSoldQty.ToString("N0")</div>
+                    <div class="stat-label">Total Qty Sold</div>
+                </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="stat-card text-center">
-                <div class="stat-value">@Model.TotalPurchasedValue.ToString("N2")</div>
-                <div class="stat-label">@(useGross ? "Gross" : "Net") Purchased</div>
+            <div class="rpt-kpi kpi-purch rpt-rise rpt-rise-3">
+                <div class="rpt-kpi-icon"><i class="bi bi-wallet2"></i></div>
+                <div>
+                    <div class="stat-value" data-rm-countup>@Model.TotalPurchasedValue.ToString("N2")</div>
+                    <div class="stat-label">@(useGross ? "Gross" : "Net") Purchased</div>
+                </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="stat-card text-center">
-                @{var profitColor = Model.TotalProfit >= 0 ? "text-success" : "text-danger";}
-                <div class="stat-value @profitColor">@Model.TotalProfit.ToString("N2")</div>
-                <div class="stat-label">Total Profit</div>
+            <div class="rpt-kpi kpi-profit rpt-rise rpt-rise-4">
+                <div class="rpt-kpi-icon"><i class="bi bi-graph-up-arrow"></i></div>
+                <div>
+                    @{var profitColor = Model.TotalProfit >= 0 ? "text-success" : "text-danger";}
+                    <div class="stat-value @profitColor" data-rm-countup>@Model.TotalProfit.ToString("N2")</div>
+                    <div class="stat-label">Total Profit</div>
+                </div>
             </div>
         </div>
         }
     </div>
 
-    <div class="card" id="results">
+    <div class="card rpt-rise rpt-rise-2" id="results">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span>
+            <span class="rpt-results-meta">
                 <i class="bi bi-table me-2"></i>Results: @Model.TotalCount.ToString("N0") total rows
                 @if (hasL1) { <span class="badge bg-secondary ms-2">Grouped by @Model.PrimaryGroup</span> }
                 @if (hasL2) { <span class="badge bg-secondary ms-1">then @Model.SecondaryGroup</span> }
@@ -359,7 +368,7 @@
             </div>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
+            <div class="table-responsive rpt-table-wrap">
             @if (isMonthly)
             {
                 var months = new[]{"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
@@ -769,21 +778,21 @@
 }
 else if (ViewContext.HttpContext.Request.Method == "POST")
 {
-    <div class="card" id="results">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-inbox empty-state-icon text-muted"></i>
-            <h4 class="mt-3">No Data Found</h4>
-            <p class="text-muted">No transactions found for the selected criteria.</p>
+    <div class="card rpt-rise rpt-rise-2" id="results">
+        <div class="card-body rpt-empty">
+            <div class="rpt-empty-icon" style="color:#64748b;background:linear-gradient(135deg,#f1f5f9,#f8fafc);border-color:#e2e8f0;"><i class="bi bi-inbox"></i></div>
+            <h4>No Data Found</h4>
+            <p>No transactions found for the selected criteria. Try widening the date range or removing some filters.</p>
         </div>
     </div>
 }
 else
 {
-    <div class="card">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-bar-chart empty-state-icon text-primary"></i>
-            <h4 class="mt-3">Generate Your Report</h4>
-            <p class="text-muted">Select your parameters above and click "Generate Report" to view the Purchases vs Sales analysis.</p>
+    <div class="card rpt-rise rpt-rise-2">
+        <div class="card-body rpt-empty">
+            <div class="rpt-empty-icon"><i class="bi bi-bar-chart"></i></div>
+            <h4>Generate Your Report</h4>
+            <p>Select your parameters above and click "Generate Report" to view the Purchases vs Sales analysis.</p>
         </div>
     </div>
 }
@@ -1077,6 +1086,8 @@ else
     AnalyzeActionUrl = Url.Action("AnalyzePsReport", "Reports"),
     ReportType = "PurchasesSales"
 })
+
+</div> @* /.rpt-modern *@
 
 @section Scripts {
 <script>

@@ -1,4 +1,4 @@
-@using Powersoft.Reporting.Core.Models
+﻿@using Powersoft.Reporting.Core.Models
 @using System.Text.Json
 @{
     ViewData["Title"] = "Pareto 80/20 Analysis";
@@ -23,24 +23,23 @@
     .stat-card .label { font-size: 0.8rem; color: #6b7280; }
 </style>
 
-<div class="row mb-4">
-    <div class="col-12 d-flex justify-content-between align-items-start">
+<div class="rpt-modern">
+
+<div class="rpt-hero rpt-rise">
+    <div class="rpt-hero-left">
+        <div class="rpt-hero-icon"><i class="bi bi-funnel"></i></div>
         <div>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
-                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
-                    <li class="breadcrumb-item active">Pareto 80/20</li>
-                </ol>
-            </nav>
-            <h2 class="mb-0">
-                <i class="bi bi-funnel me-2 text-primary"></i>Pareto 80/20 Analysis
-            </h2>
-            <p class="text-muted mb-0">ABC classification of sales data — @dbName</p>
+            <div class="rpt-crumbs">
+                <a asp-controller="Reports" asp-action="Index">Reports</a>
+                <a asp-controller="Reports" asp-action="Index">Stock Control</a>
+                <span>Pareto 80/20</span>
+            </div>
+            <h2>Pareto 80/20 Analysis</h2>
+            <p class="rpt-hero-sub">ABC classification of sales data — @dbName</p>
         </div>
-        <div class="mt-3">
-            @await Html.PartialAsync("_TutorialButton", ("Pareto Analysis", ""))
-        </div>
+    </div>
+    <div>
+        @await Html.PartialAsync("_TutorialButton", ("Pareto Analysis", ""))
     </div>
 </div>
 
@@ -52,20 +51,20 @@
         <form id="paretoForm">
             <div class="row mb-3">
                 <div class="col-12">
-                    <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                    <div class="rpt-eyebrow"><i class="bi bi-lightning-charge"></i>Quick Date Selection</div>
                     <div class="date-presets btn-group flex-wrap" role="group">
                         <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                        <label class="btn rpt-chip" for="presetToday">Today</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                        <label class="btn rpt-chip" for="presetLast30">Last 30 Days</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off" checked>
-                        <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                        <label class="btn rpt-chip" for="presetThisMonth">This Month</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                        <label class="btn rpt-chip" for="presetLastMonth">Last Month</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                        <label class="btn rpt-chip" for="presetYTD">Year to Date</label>
                         <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
-                        <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                        <label class="btn rpt-chip" for="presetLastYear">Last Year</label>
                     </div>
                 </div>
             </div>
@@ -221,6 +220,9 @@
                         <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Default
                     </button>
                 </div>
+                <a asp-action="Pareto" class="btn btn-outline-secondary btn-reset" title="Clear all filters">
+                    <i class="bi bi-funnel me-1"></i>Clear Filters
+                </a>
             </div>
         </form>
     </div>
@@ -379,6 +381,8 @@
     HasSavedLayout = false,
     ReportViewUrl  = Url.Action("Pareto", "Reports") ?? ""
 })
+
+</div> @* /.rpt-modern *@
 
 @section Scripts {
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>

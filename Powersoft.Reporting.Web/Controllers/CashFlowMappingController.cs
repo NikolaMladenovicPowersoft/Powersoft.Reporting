@@ -222,6 +222,83 @@ public class CashFlowMappingController : Controller
         }
     }
 
+    /// <summary>
+    /// Coverage panel data: how much of the tenant's real chart of accounts the mapping covers,
+    /// plus the unmapped accounts (cash-active first) so the admin can fix gaps directly.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> Coverage()
+    {
+        if (!CanManageMapping()) return Json(new { success = false, message = "Not authorized." });
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return Json(new { success = false, message = "Not connected to a database." });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateCashFlowMappingRepository(conn);
+            var c = await repo.GetCoverageAsync();
+            return Json(new
+            {
+                success = true,
+                totalAccounts = c.TotalAccounts,
+                mappedAccounts = c.MappedAccounts,
+                activeAccounts = c.ActiveAccounts,
+                activeMappedAccounts = c.ActiveMappedAccounts,
+                unassignedTruncated = c.UnassignedTruncated,
+                unassigned = c.UnassignedAccounts.Select(a => new { code = a.Code, name = a.Name, active = a.HasCashActivity })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to compute cash flow mapping coverage");
+            return Json(new { success = false, message = "Could not compute coverage." });
+        }
+    }
+
+    /// <summary>
+    /// Live preview while editing a range: which real accounts it catches and which existing
+    /// ranges it overlaps. <paramref name="excludeId"/> = the row being edited (0 for a new row).
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> PreviewRange(string codeFrom, string codeTo, int excludeId = 0)
+    {
+        if (!CanManageMapping()) return Json(new { success = false, message = "Not authorized." });
+        var conn = GetTenantConnectionString();
+        if (string.IsNullOrEmpty(conn)) return Json(new { success = false, message = "Not connected to a database." });
+
+        codeFrom = (codeFrom ?? "").Trim();
+        codeTo = (codeTo ?? "").Trim();
+        if (codeFrom.Length == 0 || codeTo.Length == 0)
+            return Json(new { success = false, message = "Enter both Code From and Code To." });
+        if (string.CompareOrdinal(codeFrom, codeTo) > 0)
+            return Json(new { success = false, message = "Code From sorts after Code To — this range would never match any account." });
+
+        try
+        {
+            var repo = _repositoryFactory.CreateCashFlowMappingRepository(conn);
+            var p = await repo.PreviewRangeAsync(codeFrom, codeTo, excludeId);
+            return Json(new
+            {
+                success = true,
+                matchCount = p.MatchCount,
+                sample = p.SampleAccounts.Select(a => new { code = a.Code, name = a.Name, active = a.HasCashActivity }),
+                overlaps = p.OverlappingRanges.Select(o => new
+                {
+                    id = o.PkMappingID,
+                    groupName = o.GroupName,
+                    categoryName = o.CategoryName,
+                    codeFrom = o.CodeFrom,
+                    codeTo = o.CodeTo
+                })
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to preview cash flow mapping range {From}-{To}", codeFrom, codeTo);
+            return Json(new { success = false, message = "Could not preview the range." });
+        }
+    }
+
     /// <summary>Replaces the whole mapping with the default (ARVA/PBIX) 48-row seed.</summary>
     [HttpPost]
     [ValidateAntiForgeryToken]

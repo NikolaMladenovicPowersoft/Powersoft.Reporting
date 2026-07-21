@@ -126,6 +126,145 @@ ORDER BY CodeFrom DESC, GroupSortOrder, CategorySortOrder, pk_MappingID";
         return result;
     }
 
+    // Same cash-relevance slice as CashFlowRepository.ActualsSql: an account is "active" when it
+    // appears on a leg of a bank-touching transaction that is not OB/YE — i.e. the report could
+    // actually show it. Coverage sorts these first because unmapped active accounts are the ones
+    // that end up in "(Unassigned)" on the statement.
+    private const string AccountsCte = @"
+;WITH CashTx AS (
+    SELECT DISTINCT t.fk_tt_number
+    FROM tbl_payments t WITH (NOLOCK)
+    INNER JOIN tbl_accbank b WITH (NOLOCK) ON t.fk_tt_accode = b.fk_ba_link
+),
+Active AS (
+    SELECT DISTINCT t.fk_tt_accode AS Code
+    FROM tbl_payments t WITH (NOLOCK)
+    INNER JOIN CashTx c ON t.fk_tt_number = c.fk_tt_number
+    WHERE t.fk_tt_type NOT IN ('OB', 'YE')
+),
+Acc AS (
+    SELECT d.pk_detailid AS Code,
+           ISNULL(d.da_name, '') AS Name,
+           CASE WHEN a.Code IS NULL THEN 0 ELSE 1 END AS HasCashActivity,
+           CASE WHEN EXISTS (
+               SELECT 1 FROM dboReportsAI.tbl_CashFlowMapping m WITH (NOLOCK)
+               WHERE d.pk_detailid >= m.CodeFrom AND d.pk_detailid <= m.CodeTo
+           ) THEN 1 ELSE 0 END AS Mapped
+    FROM tbl_detailac d WITH (NOLOCK)
+    LEFT JOIN Active a ON a.Code = d.pk_detailid
+)";
+
+    public async Task<CashFlowMappingCoverage> GetCoverageAsync(int maxUnassigned = 200)
+    {
+        var sql = AccountsCte + @"
+SELECT COUNT(*)                                              AS TotalAccounts,
+       ISNULL(SUM(Mapped), 0)                                AS MappedAccounts,
+       ISNULL(SUM(HasCashActivity), 0)                       AS ActiveAccounts,
+       ISNULL(SUM(CASE WHEN HasCashActivity = 1 THEN Mapped ELSE 0 END), 0) AS ActiveMapped
+FROM Acc;
+" + AccountsCte + @"
+SELECT TOP (@MaxRows) Code, Name, HasCashActivity
+FROM Acc
+WHERE Mapped = 0
+ORDER BY HasCashActivity DESC, Code;";
+
+        var result = new CashFlowMappingCoverage();
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 60 };
+        cmd.Parameters.AddWithValue("@MaxRows", maxUnassigned + 1);
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        if (await reader.ReadAsync())
+        {
+            result.TotalAccounts = reader.GetInt32(0);
+            result.MappedAccounts = reader.GetInt32(1);
+            result.ActiveAccounts = reader.GetInt32(2);
+            result.ActiveMappedAccounts = reader.GetInt32(3);
+        }
+
+        if (await reader.NextResultAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                result.UnassignedAccounts.Add(new CashFlowMappingAccount
+                {
+                    Code = reader.GetValue(0).ToString() ?? "",
+                    Name = reader.GetString(1),
+                    HasCashActivity = reader.GetInt32(2) == 1
+                });
+            }
+        }
+
+        if (result.UnassignedAccounts.Count > maxUnassigned)
+        {
+            result.UnassignedTruncated = true;
+            result.UnassignedAccounts.RemoveAt(result.UnassignedAccounts.Count - 1);
+        }
+        return result;
+    }
+
+    public async Task<CashFlowMappingRangePreview> PreviewRangeAsync(
+        string codeFrom, string codeTo, int excludeId, int maxSample = 10)
+    {
+        var sql = AccountsCte + @"
+SELECT COUNT(*) FROM Acc WHERE Code >= @From AND Code <= @To;
+" + AccountsCte + @"
+SELECT TOP (@MaxSample) Code, Name, HasCashActivity
+FROM Acc
+WHERE Code >= @From AND Code <= @To
+ORDER BY HasCashActivity DESC, Code;
+
+SELECT pk_MappingID, GroupName, GroupSortOrder, CategoryName, CategorySortOrder, CodeFrom, CodeTo
+FROM dboReportsAI.tbl_CashFlowMapping WITH (NOLOCK)
+WHERE CodeFrom <= @To AND CodeTo >= @From AND pk_MappingID <> @ExcludeId
+ORDER BY CodeFrom DESC, GroupSortOrder, CategorySortOrder, pk_MappingID;";
+
+        var result = new CashFlowMappingRangePreview();
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 60 };
+        cmd.Parameters.AddWithValue("@From", (codeFrom ?? "").Trim());
+        cmd.Parameters.AddWithValue("@To", (codeTo ?? "").Trim());
+        cmd.Parameters.AddWithValue("@ExcludeId", excludeId);
+        cmd.Parameters.AddWithValue("@MaxSample", maxSample);
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        if (await reader.ReadAsync())
+            result.MatchCount = reader.GetInt32(0);
+
+        if (await reader.NextResultAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                result.SampleAccounts.Add(new CashFlowMappingAccount
+                {
+                    Code = reader.GetValue(0).ToString() ?? "",
+                    Name = reader.GetString(1),
+                    HasCashActivity = reader.GetInt32(2) == 1
+                });
+            }
+        }
+
+        if (await reader.NextResultAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                result.OverlappingRanges.Add(new CashFlowMappingEntry
+                {
+                    PkMappingID = reader.GetInt32(0),
+                    GroupName = reader.GetString(1),
+                    GroupSortOrder = reader.GetInt32(2),
+                    CategoryName = reader.GetString(3),
+                    CategorySortOrder = reader.GetInt32(4),
+                    CodeFrom = reader.GetString(5),
+                    CodeTo = reader.GetString(6)
+                });
+            }
+        }
+        return result;
+    }
+
     public async Task<int> ResetToDefaultsAsync()
     {
         // Single batch so a failed insert can't leave the table empty.

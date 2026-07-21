@@ -1,0 +1,514 @@
+/* ============================================================
+   Report Modern — 2026 presentation layer for report pages.
+   Everything is scoped under .rpt-modern so any report view can
+   opt in by adding the wrapper div + this stylesheet, without
+   touching its element IDs, form wiring or JS hooks.
+   ============================================================ */
+
+.rpt-modern {
+    --rm-primary: #2563eb;
+    --rm-primary-2: #4f46e5;
+    --rm-ink: #0f172a;
+    --rm-muted: #64748b;
+    --rm-border: #e2e8f0;
+    --rm-surface: #ffffff;
+    --rm-surface-2: #f8fafc;
+    --rm-purch: #2563eb;
+    --rm-purch-bg: #eff6ff;
+    --rm-sales: #059669;
+    --rm-sales-bg: #ecfdf5;
+    --rm-radius: 18px;
+    --rm-radius-sm: 12px;
+    --rm-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 8px 24px -12px rgba(15, 23, 42, .12);
+    --rm-shadow-lift: 0 2px 4px rgba(15, 23, 42, .06), 0 16px 40px -16px rgba(37, 99, 235, .25);
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: var(--rm-ink);
+}
+
+/* ---------- Hero header ---------- */
+
+.rpt-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.25rem;
+    border-radius: var(--rm-radius);
+    background:
+        radial-gradient(1200px 300px at 0% 0%, rgba(37, 99, 235, .10), transparent 60%),
+        radial-gradient(900px 260px at 100% 100%, rgba(5, 150, 105, .08), transparent 55%),
+        var(--rm-surface);
+    border: 1px solid var(--rm-border);
+    box-shadow: var(--rm-shadow);
+}
+
+.rpt-hero-left { display: flex; align-items: center; gap: 1rem; min-width: 0; }
+
+.rpt-hero-icon {
+    width: 56px; height: 56px; flex: 0 0 56px;
+    display: grid; place-items: center;
+    border-radius: 16px;
+    font-size: 1.5rem; color: #fff;
+    background: linear-gradient(135deg, var(--rm-primary), var(--rm-primary-2));
+    box-shadow: 0 8px 20px -8px rgba(37, 99, 235, .55);
+}
+
+.rpt-hero h2 {
+    margin: 0;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    font-size: 1.45rem;
+}
+
+.rpt-hero .rpt-hero-sub { color: var(--rm-muted); font-size: .875rem; margin: .1rem 0 0; }
+
+.rpt-crumbs { display: flex; gap: .35rem; flex-wrap: wrap; margin-bottom: .45rem; }
+
+.rpt-crumbs a, .rpt-crumbs span {
+    font-size: .72rem; font-weight: 600; letter-spacing: .02em;
+    text-decoration: none;
+    padding: .18rem .6rem;
+    border-radius: 999px;
+    background: var(--rm-surface-2);
+    border: 1px solid var(--rm-border);
+    color: var(--rm-muted);
+    transition: all .15s ease;
+}
+
+.rpt-crumbs a:hover { color: var(--rm-primary); border-color: rgba(37, 99, 235, .35); background: var(--rm-purch-bg); }
+.rpt-crumbs span { color: var(--rm-primary); background: var(--rm-purch-bg); border-color: rgba(37, 99, 235, .25); }
+
+/* ---------- Cards / surfaces ---------- */
+
+.rpt-modern .card {
+    border: 1px solid var(--rm-border);
+    border-radius: var(--rm-radius);
+    box-shadow: var(--rm-shadow);
+    overflow: hidden;
+}
+
+.rpt-modern .card-header {
+    background: var(--rm-surface);
+    border-bottom: 1px solid var(--rm-border);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    padding: .85rem 1.15rem;
+}
+
+/* Eyebrow section labels inside the filter card */
+.rpt-eyebrow {
+    display: flex; align-items: center; gap: .5rem;
+    font-size: .7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .1em;
+    color: var(--rm-muted);
+    margin-bottom: .55rem;
+}
+
+.rpt-eyebrow::after { content: ''; flex: 1; height: 1px; background: var(--rm-border); }
+.rpt-eyebrow i { color: var(--rm-primary); font-size: .8rem; }
+
+/* ---------- Date preset chips ---------- */
+
+.rpt-modern .date-presets { gap: .4rem; }
+
+.rpt-modern .rpt-chip {
+    border: 1px solid var(--rm-border);
+    border-radius: 999px;
+    background: var(--rm-surface);
+    color: var(--rm-muted);
+    font-size: .78rem;
+    font-weight: 600;
+    padding: .32rem .85rem;
+    line-height: 1.25;
+    transition: all .16s ease;
+}
+
+.rpt-modern .rpt-chip:hover {
+    border-color: rgba(37, 99, 235, .45);
+    color: var(--rm-primary);
+    background: var(--rm-purch-bg);
+    transform: translateY(-1px);
+}
+
+.rpt-modern .btn-check:checked + .rpt-chip {
+    background: linear-gradient(135deg, var(--rm-primary), var(--rm-primary-2));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 6px 14px -6px rgba(37, 99, 235, .55);
+}
+
+.rpt-modern .btn-check:focus-visible + .rpt-chip {
+    outline: 2px solid rgba(37, 99, 235, .45);
+    outline-offset: 2px;
+}
+
+/* ---------- Form controls ---------- */
+
+.rpt-modern .form-control, .rpt-modern .form-select {
+    border-radius: var(--rm-radius-sm);
+    border-color: var(--rm-border);
+    background-color: var(--rm-surface-2);
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.rpt-modern .form-control:focus, .rpt-modern .form-select:focus {
+    background-color: var(--rm-surface);
+    border-color: var(--rm-primary);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, .12);
+}
+
+.rpt-modern .form-label { font-size: .78rem; font-weight: 600; color: #334155; margin-bottom: .3rem; }
+
+/* Option switches (Include VAT, Show Profit, ...) */
+.rpt-modern .rpt-switches {
+    display: flex; flex-wrap: wrap; gap: .5rem .65rem; align-items: center;
+}
+
+.rpt-modern .rpt-switches .form-check {
+    margin: 0;
+    padding: .35rem .8rem .35rem 2.7rem;
+    border: 1px solid var(--rm-border);
+    border-radius: 999px;
+    background: var(--rm-surface);
+    transition: all .16s ease;
+}
+
+.rpt-modern .rpt-switches .form-check:hover { border-color: rgba(37, 99, 235, .4); }
+
+.rpt-modern .rpt-switches .form-check:has(.form-check-input:checked) {
+    background: var(--rm-purch-bg);
+    border-color: rgba(37, 99, 235, .35);
+}
+
+.rpt-modern .rpt-switches .form-check:has(.form-check-input:disabled) { opacity: .5; }
+
+.rpt-modern .rpt-switches .form-check-input {
+    margin-left: -2.2rem;
+    width: 1.7em; height: .95em;
+    margin-top: .28em;
+    cursor: pointer;
+}
+
+.rpt-modern .rpt-switches .form-check-input:checked { background-color: var(--rm-primary); border-color: var(--rm-primary); }
+.rpt-modern .rpt-switches .form-check-label { font-size: .82rem; font-weight: 600; color: #334155; cursor: pointer; }
+
+/* ---------- Buttons ---------- */
+
+.rpt-modern .btn { border-radius: var(--rm-radius-sm); font-weight: 600; transition: all .16s ease; }
+
+.rpt-modern .btn-primary,
+.rpt-modern .btn-generate {
+    background: linear-gradient(135deg, var(--rm-primary), var(--rm-primary-2));
+    border: none;
+    box-shadow: 0 8px 18px -8px rgba(37, 99, 235, .6);
+}
+
+.rpt-modern .btn-primary:hover,
+.rpt-modern .btn-generate:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px -8px rgba(37, 99, 235, .65);
+    background: linear-gradient(135deg, #1d4ed8, #4338ca);
+}
+
+.rpt-modern .btn-primary:active { transform: translateY(0); }
+
+.rpt-modern .btn-warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border: none; color: #fff;
+    box-shadow: 0 8px 18px -8px rgba(217, 119, 6, .55);
+}
+
+.rpt-modern .btn-warning:hover { color: #fff; transform: translateY(-1px); }
+
+/* Outline buttons: Bootstrap's hover fills them with the theme colour and flips the text
+   to white; combined with our flat surfaces that produced white-on-white. Replace the hover
+   with a light tint + darker text of the same hue for every variant used on report pages. */
+.rpt-modern [class*="btn-outline-"] { background: var(--rm-surface); }
+.rpt-modern [class*="btn-outline-"]:hover { transform: translateY(-1px); }
+
+.rpt-modern .btn-outline-secondary { color: #475569; border-color: var(--rm-border); }
+.rpt-modern .btn-outline-secondary:hover,
+.rpt-modern .btn-outline-secondary:active,
+.rpt-modern .btn-outline-secondary.active {
+    color: var(--rm-ink);
+    background: var(--rm-surface-2);
+    border-color: #94a3b8;
+}
+
+.rpt-modern .btn-outline-primary:hover,
+.rpt-modern .btn-outline-primary:active,
+.rpt-modern .btn-outline-primary.active {
+    color: #1d4ed8;
+    background: var(--rm-purch-bg);
+    border-color: rgba(37, 99, 235, .5);
+}
+
+.rpt-modern .btn-outline-success:hover,
+.rpt-modern .btn-outline-success:active,
+.rpt-modern .btn-outline-success.active {
+    color: #047857;
+    background: var(--rm-sales-bg);
+    border-color: rgba(5, 150, 105, .5);
+}
+
+.rpt-modern .btn-outline-danger:hover,
+.rpt-modern .btn-outline-danger:active,
+.rpt-modern .btn-outline-danger.active {
+    color: #b91c1c;
+    background: #fef2f2;
+    border-color: rgba(220, 38, 38, .45);
+}
+
+.rpt-modern .btn-outline-info:hover,
+.rpt-modern .btn-outline-info:active,
+.rpt-modern .btn-outline-info.active {
+    color: #0e7490;
+    background: #ecfeff;
+    border-color: rgba(8, 145, 178, .45);
+}
+
+.rpt-modern .btn-outline-warning:hover,
+.rpt-modern .btn-outline-warning:active,
+.rpt-modern .btn-outline-warning.active {
+    color: #b45309;
+    background: #fffbeb;
+    border-color: rgba(217, 119, 6, .5);
+}
+
+/* btn-outline-light lives on dark/coloured headers (e.g. Document Preview) — the generic
+   white-surface rule above would render light-gray text on white. Keep it transparent there. */
+.rpt-modern .btn-outline-light {
+    background: transparent;
+    color: #fff;
+    border-color: rgba(255, 255, 255, .65);
+}
+.rpt-modern .btn-outline-light:hover,
+.rpt-modern .btn-outline-light:active,
+.rpt-modern .btn-outline-light.active {
+    background: var(--rm-surface);
+    color: var(--rm-ink);
+    border-color: var(--rm-surface);
+}
+
+/* ---------- KPI cards ---------- */
+
+.rpt-modern .rpt-kpi {
+    position: relative;
+    display: flex; align-items: center; gap: .9rem;
+    background: var(--rm-surface);
+    border: 1px solid var(--rm-border);
+    border-radius: var(--rm-radius);
+    box-shadow: var(--rm-shadow);
+    padding: 1.05rem 1.2rem;
+    height: 100%;
+    overflow: hidden;
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.rpt-modern .rpt-kpi:hover { transform: translateY(-2px); box-shadow: var(--rm-shadow-lift); }
+
+.rpt-modern .rpt-kpi::before {
+    content: '';
+    position: absolute; inset: 0 auto 0 0; width: 4px;
+    background: linear-gradient(180deg, var(--rm-primary), var(--rm-primary-2));
+}
+
+.rpt-modern .rpt-kpi.kpi-purch::before { background: linear-gradient(180deg, #3b82f6, #1d4ed8); }
+.rpt-modern .rpt-kpi.kpi-sales::before { background: linear-gradient(180deg, #34d399, #059669); }
+.rpt-modern .rpt-kpi.kpi-profit::before { background: linear-gradient(180deg, #a78bfa, #7c3aed); }
+.rpt-modern .rpt-kpi.kpi-neutral::before { background: linear-gradient(180deg, #94a3b8, #64748b); }
+
+.rpt-modern .rpt-kpi-icon {
+    width: 46px; height: 46px; flex: 0 0 46px;
+    display: grid; place-items: center;
+    border-radius: 14px; font-size: 1.25rem;
+}
+
+.rpt-modern .kpi-purch .rpt-kpi-icon { background: var(--rm-purch-bg); color: var(--rm-purch); }
+.rpt-modern .kpi-sales .rpt-kpi-icon { background: var(--rm-sales-bg); color: var(--rm-sales); }
+.rpt-modern .kpi-profit .rpt-kpi-icon { background: #f5f3ff; color: #7c3aed; }
+.rpt-modern .kpi-neutral .rpt-kpi-icon { background: var(--rm-surface-2); color: var(--rm-muted); }
+
+.rpt-modern .rpt-kpi .stat-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+    color: var(--rm-ink);
+}
+
+.rpt-modern .rpt-kpi .stat-label {
+    font-size: .7rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: var(--rm-muted);
+    margin-top: .15rem;
+}
+
+/* ---------- Results table ---------- */
+
+.rpt-modern .rpt-table-wrap {
+    max-height: 74vh;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+
+.rpt-modern .table { font-size: .85rem; margin-bottom: 0; }
+
+.rpt-modern .table thead th {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--rm-surface-2);
+    color: #475569;
+    font-size: .68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em;
+    border-bottom: 1px solid #cbd5e1;
+    box-shadow: 0 1px 0 #cbd5e1;
+    white-space: nowrap;
+}
+
+/* two-row monthly header: second row sticks right below the first */
+.rpt-modern .table thead tr:nth-child(2) th { top: 34px; }
+
+.rpt-modern .table th.col-purch { background: var(--rm-purch-bg) !important; color: #1e40af; }
+.rpt-modern .table th.col-sales { background: var(--rm-sales-bg) !important; color: #065f46; }
+
+.rpt-modern .table tbody td {
+    padding: .5rem .6rem;
+    font-variant-numeric: tabular-nums;
+    border-color: #f1f5f9;
+}
+
+.rpt-modern .table.table-hover tbody tr:hover td { background: #f0f6ff; }
+
+/* group hierarchy — accent bars instead of heavy solid fills */
+.rpt-modern .table .group-header-row td {
+    background: linear-gradient(90deg, rgba(37, 99, 235, .10), rgba(37, 99, 235, .02)) !important;
+    border-top: 1px solid rgba(37, 99, 235, .25);
+    border-bottom: 1px solid var(--rm-border);
+    border-left: 4px solid var(--rm-primary);
+    color: var(--rm-ink);
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: .85rem;
+}
+
+.rpt-modern .table .group-subtotal-row td {
+    background: var(--rm-surface-2) !important;
+    font-style: normal;
+    font-weight: 600;
+    color: #334155;
+    border-bottom: 1px solid #cbd5e1;
+}
+
+.rpt-modern .table .grand-total-row td {
+    background: linear-gradient(90deg, #eef4ff, #f4f1ff) !important;
+    border-top: 2px solid var(--rm-primary);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    position: sticky; bottom: 0; z-index: 4;
+    box-shadow: 0 -1px 0 rgba(37, 99, 235, .3);
+}
+
+/* drill-down value links */
+.rpt-modern a.dd-link-purch, .rpt-modern a.dd-link-sales {
+    border-bottom-style: dotted;
+    border-radius: 3px;
+    padding: 0 2px;
+    transition: background .12s ease;
+}
+
+.rpt-modern a.dd-link-purch:hover { background: var(--rm-purch-bg); }
+.rpt-modern a.dd-link-sales:hover { background: var(--rm-sales-bg); }
+
+/* ---------- Results toolbar / badges ---------- */
+
+/* "Grouped by ..." badges arrive as .badge.bg-secondary — Bootstrap's bg utility carries
+   !important, so it must be countered here to get the light pill look. */
+.rpt-modern .rpt-results-meta .badge {
+    background: var(--rm-purch-bg) !important;
+    color: var(--rm-primary) !important;
+    border: 1px solid rgba(37, 99, 235, .25);
+    font-weight: 600;
+}
+
+/* ---------- Pagination ---------- */
+
+.rpt-modern .pagination { gap: .25rem; }
+
+.rpt-modern .pagination .page-link {
+    border-radius: 10px !important;
+    border: 1px solid var(--rm-border);
+    color: var(--rm-muted);
+    font-weight: 600;
+    min-width: 2.2rem;
+    text-align: center;
+    transition: all .14s ease;
+}
+
+.rpt-modern .pagination .page-link:hover { color: var(--rm-primary); background: var(--rm-purch-bg); border-color: rgba(37, 99, 235, .35); }
+
+.rpt-modern .pagination .page-item.active .page-link {
+    background: linear-gradient(135deg, var(--rm-primary), var(--rm-primary-2));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 6px 14px -6px rgba(37, 99, 235, .55);
+}
+
+/* ---------- Empty state ---------- */
+
+.rpt-modern .rpt-empty { padding: 3.5rem 1rem; text-align: center; }
+
+.rpt-modern .rpt-empty-icon {
+    width: 84px; height: 84px;
+    margin: 0 auto 1.1rem;
+    display: grid; place-items: center;
+    border-radius: 26px;
+    font-size: 2.3rem;
+    color: var(--rm-primary);
+    background: linear-gradient(135deg, var(--rm-purch-bg), #eef2ff);
+    border: 1px solid rgba(37, 99, 235, .18);
+}
+
+.rpt-modern .rpt-empty h4 { font-weight: 800; letter-spacing: -0.02em; }
+.rpt-modern .rpt-empty p { color: var(--rm-muted); max-width: 460px; margin: 0 auto; }
+
+/* ---------- Reveal micro-interactions ---------- */
+
+.rpt-modern .rpt-rise { animation: rptRise .45s cubic-bezier(.2, .7, .3, 1) both; }
+.rpt-modern .rpt-rise-1 { animation-delay: .04s; }
+.rpt-modern .rpt-rise-2 { animation-delay: .09s; }
+.rpt-modern .rpt-rise-3 { animation-delay: .14s; }
+.rpt-modern .rpt-rise-4 { animation-delay: .19s; }
+
+@keyframes rptRise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rpt-modern .rpt-rise { animation: none; }
+    .rpt-modern .btn, .rpt-modern .rpt-kpi, .rpt-modern .rpt-chip { transition: none; }
+}
+
+/* ---------- Modals inside the wrapper ---------- */
+
+.rpt-modern .modal-content {
+    border: 1px solid var(--rm-border);
+    border-radius: var(--rm-radius);
+    box-shadow: 0 24px 64px -24px rgba(15, 23, 42, .45);
+}
+
+.rpt-modern .modal-header { border-bottom: 1px solid var(--rm-border); }
+.rpt-modern .modal-title { font-weight: 700; letter-spacing: -0.01em; }
+
+/* ---------- Small screens ---------- */
+
+@media (max-width: 767px) {
+    .rpt-hero { padding: 1rem 1.1rem; }
+    .rpt-hero-icon { width: 46px; height: 46px; flex-basis: 46px; font-size: 1.2rem; }
+    .rpt-modern .rpt-kpi .stat-value { font-size: 1.2rem; }
+    .rpt-modern .rpt-table-wrap { max-height: none; }
+}

@@ -1,4 +1,4 @@
-@using Powersoft.Reporting.Core.Models
+﻿@using Powersoft.Reporting.Core.Models
 @{
     ViewData["Title"] = "Cancellation Logging";
     var connectedDb = ViewBag.ConnectedDatabase as string ?? "";
@@ -17,20 +17,19 @@
     .group-subtotal-row td{background:#f8fafc!important;border-top:1px solid #cbd5e1;border-bottom:1px solid #94a3b8;font-style:italic;color:#475569;}
 </style>
 
-<div class="row mb-4">
-    <div class="col-12 d-flex justify-content-between align-items-start">
+<div class="rpt-modern">
+
+<div class="rpt-hero rpt-rise">
+    <div class="rpt-hero-left">
+        <div class="rpt-hero-icon"><i class="bi bi-x-circle"></i></div>
         <div>
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Reports</a></li>
-                    <li class="breadcrumb-item"><a asp-controller="Reports" asp-action="Index">Stock Control</a></li>
-                    <li class="breadcrumb-item active">Cancellation Logging</li>
-                </ol>
-            </nav>
-            <h2 class="mb-0">
-                <i class="bi bi-x-circle me-2 text-danger"></i>Cancellation Logging
-            </h2>
-            <p class="text-muted mb-0">Deleted lines, cancelled invoices, and complimentary items from POS transactions</p>
+            <div class="rpt-crumbs">
+                <a asp-controller="Reports" asp-action="Index">Reports</a>
+                <a asp-controller="Reports" asp-action="Index">Stock Control</a>
+                <span>Cancellation Logging</span>
+            </div>
+            <h2>Cancellation Logging</h2>
+            <p class="rpt-hero-sub">Deleted lines, cancelled invoices, and complimentary items from POS transactions</p>
         </div>
     </div>
 </div>
@@ -40,24 +39,24 @@
     <div class="card-body">
         <div class="row mb-3">
             <div class="col-12">
-                <label class="form-label fw-semibold mb-2">Quick Date Selection</label>
+                <div class="rpt-eyebrow"><i class="bi bi-lightning-charge"></i>Quick Date Selection</div>
                 <div class="date-presets btn-group flex-wrap" role="group">
                     <input type="radio" class="btn-check" name="DatePreset" id="presetToday" value="today" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetToday">Today</label>
+                    <label class="btn rpt-chip" for="presetToday">Today</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetYesterday" value="yesterday" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetYesterday">Yesterday</label>
+                    <label class="btn rpt-chip" for="presetYesterday">Yesterday</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetLast7" value="last7" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetLast7">Last 7 Days</label>
+                    <label class="btn rpt-chip" for="presetLast7">Last 7 Days</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetLast30" value="last30" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetLast30">Last 30 Days</label>
+                    <label class="btn rpt-chip" for="presetLast30">Last 30 Days</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetThisMonth" value="thisMonth" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetThisMonth">This Month</label>
+                    <label class="btn rpt-chip" for="presetThisMonth">This Month</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetLastMonth" value="lastMonth" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetLastMonth">Last Month</label>
+                    <label class="btn rpt-chip" for="presetLastMonth">Last Month</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetYTD" value="ytd" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetYTD">Year to Date</label>
+                    <label class="btn rpt-chip" for="presetYTD">Year to Date</label>
                     <input type="radio" class="btn-check" name="DatePreset" id="presetLastYear" value="lastYear" autocomplete="off">
-                    <label class="btn btn-outline-secondary btn-sm" for="presetLastYear">Last Year</label>
+                    <label class="btn rpt-chip" for="presetLastYear">Last Year</label>
                 </div>
             </div>
         </div>
@@ -163,6 +162,9 @@
                     </button>
                 }
             </div>
+            <a asp-action="CancelLog" class="btn btn-outline-secondary btn-reset" title="Clear all filters">
+                <i class="bi bi-funnel me-1"></i>Clear Filters
+            </a>
         </div>
         @if (hasSavedLayout)
         {
@@ -795,3 +797,5 @@ function applyLayoutParameters(parms) {
     </text>
 }
 </script>
+
+</div> @* /.rpt-modern *@

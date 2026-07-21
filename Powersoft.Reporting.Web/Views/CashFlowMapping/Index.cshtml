@@ -22,6 +22,19 @@
 
         <div id="alertHost"></div>
 
+        <!-- Coverage panel: the mapping vs the tenant's REAL chart of accounts -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clipboard2-check me-2"></i>Coverage of your chart of accounts</h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="loadCoverage()" title="Recalculate">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+            <div class="card-body" id="coverageBody">
+                <span class="text-muted">Calculating&hellip;</span>
+            </div>
+        </div>
+
         <div class="card shadow-sm mb-4">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-search me-2"></i>Test an account code</h5>
@@ -42,14 +55,19 @@
                         <span id="testResult" class="small"></span>
                     </div>
                 </div>
-                <div class="form-text">Shows exactly where the Cash Flow report will place this account with the current ranges.</div>
+                <div class="form-text">Shows exactly where the Cash Flow report will place this account with the current ranges &mdash; and highlights the winning range in the table below.</div>
             </div>
         </div>
 
         <div class="card shadow-sm">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="mb-0"><i class="bi bi-table me-2"></i>Account ranges <span id="rowCount" class="badge bg-secondary ms-1"></span></h5>
-                <div class="d-flex gap-2">
+                <div class="d-flex gap-2 align-items-center">
+                    <div class="input-group input-group-sm" style="width:220px;">
+                        <span class="input-group-text"><i class="bi bi-funnel"></i></span>
+                        <input type="text" id="tableFilter" class="form-control" placeholder="Filter ranges&hellip;"
+                               oninput="render()" />
+                    </div>
                     <button type="button" class="btn btn-sm btn-primary" onclick="openEditor(null)">
                         <i class="bi bi-plus-lg me-1"></i>Add range
                     </button>
@@ -63,17 +81,16 @@
                     <table class="table table-hover table-sm align-middle mb-0" id="mappingTable">
                         <thead class="table-light">
                             <tr>
-                                <th style="min-width:220px;">Group</th>
-                                <th class="text-end" style="width:90px;">Group #</th>
                                 <th style="min-width:200px;">Category</th>
                                 <th class="text-end" style="width:100px;">Category #</th>
                                 <th style="width:140px;">Code From</th>
                                 <th style="width:140px;">Code To</th>
+                                <th style="width:130px;"></th>
                                 <th style="width:110px;"></th>
                             </tr>
                         </thead>
                         <tbody id="mappingBody">
-                            <tr><td colspan="7" class="text-center text-muted py-4">Loading&hellip;</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted py-4">Loading&hellip;</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -100,29 +117,45 @@
                         <datalist id="groupList"></datalist>
                         <div class="form-text">Statement section. Pick an existing group or type a new one.</div>
                     </div>
-                    <div class="col-6">
-                        <label class="form-label" for="edGroupSort">Group sort order</label>
-                        <input type="number" id="edGroupSort" class="form-control" step="1" />
-                        <div class="form-text">Lower = higher on the statement (e.g. 1000).</div>
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label" for="edCategorySort">Category sort order</label>
-                        <input type="number" id="edCategorySort" class="form-control" step="1" />
-                        <div class="form-text">Order inside the group (e.g. 1100).</div>
-                    </div>
                     <div class="col-12">
                         <label class="form-label" for="edCategoryName">Category</label>
                         <input type="text" id="edCategoryName" class="form-control" maxlength="60" list="categoryList"
                                placeholder="e.g. Customers" />
                         <datalist id="categoryList"></datalist>
+                        <div class="form-text">Statement line inside the group. Pick existing or type a new one.</div>
                     </div>
                     <div class="col-6">
                         <label class="form-label" for="edCodeFrom">Code From</label>
-                        <input type="text" id="edCodeFrom" class="form-control font-monospace" maxlength="20" placeholder="e.g. 411" />
+                        <input type="text" id="edCodeFrom" class="form-control font-monospace" maxlength="20" placeholder="e.g. 411"
+                               oninput="schedulePreview()" />
                     </div>
                     <div class="col-6">
                         <label class="form-label" for="edCodeTo">Code To</label>
-                        <input type="text" id="edCodeTo" class="form-control font-monospace" maxlength="20" placeholder="e.g. 411999" />
+                        <input type="text" id="edCodeTo" class="form-control font-monospace" maxlength="20" placeholder="e.g. 411999"
+                               oninput="schedulePreview()" />
+                    </div>
+                    <div class="col-12">
+                        <!-- Live preview: real accounts this range catches + overlaps with existing ranges -->
+                        <div id="rangePreview" class="border rounded small p-2 bg-light" style="display:none;"></div>
+                    </div>
+                    <div class="col-12">
+                        <a class="small text-decoration-none" data-bs-toggle="collapse" href="#advancedSort" role="button">
+                            <i class="bi bi-gear me-1"></i>Advanced: sort order
+                        </a>
+                        <div class="collapse mt-2" id="advancedSort">
+                            <div class="row g-3">
+                                <div class="col-6">
+                                    <label class="form-label" for="edGroupSort">Group sort order</label>
+                                    <input type="number" id="edGroupSort" class="form-control" step="1" />
+                                    <div class="form-text">Lower = higher on the statement. Filled automatically.</div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label" for="edCategorySort">Category sort order</label>
+                                    <input type="number" id="edCategorySort" class="form-control" step="1" />
+                                    <div class="form-text">Order inside the group. Filled automatically.</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-12">
                         <div class="alert alert-light border small mb-0">
@@ -138,6 +171,28 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="editorSaveBtn" onclick="saveEditor()">
                     <i class="bi bi-check-lg me-1"></i>Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete confirmation modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger"><i class="bi bi-trash me-2"></i>Delete range?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="deleteDetails" class="mb-1"></p>
+                <p class="mb-0 text-muted small">Accounts covered only by this range will move to &ldquo;(Unassigned)&rdquo; on the report.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="deleteBtn" onclick="doDelete()">
+                    <i class="bi bi-trash me-1"></i>Delete
                 </button>
             </div>
         </div>
@@ -170,8 +225,24 @@
 <form id="afForm">@Html.AntiForgeryToken()</form>
 
 @section Scripts {
+<style>
+    #mappingTable tr.group-row td {
+        background: #f1f5f9;
+        border-top: 2px solid #94a3b8;
+        font-weight: 600;
+    }
+    #mappingTable tr.flash-row td {
+        animation: cfmFlash 2.2s ease-out;
+    }
+    @@keyframes cfmFlash {
+        0% { background-color: #fff3cd; }
+        100% { background-color: transparent; }
+    }
+</style>
 <script>
     var _rows = [];
+    var _deleteId = 0;
+    var _previewTimer = null;
 
     function token() { return document.querySelector('#afForm input[name="__RequestVerificationToken"]').value; }
     function esc(s) {
@@ -190,35 +261,156 @@
             .then(function (j) {
                 if (!j.success) { showAlert('danger', j.message || 'Load failed.'); return; }
                 _rows = j.rows || [];
+                computeOverlaps();
                 render();
             })
             .catch(function () { showAlert('danger', 'Could not load the mapping table.'); });
     }
 
+    // ── coverage panel ──
+
+    function loadCoverage() {
+        document.getElementById('coverageBody').innerHTML = '<span class="text-muted">Calculating&hellip;</span>';
+        fetch('@Url.Action("Coverage")')
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j.success) {
+                    document.getElementById('coverageBody').innerHTML =
+                        '<span class="text-danger">' + esc(j.message || 'Coverage failed.') + '</span>';
+                    return;
+                }
+                renderCoverage(j);
+            })
+            .catch(function () {
+                document.getElementById('coverageBody').innerHTML = '<span class="text-danger">Coverage failed.</span>';
+            });
+    }
+
+    function renderCoverage(c) {
+        var pct = c.totalAccounts ? Math.round(c.mappedAccounts / c.totalAccounts * 100) : 100;
+        var unassignedActive = (c.unassigned || []).filter(function (a) { return a.active; }).length;
+        var allGood = c.mappedAccounts === c.totalAccounts;
+        var activeGood = c.activeMappedAccounts === c.activeAccounts;
+
+        var html =
+            '<div class="row g-3 align-items-center">' +
+              '<div class="col-md-5">' +
+                '<div class="d-flex justify-content-between small mb-1">' +
+                  '<span><strong>' + c.mappedAccounts.toLocaleString() + '</strong> of <strong>' + c.totalAccounts.toLocaleString() + '</strong> accounts mapped</span>' +
+                  '<span class="text-muted">' + pct + '%</span>' +
+                '</div>' +
+                '<div class="progress" style="height:10px;">' +
+                  '<div class="progress-bar bg-' + (allGood ? 'success' : (pct >= 90 ? 'info' : 'warning')) + '" style="width:' + pct + '%"></div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="col-md-4 small">' +
+                (activeGood
+                    ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>All <strong>' + c.activeAccounts.toLocaleString() + '</strong> accounts with cash activity are mapped.</span>'
+                    : '<span class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i><strong>' + (c.activeAccounts - c.activeMappedAccounts).toLocaleString() + '</strong> of ' + c.activeAccounts.toLocaleString() + ' accounts with cash activity are <strong>unmapped</strong> &mdash; they show as (Unassigned) on the report.</span>') +
+              '</div>' +
+              '<div class="col-md-3 text-md-end">' +
+                (c.unassigned && c.unassigned.length
+                    ? '<button type="button" class="btn btn-sm btn-outline-' + (unassignedActive ? 'danger' : 'secondary') + '" data-bs-toggle="collapse" data-bs-target="#unassignedList">' +
+                      '<i class="bi bi-list-ul me-1"></i>Show unmapped (' + c.unassigned.length + (c.unassignedTruncated ? '+' : '') + ')</button>'
+                    : '') +
+              '</div>' +
+            '</div>';
+
+        if (c.unassigned && c.unassigned.length) {
+            html += '<div class="collapse mt-3" id="unassignedList"><div class="table-responsive" style="max-height:280px;overflow-y:auto;">' +
+                '<table class="table table-sm table-hover align-middle mb-0"><thead class="table-light"><tr>' +
+                '<th style="width:140px;">Account</th><th>Name</th><th style="width:130px;"></th><th style="width:110px;"></th></tr></thead><tbody>';
+            c.unassigned.forEach(function (a) {
+                html += '<tr>' +
+                    '<td class="font-monospace">' + esc(a.code) + '</td>' +
+                    '<td>' + esc(a.name) + '</td>' +
+                    '<td>' + (a.active ? '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">cash activity</span>' : '<span class="text-muted small">no cash activity</span>') + '</td>' +
+                    '<td class="text-end pe-3"><button type="button" class="btn btn-sm btn-outline-primary" title="Add a range for this account" ' +
+                        'onclick="addForAccount(\'' + esc(a.code).replace(/'/g, "\\'") + '\')"><i class="bi bi-plus-lg"></i> Map</button></td>' +
+                    '</tr>';
+            });
+            html += '</tbody></table>';
+            if (c.unassignedTruncated) {
+                html += '<div class="small text-muted p-2">List capped at 200 accounts &mdash; unmapped accounts with cash activity are shown first.</div>';
+            }
+            html += '</div></div>';
+        }
+        document.getElementById('coverageBody').innerHTML = html;
+    }
+
+    function addForAccount(code) {
+        openEditor(null);
+        document.getElementById('edCodeFrom').value = code;
+        document.getElementById('edCodeTo').value = code;
+        schedulePreview();
+    }
+
+    // ── overlap detection (ordinal string compare — same semantics as SQL/report) ──
+
+    function computeOverlaps() {
+        _rows.forEach(function (r) { r._overlaps = []; });
+        for (var i = 0; i < _rows.length; i++) {
+            for (var j = i + 1; j < _rows.length; j++) {
+                var a = _rows[i], b = _rows[j];
+                if (a.codeFrom <= b.codeTo && b.codeFrom <= a.codeTo) {
+                    a._overlaps.push(b);
+                    b._overlaps.push(a);
+                }
+            }
+        }
+    }
+
+    // ── table ──
+
     function render() {
         var body = document.getElementById('mappingBody');
         document.getElementById('rowCount').textContent = _rows.length;
         if (!_rows.length) {
-            body.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">' +
+            body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">' +
                 'No ranges defined &mdash; every account will fall into &ldquo;(Unassigned)&rdquo;. ' +
                 'Add ranges or use Reset to defaults.</td></tr>';
             return;
         }
+
+        var filter = (document.getElementById('tableFilter').value || '').toLowerCase();
+        var visible = filter
+            ? _rows.filter(function (r) {
+                return (r.groupName + ' ' + r.categoryName + ' ' + r.codeFrom + ' ' + r.codeTo).toLowerCase().indexOf(filter) >= 0;
+            })
+            : _rows;
+
+        if (!visible.length) {
+            body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No ranges match the filter.</td></tr>';
+            return;
+        }
+
         var html = '';
         var prevGroup = null;
-        _rows.forEach(function (r) {
-            var newGroup = r.groupName !== prevGroup;
-            prevGroup = r.groupName;
-            html += '<tr' + (newGroup ? ' class="border-top"' : '') + '>' +
-                '<td>' + (newGroup ? '<strong>' + esc(r.groupName) + '</strong>' : '<span class="text-muted small">' + esc(r.groupName) + '</span>') + '</td>' +
-                '<td class="text-end text-muted small">' + r.groupSortOrder + '</td>' +
-                '<td>' + esc(r.categoryName) + '</td>' +
+        visible.forEach(function (r) {
+            if (r.groupName !== prevGroup) {
+                prevGroup = r.groupName;
+                html += '<tr class="group-row"><td colspan="6">' +
+                    '<i class="bi bi-folder2-open me-2"></i>' + esc(r.groupName) +
+                    ' <span class="text-muted fw-normal small ms-2">#' + r.groupSortOrder + '</span></td></tr>';
+            }
+            var overlapBadge = '';
+            if (r._overlaps && r._overlaps.length) {
+                var tip = r._overlaps.map(function (o) {
+                    return o.codeFrom + '\u2013' + o.codeTo + ' (' + o.categoryName + ')';
+                }).join('\n');
+                overlapBadge = '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" ' +
+                    'title="Overlaps:\n' + esc(tip) + '\n\nMost specific range (greatest Code From) wins.">' +
+                    '<i class="bi bi-intersect me-1"></i>overlaps ' + r._overlaps.length + '</span>';
+            }
+            html += '<tr data-id="' + r.id + '">' +
+                '<td class="ps-4">' + esc(r.categoryName) + '</td>' +
                 '<td class="text-end text-muted small">' + r.categorySortOrder + '</td>' +
                 '<td class="font-monospace">' + esc(r.codeFrom) + '</td>' +
                 '<td class="font-monospace">' + esc(r.codeTo) + '</td>' +
+                '<td>' + overlapBadge + '</td>' +
                 '<td class="text-end pe-3">' +
                     '<button type="button" class="btn btn-sm btn-outline-secondary me-1" title="Edit" onclick="openEditor(' + r.id + ')"><i class="bi bi-pencil"></i></button>' +
-                    '<button type="button" class="btn btn-sm btn-outline-danger" title="Delete" onclick="deleteRow(' + r.id + ')"><i class="bi bi-trash"></i></button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-danger" title="Delete" onclick="confirmDelete(' + r.id + ')"><i class="bi bi-trash"></i></button>' +
                 '</td></tr>';
         });
         body.innerHTML = html;
@@ -234,6 +426,8 @@
             Object.keys(cats).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
     }
 
+    // ── editor ──
+
     function openEditor(id) {
         var row = id ? _rows.find(function (r) { return r.id === id; }) : null;
         document.getElementById('editorTitle').textContent = row ? 'Edit range' : 'Add range';
@@ -245,22 +439,90 @@
         document.getElementById('edCodeFrom').value = row ? row.codeFrom : '';
         document.getElementById('edCodeTo').value = row ? row.codeTo : '';
         var a = document.getElementById('editorAlert'); a.style.display = 'none'; a.innerHTML = '';
+        var p = document.getElementById('rangePreview'); p.style.display = 'none'; p.innerHTML = '';
         new bootstrap.Modal(document.getElementById('editorModal')).show();
+        if (row) schedulePreview();
     }
 
-    // Typing an existing group/category auto-fills its sort order so rows stay grouped together.
+    // Sort orders fill themselves: existing group/category reuses its number so rows stay
+    // together; a new name gets the next free slot (group: max+1000, category: max-in-group+100).
+    function suggestGroupSort() {
+        var name = document.getElementById('edGroupName').value;
+        for (var i = 0; i < _rows.length; i++) {
+            if (_rows[i].groupName === name) { document.getElementById('edGroupSort').value = _rows[i].groupSortOrder; return; }
+        }
+        var max = 0;
+        _rows.forEach(function (r) { if (r.groupSortOrder > max) max = r.groupSortOrder; });
+        document.getElementById('edGroupSort').value = max + 1000;
+    }
+
+    function suggestCategorySort() {
+        var name = document.getElementById('edCategoryName').value;
+        for (var i = 0; i < _rows.length; i++) {
+            if (_rows[i].categoryName === name) { document.getElementById('edCategorySort').value = _rows[i].categorySortOrder; return; }
+        }
+        var group = document.getElementById('edGroupName').value;
+        var max = 0, groupSort = parseInt(document.getElementById('edGroupSort').value, 10) || 0;
+        _rows.forEach(function (r) { if (r.groupName === group && r.categorySortOrder > max) max = r.categorySortOrder; });
+        document.getElementById('edCategorySort').value = max > 0 ? max + 100 : groupSort + 100;
+    }
+
+    // ── live range preview ──
+
+    function schedulePreview() {
+        clearTimeout(_previewTimer);
+        _previewTimer = setTimeout(previewRange, 400);
+    }
+
+    function previewRange() {
+        var from = document.getElementById('edCodeFrom').value.trim();
+        var to = document.getElementById('edCodeTo').value.trim();
+        var host = document.getElementById('rangePreview');
+        if (!from || !to) { host.style.display = 'none'; return; }
+
+        host.style.display = '';
+        host.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split me-1"></i>Checking the range&hellip;</span>';
+        var url = '@Url.Action("PreviewRange")' + '?codeFrom=' + encodeURIComponent(from) +
+            '&codeTo=' + encodeURIComponent(to) + '&excludeId=' + (document.getElementById('edId').value || 0);
+        fetch(url)
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j.success) { host.innerHTML = '<span class="text-danger">' + esc(j.message || 'Preview failed.') + '</span>'; return; }
+                var html = '';
+                if (j.matchCount === 0) {
+                    html += '<div class="text-warning-emphasis"><i class="bi bi-exclamation-circle me-1"></i>' +
+                        'No existing account falls inside this range. It will only apply to accounts created later.</div>';
+                } else {
+                    html += '<div><i class="bi bi-check-circle text-success me-1"></i>Catches <strong>' + j.matchCount.toLocaleString() +
+                        '</strong> account' + (j.matchCount === 1 ? '' : 's') + ':</div>';
+                    html += '<div class="font-monospace mt-1" style="max-height:110px;overflow-y:auto;">';
+                    (j.sample || []).forEach(function (a) {
+                        html += '<div>' + esc(a.code) + ' <span class="text-muted">' + esc(a.name) + '</span>' +
+                            (a.active ? ' <span class="badge bg-success-subtle text-success border border-success-subtle">cash</span>' : '') + '</div>';
+                    });
+                    if (j.matchCount > (j.sample || []).length) {
+                        html += '<div class="text-muted">&hellip; and ' + (j.matchCount - j.sample.length).toLocaleString() + ' more</div>';
+                    }
+                    html += '</div>';
+                }
+                if (j.overlaps && j.overlaps.length) {
+                    html += '<div class="mt-2 text-warning-emphasis"><i class="bi bi-intersect me-1"></i>Overlaps ' + j.overlaps.length +
+                        ' existing range' + (j.overlaps.length === 1 ? '' : 's') + ' (most specific wins):</div>';
+                    j.overlaps.forEach(function (o) {
+                        html += '<div class="small ms-3">' + esc(o.codeFrom) + '&ndash;' + esc(o.codeTo) +
+                            ' &rarr; ' + esc(o.groupName) + ' / ' + esc(o.categoryName) + '</div>';
+                    });
+                }
+                host.innerHTML = html;
+            })
+            .catch(function () { host.innerHTML = '<span class="text-danger">Preview failed.</span>'; });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
-        document.getElementById('edGroupName').addEventListener('change', function () {
-            for (var i = 0; i < _rows.length; i++) {
-                if (_rows[i].groupName === this.value) { document.getElementById('edGroupSort').value = _rows[i].groupSortOrder; break; }
-            }
-        });
-        document.getElementById('edCategoryName').addEventListener('change', function () {
-            for (var i = 0; i < _rows.length; i++) {
-                if (_rows[i].categoryName === this.value) { document.getElementById('edCategorySort').value = _rows[i].categorySortOrder; break; }
-            }
-        });
+        document.getElementById('edGroupName').addEventListener('change', suggestGroupSort);
+        document.getElementById('edCategoryName').addEventListener('change', suggestCategorySort);
         load();
+        loadCoverage();
     });
 
     function editorError(msg) {
@@ -270,6 +532,10 @@
     }
 
     function saveEditor() {
+        // Sort orders auto-fill from the group/category name; make sure they exist even when the
+        // user typed a name without triggering the change event.
+        if (document.getElementById('edGroupSort').value === '' && document.getElementById('edGroupName').value !== '') suggestGroupSort();
+        if (document.getElementById('edCategorySort').value === '' && document.getElementById('edCategoryName').value !== '') suggestCategorySort();
         var groupSort = document.getElementById('edGroupSort').value;
         var catSort = document.getElementById('edCategorySort').value;
         if (groupSort === '' || catSort === '') { editorError('Both sort orders are required (whole numbers).'); return; }
@@ -294,24 +560,39 @@
                 bootstrap.Modal.getInstance(document.getElementById('editorModal')).hide();
                 showAlert('success', j.message);
                 load();
+                loadCoverage();
             })
             .catch(function () { btn.disabled = false; editorError('Save failed.'); });
     }
 
-    function deleteRow(id) {
+    // ── delete ──
+
+    function confirmDelete(id) {
         var row = _rows.find(function (r) { return r.id === id; });
         if (!row) return;
-        if (!confirm('Delete range ' + row.codeFrom + ' - ' + row.codeTo + ' (' + row.groupName + ' / ' + row.categoryName + ')?')) return;
+        _deleteId = id;
+        document.getElementById('deleteDetails').innerHTML =
+            'Range <strong class="font-monospace">' + esc(row.codeFrom) + '&ndash;' + esc(row.codeTo) + '</strong>' +
+            ' (' + esc(row.groupName) + ' / ' + esc(row.categoryName) + ')';
+        new bootstrap.Modal(document.getElementById('deleteModal')).show();
+    }
 
-        var data = new URLSearchParams({ id: id, __RequestVerificationToken: token() });
+    function doDelete() {
+        var btn = document.getElementById('deleteBtn');
+        btn.disabled = true;
+        var data = new URLSearchParams({ id: _deleteId, __RequestVerificationToken: token() });
         fetch('@Url.Action("Delete")', { method: 'POST', body: data })
             .then(function (r) { return r.json(); })
             .then(function (j) {
+                btn.disabled = false;
+                bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
                 showAlert(j.success ? 'success' : 'danger', j.message);
-                if (j.success) load();
+                if (j.success) { load(); loadCoverage(); }
             })
-            .catch(function () { showAlert('danger', 'Delete failed.'); });
+            .catch(function () { btn.disabled = false; showAlert('danger', 'Delete failed.'); });
     }
+
+    // ── test tool ──
 
     function testAccount() {
         var code = document.getElementById('testCode').value.trim();
@@ -329,9 +610,25 @@
                     '<i class="bi bi-chevron-right small"></i> <strong>' + esc(j.categoryName) + '</strong> ' +
                     '<span class="text-muted">via ' + esc(j.codeFrom) + '&ndash;' + esc(j.codeTo) +
                     (j.matchCount > 1 ? ' (' + j.matchCount + ' ranges matched, most specific won)' : '') + '</span>';
+                highlightRow(j.id);
             })
             .catch(function () { host.innerHTML = '<span class="text-danger">Failed.</span>'; });
     }
+
+    // Scroll to and flash the winning range so the admin sees WHICH row decided the account.
+    function highlightRow(id) {
+        if (!id) return;
+        document.getElementById('tableFilter').value = '';
+        render();
+        var tr = document.querySelector('#mappingBody tr[data-id="' + id + '"]');
+        if (!tr) return;
+        tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        tr.classList.remove('flash-row');
+        void tr.offsetWidth; // restart the CSS animation
+        tr.classList.add('flash-row');
+    }
+
+    // ── reset ──
 
     function confirmReset() { new bootstrap.Modal(document.getElementById('resetModal')).show(); }
 
@@ -345,7 +642,7 @@
                 btn.disabled = false;
                 bootstrap.Modal.getInstance(document.getElementById('resetModal')).hide();
                 showAlert(j.success ? 'success' : 'danger', j.message);
-                if (j.success) load();
+                if (j.success) { load(); loadCoverage(); }
             })
             .catch(function () { btn.disabled = false; showAlert('danger', 'Reset failed.'); });
     }
